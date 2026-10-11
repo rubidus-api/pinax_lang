@@ -33,8 +33,16 @@ Pinax 는 호스트 프로그램 안에서 돌도록 만든 언어입니다. 호
 
 ## 기반
 
-순수 C23 입니다. 의존하는 것은 벤더링한
-[proven_c_lib](https://github.com/rubidus-api/proven_c_lib)(MIT) 하나뿐일 예정입니다.
+순수 C23 입니다. 의존하는 것은 `vendor/proven/` 에 벤더링한
+[proven_c_lib](https://github.com/rubidus-api/proven_c_lib)(MIT) 하나뿐입니다.
+
+호스트 인터페이스는 헤더 한 장 `include/pinax.h` 입니다. 계획한 API 를 선언한 것이고, 아직
+그 뒤에 구현은 없습니다. 빌드 드라이버는 벤더링한 라이브러리를 컴파일하고 헤더를 검사합니다.
+
+```sh
+cc -std=c23 -o nob nob.c
+./nob check
+```
 
 ## 라이선스
 

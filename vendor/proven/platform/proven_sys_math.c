@@ -1,0 +1,31 @@
+#if !defined(_WIN32) && !defined(_WIN64)
+#ifndef _DEFAULT_SOURCE
+#define _DEFAULT_SOURCE
+#endif
+#ifndef _POSIX_C_SOURCE
+#define _POSIX_C_SOURCE 200809L
+#endif
+#endif
+
+#include "proven_sys_math.h"
+
+#if defined(PROVEN_FREESTANDING)
+/* No <math.h>: a freestanding toolchain need not ship one (bare Clang for wasm32 does not). The
+ * compiler's builtin answers the same question with no header and no library call. */
+bool proven_sys_math_isfinite_f64(proven_sys_f64_t val) {
+    return __builtin_isfinite(val);
+}
+#else
+#include <math.h>
+
+bool proven_sys_math_isfinite_f64(proven_sys_f64_t val) {
+#if defined(__STDC_VERSION__) && __STDC_VERSION__ >= 199901L
+    return isfinite(val);
+#else
+    // Fallback if isfinite is not available, though C23/C99 should have it
+    // In a true freestanding environment with no math.h, 
+    // compiler built-ins or bitwise checks would go here.
+    return (val == val) && (val != INFINITY) && (val != -INFINITY);
+#endif
+}
+#endif

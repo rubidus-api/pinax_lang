@@ -36,8 +36,17 @@ extension a catalogue. The language keeps its data flat.
 
 ## Stack
 
-Pure C23. The only dependency will be a vendored copy of
-[proven_c_lib](https://github.com/rubidus-api/proven_c_lib) (MIT).
+Pure C23. The only dependency is a vendored copy of
+[proven_c_lib](https://github.com/rubidus-api/proven_c_lib) (MIT) under `vendor/proven/`.
+
+The host interface is one header, `include/pinax.h`; it declares the planned API and has no
+implementation behind it yet. The build driver compiles the vendored library and checks the
+header:
+
+```sh
+cc -std=c23 -o nob nob.c
+./nob check
+```
 
 ## License
 
