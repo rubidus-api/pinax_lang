@@ -3,7 +3,7 @@
 //   cc -std=c23 -o nob nob.c
 //   ./nob                     build build/<target>/libpinax.a (today: the vendored proven_c_lib
 //                             parts Pinax uses; the interpreter is not written yet)
-//   ./nob test                build and run the tests (skipped when tests/ is absent)
+//   ./nob test                build, then run the tests (the tests are skipped when tests/ is absent)
 //   ./nob check               the public header compiles as C99, C23 and C++17; public files
 //                             are ASCII, inside the public list and free of local paths
 //   ./nob freestanding        compile the portable part with -ffreestanding
@@ -190,14 +190,14 @@ static int build_lib(const target_t *t, char *lib, size_t lib_cap, char *hosted_
 }
 
 static int cmd_test(const target_t *t) {
-    if (!exists("tests/test_main.c")) {
-        printf("nob: tests/ not present (public checkout); skipping tests\n");
-        return 0;
-    }
     char lib[512];
     static char hosted[8192];
     if (build_lib(t, lib, sizeof lib, hosted, sizeof hosted))
         return 1;
+    if (!exists("tests/test_main.c")) {
+        printf("nob: tests/ not present (public checkout); skipping tests\n");
+        return 0;
+    }
     char dir[256], objdir[300], exe[512];
     build_dir(dir, sizeof dir, t);
     snprintf(objdir, sizeof objdir, "%s/obj", dir);

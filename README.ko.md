@@ -42,7 +42,7 @@ Pinax 는 호스트 프로그램 안에서 돌도록 만든 언어입니다. 호
 
 ```sh
 cc -std=c23 -o nob nob.c
-./nob check
+./nob all
 ```
 
 ## 라이선스

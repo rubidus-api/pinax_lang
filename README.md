@@ -46,7 +46,7 @@ header:
 
 ```sh
 cc -std=c23 -o nob nob.c
-./nob check
+./nob all
 ```
 
 ## License
