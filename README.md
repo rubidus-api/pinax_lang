@@ -31,7 +31,7 @@ dynamic typing.
 
 ## The name
 
-*Pinax* (Greek πίναξ, also used in Latin) is a flat board or writing tablet, and by
+*Pinax* (Greek *pinax*, also used in Latin) is a flat board or writing tablet, and by
 extension a catalogue. The language keeps its data flat.
 
 ## Stack
