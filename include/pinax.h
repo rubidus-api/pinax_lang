@@ -50,7 +50,7 @@ typedef enum pinax_err {
     PINAX_SUSPENDED,    /* instruction budget ran out; pinax_resume() continues */
     PINAX_WAITING,      /* every runnable task waits for a host operation */
     PINAX_PENDING,      /* returned by an awaitable host word: result comes later */
-    /* failures raised by scripts as error values and not handled there */
+    /* a fault that ended the script, or a failure it passed up to the host */
     PINAX_ERR_FAILED = 0x100,
     PINAX_ERR_OVERFLOW, /* integer overflow */
     PINAX_ERR_RANGE,    /* index outside a declared capacity */
@@ -98,7 +98,7 @@ PINAX_API pinax_str pinax_error_text(const pinax_state *state);
 
 /*
  * Arguments and results of one call, by type. A word declared
- *     ( name:str count:int flags:int -- total:int )
+ *     (name str, count int, flags int gives total int)
  * finds name in s[0], count in i[0], flags in i[1], and stores total in ri[0].
  * The pointers go straight into the state's banks: nothing is converted or copied.
  * bool, characters, handles and distinct types over int all count as int.
@@ -119,7 +119,7 @@ enum {
 
 typedef struct pinax_word_def {
     const char   *name;      /* word name as scripts see it */
-    const char   *signature; /* "( a:int b:str -- r:int )"; checked once, here */
+    const char   *signature; /* "(a int, b str gives r int)"; checked once, here */
     pinax_host_fn fn;
     void         *user;
     uint32_t      flags;
@@ -143,7 +143,7 @@ PINAX_API pinax_err pinax_complete(pinax_state *state, pinax_token token,
 /* ---- C libraries named by scripts --------------------------------------------------- */
 
 /*
- * A script's `extern name ( ... ) from "lib"` asks the host for the function. Pinax does
+ * A script's `extern name (...) from "lib"` asks the host for the function. Pinax does
  * not load libraries itself: with no resolver, or when it returns NULL, the load fails.
  * Only integer, handle and string arguments and one integer or handle result are callable
  * this way; anything else needs a host word.
@@ -154,7 +154,7 @@ PINAX_API void pinax_set_resolver(pinax_state *state, pinax_resolve_fn resolve, 
 
 /* ---- host objects ----------------------------------------------------------------- */
 
-/* A kind of host pointer scripts can hold as a use-once `name` value. close may be NULL. */
+/* A kind of host pointer scripts can hold as a use-once value of type `name`. close may be NULL. */
 PINAX_API pinax_err pinax_handle_type(pinax_state *state, const char *name,
                                       void (*close)(void *object, void *user), void *user,
                                       uint32_t *out_type);
