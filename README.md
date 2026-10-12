@@ -4,9 +4,9 @@
 
 A small, fast scripting language to embed in C programs, with fixed, flat memory.
 
-> **Status: design stage.** There is no interpreter yet. This page states what the project
-> is aiming for; scripts cannot be run today. The repository holds the host header and the
-> build skeleton only.
+> **Status: early.** There is no compiler yet, so scripts cannot be run today. This page
+> states what the project is aiming for. The repository holds the host header, the build
+> driver and a first interpreter that runs hand-written bytecode (used to measure the design).
 
 Pinax is meant to live inside a host program. The host hands it one block of memory,
 registers the functions it may call, and runs scripts in it. Every value has a type and a

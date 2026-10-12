@@ -1,0 +1,94 @@
+// pinax_internal.h - the state as the interpreter sees it. Not a public header.
+#ifndef PINAX_INTERNAL_H
+#define PINAX_INTERNAL_H
+
+#include "pinax.h"
+#include "pinax_code.h"
+
+#include <stdbool.h>
+
+#define PNX_MAX_HOSTS 64
+#define PNX_MAX_STR_ARGS 8
+#define PNX_MAX_STR_RESULTS 4
+
+// A string value: bytes `offset .. offset + length` of a segment. Never an address, so the
+// block can be copied or mapped elsewhere and the value still holds.
+typedef struct pnx_scell {
+    uint32_t segment;
+    uint32_t length;
+    uint64_t offset;
+} pnx_scell;
+
+#define PNX_SNEXT_DONE UINT64_MAX // offset of a sequence that is used up
+
+typedef struct pnx_frame {
+    uint32_t pc, int_base, str_base, reserved;
+} pnx_frame;
+
+typedef struct pnx_counts {
+    uint8_t int_args, str_args, int_results, str_results;
+    bool    fails;
+} pnx_counts;
+
+typedef struct pnx_host {
+    char          module[16];
+    char          name[32];
+    char          signature[72];
+    pinax_host_fn fn;
+    void         *user;
+    uint32_t      flags;
+    pnx_counts    counts;
+} pnx_host;
+
+typedef struct pnx_global {
+    uint8_t *ptr; // a buffer starts with its 64-bit length
+    uint32_t kind, elem_bytes, capacity;
+} pnx_global;
+
+struct pinax_call {
+    pinax_state *state;
+};
+
+struct pinax_state {
+    uint8_t *block;
+    size_t   block_len, used, needed;
+
+    int64_t   *ibank;
+    pnx_scell *sbank;
+    pnx_frame *ctrl;
+    uint8_t   *region;
+    pnx_host  *hosts;
+    uint32_t   int_slots, str_slots, depth_max, region_len, region_used, n_hosts;
+
+    // loaded code; all inside the block
+    const pnx_head     *head;
+    const pnx_wordrec  *words;
+    const pnx_importrec *importrecs;
+    const int64_t      *iconst;
+    const pnx_sconst   *sconst;
+    const uint32_t     *code;
+    pnx_counts         *word_counts;
+    const pnx_host    **imports;
+    pnx_global         *globals;
+
+    const uint8_t *segment[PNX_SEG_COUNT];
+    uint32_t       host_segments; // segments past PNX_SEG_HOST in use for this run
+
+    uint64_t budget, left, instructions;
+    uint32_t pc, int_base, str_base, depth, depth_peak;
+    uint32_t top_word;
+    bool     suspended;
+    pinax_err   fail;
+    const char *error_text;
+};
+
+// Counts the int and str parameters and results of "(a int, b str gives r int or fail)".
+bool pnx_signature_counts(const char *signature, pnx_counts *out);
+
+// Runs from state->pc until the top word returns, faults, fails or the budget runs out.
+pinax_err pnx_execute(pinax_state *state);
+
+// Bytes in the main task's region; NULL when it is full.
+uint8_t *pnx_region_alloc(pinax_state *state, size_t bytes);
+
+#endif // PINAX_INTERNAL_H

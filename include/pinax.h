@@ -1,7 +1,9 @@
 /*
  * pinax.h - host interface of the Pinax embeddable scripting language.
  *
- * Nothing here is implemented yet.
+ * Implemented so far: the P0 interpreter, which runs bytecode containers (open, register,
+ * load_bytecode, find, run, resume, budget, bind, stats). Every other function is declared
+ * and answers PINAX_ERR_STATE.
  *
  * The whole interface is this one header. It needs only <stddef.h> and <stdint.h>.
  *
@@ -100,7 +102,9 @@ PINAX_API pinax_str pinax_error_text(const pinax_state *state);
  * Arguments and results of one call, by type. A word declared
  *     (name str, count int, flags int gives total int)
  * finds name in s[0], count in i[0], flags in i[1], and stores total in ri[0].
- * The pointers go straight into the state's banks: nothing is converted or copied.
+ * The integer pointers go straight into the state's bank: nothing is converted or copied.
+ * The string arrays exist only for this call (a script holds a string as a segment and an
+ * offset, never as an address); the bytes they point to are not copied.
  * bool, characters, handles and distinct types over int all count as int.
  */
 typedef struct pinax_args {

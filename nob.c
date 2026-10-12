@@ -35,9 +35,9 @@
 
 #define COUNT(a) (sizeof(a) / sizeof((a)[0]))
 
-// Pinax sources (no OS access; freestanding). None yet.
-static const char *const core_sources[] = {NULL};
-static const size_t core_count = 0;
+// Pinax sources (no OS access; freestanding).
+static const char *const core_sources[] = {"src/pinax_state.c", "src/pinax_vm.c"};
+static const size_t core_count = COUNT(core_sources);
 
 // proven_c_lib files that build without an operating system.
 static const char *const proven_portable[] = {
