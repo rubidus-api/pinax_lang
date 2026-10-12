@@ -582,7 +582,8 @@ pinax_err pinax_resume(pinax_state *st, const pinax_args *results) {
         return PINAX_ERR_ARGUMENT;
     if (!st->suspended)
         return fail(st, PINAX_ERR_STATE, "nothing is suspended");
-    st->left = st->budget;
+    st->left = st->budget > st->owed ? st->budget : st->owed;
+    st->owed = 0;
     return deliver(st, pnx_execute(st), results);
 }
 

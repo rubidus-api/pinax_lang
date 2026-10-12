@@ -543,6 +543,7 @@ pinax_err pnx_execute(pinax_state *st) {
             if (budget) {
                 if (left < n) {
                     --pc;
+                    st->owed = n; // the next resume gets at least this much, so it moves on
                     goto suspended;
                 }
                 left -= n;

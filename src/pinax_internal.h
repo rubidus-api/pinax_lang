@@ -75,6 +75,7 @@ struct pinax_state {
     uint32_t       host_segments; // segments past PNX_SEG_HOST in use for this run
 
     uint64_t budget, left, instructions;
+    uint32_t owed; // cost of the CHECK a run was suspended at
     uint32_t pc, int_base, str_base, depth, depth_peak;
     uint32_t top_word;
     bool     suspended;
