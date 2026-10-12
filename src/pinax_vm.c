@@ -215,7 +215,9 @@ pinax_err pnx_execute(pinax_state *st) {
         CASE(MUL) { if (ckd_mul(&R[OP_A(w)], R[OP_B(w)], R[OP_C(w)])) FAULT(PINAX_ERR_OVERFLOW); NEXT(); }
         CASE(DIV) {
             const int64_t a = R[OP_B(w)], b = R[OP_C(w)];
-            if (b == 0 || (a == INT64_MIN && b == -1))
+            if (b == 0)
+                FAULT(PINAX_ERR_DIV_ZERO);
+            if (a == INT64_MIN && b == -1)
                 FAULT(PINAX_ERR_OVERFLOW);
             R[OP_A(w)] = a / b;
             NEXT();
@@ -223,7 +225,7 @@ pinax_err pnx_execute(pinax_state *st) {
         CASE(MOD) {
             const int64_t a = R[OP_B(w)], b = R[OP_C(w)];
             if (b == 0)
-                FAULT(PINAX_ERR_OVERFLOW);
+                FAULT(PINAX_ERR_DIV_ZERO);
             R[OP_A(w)] = b == -1 ? 0 : a % b;
             NEXT();
         }

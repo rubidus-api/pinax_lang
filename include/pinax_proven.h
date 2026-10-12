@@ -75,6 +75,7 @@ static inline proven_err_t pinax_err_to_proven(pinax_err err) {
     case PINAX_ERR_FULL:
     case PINAX_ERR_DEPTH:
     case PINAX_ERR_NO_ROOM:   return PROVEN_ERR_NOMEM;
+    case PINAX_ERR_DIV_ZERO:
     case PINAX_ERR_ARGUMENT:  return PROVEN_ERR_INVALID_ARG;
     case PINAX_ERR_NOT_FOUND: return PROVEN_ERR_NOT_FOUND;
     case PINAX_ERR_SYNTAX:

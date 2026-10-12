@@ -55,6 +55,7 @@ typedef enum pinax_err {
     /* a fault that ended the script, or a failure it passed up to the host */
     PINAX_ERR_FAILED = 0x100,
     PINAX_ERR_OVERFLOW, /* integer overflow */
+    PINAX_ERR_DIV_ZERO, /* division by zero */
     PINAX_ERR_RANGE,    /* index outside a declared capacity */
     PINAX_ERR_FULL,     /* a declared capacity is used up */
     PINAX_ERR_DEPTH,    /* call depth limit */
