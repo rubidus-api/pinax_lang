@@ -479,7 +479,7 @@ pinax_err pinax_load_bytecode(pinax_state *st, pinax_str bytecode) {
         uint64_t bytes;
         err = PINAX_ERR_FORMAT;
         why = "bytecode: bad global record";
-        if (!terminated(rec->name, sizeof rec->name) || rec->capacity == 0)
+        if (!terminated(rec->name, sizeof rec->name) || !terminated(rec->type, sizeof rec->type) || rec->capacity == 0)
             goto rollback;
         switch (rec->kind) {
         case PNX_G_INT: bytes = 8; break;
@@ -709,8 +709,26 @@ pinax_err pinax_handle_release(pinax_state *st, uint32_t type, pinax_handle hand
 }
 
 pinax_err pinax_global_find(pinax_state *st, const char *name, pinax_global *out) {
-    (void)st, (void)name, (void)out;
-    return PINAX_ERR_STATE;
+    if (!st || !name || !out)
+        return PINAX_ERR_ARGUMENT;
+    if (!st->head)
+        return fail(st, PINAX_ERR_STATE, "no code loaded");
+    const pnx_globalrec *recs = (const pnx_globalrec *)(const void *)(st->words + st->head->n_words);
+    for (uint32_t k = 0; k < st->head->n_globals; ++k) {
+        if (!text_equal(recs[k].name, name))
+            continue;
+        const pnx_global *g = &st->globals[k];
+        if (g->kind == PNX_G_INDEX)
+            break; // an index is not data of its own
+        const bool buffer = g->kind == PNX_G_BUFFER;
+        out->ptr = buffer ? g->ptr + 8 : g->ptr; // a buffer's bytes follow its 64-bit length
+        out->element_bytes = buffer ? 1 : g->elem_bytes;
+        out->capacity = g->capacity;
+        out->type.ptr = (const unsigned char *)recs[k].type;
+        out->type.len = __builtin_strlen(recs[k].type);
+        return PINAX_OK;
+    }
+    return fail(st, PINAX_ERR_NOT_FOUND, "no such global");
 }
 
 pinax_err pinax_eval(pinax_state *st, pinax_str line) {

@@ -225,6 +225,7 @@ typedef struct pnx_wordrec {
 
 typedef struct pnx_globalrec {
     char     name[32];
+    char     type[32]; // the type as declared, for pinax_global_find(); may be empty
     uint32_t kind, elem_bytes, capacity, reserved;
 } pnx_globalrec;
 
