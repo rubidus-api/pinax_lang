@@ -260,6 +260,7 @@ PNX_OP(SNEXT) { // PNX_R_FAILED: the sequence is used up
     if (rest->offset == PNX_SNEXT_DONE)
         return PNX_R_FAILED;
     const uint32_t n = pnx_find_byte(pnx_view_bytes(st, *rest), rest->length, (uint8_t)OP_C(w));
+    st->charge += n != UINT32_MAX ? n : rest->length;
     if (n != UINT32_MAX) {
         S[OP_B(w)] = (pnx_scell){rest->segment, n, rest->offset};
         rest->offset += n + 1u;
@@ -382,6 +383,7 @@ PNX_INLINE int pnx_region_append(pinax_state *st, pnx_scell *cell, const uint8_t
 }
 PNX_OP(RCATS) {
     const pnx_scell s = S[OP_B(w)];
+    st->charge += s.length;
     return pnx_region_append(st, &S[OP_A(w)], pnx_view_bytes(st, s), s.length);
 }
 PNX_OP(RCATI) {
@@ -438,6 +440,7 @@ PNX_OP(LPOP) {
 PNX_OP(SFIND) {
     const pnx_scell hay = S[OP_B(w)], part = S[OP_C(w)];
     const uint32_t at = pnx_find(pnx_view_bytes(st, hay), hay.length, pnx_view_bytes(st, part), part.length);
+    st->charge += at != UINT32_MAX ? at : hay.length;
     if (at == UINT32_MAX) {
         st->fail = PINAX_ERR_NOT_FOUND;
         return PNX_R_FAILED;
@@ -466,6 +469,7 @@ PNX_OP(SWORD) { // PNX_R_FAILED: no word is left
     S[OP_B(w)] = (pnx_scell){rest->segment, end - i, rest->offset + i};
     rest->offset += end;
     rest->length -= end;
+    st->charge += end;
     return PNX_R_OK;
 }
 PNX_OP(ERRTEXT) {
@@ -490,6 +494,7 @@ PNX_INLINE int pnx_buffer_append(pinax_state *st, const pnx_global *g, const uin
 }
 PNX_OP(BCAT) {
     const pnx_scell s = S[OP_A(w)];
+    st->charge += s.length;
     return pnx_buffer_append(st, &st->globals[OP_BX(w)], pnx_view_bytes(st, s), s.length);
 }
 PNX_OP(BCATI) {
@@ -528,6 +533,7 @@ PNX_OP(SSUF) {
 PNX_OP(SHAS) {
     const pnx_scell s = S[OP_B(w)], p = S[OP_C(w)];
     R[OP_A(w)] = pnx_find(pnx_view_bytes(st, s), s.length, pnx_view_bytes(st, p), p.length) != UINT32_MAX;
+    st->charge += s.length;
     return PNX_R_OK;
 }
 
@@ -550,6 +556,7 @@ PNX_OP(SREPL) {
     const int r = pnx_region_append(st, &out, bytes + at, s.length - at);
     if (r != PNX_R_OK)
         return r;
+    st->charge += (uint64_t)s.length + out.length;
     S[OP_A(w)] = out;
     return PNX_R_OK;
 }
@@ -664,6 +671,7 @@ PNX_OP(SLINE) { // PNX_R_FAILED: no line is left. A final line break does not st
     const uint8_t *bytes = pnx_view_bytes(st, *rest);
     const uint32_t at = pnx_find_byte(bytes, rest->length, '\n');
     uint32_t n = at == UINT32_MAX ? rest->length : at;
+    st->charge += n;
     const uint32_t used = at == UINT32_MAX ? rest->length : at + 1;
     if (at != UINT32_MAX && n > 0 && bytes[n - 1] == '\r')
         --n;
@@ -679,6 +687,7 @@ PNX_OP(SNEXTS) { // like SNEXT, with a separator string; an empty separator neve
     const pnx_scell sep = S[OP_C(w)];
     const uint32_t at = sep.length ? pnx_find(pnx_view_bytes(st, *rest), rest->length, pnx_view_bytes(st, sep), sep.length)
                                    : UINT32_MAX;
+    st->charge += at != UINT32_MAX ? at : rest->length;
     if (at != UINT32_MAX) {
         S[OP_B(w)] = (pnx_scell){rest->segment, at, rest->offset};
         rest->offset += at + sep.length;
@@ -762,6 +771,16 @@ PNX_OP(RPADR) {
     const pnx_scell s = S[OP_B(w)];
     return pnx_append_padded(st, &S[OP_A(w)], pnx_view_bytes(st, s), s.length, R[OP_C(w)], ' ', true);
 }
+
+PNX_OP(RTOP) { R[OP_A(w)] = st->region_used; return PNX_R_OK; }
+PNX_OP(RCUT) {
+    const uint64_t top = (uint64_t)R[OP_A(w)];
+    if (top > st->region_used)
+        return PINAX_ERR_RANGE;
+    st->region_used = (uint32_t)top;
+    return PNX_R_OK;
+}
+PNX_OP(RFREE) { R[OP_A(w)] = st->region_len - st->region_used; return PNX_R_OK; }
 
 PNX_OP(SETFAIL) { st->fail = (pinax_err)OP_BX(w); return PNX_R_OK; }
 

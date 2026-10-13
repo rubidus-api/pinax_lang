@@ -384,6 +384,12 @@ static const char *check_word(const pinax_state *st, uint32_t index, span range,
             else if (st->word_counts[x].fails != counts.fails)
                 return "code: tail call between a failing and a non-failing word";
         }
+        if (info.second == PNX_X_COUNTS) { // a call through a register: its arguments and results fit the window
+            fails = x >> 31 != 0;
+            const uint32_t ia = x & 0xffu, sa = (x >> 8) & 0xffu, ir = (x >> 16) & 0xffu, sr = (x >> 24) & 0x7fu;
+            if (a + (ia > ir ? ia : ir) > word->int_cells || b + (sa > sr ? sa : sr) > word->str_cells)
+                return "code: call outside the window";
+        }
         if (info.second == PNX_X_IMPORT) {
             if (x >= head->n_imports)
                 return "code: host word outside the table";
@@ -653,6 +659,7 @@ pinax_err pinax_run(pinax_state *st, pinax_word word, const pinax_args *args) {
     st->pc = rec->entry;
     st->int_base = st->str_base = st->depth = 0;
     st->left = st->budget;
+    st->charge = 0;
     st->fail = PINAX_ERR_FAILED;
     return deliver(st, pnx_execute(st), args);
 }

@@ -25,7 +25,7 @@ typedef uint16_t tid;
 #define TY_SBANK 0x8000u
 // TY_STEM and TY_COLL are not values: a stem (lo hi range) and the name of an array or list
 // exist only at compile time and are taken by the word that follows.
-enum { TY_NONE, TY_INT, TY_BOOL, TY_ERR, TY_STEM, TY_COLL, TY_STR = TY_SBANK | 6, TY_FIRST_DECLARED = 16 };
+enum { TY_NONE, TY_INT, TY_BOOL, TY_ERR, TY_STEM, TY_COLL, TY_STR = TY_SBANK | 6, TY_MARK = 7, TY_FIRST_DECLARED = 16 };
 enum { BANK_I, BANK_S, BANK_NONE };
 enum { E_SLOT, E_LOCAL, E_CONST, E_COND };
 enum { B_IF, B_LOOP, B_ORELSE, B_CASE, B_OF, B_DO };
@@ -37,6 +37,8 @@ enum { GK_SCALAR, GK_ARRAY, GK_LIST, GK_BUFFER, GK_INDEX, GK_QUEUE, GK_POOL };
 enum { L_PLAIN, L_OWNS, L_MOVED }; // what a local holds of a value that must be given exactly once
 #define FWD_MARK 0x80000000u // in a call: the number of a forward declaration, patched at the end
 #define TY_DISTINCT 0x4000u  // declared by `type`: this plus its number
+#define TY_BLOCK 0x2000u     // word (effect): this plus the number of the effect in comp.btypes
+#define MAX_NESTED 4         // value blocks inside value blocks
 enum { USE_EACH, USE_FOLD, USE_TIMES, USE_COUNT, USE_ANY, USE_ALL, USE_FIRST, USE_EACH_INDEX };
 
 #define MAX_STACK 64
@@ -138,6 +140,7 @@ typedef struct fn {
     uint8_t  nloc[2], maxloc[2], maxslot[2];
     uint32_t floor; // stack entries below this belong to a running block
     bool     dead; // the code here cannot be reached
+    sig      own_sig; // a value block keeps its effect here
     vec      code; // of uint32_t
     uint32_t start, last_check;
     // The call just emitted, when what it gives is what this word gives: a return right after
@@ -197,6 +200,13 @@ typedef struct dtype {
     tid  base;
 } dtype;
 
+// The finished code of a value block, kept until the word around it has been stored: words lie
+// in the container in the order of their numbers.
+typedef struct pending_code {
+    uint32_t  word, n;
+    uint32_t *code;
+} pending_code;
+
 typedef struct comp {
     pinax_state *st;
     const char  *file;
@@ -214,6 +224,11 @@ typedef struct comp {
     vec          records;  // record
     vec          fields;   // field
     vec          fwds;     // fwd
+    vec          btypes;   // sig: the effects that are block types
+    vec          pending;  // pending_code: value blocks compiled inside the body now being compiled
+    fn          *block_fn[MAX_NESTED];
+    uint32_t     nested;   // value blocks open
+    uint32_t     def_index; // the word a definition just made
     vec          dtypes;   // dtype
     bool         use_strings, use_format;
     bool         data_only; // PINAX_LOAD_DATA: declarations, literals, stores and rows only
@@ -318,7 +333,11 @@ static tid row_type(uint32_t index) {
 }
 
 static bool is_row(tid type) {
-    return type >= TY_FIRST_DECLARED && type < TY_DISTINCT;
+    return type >= TY_FIRST_DECLARED && type < TY_BLOCK;
+}
+
+static bool is_block(tid type) {
+    return type >= TY_BLOCK && type < TY_DISTINCT;
 }
 
 // The type a distinct type is made of; any other type is its own base.
@@ -335,7 +354,7 @@ static name type_name(const comp *c, tid type) {
         return ((const globalsym *)c->globals.ptr + (type - TY_FIRST_DECLARED))->name;
     if (base_of(c, type) != type)
         return ((const dtype *)c->dtypes.ptr + ((type & ~TY_SBANK) - TY_DISTINCT))->name;
-    return cname(type == TY_INT ? "int" : type == TY_BOOL ? "bool" : type == TY_ERR ? "err" : "str");
+    return cname(type == TY_INT ? "int" : type == TY_BOOL ? "bool" : type == TY_ERR ? "err" : type == TY_MARK ? "mark" : "str");
 }
 
 static tid basic_type(name n) {
@@ -347,6 +366,8 @@ static tid basic_type(name n) {
         return TY_STR;
     if (name_is(n, "err"))
         return TY_ERR;
+    if (name_is(n, "mark"))
+        return TY_MARK;
     return TY_NONE;
 }
 
@@ -368,6 +389,32 @@ static tid type_of_name(const comp *c, name n) {
             return row_type(g);
     }
     return TY_NONE;
+}
+
+// The type of blocks with effect `s`: one number per effect (names of parameters do not count).
+static bool block_type(comp *c, const sig *s, tid *out) {
+    const sig *all = c->btypes.ptr;
+    for (uint32_t k = 0; k < c->btypes.n; ++k) {
+        bool same = all[k].n_in == s->n_in && all[k].n_out == s->n_out && all[k].fails == s->fails;
+        for (uint32_t j = 0; same && j < s->n_in; ++j)
+            same = all[k].in[j] == s->in[j] && all[k].in_owned[j] == s->in_owned[j];
+        for (uint32_t j = 0; same && j < s->n_out; ++j)
+            same = all[k].out[j] == s->out[j] && all[k].out_owned[j] == s->out_owned[j];
+        if (same) {
+            *out = (tid)(TY_BLOCK + k);
+            return true;
+        }
+    }
+    if (c->btypes.n >= TY_DISTINCT - TY_BLOCK)
+        return syntax(c, "too many different block types");
+    sig *slot = vec_push(c, &c->btypes, sizeof(sig));
+    if (!slot)
+        return false;
+    *slot = *s;
+    for (uint32_t j = 0; j < MAX_PARAMS; ++j)
+        slot->in_name[j] = slot->out_name[j] = (name){0};
+    *out = (tid)(TY_BLOCK + c->btypes.n - 1);
+    return true;
 }
 
 // "(" effect ")" ; the current token is the "(".
@@ -401,36 +448,39 @@ static bool parse_sig(comp *c, sig *s) {
             s->fails = true;
             break;
         }
+        // [ name ] [ owned ] type ; a type is a name or word ( effect )
         bool owned = false;
-        if (is_word(c, PNX_KW_owned)) { // owned type
-            owned = true;
-            if (!advance(c))
-                return false;
-        }
-        if (c->tok.kind != PNX_T_NAME)
-            return syntax(c, "a parameter is a type, or a name and a type");
-        name first = tok_name(c), param = {0}, type = first;
-        if (!advance(c))
-            return false;
-        if (!owned && is_word(c, PNX_KW_owned)) { // name owned type
-            owned = true;
-            param = first;
-            if (!advance(c))
-                return false;
-            if (c->tok.kind != PNX_T_NAME)
-                return syntax(c, "owned is followed by a type");
+        name param = {0}, type = {0};
+        tid  t = TY_NONE;
+        if (c->tok.kind == PNX_T_NAME) {
             type = tok_name(c);
             if (!advance(c))
                 return false;
-        } else if (c->tok.kind == PNX_T_NAME) {
-            if (owned)
-                return syntax(c, "owned stands right before the type: name owned type");
-            param = first;
-            type = tok_name(c);
-            if (!advance(c))
-                return false;
+            if (c->tok.kind == PNX_T_NAME || is_word(c, PNX_KW_owned) || is_word(c, PNX_KW_word)) {
+                param = type; // it was the name of the parameter
+                type = (name){0};
+            }
         }
-        const tid t = type_of_name(c, type);
+        if (!type.length) {
+            if (is_word(c, PNX_KW_owned)) {
+                owned = true;
+                if (!advance(c))
+                    return false;
+            }
+            if (is_word(c, PNX_KW_word)) { // a block: word ( effect )
+                sig inner;
+                if (!advance(c) || !parse_sig(c, &inner) || !block_type(c, &inner, &t))
+                    return false;
+            } else if (c->tok.kind == PNX_T_NAME) {
+                type = tok_name(c);
+                if (!advance(c))
+                    return false;
+            } else {
+                return syntax(c, "a parameter is a type, or a name and a type");
+            }
+        }
+        if (type.length)
+            t = type_of_name(c, type);
         if (t == TY_NONE)
             return type_error(c, name_is(type, "float") ? "float is not available: this build has no F bank"
                                                         : "this type is not known here");
@@ -454,7 +504,7 @@ static bool parse_sig(comp *c, sig *s) {
         if (c->tok.kind == PNX_T_COMMA) {
             if (!advance(c))
                 return false;
-            if (c->tok.kind != PNX_T_NAME && !is_word(c, PNX_KW_owned))
+            if (c->tok.kind != PNX_T_NAME && !is_word(c, PNX_KW_owned) && !is_word(c, PNX_KW_word))
                 return syntax(c, "a parameter is expected after the comma");
         } else if (c->tok.kind != PNX_T_RPAREN && !is_word(c, PNX_KW_gives) && !is_word(c, PNX_KW_or)) {
             return syntax(c, "parameters are separated by commas");
@@ -486,7 +536,24 @@ static bool sig_text(const comp *c, const sig *s, char *out, size_t cap) {
         }
         for (uint32_t k = 0; k < count; ++k) {
             const name pn = side ? s->out_name[k] : s->in_name[k];
-            const name tn = type_name(c, side ? s->out[k] : s->in[k]);
+            const tid kt = side ? s->out[k] : s->in[k];
+            if (is_block(kt)) { // word (effect), written out
+                char inner[72];
+                if (!sig_text(c, (const sig *)c->btypes.ptr + (kt - TY_BLOCK), inner, sizeof inner))
+                    return false;
+                if (k)
+                    PUT(", ", 2);
+                if (pn.length) {
+                    PUT(pn.text, pn.length);
+                    PUT(" ", 1);
+                }
+                if (side ? s->out_owned[k] : s->in_owned[k])
+                    PUT("owned ", 6);
+                PUT("word ", 5);
+                PUT(inner, __builtin_strlen(inner));
+                continue;
+            }
+            const name tn = type_name(c, kt);
             if (k)
                 PUT(", ", 2);
             if (pn.length) {
@@ -941,7 +1008,7 @@ enum {
     BW_STARTS_WITH, BW_ENDS_WITH, BW_CONTAINS, BW_LOOKUP, BW_INSERT, BW_REMOVE, BW_REPLACE, BW_PUT, BW_PEEK,
     BW_ALLOC, BW_FREE, BW_IS_ALIVE, BW_COUNT, BW_ANY, BW_ALL, BW_FIRST, BW_EACH_INDEX, BW_MINIMUM, BW_MAXIMUM,
     BW_SLICE, BW_CUT, BW_TRY_CUT, BW_TRIM, BW_TRIM_LEFT, BW_TRIM_RIGHT, BW_LINES, BW_SPLIT, BW_FIND_LAST, BW_COMPARE,
-    BW_HEX, BW_BIN, BW_HEX_PAD, BW_ZERO_PAD, BW_PAD_LEFT, BW_PAD_RIGHT
+    BW_HEX, BW_BIN, BW_HEX_PAD, BW_ZERO_PAD, BW_PAD_LEFT, BW_PAD_RIGHT, BW_CALL, BW_MARK, BW_RELEASE, BW_REGION_FREE
 };
 static const struct builtin {
     const char *name;
@@ -972,7 +1039,8 @@ static const struct builtin {
     {"lines", BW_LINES, 1},         {"split", BW_SPLIT, 1},        {"find_last", BW_FIND_LAST, 1},
     {"compare", BW_COMPARE, 1},     {"pad_left", BW_PAD_LEFT, 1},  {"pad_right", BW_PAD_RIGHT, 1},
     {"hex", BW_HEX, 2},             {"bin", BW_BIN, 2},            {"hex_pad", BW_HEX_PAD, 2},
-    {"zero_pad", BW_ZERO_PAD, 2},
+    {"zero_pad", BW_ZERO_PAD, 2},   {"call", BW_CALL, 0},          {"mark", BW_MARK, 0},
+    {"release", BW_RELEASE, 0},     {"region_free", BW_REGION_FREE, 0},
 };
 
 // `len` and `is_empty` belong to the core for arrays and lists and to `strings` for a str; the
@@ -2310,6 +2378,8 @@ static bool do_cat(comp *c) {
 // ---- stems and the blocks of combining words ----------------------------------------------
 
 // Finds the word after the end that closes the block opened by the current `do`.
+static bool value_block(comp *c, const sig *bs, uint32_t line, uint32_t column);
+
 static bool scan_user(comp *c, name *out) {
     pnx_lexer lx = *c->lx;
     pnx_token t;
@@ -2329,9 +2399,8 @@ static bool scan_user(comp *c, name *out) {
     }
     if (!pnx_lex_next(&lx, &t))
         return error_at(c, PINAX_ERR_SYNTAX, lx.error_line, lx.error_column, lx.error);
-    if (t.kind != PNX_T_NAME)
-        return syntax(c, "a block is followed by the word that uses it (each, fold, times)");
-    *out = (name){lx.source + t.start, t.length};
+    // anything but a combining word after the end makes the block a value
+    *out = t.kind == PNX_T_NAME ? (name){lx.source + t.start, t.length} : (name){0};
     return true;
 }
 
@@ -2474,6 +2543,12 @@ static bool do_block(comp *c) {
         return false;
     if (c->tok.kind == PNX_T_LPAREN && !parse_sig(c, &bs))
         return false;
+    static const char *const users[] = {"times", "each", "fold", "count", "any", "all", "first", "each_index"};
+    bool expanded = false;
+    for (size_t k = 0; k < sizeof users / sizeof users[0]; ++k)
+        expanded = expanded || name_is(user, users[k]);
+    if (!expanded)
+        return value_block(c, &bs, at.line, at.column);
     if (bs.fails)
         return error_at(c, PINAX_ERR_SYNTAX, at.line, at.column, "a block that can fail is not supported yet");
     const bool has_stem = f->depth > f->floor && bank_of(f->stack[f->depth - 1].type) == BANK_NONE;
@@ -2811,6 +2886,50 @@ static bool builtin(comp *c, const struct builtin *w) {
     case BW_SUM: return do_sum(c) && advance(c);
     case BW_MINIMUM:
     case BW_MAXIMUM: return do_extreme(c, w->id == BW_MAXIMUM);
+    case BW_CALL: { // args block call : calls the word the block value names
+        if (!need(c, 1))
+            return false;
+        const tid type = f->stack[f->depth - 1].type;
+        if (!is_block(type))
+            return type_error(c, "call takes a block value: args f call");
+        const sig bs = *((const sig *)c->btypes.ptr + (type - TY_BLOCK));
+        if (!settle(c, f->depth - 1))
+            return false;
+        const uint32_t which = slot_of(c, f->depth - 1);
+        --f->depth;
+        uint32_t base[2], in[2], out[2];
+        if (!call_args(c, &bs, base) || (bs.fails && !settle_all(c)))
+            return false;
+        count_sig(&bs, in, out);
+        (void)top_slot(c, BANK_I, (in[0] > out[0] ? in[0] : out[0]) + 1);
+        (void)top_slot(c, BANK_S, in[1] > out[1] ? in[1] : out[1]);
+        const uint32_t expect = in[0] | in[1] << 8 | out[0] << 16 | out[1] << 24 | (bs.fails ? 0x80000000u : 0);
+        if (!check_before_call(c) || emit(c, PNX_ABC(PNX_CALLR, base[BANK_I], base[BANK_S], which)) == NONE ||
+            emit(c, expect) == NONE || !advance(c))
+            return false;
+        return bs.fails ? guard(c, &bs, base, in, false) : push_results(c, &bs, base, in, false);
+    }
+    case BW_MARK: // the top of the region now; release gives back everything made after it
+        if (!push_slot(c, TY_MARK))
+            return false;
+        f->stack[f->depth - 1].owned = true;
+        return emit(c, PNX_ABX(PNX_RTOP, slot_of(c, f->depth - 1), 0)) != NONE && advance(c);
+    case BW_RELEASE:
+        c->sink = true;
+        if (!need(c, 1))
+            return false;
+        if (f->stack[f->depth - 1].type != TY_MARK)
+            return type_error(c, "release takes the mark that mark gave");
+        if (!reg_of(c, f->depth - 1, &ra))
+            return false;
+        if (!give(c, f->depth - 1))
+            return type_error(c, "this mark was already released");
+        --f->depth;
+        return emit(c, PNX_ABX(PNX_RCUT, ra, 0)) != NONE && advance(c);
+    case BW_REGION_FREE:
+        if (!push_slot(c, TY_INT))
+            return false;
+        return emit_def(c, PNX_ABX(PNX_RFREE, slot_of(c, f->depth - 1), 0), BANK_I) != NONE && advance(c);
     case BW_LINES:
         if (!need(c, 1))
             return false;
@@ -3614,8 +3733,9 @@ static bool finish_registers(comp *c, fn *f, uint16_t cells[2]) {
         const uint32_t op = *w & 0xffu;
         const pnx_opinfo info = pnx_ops_info[op];
         uint32_t a = (*w >> 8) & 0xffu, b = (*w >> 16) & 0xffu, cc = *w >> 24;
-        if (op == PNX_CALL || op == PNX_HCALL || op == PNX_HCALLF) {
-            if (!remap(c, PNX_K_I, &a, f->maxloc) || !remap(c, PNX_K_S, &b, f->maxloc))
+        if (op == PNX_CALL || op == PNX_HCALL || op == PNX_HCALLF || op == PNX_CALLR) {
+            if (!remap(c, PNX_K_I, &a, f->maxloc) || !remap(c, PNX_K_S, &b, f->maxloc) ||
+                (op == PNX_CALLR && !remap(c, PNX_K_I, &cc, f->maxloc)))
                 return false;
             *w = PNX_ABC(op, a, b, cc);
         } else if (info.shape == PNX_F_ABC) {
@@ -3647,6 +3767,102 @@ static void fn_reset(fn *f, bool is_top) {
     f->def_at = NONE;
     f->tail_at = NONE;
     f->is_top = is_top;
+}
+
+// The inputs of the body in c->f are the first registers of its window: named ones become
+// locals, bare ones start on the stack and are read from those registers.
+static bool bind_inputs(comp *c, const sig *s) {
+    fn *f = c->f;
+    for (uint32_t k = 0; k < s->n_in; ++k) {
+        const int bank = bank_of(s->in[k]);
+        local *l = &f->locals[f->n_locals++];
+        *l = (local){.name = s->in_name[k], .type = s->in[k], .reg = f->nloc[bank]++,
+                     .state = s->in_owned[k] ? L_OWNS : L_PLAIN};
+        if (l->name.length) {
+            for (uint32_t j = 0; j + 1 < f->n_locals; ++j) {
+                if (f->locals[j].name.length && name_eq(f->locals[j].name, l->name))
+                    return type_error(c, "two parameters have the same name");
+            }
+            const name pn = l->name;
+            l->name.length = 0; // not yet visible to the check below
+            const bool free_name = name_is_free(c, pn);
+            l->name = pn;
+            if (!free_name)
+                return false;
+        } else if (!push(c, (entry){.type = l->type, .kind = E_LOCAL, .reg = l->reg, .src = (uint8_t)f->n_locals})) {
+            return false;
+        }
+    }
+    f->maxloc[0] = f->nloc[0];
+    f->maxloc[1] = f->nloc[1];
+    return true;
+}
+
+// The registers of the finished body in `f` and the size of its window, into word `index`.
+static bool finish_word(comp *c, fn *f, uint32_t index) {
+    wordsym *w = (wordsym *)c->words.ptr + index;
+    uint32_t in[2], out[2];
+    count_sig(&w->sig, in, out);
+    if (!finish_registers(c, f, w->cells))
+        return false;
+    for (int bank = 0; bank < 2; ++bank) { // the loader wants room for arguments and results
+        const uint32_t least = in[bank] > out[bank] ? in[bank] : out[bank];
+        if (w->cells[bank] < least)
+            w->cells[bank] = (uint16_t)least;
+    }
+    return true;
+}
+
+// do ( effect ) body end , not followed by a combining word: a block that is a value. It
+// becomes a word of its own, sees no local of the code around it, and its number is the value.
+static bool value_block(comp *c, const sig *bs, uint32_t line, uint32_t column) {
+    if (c->data_only)
+        return error_at(c, PINAX_ERR_SYNTAX, line, column, "a data source holds no blocks");
+    if (c->nested == MAX_NESTED)
+        return error_at(c, PINAX_ERR_SYNTAX, line, column, "value blocks are nested too deeply");
+    fn *outer = c->f, *f = c->block_fn[c->nested];
+    if (!f) {
+        f = c->block_fn[c->nested] = arena_alloc(c, sizeof(fn));
+        if (!f)
+            return false;
+    }
+    wordsym *w = vec_push(c, &c->words, sizeof(wordsym));
+    if (!w)
+        return false;
+    const uint32_t index = c->words.n - 1;
+    __builtin_memset(w, 0, sizeof *w);
+    w->name = cname("(block)");
+    w->sig = *bs;
+    tid type;
+    if (!block_type(c, bs, &type))
+        return false;
+    fn_reset(f, false);
+    f->own_sig = *bs;
+    f->sig = &f->own_sig;
+    c->f = f;
+    ++c->nested;
+    if (!bind_inputs(c, &f->own_sig))
+        return false;
+    while (!(is_word(c, PNX_KW_end) && f->n_blocks == 0)) {
+        if (c->tok.kind == PNX_T_END)
+            return syntax(c, "the block is not closed by end");
+        if (!body_token(c))
+            return false;
+    }
+    if (!f->dead && !emit_return(c))
+        return false;
+    if (!finish_word(c, f, index))
+        return false;
+    // keep the code until the word around it is stored
+    pending_code *keep = vec_push(c, &c->pending, sizeof(pending_code));
+    uint32_t *copy = keep ? arena_alloc(c, (size_t)f->code.n * 4 + 4) : NULL;
+    if (!copy)
+        return false;
+    __builtin_memcpy(copy, f->code.ptr, (size_t)f->code.n * 4);
+    *keep = (pending_code){index, f->code.n, copy};
+    --c->nested;
+    c->f = outer;
+    return push(c, (entry){.type = type, .kind = E_CONST, .value = index}) && advance(c); // past the end
 }
 
 // word NAME ( effect ) body end        test NAME body end
@@ -3683,6 +3899,7 @@ static bool definition(comp *c, bool is_test) {
         return false;
     __builtin_memset(w, 0, sizeof *w);
     w->name = n;
+    c->def_index = c->words.n - 1;
     if (!is_test && !parse_sig(c, &w->sig))
         return false;
     char text[72];
@@ -3693,36 +3910,16 @@ static bool definition(comp *c, bool is_test) {
         char promised[72];
         if (!sig_text(c, &ahead->sig, promised, sizeof promised) || __builtin_strcmp(promised, text) != 0)
             return type_error(c, "the definition has another signature than its forward declaration");
-        ahead->index = c->words.n - 1;
+        ahead->index = c->def_index;
     }
 
     fn *f = c->word_fn;
     fn_reset(f, false);
-    f->sig = &w->sig;
+    f->own_sig = w->sig; // the word table may move while blocks inside this word are compiled
+    f->sig = &f->own_sig;
     c->f = f;
-    // inputs are the first registers of the window: named ones are locals, bare ones start on
-    // the stack and are read from those registers
-    for (uint32_t k = 0; k < w->sig.n_in; ++k) {
-        const int bank = bank_of(w->sig.in[k]);
-        local *l = &f->locals[f->n_locals++];
-        *l = (local){.name = w->sig.in_name[k], .type = w->sig.in[k], .reg = f->nloc[bank]++};
-        if (l->name.length) {
-            for (uint32_t j = 0; j + 1 < f->n_locals; ++j) {
-                if (f->locals[j].name.length && name_eq(f->locals[j].name, l->name))
-                    return type_error(c, "two parameters have the same name");
-            }
-            const name pn = l->name;
-            l->name.length = 0; // not yet visible to the check below
-            const bool free_name = name_is_free(c, pn);
-            l->name = pn;
-            if (!free_name)
-                return false;
-        } else if (!push(c, (entry){.type = l->type, .kind = E_LOCAL, .reg = l->reg})) {
-            return false;
-        }
-    }
-    f->maxloc[0] = f->nloc[0];
-    f->maxloc[1] = f->nloc[1];
+    if (!bind_inputs(c, &f->own_sig))
+        return false;
 
     while (!(is_word(c, PNX_KW_end) && f->n_blocks == 0)) {
         if (c->tok.kind == PNX_T_END)
@@ -3732,16 +3929,8 @@ static bool definition(comp *c, bool is_test) {
     }
     if (!f->dead && !emit_return(c))
         return false;
-    w = (wordsym *)c->words.ptr + (c->words.n - 1);
-    uint32_t in[2], out[2];
-    count_sig(&w->sig, in, out);
-    if (!finish_registers(c, f, w->cells))
+    if (!finish_word(c, f, c->def_index))
         return false;
-    for (int bank = 0; bank < 2; ++bank) { // the loader wants room for arguments and results
-        const uint32_t least = in[bank] > out[bank] ? in[bank] : out[bank];
-        if (w->cells[bank] < least)
-            w->cells[bank] = (uint16_t)least;
-    }
     c->f = c->top_fn;
     return advance(c);
 }
@@ -3872,7 +4061,7 @@ static bool declare_global(comp *c) {
     if (g.type == TY_STR) {
         if (!str_capacity(c, &g.strcap))
             return false;
-    } else if (g.type == TY_NONE || bank_of(g.type) != BANK_I) {
+    } else if (g.type == TY_NONE || bank_of(g.type) != BANK_I || is_block(g.type) || g.type == TY_MARK) {
         return type_error(c, "this type is not known, or not supported for a global yet");
     }
     if (c->globals.n >= 0xfffu)
@@ -4471,6 +4660,30 @@ static void patch_forward_calls(const comp *c, uint32_t *code, uint32_t n) {
     }
 }
 
+// Stores the value blocks finished since the last word was stored, in the order of their numbers.
+static bool store_pending(comp *c, image *im) {
+    if (c->nested)
+        return true; // an outer block is still open; its number comes first
+    const pending_code *all = c->pending.ptr;
+    for (uint32_t done = 0; done < c->pending.n; ++done) {
+        const pending_code *next = NULL;
+        for (uint32_t k = 0; k < c->pending.n; ++k) { // few: pick the lowest number not stored yet
+            if (all[k].code && (!next || all[k].word < next->word))
+                next = &all[k];
+        }
+        ((wordsym *)c->words.ptr + next->word)->entry = im->code.n;
+        for (uint32_t k = 0; k < next->n; ++k) {
+            uint32_t *slot = vec_push(c, &im->code, sizeof(uint32_t));
+            if (!slot)
+                return false;
+            *slot = next->code[k];
+        }
+        ((pending_code *)next)->code = NULL;
+    }
+    c->pending.n = 0;
+    return true;
+}
+
 static void put_text(char *out, size_t cap, name n) {
     const size_t len = n.length < cap - 1 ? n.length : cap - 1;
     __builtin_memcpy(out, n.text, len);
@@ -4504,12 +4717,10 @@ static bool compile(comp *c, image *im, bool *has_top) {
         } else if (c->data_only && (is_word(c, PNX_KW_word) || is_word(c, PNX_KW_test) || is_word(c, PNX_KW_use))) {
             return syntax(c, "a data source defines no words and uses no modules");
         } else if (is_word(c, PNX_KW_word) || is_word(c, PNX_KW_test)) {
-            wordsym *last;
             if (!definition(c, is_word(c, PNX_KW_test)))
                 return false;
-            last = (wordsym *)c->words.ptr + (c->words.n - 1);
-            last->entry = im->code.n;
-            if (!append_code(c, im, c->word_fn))
+            ((wordsym *)c->words.ptr + c->def_index)->entry = im->code.n;
+            if (!append_code(c, im, c->word_fn) || !store_pending(c, im))
                 return false;
         } else if (is_word(c, PNX_KW_bound) && !c->top_fn->n_blocks) {
             // bound global | bound array : the host gives the storage (pinax_bind); until it does,
@@ -4563,7 +4774,7 @@ static bool compile(comp *c, image *im, bool *has_top) {
                 return false;
         } else if (is_word(c, PNX_KW_pinax)) {
             return syntax(c, "the version line is the first thing in a source");
-        } else if (!body_token(c)) {
+        } else if (!body_token(c) || !store_pending(c, im)) {
             return false;
         }
     }

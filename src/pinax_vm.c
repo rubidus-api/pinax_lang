@@ -257,6 +257,9 @@ pinax_err pnx_execute(pinax_state *st) {
         RUN(PFREE)
         RUN(PALIVE)
         RUN(SETFAIL)
+        RUN(RTOP)
+        RUN(RCUT)
+        RUN(RFREE)
         RUN(SCUTS)
         RUNF(SCUTSF)
         RUN(STRIM)
@@ -295,6 +298,31 @@ pinax_err pnx_execute(pinax_state *st) {
 
         CASE(CALL) {
             const pnx_wordrec *callee = &st->words[*pc++];
+            const uint32_t new_ibase = ibase + OP_A(w), new_sbase = sbase + OP_B(w);
+            if (depth == st->depth_max || new_ibase + callee->int_cells > st->int_slots ||
+                new_sbase + callee->str_cells > st->str_slots)
+                FAULT(PINAX_ERR_DEPTH);
+            st->ctrl[depth++] = (pnx_frame){(uint32_t)(pc - code), ibase, sbase, 0};
+            if (depth > st->depth_peak)
+                st->depth_peak = depth;
+            ibase = new_ibase;
+            sbase = new_sbase;
+            R = st->ibank + ibase;
+            S = st->sbank + sbase;
+            pc = code + callee->entry;
+            NEXT();
+        }
+        CASE(CALLR) { // the word number comes from a register; what it takes and gives is checked here
+            const uint32_t expect = *pc++;
+            const uint64_t number = (uint64_t)R[OP_C(w)];
+            if (number >= st->head->n_words)
+                FAULT(PINAX_ERR_RANGE);
+            const pnx_counts have = st->word_counts[number];
+            if (have.int_args != (expect & 0xffu) || have.str_args != ((expect >> 8) & 0xffu) ||
+                have.int_results != ((expect >> 16) & 0xffu) || have.str_results != ((expect >> 24) & 0x7fu) ||
+                have.fails != (expect >> 31 != 0))
+                FAULT(PINAX_ERR_SIGNATURE);
+            const pnx_wordrec *callee = &st->words[number];
             const uint32_t new_ibase = ibase + OP_A(w), new_sbase = sbase + OP_B(w);
             if (depth == st->depth_max || new_ibase + callee->int_cells > st->int_slots ||
                 new_sbase + callee->str_cells > st->str_slots)
@@ -381,16 +409,19 @@ pinax_err pnx_execute(pinax_state *st) {
 
         CASE(CHECK) {
 #if !defined(PINAX_BUDGET_EACH)
-            const uint32_t n = OP_BX(w);
-            count += n;
+            uint64_t n = OP_BX(w);
+            if (st->charge >= 16) // bytes scanned since the last CHECK (D0022: 16 bytes as one instruction)
+                n += st->charge >> 4;
             if (budget) {
                 if (left < n) {
                     --pc;
-                    st->owed = n; // the next resume gets at least this much, so it moves on
+                    st->owed = n > UINT32_MAX ? UINT32_MAX : (uint32_t)n; // the next resume gets at least this much
                     goto suspended;
                 }
                 left -= n;
             }
+            count += n;
+            st->charge &= 15u;
 #endif
             NEXT();
         }

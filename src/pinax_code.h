@@ -43,6 +43,8 @@ enum {
     PNX_X_WORD,   // word index
     PNX_X_IMPORT, // host word index
     PNX_X_FIELD,  // global 12 bits | byte offset 12 bits | width code or string capacity 8 bits
+    PNX_X_COUNTS, // what a call through a register expects of the word: int args | str args << 8 |
+                  // int results << 16 | str results << 24, and bit 31 when the word can fail
 };
 
 // X(name, A, B, C, shape, second word, fails)
@@ -75,6 +77,9 @@ enum {
 // generation of its slot in the upper 32 bits; using it after PFREE is the fault STALE.
 // SETFAIL sets the number a failure word after it would pass on (for words the compiler
 // expands, like first, that fail without a failing instruction).
+// CALLR calls the word whose number is in R[C], like CALL; the word must take and give what the
+// second word says, else the fault SIGNATURE. RTOP gives the top of the region, RCUT sets it
+// back to an earlier top (a later one is a fault), RFREE gives the bytes left.
 // SCUTS A, B: S[A] is cut at the first S[B]; S[A] becomes the part before and S[B] the part
 // after (empty when the separator is missing; SCUTSF fails then). STRIM takes white space off
 // (C: 1 the front, 2 the back, 3 both). SLINE and SNEXTS take the next line or the next piece
@@ -184,6 +189,10 @@ enum {
     X(PFREE, PNX_K_I, PNX_K_NONE, PNX_K_NONE, PNX_F_GLOBAL, PNX_X_NONE, 0)                         \
     X(PALIVE, PNX_K_I, PNX_K_I, PNX_K_G, PNX_F_ABC, PNX_X_NONE, 0)                                 \
     X(SETFAIL, PNX_K_NONE, PNX_K_NONE, PNX_K_NONE, PNX_F_IMM, PNX_X_NONE, 0)                       \
+    X(CALLR, PNX_K_IMM, PNX_K_IMM, PNX_K_I, PNX_F_ABC, PNX_X_COUNTS, 0)                            \
+    X(RTOP, PNX_K_I, PNX_K_NONE, PNX_K_NONE, PNX_F_IMM, PNX_X_NONE, 0)                             \
+    X(RCUT, PNX_K_I, PNX_K_NONE, PNX_K_NONE, PNX_F_IMM, PNX_X_NONE, 0)                             \
+    X(RFREE, PNX_K_I, PNX_K_NONE, PNX_K_NONE, PNX_F_IMM, PNX_X_NONE, 0)                            \
     X(SCUTS, PNX_K_S, PNX_K_S, PNX_K_NONE, PNX_F_ABC, PNX_X_NONE, 0)                               \
     X(SCUTSF, PNX_K_S, PNX_K_S, PNX_K_NONE, PNX_F_ABC, PNX_X_NONE, 1)                              \
     X(STRIM, PNX_K_S, PNX_K_S, PNX_K_IMM, PNX_F_ABC, PNX_X_NONE, 0)                                \
