@@ -1,8 +1,8 @@
 /*
  * pinax.h - host interface of the Pinax embeddable scripting language.
  *
- * Not implemented yet, and answering PINAX_ERR_STATE: pinax_eval, pinax_call_pending and
- * pinax_complete (awaitable host words), the images and pinax_clone.
+ * Not implemented yet, and answering PINAX_ERR_STATE: pinax_call_pending and pinax_complete
+ * (awaitable host words), the images and pinax_clone.
  * Everything else works.
  *
  * The whole interface is this one header. It needs only <stddef.h> and <stdint.h>.
@@ -232,7 +232,18 @@ enum {
  *  - PINAX_LOAD_DATA: a source that does not finish inside its own small budget fails the load. */
 PINAX_API pinax_err pinax_load(pinax_state *state, const char *name, pinax_str source, uint32_t mode);
 PINAX_API pinax_err pinax_load_bytecode(pinax_state *state, pinax_str bytecode);
-/* One line at the top level, as in an interactive session. */
+/* One line at the top level, as in an interactive session (the text may be several lines).
+ *  - All the texts given to pinax_eval() are one module, the session: a line sees what the
+ *    lines before it defined and the modules they opened with `use`. Sources loaded with
+ *    pinax_load() do not see the session's names.
+ *  - What the line leaves on the stack is told through config.diag with line 0, as one message:
+ *    3 "abc" true. So are the answers of the tool words that exist only here: `list_words`,
+ *    and `see`, after which every definition in the text is listed, one message for each of
+ *    its lines (that line number, column 0): "stack: int str".
+ *  - A text that ends inside a definition or a block answers PINAX_ERR_SYNTAX with an error
+ *    text that begins "unfinished:"; give the longer text when the rest has come.
+ *  - A text that is refused or ends in a fault leaves nothing behind. A name that exists is
+ *    not defined again. */
 PINAX_API pinax_err pinax_eval(pinax_state *state, pinax_str line);
 
 /* ---- running ----------------------------------------------------------------------- */

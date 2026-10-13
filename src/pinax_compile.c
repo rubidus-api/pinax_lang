@@ -260,6 +260,13 @@ typedef struct comp {
         uint32_t words, consts, globals, records, dtypes, externs;
     } base;
     vec          externs;   // externsym
+    // pinax_eval(): every line belongs to one module, the session, so a line sees what the
+    // lines before it declared and the modules they opened
+    bool         eval;
+    bool         unfinished; // the text ended inside a definition or a block: more is to come
+    bool         see;        // list the stack after every line of the definitions that follow
+    uint32_t     see_line;
+    sig          eval_sig;   // what the line leaves on the stack: the results of its code
     bool         in_extern; // a signature of an extern is being read: cstr is a type there
     bool         in_host;   // a signature of a host word is being read: buffer is a type there
     uint32_t     cstr_mask; // and these of its inputs were written cstr
@@ -282,6 +289,8 @@ typedef struct comp {
 
 static bool error_at(comp *c, pinax_err err, uint32_t line, uint32_t column, const char *message) {
     if (c->err == PINAX_OK) {
+        if (err == PINAX_ERR_SYNTAX && c->tok.kind == PNX_T_END)
+            c->unfinished = true; // the text ran out; pinax_eval() says so
         c->err = err;
         c->message = message;
         c->line = line;
@@ -425,9 +434,9 @@ static tid type_of_name(const comp *c, name n) {
     const tid basic = basic_type(n);
     if (basic != TY_NONE)
         return basic;
-    for (uint32_t k = c->base.dtypes; k < c->dtypes.n; ++k) {
+    for (uint32_t k = c->eval ? 0 : c->base.dtypes; k < c->dtypes.n; ++k) {
         const dtype *d = (const dtype *)c->dtypes.ptr + k;
-        if (name_eq(d->name, n))
+        if ((k >= c->base.dtypes || d->module == c->module) && name_eq(d->name, n))
             return (tid)((TY_DISTINCT + k) | (d->base & TY_SBANK));
     }
     for (uint32_t k = 0; k < c->st->n_handle_types; ++k) { // a type the host gave
@@ -952,8 +961,8 @@ static local *find_local(fn *f, name n) {
 
 static wordsym *find_word(comp *c, name n, uint32_t *index) {
     wordsym *all = c->words.ptr;
-    for (uint32_t k = c->base.words; k < c->words.n; ++k) {
-        if (name_eq(all[k].name, n)) {
+    for (uint32_t k = c->eval ? 0 : c->base.words; k < c->words.n; ++k) {
+        if ((k >= c->base.words || all[k].module == c->module) && name_eq(all[k].name, n)) {
             if (index)
                 *index = k;
             return &all[k];
@@ -999,8 +1008,8 @@ static bool module_used(const comp *c, name module) {
 // not among them: it cannot use itself.
 static uint32_t source_module(const comp *c, name n) {
     const name *all = c->srcmods.ptr;
-    for (uint32_t k = 0; k + 1 < c->srcmods.n; ++k) {
-        if (all[k].length && name_eq(all[k], n))
+    for (uint32_t k = 0; k < c->srcmods.n; ++k) {
+        if (k != c->module && all[k].length && name_eq(all[k], n))
             return k;
     }
     return NONE;
@@ -1008,7 +1017,7 @@ static uint32_t source_module(const comp *c, name n) {
 
 // Whether this source opened source module number `m` with `use`.
 static bool source_used(const comp *c, uint32_t m) {
-    return m + 1 < c->srcmods.n && ((const name *)c->srcmods.ptr)[m].length &&
+    return m != c->module && m < c->srcmods.n && ((const name *)c->srcmods.ptr)[m].length &&
            module_used(c, ((const name *)c->srcmods.ptr)[m]);
 }
 
@@ -1065,8 +1074,8 @@ static const core_word *find_core(name n) {
 
 static const constant *find_const(const comp *c, name n) {
     const constant *all = c->consts.ptr;
-    for (uint32_t k = c->base.consts; k < c->consts.n; ++k) {
-        if (name_eq(all[k].name, n))
+    for (uint32_t k = c->eval ? 0 : c->base.consts; k < c->consts.n; ++k) {
+        if ((k >= c->base.consts || all[k].module == c->module) && name_eq(all[k].name, n))
             return &all[k];
     }
     return NULL;
@@ -1074,8 +1083,8 @@ static const constant *find_const(const comp *c, name n) {
 
 static uint32_t find_global(const comp *c, name n) {
     const globalsym *all = c->globals.ptr;
-    for (uint32_t k = c->base.globals; k < c->globals.n; ++k) {
-        if (name_eq(all[k].name, n))
+    for (uint32_t k = c->eval ? 0 : c->base.globals; k < c->globals.n; ++k) {
+        if ((k >= c->base.globals || all[k].module == c->module) && name_eq(all[k].name, n))
             return k;
     }
     return NONE;
@@ -1083,8 +1092,8 @@ static uint32_t find_global(const comp *c, name n) {
 
 static uint32_t find_record(const comp *c, name n) {
     const record *all = c->records.ptr;
-    for (uint32_t k = c->base.records; k < c->records.n; ++k) {
-        if (name_eq(all[k].name, n))
+    for (uint32_t k = c->eval ? 0 : c->base.records; k < c->records.n; ++k) {
+        if ((k >= c->base.records || all[k].module == c->module) && name_eq(all[k].name, n))
             return k;
     }
     return NONE;
@@ -1093,8 +1102,8 @@ static uint32_t find_record(const comp *c, name n) {
 // The extern of this source called `n`: its number in comp.externs, or NONE.
 static uint32_t find_extern(const comp *c, name n) {
     const externsym *all = c->externs.ptr;
-    for (uint32_t k = c->base.externs; k < c->externs.n; ++k) {
-        if (name_eq(all[k].name, n))
+    for (uint32_t k = c->eval ? 0 : c->base.externs; k < c->externs.n; ++k) {
+        if ((k >= c->base.externs || all[k].module == c->module) && name_eq(all[k].name, n))
             return k;
     }
     return NONE;
@@ -2540,8 +2549,10 @@ static bool scan_user(comp *c, name *out, name *dst) {
     for (uint32_t depth = 1; depth;) {
         if (!pnx_lex_next(&lx, &t))
             return error_at(c, PINAX_ERR_SYNTAX, lx.error_line, lx.error_column, lx.error);
-        if (t.kind == PNX_T_END)
+        if (t.kind == PNX_T_END) {
+            c->unfinished = true;
             return syntax(c, "this block is not closed by end");
+        }
         if (t.kind != PNX_T_RESERVED)
             continue;
         switch (t.word) {
@@ -3896,8 +3907,45 @@ static bool body_name(comp *c) {
     return call_host(c, host);
 }
 
+// The stack as it stands, in words, for the listing and for the values a line leaves.
+static void stack_text(const comp *c, const fn *f, char *out, size_t cap) {
+    size_t n = 0;
+    for (uint32_t k = 0; k < f->depth; ++k) {
+        if (f->stack[k].hidden)
+            continue;
+        const tid t = f->stack[k].type;
+        const name tn = t == TY_COLL ? cname("(names)") : t == TY_STEM ? cname("(stem)")
+                        : is_block(t) ? cname("word") : type_name(c, t);
+        if (n + tn.length + 2 >= cap)
+            break;
+        if (n)
+            out[n++] = ' ';
+        __builtin_memcpy(out + n, tn.text, tn.length);
+        n += tn.length;
+    }
+    if (!n && cap > 8) {
+        __builtin_memcpy(out, "(empty)", 7);
+        n = 7;
+    }
+    out[n] = '\0';
+}
+
+// see: one message for every line of a definition, saying what the stack holds after it.
+static void see_line(comp *c, uint32_t next_line) {
+    if (c->see && c->see_line && c->see_line != next_line && c->st->diag && c->f != c->top_fn) {
+        char text[200] = "stack: ";
+        stack_text(c, c->f, text + 7, sizeof text - 7);
+        const pinax_str file = {(const unsigned char *)c->file, __builtin_strlen(c->file)};
+        const pinax_str message = {(const unsigned char *)text, __builtin_strlen(text)};
+        c->st->diag(c->st->diag_user, file, c->see_line, 0, message);
+    }
+    c->see_line = next_line;
+}
+
 static bool body_token(comp *c) {
     fn *f = c->f;
+    if (c->see)
+        see_line(c, c->tok.line);
     const pnx_token t = c->tok;
     if (f->n_blocks && f->blocks[f->n_blocks - 1].kind == B_CASE)
         return case_item(c);
@@ -4217,6 +4265,8 @@ static bool definition(comp *c, bool is_test) {
         if (!body_token(c))
             return false;
     }
+    if (c->see)
+        see_line(c, 0); // the last line of the body
     if (!f->dead && !emit_return(c))
         return false;
     if (!finish_word(c, f, c->def_index))
@@ -5077,6 +5127,37 @@ static bool compile(comp *c, image *im, bool *has_top) {
     }
     struct counts seen = c->base;
     while (c->tok.kind != PNX_T_END) {
+        if (c->eval && c->tok.kind == PNX_T_NAME && !c->top_fn->n_blocks && c->top_fn->depth == 0 &&
+            (name_is(tok_name(c), "see") || name_is(tok_name(c), "list_words"))) {
+            // tool words of an interactive session (RFC-0009 section 6)
+            if (name_is(tok_name(c), "see")) {
+                c->see = true;
+            } else if (c->st->diag) {
+                const wordsym *all = c->words.ptr;
+                for (uint32_t k = 0; k < c->words.n; ++k) {
+                    char text[120], effect[72];
+                    if (all[k].name.text[0] == '(' || !sig_text(c, &all[k].sig, effect, sizeof effect))
+                        continue;
+                    size_t n = 0;
+                    const name module = ((const name *)c->srcmods.ptr)[all[k].module];
+                    if (all[k].module != c->module && module.length) {
+                        __builtin_memcpy(text, module.text, module.length);
+                        n = module.length;
+                        text[n++] = '.';
+                    }
+                    __builtin_memcpy(text + n, all[k].name.text, all[k].name.length);
+                    n += all[k].name.length;
+                    text[n++] = ' ';
+                    __builtin_memcpy(text + n, effect, __builtin_strlen(effect) + 1);
+                    const pinax_str file = {(const unsigned char *)c->file, __builtin_strlen(c->file)};
+                    const pinax_str message = {(const unsigned char *)text, __builtin_strlen(text)};
+                    c->st->diag(c->st->diag_user, file, 0, 0, message);
+                }
+            }
+            if (!advance(c))
+                return false;
+            continue;
+        }
         if (is_word(c, PNX_KW_use)) {
             if (!use_module(c))
                 return false;
@@ -5102,6 +5183,7 @@ static bool compile(comp *c, image *im, bool *has_top) {
             ((wordsym *)c->words.ptr + c->def_index)->entry = im->code.n;
             if (!append_code(c, im, c->word_fn) || !store_pending(c, im))
                 return false;
+            c->see_line = 0;
         } else if (is_word(c, PNX_KW_bound) && !c->top_fn->n_blocks) {
             // bound global | bound array : the host gives the storage (pinax_bind); until it does,
             // the declaration has storage of its own, so nothing is ever unbacked
@@ -5182,14 +5264,30 @@ static bool compile(comp *c, image *im, bool *has_top) {
     }
     *has_top = top->code.n != 0 || top->depth != 0;
     if (*has_top) {
-        if (top->depth && !top->dead)
+        if (top->depth && !top->dead && !c->eval)
             return type_error(c, "values are left on the stack at the end of the source");
-        if (!top->dead && emit(c, PNX_ABC(PNX_RET, 0, 0, 0)) == NONE)
+        if (c->eval && !top->dead) { // what a line of a session leaves is what its code gives
+            sig *s = &c->eval_sig;
+            for (uint32_t k = 0; k < top->depth; ++k) {
+                const tid t = top->stack[k].type;
+                if (s->n_out == MAX_PARAMS || t == TY_COLL || t == TY_STEM || top->stack[k].owned)
+                    return type_error(c, s->n_out == MAX_PARAMS ? "the line leaves too many values"
+                                         : top->stack[k].owned  ? "the line leaves an owned value that nothing takes"
+                                                                : "the line leaves a name or a stem, which is not a value");
+                s->out[s->n_out++] = t;
+            }
+            top->sig = s;
+            if (!emit_return(c))
+                return false;
+        } else if (!top->dead && emit(c, PNX_ABC(PNX_RET, 0, 0, 0)) == NONE) {
             return false;
+        }
         wordsym *w = vec_push(c, &c->words, sizeof(wordsym));
         if (!w)
             return false;
         __builtin_memset(w, 0, sizeof *w);
+        if (c->eval)
+            w->sig = c->eval_sig;
         w->name = cname(LOAD_WORD);
         w->module = c->module;
         w->entry = im->code.n;
@@ -5341,6 +5439,10 @@ static bool serialize(comp *c, const image *im, uint8_t **out, size_t *out_len) 
 typedef struct symtab {
     vec    words, consts, globals, records, fields, btypes, dtypes, srcmods, externs;
     size_t bytes;
+    // the session of pinax_eval(): its module number (NONE before the first line) and the
+    // modules its lines opened
+    uint32_t session, n_opened;
+    name     opened[MAX_MODULES], opened_real[MAX_MODULES];
 } symtab;
 
 typedef void name_fn(name *n, void *user);
@@ -5374,6 +5476,10 @@ static void each_name(symtab *t, name_fn *f, void *user) {
         f((name *)t->srcmods.ptr + k, user);
     for (uint32_t k = 0; k < t->externs.n; ++k)
         f(&((externsym *)t->externs.ptr + k)->name, user);
+    for (uint32_t k = 0; k < t->n_opened; ++k) {
+        f(&t->opened[k], user);
+        f(&t->opened_real[k], user);
+    }
 }
 
 #define TABLES(X)                                                                                            \
@@ -5422,7 +5528,19 @@ static void name_shift(name *n, void *user) {
 // The tables as one piece in the working memory.
 static symtab *keep_symbols(comp *c, pinax_str source, const uint8_t *work) {
     symtab now = {c->words, c->consts, c->globals, c->records, c->fields, c->btypes, c->dtypes, c->srcmods,
-                  c->externs, 0};
+                  c->externs, 0, NONE, 0, {{0}}, {{0}}};
+    const symtab *old = c->st->symbols;
+    if (c->eval) { // this line's session: its number and what it has opened by now
+        now.session = c->module;
+        now.n_opened = c->n_modules;
+        __builtin_memcpy(now.opened, c->modules, sizeof now.opened);
+        __builtin_memcpy(now.opened_real, c->module_real, sizeof now.opened_real);
+    } else if (old) {
+        now.session = old->session;
+        now.n_opened = old->n_opened;
+        __builtin_memcpy(now.opened, old->opened, sizeof now.opened);
+        __builtin_memcpy(now.opened_real, old->opened_real, sizeof now.opened_real);
+    }
     keeper k = {{source.ptr, work}, {source.ptr + source.len, c->arena_end}, NULL, 0};
     each_name(&now, name_size, &k);
     size_t bytes = sizeof(symtab) + ((k.total + 7u) & ~(size_t)7u);
@@ -5442,6 +5560,10 @@ static symtab *keep_symbols(comp *c, pinax_str source, const uint8_t *work) {
     TABLES(X)
 #undef X
     t->bytes = bytes;
+    t->session = now.session;
+    t->n_opened = now.n_opened;
+    __builtin_memcpy(t->opened, now.opened, sizeof t->opened);
+    __builtin_memcpy(t->opened_real, now.opened_real, sizeof t->opened_real);
     k.at = p;
     each_name(t, name_keep, &k);
     return t;
@@ -5532,7 +5654,55 @@ static bool module_name(const char *file, size_t *length) {
     return n > 0 && n <= 31;
 }
 
-pinax_err pinax_load(pinax_state *st, const char *file, pinax_str source, uint32_t mode) {
+// What a line of a session left on the stack, told to the host through its diagnostics
+// function with line 0: "3 \"abc\" true".
+static void tell_values(pinax_state *st, const char *file, const char *tags, uint32_t count, const int64_t *ints,
+                        const pinax_str *strs) {
+    char   text[240];
+    size_t n = 0;
+    uint32_t ni = 0, ns = 0;
+    for (uint32_t k = 0; k < count && n + 80 < sizeof text; ++k) {
+        if (k)
+            text[n++] = ' ';
+        if (tags[k] == 's') {
+            const pinax_str s = strs[ns++];
+            const size_t shown = s.len > 60 ? 60 : s.len;
+            text[n++] = '"';
+            __builtin_memcpy(text + n, s.ptr, shown);
+            n += shown;
+            if (shown < s.len) {
+                __builtin_memcpy(text + n, "...", 3);
+                n += 3;
+            }
+            text[n++] = '"';
+            continue;
+        }
+        const int64_t v = ints[ni++];
+        if (tags[k] == 'i') {
+            uint8_t digits[24];
+            const uint32_t d = pnx_format_int(v, digits);
+            __builtin_memcpy(text + n, digits, d);
+            n += d;
+        } else if (tags[k] == 'b') {
+            __builtin_memcpy(text + n, v ? "true" : "false", v ? 4 : 5);
+            n += v ? 4 : 5;
+        } else if (tags[k] == 'e') {
+            uint32_t offset, length;
+            pnx_err_name(v, &offset, &length);
+            __builtin_memcpy(text + n, "err.", 4);
+            __builtin_memcpy(text + n + 4, pnx_static_text + offset, length);
+            n += 4 + length;
+        } else {
+            __builtin_memcpy(text + n, "<value>", 7);
+            n += 7;
+        }
+    }
+    const pinax_str name = {(const unsigned char *)file, __builtin_strlen(file)};
+    const pinax_str message = {(const unsigned char *)text, n};
+    st->diag(st->diag_user, name, 0, 0, message);
+}
+
+static pinax_err load_source(pinax_state *st, const char *file, pinax_str source, uint32_t mode, bool eval) {
     if (!st || (!source.ptr && source.len))
         return PINAX_ERR_ARGUMENT;
     if (st->suspended || st->in_host) {
@@ -5554,7 +5724,8 @@ pinax_err pinax_load(pinax_state *st, const char *file, pinax_str source, uint32
     // the unused tail of the block is the compiler's working memory
     uint8_t *const tail = st->block + ((st->used + 15u) & ~(size_t)15u);
     uint8_t *const end = st->block + st->block_len;
-    comp      c = {.st = st, .file = file ? file : "", .data_only = mode == PINAX_LOAD_DATA, .path_global = NONE};
+    comp      c = {.st = st, .file = file ? file : "", .data_only = mode == PINAX_LOAD_DATA, .path_global = NONE,
+                   .eval = eval};
     c.arena = tail < end ? tail : end;
     c.arena_end = end;
     const uint8_t *const work = c.arena;
@@ -5579,8 +5750,17 @@ pinax_err pinax_load(pinax_state *st, const char *file, pinax_str source, uint32
                 self = (name){(void *)text, (uint32_t)self_len};
             }
         }
-        c.module = (uint16_t)c.srcmods.n;
-        name *slot = c.err == PINAX_OK ? vec_push(&c, &c.srcmods, sizeof(name)) : NULL;
+        const symtab *kept_before = st->symbols;
+        const bool    resumed = eval && kept_before && kept_before->session != NONE;
+        if (resumed) { // a further line of the session: its module, and the modules it has opened
+            c.module = (uint16_t)kept_before->session;
+            c.n_modules = kept_before->n_opened;
+            __builtin_memcpy(c.modules, kept_before->opened, sizeof c.modules);
+            __builtin_memcpy(c.module_real, kept_before->opened_real, sizeof c.module_real);
+        } else {
+            c.module = (uint16_t)c.srcmods.n;
+        }
+        name *slot = c.err == PINAX_OK && !resumed ? vec_push(&c, &c.srcmods, sizeof(name)) : NULL;
         if (slot) {
             *slot = self;
             bool taken = self.length && (name_is(self, "str") || name_is(self, "fmt") || source_module(&c, self) != NONE);
@@ -5603,14 +5783,32 @@ pinax_err pinax_load(pinax_state *st, const char *file, pinax_str source, uint32
     }
     if (c.err != PINAX_OK) {
         st->error_text = c.message;
+        st->n_hosts = before.n_hosts;
+        if (eval && c.unfinished) { // the host reads on and gives the longer text
+            st->error_text = "unfinished: the text ends inside a definition or a block";
+            return PINAX_ERR_SYNTAX;
+        }
         if (st->diag) {
             const pinax_str name = {(const unsigned char *)c.file, __builtin_strlen(c.file)};
             const pinax_str text = {(const unsigned char *)c.message, __builtin_strlen(c.message)};
             st->diag(st->diag_user, name, c.line, c.column, text);
         }
-        st->n_hosts = before.n_hosts; // the C functions this source named
         return c.err;
     }
+
+    // what the line of a session leaves, and whether it declared anything worth keeping
+    char           tags[MAX_PARAMS];
+    const uint32_t n_values = eval ? c.eval_sig.n_out : 0;
+    for (uint32_t k = 0; k < n_values; ++k) {
+        const tid t = c.eval_sig.out[k];
+        tags[k] = t == TY_INT ? 'i' : t == TY_BOOL ? 'b' : t == TY_ERR ? 'e' : t == TY_STR ? 's' : '?';
+    }
+    const symtab *session_before = st->symbols;
+    const bool    declared = !eval || c.words.n != c.base.words + (has_top ? 1u : 0u) || c.consts.n != c.base.consts ||
+                             c.globals.n != c.base.globals || c.records.n != c.base.records ||
+                             c.dtypes.n != c.base.dtypes || c.externs.n != c.base.externs ||
+                             !session_before || session_before->session == NONE ||
+                             c.n_modules != session_before->n_opened;
 
     // The tables and the container move to the very end of the block, out of the way of the
     // loader, which takes its room from the front; the block is shortened for that moment.
@@ -5648,8 +5846,13 @@ pinax_err pinax_load(pinax_state *st, const char *file, pinax_str source, uint32
         const uint64_t budget = st->budget;
         if (mode == PINAX_LOAD_DATA) // its stores run on a small budget of their own, not the host's
             st->budget = 1024 + 16 * (uint64_t)source.len;
-        err = pinax_run(st, st->head->n_words - 1, NULL);
+        int64_t    ints[MAX_PARAMS];
+        pinax_str  strs[MAX_PARAMS];
+        pinax_args values = {.ri = ints, .rs = strs};
+        err = pinax_run(st, st->head->n_words - 1, n_values ? &values : NULL);
         st->budget = budget;
+        if (err == PINAX_OK && n_values && st->diag)
+            tell_values(st, file ? file : "", tags, n_values, ints, strs);
         if (mode == PINAX_LOAD_DATA && err == PINAX_SUSPENDED) {
             st->error_text = "the data source did not finish inside its budget";
             err = PINAX_ERR_STATE;
@@ -5665,5 +5868,15 @@ pinax_err pinax_load(pinax_state *st, const char *file, pinax_str source, uint32
             st->error_text = text;
         }
     }
+    if (err == PINAX_OK && !declared) // a line that only ran code leaves the program as it was
+        pnx_program_restore(st, &before);
     return err;
+}
+
+pinax_err pinax_load(pinax_state *st, const char *file, pinax_str source, uint32_t mode) {
+    return load_source(st, file, source, mode, false);
+}
+
+pinax_err pinax_eval(pinax_state *st, pinax_str line) {
+    return load_source(st, "(eval)", line, PINAX_LOAD_CODE, true);
 }

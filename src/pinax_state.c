@@ -970,6 +970,8 @@ static pinax_err deliver(pinax_state *st, pinax_err err, const pinax_args *resul
         return err;
     }
     const pnx_counts n = st->word_counts[st->top_word];
+    if (st->loading && !results)
+        return PINAX_OK; // a line of a session that was suspended: what it left is not shown
     if ((n.int_results && !(results && results->ri)) || (n.str_results && !(results && results->rs)))
         return fail(st, PINAX_ERR_ARGUMENT, "no place given for the results");
     for (uint32_t k = 0; k < n.int_results; ++k)
@@ -1460,10 +1462,6 @@ pinax_err pinax_global_find(pinax_state *st, const char *name, pinax_global *out
     return fail(st, PINAX_ERR_NOT_FOUND, "no such global");
 }
 
-pinax_err pinax_eval(pinax_state *st, pinax_str line) {
-    (void)st, (void)line;
-    return PINAX_ERR_STATE;
-}
 
 size_t pinax_image_size(const pinax_state *st) {
     (void)st;

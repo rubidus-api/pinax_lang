@@ -3,6 +3,9 @@
 //
 //   pnx file.pnx [arguments]      loads the file; its code outside definitions runs
 //   pnx test file.pnx             loads the file, then runs each of its `test name ... end`
+//   pnx repl                      reads lines and runs each (pinax_eval); what a line leaves is shown
+//   pnx see file.pnx              prints, for every line of every definition, the stack after it
+//   pnx fmt file.pnx              prints the file with its lines laid out the one way
 //
 // A module the file uses that is no host module is looked for beside it: `use shapes` loads
 // shapes.pnx from the directory of the file first.
@@ -10,6 +13,7 @@
 // Environment: PNX_BLOCK_KB sets the size of the state's memory block (default 16384).
 #include "pinax.h"
 #include "pinax_host.h"
+#include "pnx_fmt.h"
 
 #include <stdio.h>
 #include <stdlib.h>
@@ -71,8 +75,67 @@ static struct {
 } sources[MOST_SOURCES];
 static int n_sources;
 
+static const char *eval_path = "(eval)"; // the file whose text is given to pinax_eval, when there is one
+static bool        refused;              // the last text was refused with a message
+static const char *see_text;             // pnx see: the text being listed, to print each line beside its stack
+static size_t      see_length;
+// pnx repl: a text that turns out to be unfinished is run again when it has grown, so what
+// its listing says is held back until the text has run
+static char   held[1 << 15];
+static size_t held_n;
+static bool   holding;
+
+static void say(const char *line) {
+    if (holding) {
+        const size_t n = strlen(line);
+        if (held_n + n < sizeof held) {
+            memcpy(held + held_n, line, n);
+            held_n += n;
+        }
+        return;
+    }
+    fputs(line, stdout);
+    fflush(stdout); // the host modules write without a buffer; keep the order
+}
+
 static void diag(void *user, pinax_str file, uint32_t line, uint32_t column, pinax_str message) {
     (void)user;
+    if (line == 0) { // tool output: what a line left, the list of words
+        char out[320];
+        snprintf(out, sizeof out, "%.*s\n", (int)message.len, (const char *)message.ptr);
+        say(out);
+        return;
+    }
+    if (column == 0) { // the listing of `see`: the line as written, then the stack after it
+        char        out[400];
+        const char *stack = (const char *)message.ptr;
+        int         stack_n = (int)message.len;
+        if (stack_n > 7 && memcmp(stack, "stack: ", 7) == 0) {
+            stack += 7;
+            stack_n -= 7;
+        }
+        const char *from = see_text, *end = see_text + see_length;
+        for (uint32_t k = 1; from && k < line && from < end; ++k) { // the start of that line
+            const char *next = memchr(from, '\n', (size_t)(end - from));
+            from = next ? next + 1 : end;
+        }
+        int written = 0;
+        if (from && from < end) {
+            const char *stop = memchr(from, '\n', (size_t)(end - from));
+            int         n = (int)((stop ? stop : end) - from);
+            while (n && (from[n - 1] == ' ' || from[n - 1] == '\r' || from[n - 1] == '\t'))
+                --n;
+            written = snprintf(out, sizeof out, "%5u  %-48.*s", (unsigned)line, n > 200 ? 200 : n, from);
+        } else {
+            written = snprintf(out, sizeof out, "%5u ", (unsigned)line);
+        }
+        snprintf(out + written, sizeof out - (size_t)written, " | %.*s\n", stack_n, stack);
+        say(out);
+        return;
+    }
+    refused = true;
+    if (file.len == 6 && memcmp(file.ptr, "(eval)", 6) == 0)
+        file = (pinax_str){(const unsigned char *)eval_path, strlen(eval_path)};
     for (int k = 0; k < n_sources; ++k) {
         if (strlen(sources[k].name) == file.len && memcmp(sources[k].name, file.ptr, file.len) == 0) {
             file = (pinax_str){(const unsigned char *)sources[k].path, strlen(sources[k].path)};
@@ -93,7 +156,7 @@ static pinax_err finish(pinax_state *state, pinax_err err) {
 // NAME.pnx beside this one, when there is such a file and it is not loaded yet. (A module the
 // host registered has no such file; a `use` line inside a text literal names one by mistake
 // at worst.) Returns the outcome of the load; *said tells that the error was printed.
-static pinax_err load_file(pinax_state *state, const char *path, const char *name, bool *said) {
+static pinax_err load_file(pinax_state *state, const char *path, const char *name, bool *said, bool see) {
     if (n_sources == MOST_SOURCES) {
         fprintf(stderr, "pnx: more than %d source files\n", MOST_SOURCES);
         *said = true;
@@ -145,7 +208,7 @@ static pinax_err load_file(pinax_state *state, const char *path, const char *nam
         if (there) {
             fclose(there);
             const int mark = n_sources;
-            err = load_file(state, beside, used, said);
+            err = load_file(state, beside, used, said, false);
             if (err == PINAX_ERR_STATE && !*said) { // the name is a module of the host: that one is meant
                 for (int k = mark; k < n_sources; ++k) {
                     if (strcmp(sources[k].name, used) == 0)
@@ -162,7 +225,53 @@ static pinax_err load_file(pinax_state *state, const char *path, const char *nam
         if (err != PINAX_OK)
             return err;
     }
+    if (see) { // the same text as a session's, with the tool word `see` before it on its first line
+        char *listed = malloc(length + 4);
+        if (!listed)
+            return PINAX_ERR_NO_ROOM;
+        memcpy(listed, "see ", 4);
+        memcpy(listed + 4, text, length);
+        eval_path = sources[self].path;
+        see_text = text;
+        see_length = length;
+        const pinax_err err = finish(state, pinax_eval(state, (pinax_str){(const unsigned char *)listed, length + 4}));
+        free(listed);
+        return err;
+    }
     return finish(state, pinax_load(state, name, (pinax_str){(const unsigned char *)text, length}, PINAX_LOAD_CODE));
+}
+
+// Reads lines from standard input and runs each as a line of one session. A definition or a
+// block may go over several lines: the text is run when it is complete.
+static int repl(pinax_state *state) {
+    static char text[1 << 16];
+    size_t      n = 0;
+    for (;;) {
+        fputs(n ? ".. " : "> ", stderr);
+        if (!fgets(text + n, (int)(sizeof text - n), stdin))
+            break;
+        n += strlen(text + n);
+        refused = false;
+        holding = true;
+        held_n = 0;
+        see_text = text;
+        see_length = n;
+        pinax_err err = finish(state, pinax_eval(state, (pinax_str){(const unsigned char *)text, n}));
+        holding = false;
+        const pinax_str why = pinax_error_text(state);
+        if (err == PINAX_ERR_SYNTAX && why.len >= 11 && memcmp(why.ptr, "unfinished:", 11) == 0 &&
+            n + 1 < sizeof text)
+            continue; // more lines are to come
+        fwrite(held, 1, held_n, stdout);
+        if (err != PINAX_OK && !refused) // a fault of the line, or an error without a place
+            printf("error: %.*s\n", (int)why.len, (const char *)why.ptr);
+        fflush(stdout);
+        n = 0;
+    }
+    if (n)
+        printf("error: the input ended inside a definition or a block\n");
+    fputc('\n', stderr);
+    return 0;
 }
 
 // Prints where a script's fault happened. The state says "module:line: error"; the module
@@ -211,10 +320,25 @@ static int run_tests(pinax_state *state, const char *module) {
 
 int main(int argc, char **argv) {
     const bool testing = argc > 1 && strcmp(argv[1], "test") == 0;
-    const int  at = testing ? 2 : 1;
+    const bool seeing = argc > 1 && strcmp(argv[1], "see") == 0;
+    const bool formatting = argc > 1 && strcmp(argv[1], "fmt") == 0;
+    const bool talking = argc == 2 && strcmp(argv[1], "repl") == 0;
+    const int  at = testing || seeing || formatting ? 2 : 1;
     if (argc <= at) {
-        fprintf(stderr, "usage: pnx file.pnx [arguments]\n       pnx test file.pnx\n");
+        fprintf(stderr, "usage: pnx file.pnx [arguments]\n       pnx test file.pnx\n       pnx repl\n"
+                        "       pnx see file.pnx\n       pnx fmt file.pnx\n");
         return 2;
+    }
+    if (formatting) {
+        size_t length = 0;
+        char  *text = read_file(argv[at], &length);
+        if (!text) {
+            fprintf(stderr, "pnx: cannot read %s\n", argv[at]);
+            return 2;
+        }
+        const int status = pnx_format(text, length, stdout, argv[at]);
+        free(text);
+        return status;
     }
     const char *file_name = argv[at];
     const char *kb = getenv("PNX_BLOCK_KB");
@@ -236,6 +360,12 @@ int main(int argc, char **argv) {
         return 2;
     }
     pinax_host_set_args(argc - at, (const char *const *)(argv + at));
+    if (talking) {
+        const int status = repl(state);
+        pinax_close(state);
+        free(block);
+        return status;
+    }
 
     // The file is loaded under its own name without ".pnx" when that is written like a word,
     // so that its tests and its diagnostics can be told from those of the modules it uses.
@@ -250,10 +380,10 @@ int main(int argc, char **argv) {
     if (plain)
         memcpy(module, base, stem);
     bool said = false;
-    err = load_file(state, file_name, plain ? module : file_name, &said);
-    if (err == PINAX_ERR_STATE && plain && !said) { // the file is named like a module of the host
+    err = load_file(state, file_name, plain ? module : file_name, &said, seeing);
+    if (err == PINAX_ERR_STATE && plain && !said && !seeing) { // the file is named like a module of the host
         plain = false;
-        err = load_file(state, file_name, file_name, &said);
+        err = load_file(state, file_name, file_name, &said, false);
     }
     int status = 0;
     if (err != PINAX_OK) {

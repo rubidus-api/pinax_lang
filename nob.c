@@ -68,7 +68,7 @@ static const char *const proven_hosted[] = {
 
 // The standard host modules and the command pnx (RFC-0015): hosted, built on pinax.h.
 static const char *const host_sources[] = {"src/host/pinax_host.c"};
-static const char *const pnx_sources[] = {"src/host/pnx_main.c"};
+static const char *const pnx_sources[] = {"src/host/pnx_main.c", "src/host/pnx_fmt.c"};
 
 static const char *const test_sources[] = {"tests/test_main.c"};
 
