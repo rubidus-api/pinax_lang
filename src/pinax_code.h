@@ -60,6 +60,14 @@ enum {
 // Rows. A row of a table is its number plus one, and 0 is "no row"; that is what a register,
 // a global and a field of a record hold alike. ROW makes a row from an index, FGET and the
 // like take a row, and ADDROW appends a zeroed row to a list of records (fails when full).
+//
+// BCAT and BCATI append a string and a decimal integer to a buffer (fail when it is full).
+// STAKE, SSKIP, STAKEL, SSKIPL give the first n bytes, all but the first n, the last n, all but
+// the last n (as many as there are; a negative n is a fault). SPRE, SSUF, SHAS give 1 when the
+// second string starts, ends or occurs in the first.
+// IXGET and IXGETS find the row with an int or str key in an index (fail when there is none);
+// IXPUT enters a row (fails when its key is there already); IXDEL takes a row out.
+// SREPL A, B: the string in S[B] with every S[B+1] replaced by S[B+2], built in the region.
 #define PNX_OPS(X)                                                                                 \
     X(MOVI, PNX_K_I, PNX_K_I, PNX_K_NONE, PNX_F_ABC, PNX_X_NONE, 0)                                \
     X(MOVS, PNX_K_S, PNX_K_S, PNX_K_NONE, PNX_F_ABC, PNX_X_NONE, 0)                                \
@@ -136,7 +144,21 @@ enum {
     X(SFIND, PNX_K_I, PNX_K_S, PNX_K_S, PNX_F_ABC, PNX_X_NONE, 1)                                  \
     X(SWORD, PNX_K_S, PNX_K_S, PNX_K_NONE, PNX_F_ABC, PNX_X_NONE, 1)                               \
     X(ERRTEXT, PNX_K_S, PNX_K_I, PNX_K_NONE, PNX_F_ABC, PNX_X_NONE, 0)                             \
-    X(ADDROW, PNX_K_I, PNX_K_NONE, PNX_K_NONE, PNX_F_GLOBAL, PNX_X_NONE, 1)
+    X(ADDROW, PNX_K_I, PNX_K_NONE, PNX_K_NONE, PNX_F_GLOBAL, PNX_X_NONE, 1)                        \
+    X(BCAT, PNX_K_S, PNX_K_NONE, PNX_K_NONE, PNX_F_GLOBAL, PNX_X_NONE, 1)                          \
+    X(BCATI, PNX_K_I, PNX_K_NONE, PNX_K_NONE, PNX_F_GLOBAL, PNX_X_NONE, 1)                         \
+    X(STAKE, PNX_K_S, PNX_K_S, PNX_K_I, PNX_F_ABC, PNX_X_NONE, 0)                                  \
+    X(SSKIP, PNX_K_S, PNX_K_S, PNX_K_I, PNX_F_ABC, PNX_X_NONE, 0)                                  \
+    X(STAKEL, PNX_K_S, PNX_K_S, PNX_K_I, PNX_F_ABC, PNX_X_NONE, 0)                                 \
+    X(SSKIPL, PNX_K_S, PNX_K_S, PNX_K_I, PNX_F_ABC, PNX_X_NONE, 0)                                 \
+    X(SPRE, PNX_K_I, PNX_K_S, PNX_K_S, PNX_F_ABC, PNX_X_NONE, 0)                                   \
+    X(SSUF, PNX_K_I, PNX_K_S, PNX_K_S, PNX_F_ABC, PNX_X_NONE, 0)                                   \
+    X(SHAS, PNX_K_I, PNX_K_S, PNX_K_S, PNX_F_ABC, PNX_X_NONE, 0)                                   \
+    X(IXGET, PNX_K_I, PNX_K_I, PNX_K_G, PNX_F_ABC, PNX_X_NONE, 1)                                  \
+    X(IXGETS, PNX_K_I, PNX_K_S, PNX_K_G, PNX_F_ABC, PNX_X_NONE, 1)                                 \
+    X(IXPUT, PNX_K_I, PNX_K_NONE, PNX_K_NONE, PNX_F_GLOBAL, PNX_X_NONE, 1)                         \
+    X(IXDEL, PNX_K_I, PNX_K_NONE, PNX_K_NONE, PNX_F_GLOBAL, PNX_X_NONE, 0)                         \
+    X(SREPL, PNX_K_S, PNX_K_S, PNX_K_NONE, PNX_F_ABC, PNX_X_NONE, 0)
 
 enum {
 #define PNX_ENUM(name, a, b, c, shape, second, fails) PNX_##name,
@@ -164,6 +186,9 @@ enum {
     PNX_G_TABLE,  // capacity records of elem_bytes bytes; a str(N) field is one length byte and N bytes
     PNX_G_LIST,   // up to capacity 64-bit integers; the length starts at 0
     PNX_G_ROWS,   // up to capacity records of elem_bytes bytes; the length starts at 0
+    PNX_G_INDEX,  // lookup table of a table of records: capacity slots of 32 bits, each a row or 0;
+                  // elem_bytes is the key field as PNX_FIELD(table, offset, extra), reserved is 1
+                  // for a str(N) key (extra = N) and 0 for an integer key (extra = width code)
     PNX_G_COUNT
 };
 

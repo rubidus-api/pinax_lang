@@ -30,7 +30,7 @@ enum { BANK_I, BANK_S, BANK_NONE };
 enum { E_SLOT, E_LOCAL, E_CONST, E_COND };
 enum { B_IF, B_LOOP, B_ORELSE, B_CASE, B_OF, B_DO };
 enum { STEM_RANGE, STEM_BYTES, STEM_TIMES, STEM_COLL, STEM_WORDS, STEM_ROWS };
-enum { GK_SCALAR, GK_ARRAY, GK_LIST };
+enum { GK_SCALAR, GK_ARRAY, GK_LIST, GK_BUFFER, GK_INDEX };
 enum { USE_EACH, USE_FOLD, USE_TIMES };
 
 #define MAX_STACK 64
@@ -147,6 +147,7 @@ typedef struct globalsym {
     uint32_t capacity; // cells of an array or list
     uint32_t record;   // NONE, or the record a table holds
     uint32_t rows;     // rows written by `row` items so far
+    uint32_t table, key; // an index: its table (a global) and its key field (in comp.fields)
 } globalsym;
 
 // A field of a record: where it lies and how it is read. `extra` is the width code, or the
@@ -806,7 +807,9 @@ static const field *find_field(const comp *c, uint32_t r, name n) {
 enum {
     BW_RANGE, BW_SUM, BW_EACH, BW_FOLD, BW_TIMES, BW_LEN, BW_IS_EMPTY, BW_BYTE_AT, BW_BYTES,
     BW_IDX, BW_CAPACITY, BW_IS_FULL, BW_CLEAR, BW_PUSH, BW_POP, BW_FIND, BW_TO_INT, BW_TO_STR, BW_ASSERT,
-    BW_WORDS, BW_ERR_TEXT, BW_ADD_ROW, BW_IS_NONE, BW_NONE, BW_ROW_INDEX, BW_MAX, BW_MIN
+    BW_WORDS, BW_ERR_TEXT, BW_ADD_ROW, BW_IS_NONE, BW_NONE, BW_ROW_INDEX, BW_MAX, BW_MIN,
+    BW_APPEND, BW_APPEND_BYTE, BW_APPEND_INT, BW_CONTENTS, BW_TAKE, BW_SKIP, BW_TAKE_LAST, BW_SKIP_LAST,
+    BW_STARTS_WITH, BW_ENDS_WITH, BW_CONTAINS, BW_LOOKUP, BW_INSERT, BW_REMOVE, BW_REPLACE
 };
 static const struct builtin {
     const char *name;
@@ -822,6 +825,12 @@ static const struct builtin {
     {"assert", BW_ASSERT, false},   {"words", BW_WORDS, true},     {"err_text", BW_ERR_TEXT, false},
     {"add_row", BW_ADD_ROW, false}, {"is_none", BW_IS_NONE, false}, {"none", BW_NONE, false},
     {"row_index", BW_ROW_INDEX, false}, {"max", BW_MAX, false},    {"min", BW_MIN, false},
+    {"append", BW_APPEND, false},   {"append_byte", BW_APPEND_BYTE, false}, {"append_int", BW_APPEND_INT, false},
+    {"contents", BW_CONTENTS, false}, {"take", BW_TAKE, true},     {"skip", BW_SKIP, true},
+    {"take_last", BW_TAKE_LAST, true}, {"skip_last", BW_SKIP_LAST, true},
+    {"starts_with", BW_STARTS_WITH, true}, {"ends_with", BW_ENDS_WITH, true}, {"contains", BW_CONTAINS, true},
+    {"lookup", BW_LOOKUP, false},   {"insert", BW_INSERT, false},  {"remove", BW_REMOVE, false},
+    {"replace", BW_REPLACE, true},
 };
 
 // `len` and `is_empty` belong to the core for arrays and lists and to `strings` for a str; the
@@ -1958,6 +1967,8 @@ static bool stem_begin(comp *c, uint8_t *kind, uint8_t *cur, uint8_t *lim, uint8
     *element = TY_INT;
     if (stem.type == TY_COLL) { // an array or list: an index and the length
         const globalsym *g = (const globalsym *)c->globals.ptr + stem.value;
+        if (g->kind != GK_ARRAY && g->kind != GK_LIST)
+            return type_error(c, "a buffer or an index is not a stem; each goes over an array or a list");
         if (stem.value > 255)
             return syntax(c, "only the first 256 globals can be arrays or lists for now");
         if (!push_slot(c, TY_INT) || !push_slot(c, TY_INT))
@@ -2266,6 +2277,18 @@ static bool builtin(comp *c, const struct builtin *w) {
         if (on_coll) {
             if (!need_coll(c, &g, &gi))
                 return false;
+            if (g->kind == GK_INDEX)
+                return type_error(c, "an index has no length; ask its table");
+            if (g->kind == GK_BUFFER) { // the length of its contents
+                const uint32_t view = top_slot(c, BANK_S, 1), dst = top_slot(c, BANK_I, 1);
+                if (emit(c, PNX_ABX(PNX_BVIEW, view, gi)) == NONE || emit_def(c, PNX_ABC(PNX_SLEN, dst, view, 0), BANK_I) == NONE)
+                    return false;
+                if (w->id == BW_LEN)
+                    return push_slot(c, TY_INT) && advance(c);
+                f->def_at = NONE;
+                return push(c, (entry){.type = TY_BOOL, .kind = E_COND, .op = PNX_JEQI, .a = (uint8_t)dst, .b = 0}) &&
+                       advance(c);
+            }
             if (g->kind == GK_ARRAY) { // an array is always full
                 return push(c, w->id == BW_LEN ? (entry){.type = TY_INT, .kind = E_CONST, .value = g->capacity}
                                                : (entry){.type = TY_BOOL, .kind = E_CONST, .value = 0}) &&
@@ -2312,6 +2335,8 @@ static bool builtin(comp *c, const struct builtin *w) {
     case BW_IDX: { // i names idx
         if (!need_coll(c, &g, &gi) || !need(c, 1))
             return false;
+        if (g->kind != GK_ARRAY && g->kind != GK_LIST)
+            return type_error(c, "idx reads a cell of an array or a list");
         if (f->stack[f->depth - 1].type != TY_INT)
             return type_error(c, "idx takes an index and the name: i names idx");
         if (!reg_of(c, f->depth - 1, &ra))
@@ -2373,6 +2398,8 @@ static bool builtin(comp *c, const struct builtin *w) {
     case BW_IS_FULL: {
         if (!need_coll(c, &g, &gi))
             return false;
+        if (g->kind != GK_ARRAY && g->kind != GK_LIST)
+            return type_error(c, "is_full asks an array or a list");
         if (g->kind == GK_ARRAY)
             return push(c, (entry){.type = TY_BOOL, .kind = E_CONST, .value = 1}) && advance(c);
         const uint32_t dst = top_slot(c, BANK_I, 2);
@@ -2387,7 +2414,119 @@ static bool builtin(comp *c, const struct builtin *w) {
         return push(c, (entry){.type = TY_BOOL, .kind = E_COND, .op = PNX_JEQ, .a = (uint8_t)dst, .b = (uint8_t)(dst + 1)}) &&
                advance(c);
     }
-    case BW_CLEAR: return need_coll(c, &g, &gi) && emit(c, PNX_ABX(PNX_GCLEAR, 0, gi)) != NONE && advance(c);
+    case BW_CLEAR:
+        if (!need_coll(c, &g, &gi))
+            return false;
+        if (g->kind == GK_INDEX)
+            return type_error(c, "an index is not cleared by itself; remove its rows");
+        return emit(c, PNX_ABX(g->kind == GK_BUFFER ? PNX_BCLEAR : PNX_GCLEAR, 0, gi)) != NONE && advance(c);
+    case BW_APPEND:
+    case BW_APPEND_INT:
+    case BW_APPEND_BYTE: { // value buf append : fails when the buffer is full
+        if (!need_coll(c, &g, &gi) || !need(c, 1))
+            return false;
+        if (g->kind != GK_BUFFER)
+            return type_error(c, "this word appends to a buffer");
+        if (f->stack[f->depth - 1].type != (w->id == BW_APPEND ? TY_STR : TY_INT))
+            return type_error(c, w->id == BW_APPEND ? "append takes a str" : "this word takes an int");
+        if (!settle(c, f->depth - 1))
+            return false;
+        ra = slot_of(c, f->depth - 1);
+        --f->depth;
+        if (!settle_all(c))
+            return false;
+        const uint32_t op = w->id == BW_APPEND ? PNX_ABX(PNX_BCAT, ra, gi)
+                          : w->id == BW_APPEND_INT ? PNX_ABX(PNX_BCATI, ra, gi) : PNX_ABC(PNX_BPUT, ra, PNX_W_U8, gi);
+        return emit(c, op) != NONE && guard_op(c, TY_NONE);
+    }
+    case BW_CONTENTS: // buf contents : a view of what the buffer holds now
+        if (!need_coll(c, &g, &gi))
+            return false;
+        if (g->kind != GK_BUFFER)
+            return type_error(c, "contents gives the text of a buffer");
+        if (!push_slot(c, TY_STR))
+            return false;
+        return emit_def(c, PNX_ABX(PNX_BVIEW, slot_of(c, f->depth - 1), gi), BANK_S) != NONE && advance(c);
+    case BW_TAKE:
+    case BW_SKIP:
+    case BW_TAKE_LAST:
+    case BW_SKIP_LAST: { // s n take : a view, as many bytes as there are
+        if (!need(c, 2))
+            return false;
+        if (f->stack[f->depth - 2].type != TY_STR || f->stack[f->depth - 1].type != TY_INT)
+            return type_error(c, "this word takes a str and a count: s n take");
+        if (!reg_of(c, f->depth - 2, &ra) || !reg_of(c, f->depth - 1, &rb))
+            return false;
+        const uint32_t dst = slot_of(c, f->depth - 2);
+        const uint32_t op = w->id == BW_TAKE ? PNX_STAKE : w->id == BW_SKIP ? PNX_SSKIP
+                          : w->id == BW_TAKE_LAST ? PNX_STAKEL : PNX_SSKIPL;
+        if (emit_def(c, PNX_ABC(op, dst, ra, rb), BANK_S) == NONE)
+            return false;
+        f->depth -= 2;
+        return push_slot(c, TY_STR) && advance(c);
+    }
+    case BW_STARTS_WITH:
+    case BW_ENDS_WITH:
+    case BW_CONTAINS: { // s part starts_with
+        if (!need(c, 2))
+            return false;
+        if (f->stack[f->depth - 2].type != TY_STR || f->stack[f->depth - 1].type != TY_STR)
+            return type_error(c, "this word takes two str values: s part starts_with");
+        if (!reg_of(c, f->depth - 2, &ra) || !reg_of(c, f->depth - 1, &rb))
+            return false;
+        f->depth -= 2;
+        const uint32_t dst = top_slot(c, BANK_I, 1);
+        const uint32_t op = w->id == BW_STARTS_WITH ? PNX_SPRE : w->id == BW_ENDS_WITH ? PNX_SSUF : PNX_SHAS;
+        return emit_def(c, PNX_ABC(op, dst, ra, rb), BANK_I) != NONE && push_slot(c, TY_BOOL) && advance(c);
+    }
+    case BW_REPLACE: { // s old new replace : a new string in the region
+        if (!need(c, 3))
+            return false;
+        for (uint32_t k = 1; k <= 3; ++k) {
+            if (f->stack[f->depth - k].type != TY_STR)
+                return type_error(c, "replace takes three str values: s old new replace");
+        }
+        if (!settle(c, f->depth - 3) || !settle(c, f->depth - 2) || !settle(c, f->depth - 1))
+            return false;
+        const uint32_t base = slot_of(c, f->depth - 3);
+        (void)slot_of(c, f->depth - 1);
+        f->depth -= 3;
+        return emit_def(c, PNX_ABC(PNX_SREPL, base, base, 0), BANK_S) != NONE && push_slot(c, TY_STR) && advance(c);
+    }
+    case BW_LOOKUP: { // key index lookup : the row with that key, or failure
+        if (!need_coll(c, &g, &gi) || !need(c, 1))
+            return false;
+        if (g->kind != GK_INDEX)
+            return type_error(c, "lookup takes a key and the name of an index: key by_name lookup");
+        const field *key = (const field *)c->fields.ptr + g->key;
+        if (f->stack[f->depth - 1].type != key->type)
+            return type_error(c, "the key has another type than the key field of the index");
+        if (!settle(c, f->depth - 1))
+            return false;
+        ra = slot_of(c, f->depth - 1);
+        --f->depth;
+        if (!settle_all(c))
+            return false;
+        const tid row = ((const globalsym *)c->globals.ptr + g->table)->type;
+        return emit(c, PNX_ABC(key->is_str ? PNX_IXGETS : PNX_IXGET, top_slot(c, BANK_I, 1), ra, gi)) != NONE &&
+               guard_op(c, row);
+    }
+    case BW_INSERT:
+    case BW_REMOVE: { // row index insert : fails when the key is there already
+        if (!need_coll(c, &g, &gi) || !need(c, 1))
+            return false;
+        if (g->kind != GK_INDEX)
+            return type_error(c, "this word takes a row and the name of an index: row by_name insert");
+        if (f->stack[f->depth - 1].type != ((const globalsym *)c->globals.ptr + g->table)->type)
+            return type_error(c, "the row belongs to another table than the index");
+        if (!settle(c, f->depth - 1))
+            return false;
+        ra = slot_of(c, f->depth - 1);
+        --f->depth;
+        if (w->id == BW_REMOVE)
+            return emit(c, PNX_ABX(PNX_IXDEL, ra, gi)) != NONE && advance(c);
+        return settle_all(c) && emit(c, PNX_ABX(PNX_IXPUT, ra, gi)) != NONE && guard_op(c, TY_NONE);
+    }
     case BW_PUSH: { // v names push : fails when the list is full
         if (!need_coll(c, &g, &gi) || !need(c, 1))
             return false;
@@ -3104,6 +3243,73 @@ static bool declare_record(comp *c) {
     return advance(c);
 }
 
+// buffer NAME size
+static bool declare_buffer(comp *c) {
+    if (!advance(c))
+        return false;
+    if (c->tok.kind != PNX_T_NAME)
+        return syntax(c, "the declaration is: buffer name size");
+    globalsym g = {.name = tok_name(c), .kind = GK_BUFFER, .record = NONE};
+    if (name_is_global(c, g.name))
+        return type_error(c, "this name is already defined");
+    if (g.name.length > 31)
+        return syntax(c, "a global name is at most 31 bytes long");
+    if (!advance(c) || !declared_size(c, &g.capacity))
+        return false;
+    if (c->globals.n >= 0xfffu)
+        return syntax(c, "too many globals");
+    globalsym *slot = vec_push(c, &c->globals, sizeof(globalsym));
+    if (!slot)
+        return false;
+    *slot = g;
+    return true;
+}
+
+// index NAME table record.field : finds rows of the table by that field
+static bool declare_index(comp *c) {
+    if (!advance(c))
+        return false;
+    if (c->tok.kind != PNX_T_NAME)
+        return syntax(c, "the declaration is: index name table record.field");
+    globalsym g = {.name = tok_name(c), .kind = GK_INDEX, .record = NONE};
+    if (name_is_global(c, g.name))
+        return type_error(c, "this name is already defined");
+    if (g.name.length > 31)
+        return syntax(c, "a global name is at most 31 bytes long");
+    if (!advance(c))
+        return false;
+    g.table = c->tok.kind == PNX_T_NAME ? find_global(c, tok_name(c)) : NONE;
+    const globalsym *table = g.table == NONE ? NULL : (const globalsym *)c->globals.ptr + g.table;
+    if (!table || table->record == NONE || table->forward)
+        return type_error(c, "an index belongs to a declared table of records");
+    if (!advance(c))
+        return false;
+    if (c->tok.kind != PNX_T_PATH)
+        return syntax(c, "the key of an index is written record.field");
+    const name path = tok_name(c);
+    uint32_t dot = 0;
+    while (path.text[dot] != '.')
+        ++dot;
+    const field *key = find_record(c, (name){path.text, dot}) == table->record
+                           ? find_field(c, table->record, (name){path.text + dot + 1, path.length - dot - 1})
+                           : NULL;
+    if (!key)
+        return type_error(c, "the key is a field of the record the table holds");
+    if (key->type != TY_INT && key->type != TY_STR)
+        return type_error(c, "the key of an index is an integer field or a str(N) field");
+    g.key = (uint32_t)(key - (const field *)c->fields.ptr);
+    g.capacity = 4; // slots: a power of two, at least twice the rows
+    while (g.capacity < table->capacity * 2u)
+        g.capacity *= 2;
+    if (c->globals.n >= 0xfffu)
+        return syntax(c, "too many globals");
+    globalsym *slot = vec_push(c, &c->globals, sizeof(globalsym));
+    if (!slot)
+        return false;
+    *slot = g;
+    return advance(c);
+}
+
 // A literal or constant in a `row` or `assign` item. The current token is the value.
 static bool item_value(comp *c, tid *type, int64_t *value) {
     const name n = tok_name(c);
@@ -3145,6 +3351,44 @@ static bool item_value(comp *c, tid *type, int64_t *value) {
     }
 }
 
+// The values of one row: value , value ... up to the closing parenthesis, stored field by
+// field into the row in register `row` of table `gi`. The current token is the first value
+// or the parenthesis; it is the parenthesis at the end.
+static bool row_values(comp *c, uint32_t gi, uint32_t row) {
+    const globalsym *g = (const globalsym *)c->globals.ptr + gi;
+    const record *rec = (const record *)c->records.ptr + g->record;
+    const uint32_t value = top_slot(c, BANK_I, 3) + 2, text = top_slot(c, BANK_S, 1);
+    for (uint32_t k = 0;; ++k) {
+        if (c->tok.kind == PNX_T_RPAREN && k == 0)
+            return true; // an empty row: all fields zero
+        if (k >= rec->count)
+            return type_error(c, "the row has more values than the record has fields");
+        const field *fd = (const field *)c->fields.ptr + rec->first + k;
+        tid     type;
+        int64_t v;
+        if (!item_value(c, &type, &v))
+            return false;
+        if (type == TY_NONE ? !is_row(fd->type) : type != fd->type)
+            return type_error(c, "a value has another type than its field");
+        const uint32_t where = PNX_FIELD(gi, fd->offset, fd->extra);
+        if (fd->is_str) {
+            if (emit(c, PNX_ABX(PNX_LOADKS, text, (uint32_t)v)) == NONE || emit(c, PNX_ABC(PNX_FSETS, text, row, 0)) == NONE ||
+                emit(c, where) == NONE)
+                return false;
+        } else if (!load_int(c, value, v) || emit(c, PNX_ABC(PNX_FSET, value, row, 0)) == NONE || emit(c, where) == NONE) {
+            return false;
+        }
+        if (!advance(c))
+            return false;
+        if (c->tok.kind == PNX_T_RPAREN)
+            return true;
+        if (c->tok.kind != PNX_T_COMMA)
+            return syntax(c, "values are separated by commas");
+        if (!advance(c))
+            return false;
+    }
+}
+
 // row LIST [ NAME ] ( value , ... ) : adds a row when the source is loaded. With a name, the
 // name becomes a constant for that row.
 static bool row_item(comp *c) {
@@ -3177,7 +3421,7 @@ static bool row_item(comp *c) {
         return false;
     if (g->rows == g->capacity)
         return type_error(c, "the list has no room for this row");
-    const uint32_t row = top_slot(c, BANK_I, 2), value = row + 1, text = top_slot(c, BANK_S, 1);
+    const uint32_t row = top_slot(c, BANK_I, 2), value = row + 1;
     uint32_t       full = NONE, ok = NONE;
     if (g->record == NONE) { // a list of values: one value, pushed
         tid     type;
@@ -3206,7 +3450,6 @@ static bool row_item(comp *c) {
         ++g->rows;
         return advance(c);
     }
-    const record *rec = (const record *)c->records.ptr + g->record;
     if (row_name.length) {
         if (!load_int(c, value, (int64_t)g->rows + 1) || emit(c, PNX_ABC(PNX_JEQ, row, value, 1)) == NONE ||
             emit(c, PNX_ABX(PNX_FAULT, 0, PINAX_ERR_STATE)) == NONE)
@@ -3217,34 +3460,20 @@ static bool row_item(comp *c) {
         *k = (constant){.name = row_name, .type = g->type, .value = (int64_t)g->rows + 1};
         g = (globalsym *)c->globals.ptr + gi;
     }
-    for (uint32_t k = 0;; ++k) {
-        if (c->tok.kind == PNX_T_RPAREN && k == 0)
-            break; // an empty row: all fields zero
-        if (k >= rec->count)
-            return type_error(c, "the row has more values than the record has fields");
-        const field *fd = (const field *)c->fields.ptr + rec->first + k;
-        tid     type;
-        int64_t v;
-        if (!item_value(c, &type, &v))
+    if (!row_values(c, gi, row))
+        return false;
+    // the row enters every index of its list; a key that is there already is a fault while loading
+    for (uint32_t x = 0; x < c->globals.n; ++x) {
+        const globalsym *ix = (const globalsym *)c->globals.ptr + x;
+        if (ix->kind != GK_INDEX || ix->table != gi)
+            continue;
+        uint32_t bad = NONE, fine = NONE;
+        if (emit(c, PNX_ABX(PNX_IXPUT, row, x)) == NONE || !jump_later(c, &bad) || !jump_later(c, &fine))
             return false;
-        if (type == TY_NONE ? !is_row(fd->type) : type != fd->type)
-            return type_error(c, "a value has another type than its field");
-        const uint32_t where = PNX_FIELD(gi, fd->offset, fd->extra);
-        if (fd->is_str) {
-            if (emit(c, PNX_ABX(PNX_LOADKS, text, (uint32_t)v)) == NONE || emit(c, PNX_ABC(PNX_FSETS, text, row, 0)) == NONE ||
-                emit(c, where) == NONE)
-                return false;
-        } else if (!load_int(c, value, v) || emit(c, PNX_ABC(PNX_FSET, value, row, 0)) == NONE || emit(c, where) == NONE) {
+        land(c, &bad);
+        if (emit(c, PNX_ABX(PNX_FAULT, 0, PINAX_ERR_FAILED)) == NONE)
             return false;
-        }
-        if (!advance(c))
-            return false;
-        if (c->tok.kind == PNX_T_RPAREN)
-            break;
-        if (c->tok.kind != PNX_T_COMMA)
-            return syntax(c, "values are separated by commas");
-        if (!advance(c))
-            return false;
+        land(c, &fine);
     }
     ++((globalsym *)c->globals.ptr + gi)->rows;
     f->def_at = NONE;
@@ -3260,7 +3489,7 @@ static bool assign_item(comp *c) {
         return false;
     const uint32_t gi = c->tok.kind == PNX_T_NAME ? find_global(c, tok_name(c)) : NONE;
     const globalsym *g = gi == NONE ? NULL : (const globalsym *)c->globals.ptr + gi;
-    if (!g || g->kind != GK_ARRAY)
+    if (!g || g->kind != GK_ARRAY || g->forward)
         return type_error(c, "assign fills a declared array: assign name (values)");
     if (gi > 255)
         return syntax(c, "only the first 256 globals can be arrays or lists for now");
@@ -3271,6 +3500,21 @@ static bool assign_item(comp *c) {
     if (!advance(c))
         return false;
     const uint32_t value = top_slot(c, BANK_I, 2), index = value + 1;
+    for (uint32_t k = 0; g->record != NONE; ++k) { // an array of records: one parenthesised row per cell
+        if (c->tok.kind != PNX_T_LPAREN)
+            return syntax(c, "each value of an array of records is a row in parentheses");
+        if (k >= g->capacity)
+            return type_error(c, "assign has more values than the array has cells");
+        if (!advance(c) || !load_int(c, value, (int64_t)k + 1) || !row_values(c, gi, value) || !advance(c))
+            return false;
+        g = (const globalsym *)c->globals.ptr + gi;
+        if (c->tok.kind == PNX_T_RPAREN)
+            return advance(c);
+        if (c->tok.kind != PNX_T_COMMA)
+            return syntax(c, "values are separated by commas");
+        if (!advance(c))
+            return false;
+    }
     for (uint32_t k = 0;; ++k) {
         tid     type;
         int64_t v = c->tok.integer;
@@ -3371,6 +3615,12 @@ static bool compile(comp *c, image *im, bool *has_top) {
         } else if (is_word(c, PNX_KW_assign) && !c->top_fn->n_blocks) {
             if (!assign_item(c))
                 return false;
+        } else if (is_word(c, PNX_KW_buffer) && !c->top_fn->n_blocks) {
+            if (!declare_buffer(c))
+                return false;
+        } else if (is_word(c, PNX_KW_index) && !c->top_fn->n_blocks) {
+            if (!declare_index(c))
+                return false;
         } else if (is_word(c, PNX_KW_record) && !c->top_fn->n_blocks) {
             if (!declare_record(c))
                 return false;
@@ -3453,6 +3703,13 @@ static bool serialize(comp *c, const image *im, uint8_t **out, size_t *out_len) 
         if (g->record != NONE) {
             rec.kind = g->kind == GK_ARRAY ? PNX_G_TABLE : PNX_G_ROWS;
             rec.elem_bytes = ((const record *)c->records.ptr + g->record)->size;
+        } else if (g->kind == GK_BUFFER) {
+            rec.kind = PNX_G_BUFFER;
+        } else if (g->kind == GK_INDEX) {
+            const field *key = (const field *)c->fields.ptr + g->key;
+            rec.kind = PNX_G_INDEX;
+            rec.elem_bytes = PNX_FIELD(g->table, key->offset, key->extra);
+            rec.reserved = key->is_str;
         }
         put_text(rec.name, sizeof rec.name, g->name);
         __builtin_memcpy(p, &rec, sizeof rec);

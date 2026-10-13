@@ -451,4 +451,191 @@ PNX_OP(ERRTEXT) {
     return PNX_R_OK;
 }
 
+// ---- buffers, views, indexes --------------------------------------------------------------
+
+PNX_INLINE int pnx_buffer_append(pinax_state *st, const pnx_global *g, const uint8_t *bytes, uint32_t n) {
+    uint64_t len = pnx_buffer_len(g);
+    if (n > g->capacity - len) {
+        st->fail = PINAX_ERR_FULL;
+        return PNX_R_FAILED;
+    }
+    __builtin_memmove(g->ptr + 8 + len, bytes, n);
+    len += n;
+    __builtin_memcpy(g->ptr, &len, 8);
+    return PNX_R_OK;
+}
+PNX_OP(BCAT) {
+    const pnx_scell s = S[OP_A(w)];
+    return pnx_buffer_append(st, &st->globals[OP_BX(w)], pnx_view_bytes(st, s), s.length);
+}
+PNX_OP(BCATI) {
+    uint8_t digits[24];
+    const uint32_t n = pnx_format_int(R[OP_A(w)], digits);
+    return pnx_buffer_append(st, &st->globals[OP_BX(w)], digits, n);
+}
+
+#define PNX_VIEW_OP(name, expr_offset, expr_length)                                                \
+    PNX_OP(name) {                                                                                 \
+        const pnx_scell s = S[OP_B(w)];                                                            \
+        if (R[OP_C(w)] < 0)                                                                        \
+            return PINAX_ERR_RANGE;                                                                \
+        const uint32_t n = (uint64_t)R[OP_C(w)] > s.length ? s.length : (uint32_t)R[OP_C(w)];      \
+        S[OP_A(w)] = (pnx_scell){s.segment, (expr_length), s.offset + (expr_offset)};              \
+        return PNX_R_OK;                                                                           \
+    }
+PNX_VIEW_OP(STAKE, 0u, n)
+PNX_VIEW_OP(SSKIP, n, s.length - n)
+PNX_VIEW_OP(STAKEL, s.length - n, n)
+PNX_VIEW_OP(SSKIPL, 0u, s.length - n)
+
+PNX_OP(SPRE) {
+    const pnx_scell s = S[OP_B(w)], p = S[OP_C(w)];
+    R[OP_A(w)] = p.length <= s.length &&
+                 (p.length == 0 || __builtin_memcmp(pnx_view_bytes(st, s), pnx_view_bytes(st, p), p.length) == 0);
+    return PNX_R_OK;
+}
+PNX_OP(SSUF) {
+    const pnx_scell s = S[OP_B(w)], p = S[OP_C(w)];
+    R[OP_A(w)] = p.length <= s.length &&
+                 (p.length == 0 || __builtin_memcmp(pnx_view_bytes(st, s) + (s.length - p.length),
+                                                    pnx_view_bytes(st, p), p.length) == 0);
+    return PNX_R_OK;
+}
+PNX_OP(SHAS) {
+    const pnx_scell s = S[OP_B(w)], p = S[OP_C(w)];
+    R[OP_A(w)] = pnx_find(pnx_view_bytes(st, s), s.length, pnx_view_bytes(st, p), p.length) != UINT32_MAX;
+    return PNX_R_OK;
+}
+
+PNX_OP(SREPL) {
+    const pnx_scell s = S[OP_B(w)], old = S[OP_B(w) + 1], with = S[OP_B(w) + 2];
+    const uint8_t *bytes = pnx_view_bytes(st, s), *from = pnx_view_bytes(st, old), *to = pnx_view_bytes(st, with);
+    pnx_scell out = {PNX_SEG_REGION, 0, st->region_used};
+    uint32_t at = 0;
+    while (old.length != 0 && at < s.length) {
+        const uint32_t hit = pnx_find(bytes + at, s.length - at, from, old.length);
+        if (hit == UINT32_MAX)
+            break;
+        int r = pnx_region_append(st, &out, bytes + at, hit);
+        if (r == PNX_R_OK)
+            r = pnx_region_append(st, &out, to, with.length);
+        if (r != PNX_R_OK)
+            return r;
+        at += hit + old.length;
+    }
+    const int r = pnx_region_append(st, &out, bytes + at, s.length - at);
+    if (r != PNX_R_OK)
+        return r;
+    S[OP_A(w)] = out;
+    return PNX_R_OK;
+}
+
+// An index is an open-addressed table of rows (row number plus one; 0 is empty, all ones a
+// removed entry). The keys are read from the rows themselves.
+#define PNX_IX_GONE UINT32_MAX
+
+// The key bytes of `row` (number plus one) for index `x`.
+PNX_INLINE const uint8_t *pnx_index_key(const pinax_state *st, const pnx_global *x, uint32_t row, uint32_t *length,
+                                        uint8_t scratch[8]) {
+    const pnx_global *table = &st->globals[x->key & 0xfffu];
+    const uint8_t *field = table->ptr + (size_t)(row - 1) * table->elem_bytes + ((x->key >> 12) & 0xfffu);
+    if (x->key_is_str) {
+        *length = field[0];
+        return field + 1;
+    }
+    const int64_t v = pnx_load_width(field, x->key >> 24);
+    __builtin_memcpy(scratch, &v, 8);
+    *length = 8;
+    return scratch;
+}
+
+// Finds the slot of a key. Returns the slot that holds it, or the slot where it would go
+// (the first removed slot met, else the empty one) with *found false.
+PNX_INLINE uint32_t pnx_index_find(const pinax_state *st, const pnx_global *x, const uint8_t *key, uint32_t length,
+                                   bool *found) {
+    const uint32_t mask = x->capacity - 1;
+    uint32_t slot = (uint32_t)pnx_hash(key, length) & mask, spare = UINT32_MAX;
+    *found = false;
+    for (uint32_t step = 0; step < x->capacity; ++step, slot = (slot + 1) & mask) {
+        uint32_t row;
+        __builtin_memcpy(&row, x->ptr + (size_t)slot * 4, 4);
+        if (row == 0)
+            return spare != UINT32_MAX ? spare : slot;
+        if (row == PNX_IX_GONE) {
+            if (spare == UINT32_MAX)
+                spare = slot;
+            continue;
+        }
+        uint32_t n;
+        uint8_t  scratch[8];
+        const uint8_t *have = pnx_index_key(st, x, row, &n, scratch);
+        if (n == length && __builtin_memcmp(have, key, n) == 0) {
+            *found = true;
+            return slot;
+        }
+    }
+    return spare; // every slot was used once; UINT32_MAX when none is free
+}
+
+PNX_INLINE int pnx_index_get(pinax_state *st, const pnx_global *x, const uint8_t *key, uint32_t length,
+                             int64_t *out) {
+    bool found;
+    const uint32_t slot = pnx_index_find(st, x, key, length, &found);
+    if (!found) {
+        st->fail = PINAX_ERR_NOT_FOUND;
+        return PNX_R_FAILED;
+    }
+    uint32_t row;
+    __builtin_memcpy(&row, x->ptr + (size_t)slot * 4, 4);
+    *out = row;
+    return PNX_R_OK;
+}
+PNX_OP(IXGET) {
+    uint8_t key[8];
+    __builtin_memcpy(key, &R[OP_B(w)], 8);
+    return pnx_index_get(st, &st->globals[OP_C(w)], key, 8, &R[OP_A(w)]);
+}
+PNX_OP(IXGETS) {
+    const pnx_scell s = S[OP_B(w)];
+    return pnx_index_get(st, &st->globals[OP_C(w)], pnx_view_bytes(st, s), s.length, &R[OP_A(w)]);
+}
+PNX_OP(IXPUT) {
+    const pnx_global *ix = &st->globals[OP_BX(w)];
+    const uint64_t row = (uint64_t)R[OP_A(w)];
+    if (row - 1 >= st->globals[ix->key & 0xfffu].length)
+        return PINAX_ERR_RANGE;
+    uint32_t n;
+    uint8_t  scratch[8];
+    const uint8_t *key = pnx_index_key(st, ix, (uint32_t)row, &n, scratch);
+    bool found;
+    const uint32_t slot = pnx_index_find(st, ix, key, n, &found);
+    if (found || slot == UINT32_MAX) {
+        st->fail = found ? PINAX_ERR_FAILED : PINAX_ERR_FULL;
+        return PNX_R_FAILED;
+    }
+    const uint32_t value = (uint32_t)row;
+    __builtin_memcpy(ix->ptr + (size_t)slot * 4, &value, 4);
+    return PNX_R_OK;
+}
+PNX_OP(IXDEL) { // nothing happens when the row is not in the index
+    const pnx_global *ix = &st->globals[OP_BX(w)];
+    const uint64_t row = (uint64_t)R[OP_A(w)];
+    if (row - 1 >= st->globals[ix->key & 0xfffu].length)
+        return PINAX_ERR_RANGE;
+    uint32_t n;
+    uint8_t  scratch[8];
+    const uint8_t *key = pnx_index_key(st, ix, (uint32_t)row, &n, scratch);
+    bool found;
+    const uint32_t slot = pnx_index_find(st, ix, key, n, &found);
+    if (found) {
+        uint32_t have;
+        __builtin_memcpy(&have, ix->ptr + (size_t)slot * 4, 4);
+        if (have == (uint32_t)row) {
+            const uint32_t gone = PNX_IX_GONE;
+            __builtin_memcpy(ix->ptr + (size_t)slot * 4, &gone, 4);
+        }
+    }
+    return PNX_R_OK;
+}
+
 #endif // PINAX_OPS_H

@@ -236,6 +236,20 @@ pinax_err pnx_execute(pinax_state *st) {
         RUNF(SWORD)
         RUN(ERRTEXT)
         RUNF(ADDROW)
+        RUNF(BCAT)
+        RUNF(BCATI)
+        RUN(STAKE)
+        RUN(SSKIP)
+        RUN(STAKEL)
+        RUN(SSKIPL)
+        RUN(SPRE)
+        RUN(SSUF)
+        RUN(SHAS)
+        RUNF(IXGET)
+        RUNF(IXGETS)
+        RUNF(IXPUT)
+        RUN(IXDEL)
+        RUN(SREPL)
 
         CASE(CALL) {
             const pnx_wordrec *callee = &st->words[*pc++];

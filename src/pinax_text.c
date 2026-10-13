@@ -2,6 +2,7 @@
 #include "pinax_internal.h"
 
 #include "proven/fmt.h"
+#include "proven/hash.h"
 #include "proven/scan.h"
 #include "proven/u8str.h"
 
@@ -70,4 +71,8 @@ void pnx_err_name(int64_t err, uint32_t *offset, uint32_t *length) {
 #undef PNX_ERR_AT
     *offset = at; // any other number
     *length = 5;
+}
+
+uint64_t pnx_hash(const uint8_t *bytes, uint32_t length) {
+    return proven_hash_bytes((proven_mem_view_t){bytes, length});
 }

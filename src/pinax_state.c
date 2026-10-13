@@ -325,6 +325,9 @@ static const char *check_word(const pinax_state *st, uint32_t index, span range,
         case PNX_AGET: case PNX_ASET: want = PNX_G_ARRAY; global = c; break; // or a list, below
         case PNX_GLEN: case PNX_GCLEAR: want = PNX_G_COUNT + 1; global = bx; break; // any collection
         case PNX_ADDROW: want = PNX_G_ROWS; global = bx; break;
+        case PNX_BCAT: case PNX_BCATI: want = PNX_G_BUFFER; global = bx; break;
+        case PNX_IXPUT: case PNX_IXDEL: want = PNX_G_INDEX; global = bx; break;
+        case PNX_IXGET: case PNX_IXGETS: want = PNX_G_INDEX; global = c; break;
         case PNX_LPUSH: case PNX_LPOP: want = PNX_G_LIST; global = bx; break;
         case PNX_ROW: want = PNX_G_TABLE; global = c; break;
         case PNX_BCLEAR: case PNX_BVIEW: want = PNX_G_BUFFER; global = bx; break;
@@ -338,9 +341,13 @@ static const char *check_word(const pinax_state *st, uint32_t index, span range,
             const uint32_t kind = st->globals[global].kind;
             const bool ok = kind == want || (want == PNX_G_ARRAY && kind == PNX_G_LIST) ||
                             (want == PNX_G_TABLE && kind == PNX_G_ROWS) ||
-                            (want == PNX_G_COUNT + 1 && kind != PNX_G_INT && kind != PNX_G_BUFFER);
+                            (want == PNX_G_COUNT + 1 && kind != PNX_G_INT && kind != PNX_G_BUFFER &&
+                             kind != PNX_G_INDEX);
             if (!ok)
                 return "code: global of the wrong kind";
+            if ((op == PNX_IXGET && st->globals[global].key_is_str) ||
+                (op == PNX_IXGETS && !st->globals[global].key_is_str))
+                return "code: key of the wrong kind for this index";
         }
         if (info.second == PNX_X_FIELD) {
             const uint32_t offset = (x >> 12) & 0xfffu, extra = x >> 24;
@@ -352,6 +359,8 @@ static const char *check_word(const pinax_state *st, uint32_t index, span range,
         }
         if ((op == PNX_BPUT && b >= PNX_W_COUNT) || (op == PNX_SGET && c >= PNX_W_COUNT))
             return "code: unknown width";
+        if (op == PNX_SREPL && b + 2 >= word->str_cells)
+            return "code: register outside the window";
 
         if (info.second == PNX_X_WORD) {
             if (x >= head->n_words)
@@ -483,6 +492,17 @@ pinax_err pinax_load_bytecode(pinax_state *st, pinax_str bytecode) {
                 goto rollback;
             bytes = (uint64_t)rec->capacity * rec->elem_bytes;
             break;
+        case PNX_G_INDEX: { // slots: a power of two; the key field must lie inside an earlier table
+            const uint32_t table = rec->elem_bytes & 0xfffu, offset = (rec->elem_bytes >> 12) & 0xfffu,
+                           extra = rec->elem_bytes >> 24;
+            if ((rec->capacity & (rec->capacity - 1)) != 0 || table >= k || rec->reserved > 1 ||
+                (st->globals[table].kind != PNX_G_TABLE && st->globals[table].kind != PNX_G_ROWS) ||
+                (rec->reserved == 0 && extra >= PNX_W_COUNT) ||
+                offset + (rec->reserved ? 1u + extra : width_bytes[extra]) > st->globals[table].elem_bytes)
+                goto rollback;
+            bytes = (uint64_t)rec->capacity * 4;
+            break;
+        }
         default: goto rollback;
         }
         err = PINAX_ERR_NO_ROOM;
@@ -496,6 +516,11 @@ pinax_err pinax_load_bytecode(pinax_state *st, pinax_str bytecode) {
         g->elem_bytes = rec->kind == PNX_G_TABLE || rec->kind == PNX_G_ROWS ? rec->elem_bytes : 8;
         g->capacity = rec->kind == PNX_G_INT ? 1 : rec->capacity;
         g->length = rec->kind == PNX_G_LIST || rec->kind == PNX_G_ROWS ? 0 : g->capacity;
+        if (rec->kind == PNX_G_INDEX) {
+            g->key = rec->elem_bytes;
+            g->key_is_str = rec->reserved != 0;
+            g->elem_bytes = 4;
+        }
         if (!first_global)
             first_global = g->ptr;
     }
