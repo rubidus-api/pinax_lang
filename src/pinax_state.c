@@ -66,7 +66,7 @@ void *pnx_take(pinax_state *st, size_t bytes, size_t align) {
 pnx_program pnx_program_now(const pinax_state *st) {
     return (pnx_program){st->head, st->words, st->importrecs, st->iconst, st->sconst, st->code, st->word_counts,
                          st->imports, st->globals, st->segment[PNX_SEG_CONST], st->segment[PNX_SEG_GLOBAL],
-                         st->symbols, st->used};
+                         st->symbols, st->used, st->n_hosts};
 }
 
 void pnx_program_restore(pinax_state *st, const pnx_program *p) {
@@ -83,6 +83,7 @@ void pnx_program_restore(pinax_state *st, const pnx_program *p) {
     st->segment[PNX_SEG_GLOBAL] = p->seg_global;
     st->symbols = p->symbols;
     st->used = p->used;
+    st->n_hosts = p->n_hosts;
     st->suspended = false;
     st->loading = false;
 }
@@ -128,7 +129,9 @@ bool pnx_signature_counts(const char *sig, pnx_counts *out) {
         if (tokens) {
             if (token_is(type, type_len, "float"))
                 return false; // no F bank in P0
-            uint8_t *slot = token_is(type, type_len, "str") ? (results ? &n.str_results : &n.str_args)
+            // cstr: a str handed to a C function as a NUL-terminated copy (extern only)
+            uint8_t *slot = token_is(type, type_len, "str") || token_is(type, type_len, "cstr")
+                                ? (results ? &n.str_results : &n.str_args)
                                                            : (results ? &n.int_results : &n.int_args);
             if (*slot == UINT8_MAX)
                 return false;
@@ -550,6 +553,14 @@ pinax_err pnx_load_container(pinax_state *st, pinax_str bytecode, uint32_t keep)
                     found = &st->hosts[j];
             }
         }
+        if (!found && !named && rec->module[0] == '@') { // a C function named by extern
+            uint32_t index;
+            err = pnx_extern_link(st, rec->module, rec->name, rec->signature, &index);
+            why = st->error_text;
+            if (err != PINAX_OK)
+                goto rollback;
+            found = &st->hosts[index];
+        }
         if (!found) {
             err = named ? PINAX_ERR_SIGNATURE : PINAX_ERR_NOT_FOUND;
             why = named ? "a host word has another signature than the code expects"
@@ -816,7 +827,206 @@ pinax_err pinax_complete(pinax_state *st, pinax_token token, pinax_err outcome, 
 }
 
 void pinax_set_resolver(pinax_state *st, pinax_resolve_fn resolve, void *user) {
-    (void)st, (void)resolve, (void)user;
+    if (st) {
+        st->resolve = resolve;
+        st->resolve_user = user;
+    }
+}
+
+// The kind of one parameter of an extern signature, from its words: [name] [owned] type.
+static bool extern_kind(const pinax_state *st, const char *type, size_t len, bool owned, bool result, uint8_t *kind) {
+    for (uint32_t k = 0; k < st->n_handle_types; ++k) {
+        if (token_is(type, len, st->handle_types[k].name)) {
+            *kind = (uint8_t)(PNX_XA_HANDLE + k + (owned && !result ? PNX_XA_OWNED : 0));
+            return true;
+        }
+    }
+    if (owned || token_is(type, len, "float"))
+        return false;
+    const bool text = token_is(type, len, "str"), ctext = token_is(type, len, "cstr");
+    if ((text || ctext) && result)
+        return false;
+    *kind = text ? PNX_XA_STR : ctext ? PNX_XA_CSTR : PNX_XA_INT;
+    return true;
+}
+
+// Reads "(a int, s str gives r file or fail)" into the layout of the C call.
+static bool extern_layout(const pinax_state *st, const char *sig, pnx_host *h) {
+    const char *p = sig;
+    if (*p++ != '(')
+        return false;
+    bool results = false, owned = false, fails = false;
+    unsigned tokens = 0, c_args = 0;
+    const char *type = NULL;
+    size_t type_len = 0;
+    h->ext_n = 0;
+    h->ext_result = PNX_XA_NONE;
+    for (;;) {
+        while (*p == ' ')
+            ++p;
+        const char *start = p;
+        while (is_name_char(*p))
+            ++p;
+        const size_t len = (size_t)(p - start);
+        const bool is_gives = len && token_is(start, len, "gives"), is_or = len && token_is(start, len, "or");
+        if (len && !is_gives && !is_or) {
+            if (token_is(start, len, "owned"))
+                owned = true;
+            type = start;
+            type_len = len;
+            ++tokens;
+            continue;
+        }
+        if (tokens) {
+            uint8_t kind;
+            if (!extern_kind(st, type, type_len, owned, results, &kind))
+                return false;
+            if (results) {
+                if (h->ext_result != PNX_XA_NONE)
+                    return false; // one result
+                h->ext_result = kind;
+            } else {
+                c_args += kind == PNX_XA_STR ? 2 : 1;
+                if (h->ext_n == 8 || c_args > 8)
+                    return false;
+                h->ext_kind[h->ext_n++] = kind;
+            }
+            tokens = 0;
+            owned = false;
+        }
+        if (is_gives) {
+            results = true;
+        } else if (is_or) {
+            fails = true; // "or fail)": the shape was checked by pnx_signature_counts
+            while (*p && *p != ')')
+                ++p;
+        } else if (*p == ',') {
+            ++p;
+        }
+        if (*p == ')')
+            break;
+        if (!*p)
+            return false;
+    }
+    // only a pointer can say that the call failed: by being null
+    return !fails || h->ext_result >= PNX_XA_HANDLE;
+}
+
+typedef intptr_t x0(void);
+typedef intptr_t x1(intptr_t);
+typedef intptr_t x2(intptr_t, intptr_t);
+typedef intptr_t x3(intptr_t, intptr_t, intptr_t);
+typedef intptr_t x4(intptr_t, intptr_t, intptr_t, intptr_t);
+typedef intptr_t x5(intptr_t, intptr_t, intptr_t, intptr_t, intptr_t);
+typedef intptr_t x6(intptr_t, intptr_t, intptr_t, intptr_t, intptr_t, intptr_t);
+typedef intptr_t x7(intptr_t, intptr_t, intptr_t, intptr_t, intptr_t, intptr_t, intptr_t);
+typedef intptr_t x8(intptr_t, intptr_t, intptr_t, intptr_t, intptr_t, intptr_t, intptr_t, intptr_t);
+
+// The host word behind every extern: lays the arguments out as RFC-0015 section 4.3 says and
+// calls the C function.
+static pinax_err extern_call(pinax_call *call, void *user, const pinax_args *args) {
+    const pnx_host *h = user;
+    pinax_state *st = call->state;
+    const uint32_t region_mark = st->region_used;
+    intptr_t a[8] = {0};
+    pinax_handle taken[8];
+    uint8_t taken_type[8];
+    unsigned n = 0, ni = 0, ns = 0, n_taken = 0;
+    for (unsigned k = 0; k < h->ext_n; ++k) {
+        const uint8_t kind = h->ext_kind[k];
+        if (kind == PNX_XA_INT) {
+            a[n++] = (intptr_t)args->i[ni++];
+        } else if (kind == PNX_XA_STR) {
+            a[n++] = (intptr_t)args->s[ns].ptr;
+            a[n++] = (intptr_t)args->s[ns++].len;
+        } else if (kind == PNX_XA_CSTR) { // a copy with a NUL after it, for the time of the call
+            const pinax_str s = args->s[ns++];
+            uint8_t *copy = pnx_region_alloc(st, s.len + 1);
+            if (!copy) {
+                st->region_used = region_mark;
+                return PINAX_ERR_FULL;
+            }
+            if (s.len)
+                __builtin_memcpy(copy, s.ptr, s.len);
+            copy[s.len] = 0;
+            a[n++] = (intptr_t)copy;
+        } else {
+            const uint32_t type = (uint32_t)(kind & 0x0fu) + 1;
+            const pinax_handle handle = (pinax_handle)args->i[ni++];
+            void *object = pinax_handle_get(st, type, handle);
+            if (!object) {
+                st->region_used = region_mark;
+                return PINAX_ERR_STALE;
+            }
+            if (kind & PNX_XA_OWNED) {
+                taken[n_taken] = handle;
+                taken_type[n_taken++] = (uint8_t)type;
+            }
+            a[n++] = (intptr_t)object;
+        }
+    }
+    intptr_t r = 0;
+    switch (n) {
+    case 0: r = ((x0 *)h->ext)(); break;
+    case 1: r = ((x1 *)h->ext)(a[0]); break;
+    case 2: r = ((x2 *)h->ext)(a[0], a[1]); break;
+    case 3: r = ((x3 *)h->ext)(a[0], a[1], a[2]); break;
+    case 4: r = ((x4 *)h->ext)(a[0], a[1], a[2], a[3]); break;
+    case 5: r = ((x5 *)h->ext)(a[0], a[1], a[2], a[3], a[4]); break;
+    case 6: r = ((x6 *)h->ext)(a[0], a[1], a[2], a[3], a[4], a[5]); break;
+    case 7: r = ((x7 *)h->ext)(a[0], a[1], a[2], a[3], a[4], a[5], a[6]); break;
+    default: r = ((x8 *)h->ext)(a[0], a[1], a[2], a[3], a[4], a[5], a[6], a[7]); break;
+    }
+    st->region_used = region_mark;
+    for (unsigned k = 0; k < n_taken; ++k) // the function took the object: the script's handle ends
+        (void)pinax_handle_release(st, taken_type[k], taken[k]);
+    if (h->ext_result == PNX_XA_INT) {
+        args->ri[0] = (int64_t)r;
+    } else if (h->ext_result >= PNX_XA_HANDLE) {
+        pinax_handle out;
+        if (!r)
+            return PINAX_ERR_FAILED;
+        const pinax_err err = pinax_handle_new(st, (uint32_t)(h->ext_result & 0x0fu) + 1, (void *)r, &out);
+        if (err != PINAX_OK)
+            return err;
+        args->ri[0] = (int64_t)out;
+    }
+    return PINAX_OK;
+}
+
+pinax_err pnx_extern_link(pinax_state *st, const char *module, const char *name, const char *signature,
+                          uint32_t *index) {
+    pnx_host made = {0};
+    if (!copy_text(made.module, sizeof made.module, module) || !copy_text(made.name, sizeof made.name, name) ||
+        !copy_text(made.signature, sizeof made.signature, signature))
+        return fail(st, PINAX_ERR_ARGUMENT, "extern: the library or function name is too long");
+    if (!pnx_signature_counts(made.signature, &made.counts) || !extern_layout(st, made.signature, &made))
+        return fail(st, PINAX_ERR_TYPE,
+                    "extern: int, handle, str and cstr arguments (eight for C at most), one int or handle result; "
+                    "or fail only with a handle result");
+    for (uint32_t k = 0; k < st->n_hosts; ++k) {
+        if (text_equal(st->hosts[k].module, module) && text_equal(st->hosts[k].name, name)) {
+            if (!text_equal(st->hosts[k].signature, signature))
+                return fail(st, PINAX_ERR_SIGNATURE, "extern: the function is already declared with another signature");
+            *index = k;
+            return PINAX_OK;
+        }
+    }
+    if (st->n_hosts == PNX_MAX_HOSTS)
+        return fail(st, PINAX_ERR_NO_ROOM, "too many host words and extern functions");
+    if (!st->resolve)
+        return fail(st, PINAX_ERR_NOT_FOUND, "extern: the host gave no resolver, so no C function can be named");
+    const pinax_str library = {(const unsigned char *)module + 1, __builtin_strlen(module) - 1};
+    const pinax_str symbol = {(const unsigned char *)name, __builtin_strlen(name)};
+    made.ext = st->resolve(st->resolve_user, library, symbol);
+    if (!made.ext)
+        return fail(st, PINAX_ERR_NOT_FOUND, "extern: the host does not give this function");
+    pnx_host *h = &st->hosts[st->n_hosts];
+    *h = made;
+    h->fn = extern_call;
+    h->user = h;
+    *index = st->n_hosts++;
+    return PINAX_OK;
 }
 
 pinax_err pinax_handle_type(pinax_state *st, const char *name, void (*close)(void *object, void *user),

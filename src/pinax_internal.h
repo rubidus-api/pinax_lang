@@ -39,7 +39,15 @@ typedef struct pnx_host {
     void         *user;
     uint32_t      flags;
     pnx_counts    counts;
+    // a C function named by `extern`: how its arguments are laid out for the call
+    pinax_extern_fn ext;
+    uint8_t       ext_n, ext_result; // parameters; the result: PNX_XA_NONE, PNX_XA_INT or a handle
+    uint8_t       ext_kind[8];
 } pnx_host;
+
+// Kinds of an extern parameter. A handle is PNX_XA_HANDLE plus its type number, and
+// PNX_XA_OWNED more when the function takes the object over.
+enum { PNX_XA_INT = 0, PNX_XA_STR = 1, PNX_XA_CSTR = 2, PNX_XA_NONE = 3, PNX_XA_HANDLE = 0x10, PNX_XA_OWNED = 0x40 };
 
 // A kind of host object scripts can hold (pinax_handle_type).
 typedef struct pnx_handle_type {
@@ -84,6 +92,7 @@ typedef struct pnx_program {
     const uint8_t       *seg_const, *seg_global;
     void                *symbols;
     size_t               used;
+    uint32_t             n_hosts;
 } pnx_program;
 
 struct pinax_state {
@@ -124,6 +133,8 @@ struct pinax_state {
     const char *error_text;
     void (*diag)(void *user, pinax_str file, uint32_t line, uint32_t column, pinax_str message);
     void *diag_user;
+    pinax_resolve_fn resolve; // gives the C functions that `extern` names
+    void            *resolve_user;
     uint8_t hash_key[16]; // of the lookup indexes; inside the block, so images carry it
 
     pnx_handle_type  handle_types[PNX_MAX_HANDLE_TYPES];
@@ -170,6 +181,10 @@ pinax_err pnx_load_container(pinax_state *state, pinax_str bytecode, uint32_t ke
 // Bytes from the block, zeroed; NULL when it is full (pinax_needed() then tells how much).
 void *pnx_take(pinax_state *state, size_t bytes, size_t align);
 // The number of the source module called `name` (of `length` bytes), or UINT32_MAX.
+// The host word that stands for the C function `name` of library `module` ("@lib"), asking
+// the resolver for it when it is not there yet.
+pinax_err pnx_extern_link(pinax_state *state, const char *module, const char *name, const char *signature,
+                          uint32_t *index);
 uint32_t pnx_module_number(const pinax_state *state, const char *name, size_t length);
 
 // Bytes in the main task's region; NULL when it is full.

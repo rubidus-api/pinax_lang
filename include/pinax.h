@@ -1,8 +1,8 @@
 /*
  * pinax.h - host interface of the Pinax embeddable scripting language.
  *
- * Not implemented yet, and answering PINAX_ERR_STATE: pinax_eval, pinax_set_resolver (extern),
- * pinax_call_pending and pinax_complete (awaitable host words), the images and pinax_clone.
+ * Not implemented yet, and answering PINAX_ERR_STATE: pinax_eval, pinax_call_pending and
+ * pinax_complete (awaitable host words), the images and pinax_clone.
  * Everything else works.
  *
  * The whole interface is this one header. It needs only <stddef.h> and <stdint.h>.
@@ -157,6 +157,16 @@ PINAX_API pinax_err pinax_complete(pinax_state *state, pinax_token token,
  * not load libraries itself: with no resolver, or when it returns NULL, the load fails.
  * Only integer, handle and string arguments and one integer or handle result are callable
  * this way; anything else needs a host word.
+ *
+ * How the function is called: every integer and every handle's object pointer is one
+ * intptr_t argument, in the order written; a `str` is two arguments, (const char *, size_t),
+ * and is not NUL-terminated; a `cstr` is one const char * to a NUL-terminated copy that lives
+ * for the call. At most eight C arguments. The result is read as one intptr_t, so a function
+ * returning a narrower type (int), taking a double or a struct by value, or taking variable
+ * arguments cannot be named: wrap it in a host word. A null pointer where a handle is the
+ * result is a failure. A function given an `owned` handle takes the object over; the type's
+ * close function is not called for it. A wrong signature in the script is undefined behaviour
+ * in C: a host that runs scripts it does not trust sets no resolver.
  */
 typedef void (*pinax_extern_fn)(void);
 typedef pinax_extern_fn (*pinax_resolve_fn)(void *user, pinax_str library, pinax_str symbol);

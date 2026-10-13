@@ -196,6 +196,14 @@ typedef struct record {
     bool     exported; // visible to other modules as module.name
 } record;
 
+// extern NAME ( effect ) from "lib" : a C function the host's resolver gave
+typedef struct externsym {
+    name     name;
+    uint32_t host; // its host word, in state->hosts
+    uint16_t module;
+    bool     exported;
+} externsym;
+
 // forward word NAME ( effect ) : a word called before it is defined
 typedef struct fwd {
     name     name;
@@ -244,8 +252,11 @@ typedef struct comp {
     // Several loads make one program (RFC-0014). What earlier loads declared lies below these
     // counts and belongs to other modules: a bare name finds only what lies above them.
     struct counts {
-        uint32_t words, consts, globals, records, dtypes;
+        uint32_t words, consts, globals, records, dtypes, externs;
     } base;
+    vec          externs;   // externsym
+    bool         in_extern; // a signature of an extern is being read: cstr is a type there
+    uint32_t     cstr_mask; // and these of its inputs were written cstr
     uint16_t     module;    // the number of the module being compiled
     vec          srcmods;   // name: the modules loaded so far, this one last
     bool         exporting; // `export` stands before the item being compiled
@@ -401,6 +412,7 @@ static tid basic_type(name n) {
 // A type as written in a signature or a declaration: a basic type, or the name of a table of
 // records, which is the type of its rows.
 static bool source_used(const comp *c, uint32_t m);
+static uint32_t find_extern(const comp *c, name n);
 
 static tid type_of_name(const comp *c, name n) {
     const tid basic = basic_type(n);
@@ -526,6 +538,10 @@ static bool parse_sig(comp *c, sig *s) {
         }
         if (type.length)
             t = type_of_name(c, type);
+        if (t == TY_NONE && c->in_extern && !outputs && !owned && name_is(type, "cstr")) {
+            t = TY_STR; // handed to the C function as a NUL-terminated copy
+            c->cstr_mask |= 1u << s->n_in;
+        }
         if (t == TY_NONE)
             return type_error(c, name_is(type, "float") ? "float is not available: this build has no F bank"
                                                         : "this type is not known here");
@@ -607,6 +623,8 @@ static bool sig_text(const comp *c, const sig *s, char *out, size_t cap) {
             }
             if (side ? s->out_owned[k] : s->in_owned[k])
                 PUT("owned ", 6);
+            if (!side && c->in_extern && (c->cstr_mask >> k & 1u))
+                PUT("c", 1);
             PUT(tn.text, tn.length);
         }
     }
@@ -627,7 +645,9 @@ static bool host_sig(comp *c, const pnx_host *h, sig *s) {
     const pnx_token saved_tok = c->tok;
     pnx_lex_init(&temp, (const uint8_t *)h->signature, __builtin_strlen(h->signature));
     c->lx = &temp;
+    c->in_extern = h->module[0] == '@';
     const bool ok = advance(c) && parse_sig(c, s);
+    c->in_extern = false;
     c->lx = saved_lx;
     c->tok = saved_tok;
     if (!ok) { // registration accepted it, so this is a type the compiler does not have yet
@@ -1055,6 +1075,16 @@ static uint32_t find_record(const comp *c, name n) {
     return NONE;
 }
 
+// The extern of this source called `n`: its number in comp.externs, or NONE.
+static uint32_t find_extern(const comp *c, name n) {
+    const externsym *all = c->externs.ptr;
+    for (uint32_t k = c->base.externs; k < c->externs.n; ++k) {
+        if (name_eq(all[k].name, n))
+            return k;
+    }
+    return NONE;
+}
+
 // The record a field path begins with: one of this source, or one a module in use exports.
 static uint32_t find_record_any(const comp *c, name n) {
     const uint32_t own = find_record(c, n);
@@ -1137,7 +1167,7 @@ static const struct builtin *find_builtin(name n, uint8_t module) {
 
 // A name every part of the source sees: a word, a constant, a global, a type, a core word.
 static bool name_is_global(comp *c, name n) {
-    return find_word(c, n, NULL) || find_fwd(c, n, NULL) || find_core(n) || type_of_name(c, n) != TY_NONE ||
+    return find_word(c, n, NULL) || find_fwd(c, n, NULL) || find_extern(c, n) != NONE || find_core(n) || type_of_name(c, n) != TY_NONE ||
            name_is(n, "float") || name_is(n, "raw") ||
            find_record(c, n) != NONE ||
            name_is(n, "err") || find_const(c, n) || find_global(c, n) != NONE || find_builtin(n, 0);
@@ -3668,6 +3698,11 @@ static bool module_symbol(comp *c, uint16_t m, name n) {
         if (globals[k].module == m && globals[k].exported && name_eq(globals[k].name, n))
             return read_global(c, k);
     }
+    const externsym *externs = c->externs.ptr;
+    for (uint32_t k = 0; k < c->base.externs; ++k) {
+        if (externs[k].module == m && externs[k].exported && name_eq(externs[k].name, n))
+            return call_host(c, externs[k].host);
+    }
     return error(c, PINAX_ERR_NOT_FOUND, "the module exports nothing of this name");
 }
 
@@ -3726,6 +3761,8 @@ static bool body_name(comp *c) {
         uint32_t index;
         if (find_word(c, n, &index))
             return call_word(c, &((const wordsym *)c->words.ptr + index)->sig, index);
+        if ((index = find_extern(c, n)) != NONE)
+            return call_host(c, ((const externsym *)c->externs.ptr + index)->host);
         const fwd *ahead = find_fwd(c, n, &index);
         if (ahead)
             return call_word(c, &ahead->sig, FWD_MARK | index);
@@ -4131,6 +4168,45 @@ static bool use_module(comp *c) {
     c->modules[c->n_modules] = prefix;
     c->module_real[c->n_modules++] = n;
     return true;
+}
+
+// extern NAME ( effect ) from "lib" : a C function, called as RFC-0015 section 4.3 says
+static bool declare_extern(comp *c) {
+    if (!advance(c))
+        return false;
+    if (c->tok.kind != PNX_T_NAME)
+        return syntax(c, "extern names the function: extern name (effect) from \"library\"");
+    const name n = tok_name(c);
+    const pnx_token at = c->tok;
+    if (name_is_global(c, n))
+        return type_error(c, "this name is already defined");
+    if (n.length > 31)
+        return syntax(c, "a word name is at most 31 bytes long");
+    sig s;
+    c->cstr_mask = 0;
+    c->in_extern = true;
+    char text[72];
+    const bool ok = advance(c) && parse_sig(c, &s) && (sig_text(c, &s, text, sizeof text) ||
+                                                      syntax(c, "the signature is longer than 71 bytes"));
+    c->in_extern = false;
+    if (!ok)
+        return false;
+    if (!is_word(c, PNX_KW_from) || !advance(c) || (c->tok.kind != PNX_T_STRING && c->tok.kind != PNX_T_RAW))
+        return c->err == PINAX_OK ? syntax(c, "extern ends with the library: from \"name\"") : false;
+    if (c->tok.body_length == 0 || c->tok.body_length > 14 || c->tok.escapes)
+        return syntax(c, "the library name is 1 to 14 plain bytes");
+    char module[16] = "@", word[32] = {0};
+    __builtin_memcpy(module + 1, c->lx->source + c->tok.body, c->tok.body_length);
+    __builtin_memcpy(word, n.text, n.length);
+    uint32_t host;
+    const pinax_err err = pnx_extern_link(c->st, module, word, text, &host);
+    if (err != PINAX_OK)
+        return error_at(c, err, at.line, at.column, c->st->error_text);
+    externsym *slot = vec_push(c, &c->externs, sizeof(externsym));
+    if (!slot)
+        return false;
+    *slot = (externsym){.name = n, .host = host};
+    return advance(c);
 }
 
 // const NAME literal
@@ -4878,6 +4954,7 @@ static void mark_new(comp *c, struct counts *seen) {
     MARK(globals, globalsym, globals);
     MARK(records, record, records);
     MARK(dtypes, dtype, dtypes);
+    MARK(externs, externsym, externs);
 #undef MARK
     c->exporting = false;
 }
@@ -4895,7 +4972,7 @@ static bool compile(comp *c, image *im, bool *has_top) {
         if (!advance(c))
             return false;
     }
-    struct counts seen = {c->base.words, c->base.consts, c->base.globals, c->base.records, c->base.dtypes};
+    struct counts seen = c->base;
     while (c->tok.kind != PNX_T_END) {
         if (is_word(c, PNX_KW_use)) {
             if (!use_module(c))
@@ -4906,7 +4983,7 @@ static bool compile(comp *c, image *im, bool *has_top) {
             static const pnx_word_id may[] = {PNX_KW_word,  PNX_KW_const,  PNX_KW_global, PNX_KW_array, PNX_KW_list,
                                               PNX_KW_queue, PNX_KW_pool,   PNX_KW_type,   PNX_KW_buffer,
                                               PNX_KW_index, PNX_KW_record, PNX_KW_forward, PNX_KW_bound,
-                                              PNX_KW_row};
+                                              PNX_KW_row,   PNX_KW_extern};
             bool ok = false;
             for (uint32_t k = 0; k < sizeof may / sizeof may[0]; ++k)
                 ok = ok || is_word(c, may[k]);
@@ -4937,6 +5014,11 @@ static bool compile(comp *c, image *im, bool *has_top) {
             if (g->record != NONE || g->strcap || bank_of(g->type) != BANK_I)
                 return type_error(c, "bound storage holds int, bool or err values for now");
             g->bound = true;
+        } else if (is_word(c, PNX_KW_extern) && !c->top_fn->n_blocks) {
+            if (c->data_only)
+                return syntax(c, "a data source names no C functions");
+            if (!declare_extern(c))
+                return false;
         } else if (is_word(c, PNX_KW_const) && !c->top_fn->n_blocks) {
             if (!declare_const(c))
                 return false;
@@ -5121,7 +5203,7 @@ static bool serialize(comp *c, const image *im, uint8_t **out, size_t *out_len) 
 // What a load leaves in the block for the loads after it: the compiler's tables in one piece,
 // with every name it holds copied in, so the host may let go of the source.
 typedef struct symtab {
-    vec    words, consts, globals, records, fields, btypes, dtypes, srcmods;
+    vec    words, consts, globals, records, fields, btypes, dtypes, srcmods, externs;
     size_t bytes;
 } symtab;
 
@@ -5154,11 +5236,13 @@ static void each_name(symtab *t, name_fn *f, void *user) {
         f(&((dtype *)t->dtypes.ptr + k)->name, user);
     for (uint32_t k = 0; k < t->srcmods.n; ++k)
         f((name *)t->srcmods.ptr + k, user);
+    for (uint32_t k = 0; k < t->externs.n; ++k)
+        f(&((externsym *)t->externs.ptr + k)->name, user);
 }
 
 #define TABLES(X)                                                                                            \
     X(words, wordsym) X(consts, constant) X(globals, globalsym) X(records, record) X(fields, field)          \
-    X(btypes, sig) X(dtypes, dtype) X(srcmods, name)
+    X(btypes, sig) X(dtypes, dtype) X(srcmods, name) X(externs, externsym)
 
 // A name whose bytes will not outlive this load lies in the source or in the working memory.
 typedef struct keeper {
@@ -5201,7 +5285,8 @@ static void name_shift(name *n, void *user) {
 
 // The tables as one piece in the working memory.
 static symtab *keep_symbols(comp *c, pinax_str source, const uint8_t *work) {
-    symtab now = {c->words, c->consts, c->globals, c->records, c->fields, c->btypes, c->dtypes, c->srcmods, 0};
+    symtab now = {c->words, c->consts, c->globals, c->records, c->fields, c->btypes, c->dtypes, c->srcmods,
+                  c->externs, 0};
     keeper k = {{source.ptr, work}, {source.ptr + source.len, c->arena_end}, NULL, 0};
     each_name(&now, name_size, &k);
     size_t bytes = sizeof(symtab) + ((k.total + 7u) & ~(size_t)7u);
@@ -5267,7 +5352,7 @@ static bool take_symbols(comp *c, image *im) {
         c->imports = (vec){p, h->n_imports, h->n_imports};
     }
 #undef COPY
-    c->base = (struct counts){c->words.n, c->consts.n, c->globals.n, c->records.n, c->dtypes.n};
+    c->base = (struct counts){c->words.n, c->consts.n, c->globals.n, c->records.n, c->dtypes.n, c->externs.n};
     return true;
 }
 
@@ -5370,6 +5455,7 @@ pinax_err pinax_load(pinax_state *st, const char *file, pinax_str source, uint32
             const pinax_str text = {(const unsigned char *)c.message, __builtin_strlen(c.message)};
             st->diag(st->diag_user, name, c.line, c.column, text);
         }
+        st->n_hosts = before.n_hosts; // the C functions this source named
         return c.err;
     }
 
