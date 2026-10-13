@@ -52,6 +52,10 @@ enum {
 // Added for compiled code (still format 0): JSNE; GETFAIL (the number of the failure just
 // received) and FAILR (fail with the number in a register); RMARK starts a string at the top of
 // the region and RCATS, RCATI, RCATB append a string, a decimal integer, true or false to it.
+// GLEN and GCLEAR give and reset the length of an array or list; LPUSH and LPOP add and take
+// at the end of a list and fail when it is full or empty; SFIND finds a string in a string.
+// SWORD takes the next word between white space off a string (like SNEXT, the next word runs
+// when none is left); ERRTEXT gives the name of an error number.
 #define PNX_OPS(X)                                                                                 \
     X(MOVI, PNX_K_I, PNX_K_I, PNX_K_NONE, PNX_F_ABC, PNX_X_NONE, 0)                                \
     X(MOVS, PNX_K_S, PNX_K_S, PNX_K_NONE, PNX_F_ABC, PNX_X_NONE, 0)                                \
@@ -120,7 +124,14 @@ enum {
     X(RMARK, PNX_K_S, PNX_K_NONE, PNX_K_NONE, PNX_F_ABC, PNX_X_NONE, 0)                            \
     X(RCATS, PNX_K_S, PNX_K_S, PNX_K_NONE, PNX_F_ABC, PNX_X_NONE, 0)                               \
     X(RCATI, PNX_K_S, PNX_K_I, PNX_K_NONE, PNX_F_ABC, PNX_X_NONE, 0)                               \
-    X(RCATB, PNX_K_S, PNX_K_I, PNX_K_NONE, PNX_F_ABC, PNX_X_NONE, 0)
+    X(RCATB, PNX_K_S, PNX_K_I, PNX_K_NONE, PNX_F_ABC, PNX_X_NONE, 0)                               \
+    X(GLEN, PNX_K_I, PNX_K_NONE, PNX_K_NONE, PNX_F_GLOBAL, PNX_X_NONE, 0)                          \
+    X(GCLEAR, PNX_K_NONE, PNX_K_NONE, PNX_K_NONE, PNX_F_GLOBAL, PNX_X_NONE, 0)                     \
+    X(LPUSH, PNX_K_I, PNX_K_NONE, PNX_K_NONE, PNX_F_GLOBAL, PNX_X_NONE, 1)                         \
+    X(LPOP, PNX_K_I, PNX_K_NONE, PNX_K_NONE, PNX_F_GLOBAL, PNX_X_NONE, 1)                          \
+    X(SFIND, PNX_K_I, PNX_K_S, PNX_K_S, PNX_F_ABC, PNX_X_NONE, 1)                                  \
+    X(SWORD, PNX_K_S, PNX_K_S, PNX_K_NONE, PNX_F_ABC, PNX_X_NONE, 1)                               \
+    X(ERRTEXT, PNX_K_S, PNX_K_I, PNX_K_NONE, PNX_F_ABC, PNX_X_NONE, 0)
 
 enum {
 #define PNX_ENUM(name, a, b, c, shape, second, fails) PNX_##name,
@@ -146,11 +157,17 @@ enum {
     PNX_G_ARRAY,  // capacity 64-bit integers
     PNX_G_BUFFER, // byte buffer of capacity bytes
     PNX_G_TABLE,  // capacity records of elem_bytes bytes; a str(N) field is one length byte and N bytes
+    PNX_G_LIST,   // up to capacity 64-bit integers; the length starts at 0
     PNX_G_COUNT
 };
 
 // Segments an S cell can name. Further numbers are bytes outside the block.
-enum { PNX_SEG_EMPTY, PNX_SEG_CONST, PNX_SEG_GLOBAL, PNX_SEG_REGION, PNX_SEG_HOST, PNX_SEG_COUNT = 16 };
+enum {
+    PNX_SEG_EMPTY, PNX_SEG_CONST, PNX_SEG_GLOBAL, PNX_SEG_REGION,
+    PNX_SEG_STATIC, // texts built into the interpreter (error names)
+    PNX_SEG_HOST,
+    PNX_SEG_COUNT = 16
+};
 
 // The container pinax_load_bytecode() accepts: head, word records, global records, import
 // records, integer constants, string constant records, code, string bytes; in this order,

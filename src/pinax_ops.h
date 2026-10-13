@@ -158,7 +158,7 @@ PNX_OP(SETG) { __builtin_memcpy(st->globals[OP_BX(w)].ptr, &R[OP_A(w)], 8); retu
 PNX_OP(AGET) {
     const pnx_global *g = &st->globals[OP_C(w)];
     const uint64_t index = (uint64_t)R[OP_B(w)];
-    if (index >= g->capacity)
+    if (index >= g->length)
         return PINAX_ERR_RANGE;
     __builtin_memcpy(&R[OP_A(w)], g->ptr + index * 8, 8);
     return PNX_R_OK;
@@ -166,7 +166,7 @@ PNX_OP(AGET) {
 PNX_OP(ASET) {
     const pnx_global *g = &st->globals[OP_C(w)];
     const uint64_t index = (uint64_t)R[OP_B(w)];
-    if (index >= g->capacity)
+    if (index >= g->length)
         return PINAX_ERR_RANGE;
     __builtin_memcpy(g->ptr + index * 8, &R[OP_A(w)], 8);
     return PNX_R_OK;
@@ -368,6 +368,77 @@ PNX_OP(RCATI) {
 PNX_OP(RCATB) {
     return R[OP_B(w)] ? pnx_region_append(st, &S[OP_A(w)], (const uint8_t *)"true", 4)
                       : pnx_region_append(st, &S[OP_A(w)], (const uint8_t *)"false", 5);
+}
+
+// ---- arrays and lists of integers ---------------------------------------------------------
+
+PNX_OP(GLEN) { R[OP_A(w)] = st->globals[OP_BX(w)].length; return PNX_R_OK; }
+PNX_OP(GCLEAR) { // an array is zeroed; a list becomes empty
+    pnx_global *g = &st->globals[OP_BX(w)];
+    if (g->kind == PNX_G_LIST)
+        g->length = 0;
+    else
+        __builtin_memset(g->ptr, 0, (size_t)g->capacity * 8);
+    return PNX_R_OK;
+}
+PNX_OP(LPUSH) {
+    pnx_global *g = &st->globals[OP_BX(w)];
+    if (g->length == g->capacity) {
+        st->fail = PINAX_ERR_FULL;
+        return PNX_R_FAILED;
+    }
+    __builtin_memcpy(g->ptr + (size_t)g->length * 8, &R[OP_A(w)], 8);
+    ++g->length;
+    return PNX_R_OK;
+}
+PNX_OP(LPOP) {
+    pnx_global *g = &st->globals[OP_BX(w)];
+    if (g->length == 0) {
+        st->fail = PINAX_ERR_RANGE;
+        return PNX_R_FAILED;
+    }
+    --g->length;
+    __builtin_memcpy(&R[OP_A(w)], g->ptr + (size_t)g->length * 8, 8);
+    return PNX_R_OK;
+}
+PNX_OP(SFIND) {
+    const pnx_scell hay = S[OP_B(w)], part = S[OP_C(w)];
+    const uint32_t at = pnx_find(pnx_view_bytes(st, hay), hay.length, pnx_view_bytes(st, part), part.length);
+    if (at == UINT32_MAX) {
+        st->fail = PINAX_ERR_NOT_FOUND;
+        return PNX_R_FAILED;
+    }
+    R[OP_A(w)] = at;
+    return PNX_R_OK;
+}
+
+PNX_INLINE bool pnx_is_space(uint8_t c) {
+    return c == ' ' || c == '\t' || c == '\n' || c == '\r';
+}
+PNX_OP(SWORD) { // PNX_R_FAILED: no word is left
+    pnx_scell *rest = &S[OP_A(w)];
+    const uint8_t *bytes = pnx_view_bytes(st, *rest);
+    uint32_t i = 0;
+    while (i < rest->length && pnx_is_space(bytes[i]))
+        ++i;
+    uint32_t end = i;
+    while (end < rest->length && !pnx_is_space(bytes[end]))
+        ++end;
+    if (end == i) {
+        rest->offset += rest->length;
+        rest->length = 0;
+        return PNX_R_FAILED;
+    }
+    S[OP_B(w)] = (pnx_scell){rest->segment, end - i, rest->offset + i};
+    rest->offset += end;
+    rest->length -= end;
+    return PNX_R_OK;
+}
+PNX_OP(ERRTEXT) {
+    uint32_t offset, length;
+    pnx_err_name(R[OP_B(w)], &offset, &length);
+    S[OP_A(w)] = (pnx_scell){PNX_SEG_STATIC, length, offset};
+    return PNX_R_OK;
 }
 
 #endif // PINAX_OPS_H

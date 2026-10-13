@@ -228,6 +228,13 @@ pinax_err pnx_execute(pinax_state *st) {
         RUN(RCATS)
         RUN(RCATI)
         RUN(RCATB)
+        RUN(GLEN)
+        RUN(GCLEAR)
+        RUNF(LPUSH)
+        RUNF(LPOP)
+        RUNF(SFIND)
+        RUNF(SWORD)
+        RUN(ERRTEXT)
 
         CASE(CALL) {
             const pnx_wordrec *callee = &st->words[*pc++];

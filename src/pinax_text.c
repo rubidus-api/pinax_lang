@@ -30,3 +30,44 @@ uint32_t pnx_format_int(int64_t value, uint8_t out[24]) {
     const proven_fmt_result_t r = proven_u8str_append_fmt(&text, "{}", proven_arg_i64(value));
     return r.err == PROVEN_OK ? (uint32_t)r.written : 0;
 }
+
+uint32_t pnx_find(const uint8_t *bytes, uint32_t length, const uint8_t *part, uint32_t part_length) {
+    if (part_length == 0)
+        return 0;
+    if (part_length > length)
+        return UINT32_MAX;
+    const proven_size_t at =
+        proven_u8str_view_find((proven_u8str_view_t){bytes, length}, 0, (proven_u8str_view_t){part, part_length});
+    return at == PROVEN_INDEX_NOT_FOUND ? UINT32_MAX : (uint32_t)at;
+}
+
+// Error names, as err_text gives them. The order follows pinax_err.
+#define PNX_ERR_NAMES(X)                                                                           \
+    X(PINAX_ERR_FAILED, "failed") X(PINAX_ERR_OVERFLOW, "overflow") X(PINAX_ERR_DIV_ZERO, "div_zero")  \
+    X(PINAX_ERR_RANGE, "range") X(PINAX_ERR_FULL, "full") X(PINAX_ERR_DEPTH, "depth")              \
+    X(PINAX_ERR_STALE, "stale") X(PINAX_ERR_CANCELLED, "cancelled")                                \
+    X(PINAX_ERR_INTERRUPTED, "interrupted") X(PINAX_ERR_ARGUMENT, "argument")                      \
+    X(PINAX_ERR_NO_ROOM, "no_room") X(PINAX_ERR_SYNTAX, "syntax") X(PINAX_ERR_TYPE, "type")        \
+    X(PINAX_ERR_NOT_FOUND, "not_found") X(PINAX_ERR_SIGNATURE, "signature")                        \
+    X(PINAX_ERR_FORMAT, "format") X(PINAX_ERR_STATE, "state")
+
+const char pnx_static_text[] =
+#define PNX_ERR_TEXT(code, text) text "\0"
+    PNX_ERR_NAMES(PNX_ERR_TEXT)
+#undef PNX_ERR_TEXT
+    "error";
+
+void pnx_err_name(int64_t err, uint32_t *offset, uint32_t *length) {
+    uint32_t at = 0;
+#define PNX_ERR_AT(code, text)                                                                     \
+    if (err == (code)) {                                                                           \
+        *offset = at;                                                                              \
+        *length = sizeof(text) - 1;                                                                \
+        return;                                                                                    \
+    }                                                                                              \
+    at += sizeof(text);
+    PNX_ERR_NAMES(PNX_ERR_AT)
+#undef PNX_ERR_AT
+    *offset = at; // any other number
+    *length = 5;
+}

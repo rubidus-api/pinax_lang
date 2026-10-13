@@ -43,6 +43,7 @@ typedef struct pnx_host {
 typedef struct pnx_global {
     uint8_t *ptr; // a buffer starts with its 64-bit length
     uint32_t kind, elem_bytes, capacity;
+    uint32_t length; // cells in use: the capacity for an array or table, what was pushed for a list
 } pnx_global;
 
 struct pinax_call {
@@ -102,6 +103,11 @@ pinax_err pnx_execute(pinax_state *state);
 bool pnx_parse_int(const uint8_t *bytes, uint32_t length, int64_t *out);
 // Decimal text of `value` into `out`; returns its length (at most 20).
 uint32_t pnx_format_int(int64_t value, uint8_t out[24]);
+// Offset of the first `part` in `bytes`, or UINT32_MAX. An empty part is found at 0.
+uint32_t pnx_find(const uint8_t *bytes, uint32_t length, const uint8_t *part, uint32_t part_length);
+// The name of an error number as a view into the interpreter's static text.
+extern const char pnx_static_text[];
+void pnx_err_name(int64_t err, uint32_t *offset, uint32_t *length);
 // Offset of the first `byte`, or UINT32_MAX.
 uint32_t pnx_find_byte(const uint8_t *bytes, uint32_t length, uint8_t byte);
 

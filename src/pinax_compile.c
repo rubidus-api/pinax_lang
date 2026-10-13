@@ -23,11 +23,14 @@
 // number, so that it can be asked without the table.
 typedef uint16_t tid;
 #define TY_SBANK 0x8000u
-enum { TY_NONE, TY_INT, TY_BOOL, TY_ERR, TY_STEM, TY_STR = TY_SBANK | 5, TY_FIRST_DECLARED = 16 };
+// TY_STEM and TY_COLL are not values: a stem (lo hi range) and the name of an array or list
+// exist only at compile time and are taken by the word that follows.
+enum { TY_NONE, TY_INT, TY_BOOL, TY_ERR, TY_STEM, TY_COLL, TY_STR = TY_SBANK | 6, TY_FIRST_DECLARED = 16 };
 enum { BANK_I, BANK_S, BANK_NONE };
 enum { E_SLOT, E_LOCAL, E_CONST, E_COND };
 enum { B_IF, B_LOOP, B_ORELSE, B_CASE, B_OF, B_DO };
-enum { STEM_RANGE, STEM_BYTES, STEM_TIMES };
+enum { STEM_RANGE, STEM_BYTES, STEM_TIMES, STEM_COLL, STEM_WORDS };
+enum { GK_SCALAR, GK_ARRAY, GK_LIST };
 enum { USE_EACH, USE_FOLD, USE_TIMES };
 
 #define MAX_STACK 64
@@ -137,8 +140,10 @@ typedef struct constant {
 } constant;
 
 typedef struct globalsym {
-    name name;
-    tid  type;
+    name     name;
+    tid      type;     // of the scalar, or of one cell
+    uint8_t  kind;
+    uint32_t capacity; // cells of an array or list
 } globalsym;
 
 typedef struct comp {
@@ -247,7 +252,7 @@ static name cname(const char *text) {
 // ---- types and signatures ---------------------------------------------------------------
 
 static int bank_of(tid type) {
-    return type == TY_STEM ? BANK_NONE : (type & TY_SBANK) ? BANK_S : BANK_I;
+    return type == TY_STEM || type == TY_COLL ? BANK_NONE : (type & TY_SBANK) ? BANK_S : BANK_I;
 }
 
 static const char *type_name(tid type) {
@@ -529,7 +534,7 @@ static bool cond_value(comp *c, const entry *e, uint32_t reg) {
 // Makes entry `index` live in its own register.
 static bool settle(comp *c, uint32_t index) {
     entry *e = &c->f->stack[index];
-    if (e->kind == E_SLOT || e->type == TY_STEM)
+    if (e->kind == E_SLOT || bank_of(e->type) == BANK_NONE)
         return true;
     const uint32_t reg = slot_of(c, index);
     bool ok;
@@ -546,6 +551,8 @@ static bool settle(comp *c, uint32_t index) {
 
 static bool settle_all(comp *c) {
     for (uint32_t k = 0; k < c->f->depth; ++k) {
+        if (c->f->stack[k].type == TY_COLL)
+            return type_error(c, "the name of an array or list is used at once by a word (idx, len, each ...)");
         if (!settle(c, k))
             return false;
     }
@@ -570,9 +577,25 @@ static bool need(comp *c, uint32_t count) {
     if (c->f->depth - c->f->floor < count)
         return type_error(c, "the stack does not hold enough values for this word");
     for (uint32_t k = 0; k < count; ++k) {
-        if (c->f->stack[c->f->depth - 1 - k].type == TY_STEM)
+        const tid type = c->f->stack[c->f->depth - 1 - k].type;
+        if (type == TY_STEM)
             return type_error(c, "a stem is not a value: a combining word takes it at once");
+        if (type == TY_COLL)
+            return type_error(c, "the name of an array or list is not a value; a word like idx or len takes it");
     }
+    return true;
+}
+
+// The array or list named on top of the stack; pops the name.
+static bool need_coll(comp *c, const globalsym **out, uint32_t *index) {
+    fn *f = c->f;
+    if (f->depth == f->floor || f->stack[f->depth - 1].type != TY_COLL)
+        return type_error(c, "this word takes the name of an array or list last: i names idx");
+    *index = (uint32_t)f->stack[f->depth - 1].value;
+    *out = (const globalsym *)c->globals.ptr + *index;
+    if (*index > 255)
+        return syntax(c, "only the first 256 globals can be arrays or lists for now");
+    --f->depth;
     return true;
 }
 
@@ -711,17 +734,27 @@ static uint32_t find_global(const comp *c, name n) {
 }
 
 // Words the compiler expands itself: stems, combining words, the basic string words.
-enum { BW_RANGE, BW_SUM, BW_EACH, BW_FOLD, BW_TIMES, BW_LEN, BW_IS_EMPTY, BW_BYTE_AT, BW_BYTES };
+enum {
+    BW_RANGE, BW_SUM, BW_EACH, BW_FOLD, BW_TIMES, BW_LEN, BW_IS_EMPTY, BW_BYTE_AT, BW_BYTES,
+    BW_IDX, BW_CAPACITY, BW_IS_FULL, BW_CLEAR, BW_PUSH, BW_POP, BW_FIND, BW_TO_INT, BW_TO_STR, BW_ASSERT,
+    BW_WORDS, BW_ERR_TEXT
+};
 static const struct builtin {
     const char *name;
     uint8_t     id;
     bool        strings; // needs `use strings`
 } builtins[] = {
     {"range", BW_RANGE, false},     {"sum", BW_SUM, false},        {"each", BW_EACH, false},
-    {"fold", BW_FOLD, false},       {"times", BW_TIMES, false},    {"len", BW_LEN, true},
-    {"is_empty", BW_IS_EMPTY, true}, {"byte_at", BW_BYTE_AT, true}, {"bytes", BW_BYTES, true},
+    {"fold", BW_FOLD, false},       {"times", BW_TIMES, false},    {"len", BW_LEN, false},
+    {"is_empty", BW_IS_EMPTY, false}, {"byte_at", BW_BYTE_AT, true}, {"bytes", BW_BYTES, true},
+    {"idx", BW_IDX, false},         {"capacity", BW_CAPACITY, false}, {"is_full", BW_IS_FULL, false},
+    {"clear", BW_CLEAR, false},     {"push", BW_PUSH, false},      {"pop", BW_POP, false},
+    {"find", BW_FIND, true},        {"to_int", BW_TO_INT, true},   {"to_str", BW_TO_STR, true},
+    {"assert", BW_ASSERT, false},   {"words", BW_WORDS, true},     {"err_text", BW_ERR_TEXT, false},
 };
 
+// `len` and `is_empty` belong to the core for arrays and lists and to `strings` for a str; the
+// others marked so are words of `strings` only.
 static const struct builtin *find_builtin(const comp *c, name n) {
     for (size_t k = 0; k < sizeof builtins / sizeof builtins[0]; ++k) {
         if (name_is(n, builtins[k].name) && (!builtins[k].strings || c->use_strings))
@@ -1143,6 +1176,20 @@ static bool store_local(comp *c, name n) {
     entry    e = f->stack[top];
     const int bank = bank_of(e.type);
     const uint32_t g = find_local(f, n) ? NONE : find_global(c, n);
+    if (g != NONE && ((const globalsym *)c->globals.ptr + g)->kind != GK_SCALAR) { // value index to names
+        const globalsym *sym = (const globalsym *)c->globals.ptr + g;
+        uint32_t rv, ri;
+        if (!need(c, 2))
+            return false;
+        if (f->stack[top].type != TY_INT || f->stack[top - 1].type != sym->type)
+            return type_error(c, "a cell is stored as: value index to names, with the value of the cell's type");
+        if (g > 255)
+            return syntax(c, "only the first 256 globals can be arrays or lists for now");
+        if (!reg_of(c, top - 1, &rv) || !reg_of(c, top, &ri) || emit(c, PNX_ABC(PNX_ASET, rv, ri, g)) == NONE)
+            return false;
+        f->depth -= 2;
+        return true;
+    }
     if (g != NONE) { // a scalar global
         const globalsym *sym = (const globalsym *)c->globals.ptr + g;
         uint32_t reg;
@@ -1155,8 +1202,6 @@ static bool store_local(comp *c, name n) {
     }
     local *l = find_local(f, n);
     if (!l) {
-        if (e.type == TY_STEM)
-            return type_error(c, "a stem is not a value: a combining word takes it at once");
         if (f->is_top)
             return type_error(c, "outside a definition `to` stores into a declared global, not a new local");
         if (!name_is_free(c, n))
@@ -1788,11 +1833,36 @@ static bool scan_user(comp *c, name *out) {
 
 // Turns the stem on top of the stack into the registers of a loop: `cur` runs up to `lim`.
 // The operands stay on the stack, marked as belonging to the block. Returns their count.
-static bool stem_begin(comp *c, uint8_t *kind, uint8_t *cur, uint8_t *lim, uint8_t *src, uint8_t *count) {
+static bool stem_begin(comp *c, uint8_t *kind, uint8_t *cur, uint8_t *lim, uint8_t *src, uint8_t *count,
+                       tid *element) {
     fn *f = c->f;
     const entry stem = f->stack[--f->depth];
     *kind = stem.op;
     *src = 0;
+    *element = TY_INT;
+    if (stem.type == TY_COLL) { // an array or list: an index and the length
+        const globalsym *g = (const globalsym *)c->globals.ptr + stem.value;
+        if (stem.value > 255)
+            return syntax(c, "only the first 256 globals can be arrays or lists for now");
+        if (!push_slot(c, TY_INT) || !push_slot(c, TY_INT))
+            return false;
+        f->stack[f->depth - 2].hidden = f->stack[f->depth - 1].hidden = true;
+        *kind = STEM_COLL;
+        *src = (uint8_t)stem.value;
+        *cur = (uint8_t)slot_of(c, f->depth - 2);
+        *lim = (uint8_t)slot_of(c, f->depth - 1);
+        *count = 2;
+        *element = g->type;
+        return emit(c, PNX_ABX(PNX_LOADI, *cur, 0)) != NONE && emit(c, PNX_ABX(PNX_GLEN, *lim, (uint32_t)stem.value)) != NONE;
+    }
+    if (stem.op == STEM_WORDS) { // the string itself is the rest still to read
+        f->stack[f->depth - 1].hidden = true;
+        *src = (uint8_t)slot_of(c, f->depth - 1);
+        *cur = *lim = 0;
+        *count = 1;
+        *element = TY_STR;
+        return true;
+    }
     if (stem.op == STEM_RANGE) {
         f->stack[f->depth - 2].hidden = f->stack[f->depth - 1].hidden = true;
         *cur = (uint8_t)slot_of(c, f->depth - 2);
@@ -1814,12 +1884,14 @@ static bool stem_begin(comp *c, uint8_t *kind, uint8_t *cur, uint8_t *lim, uint8
 
 // Puts the current element of the stem into `reg`.
 static bool stem_element(comp *c, uint8_t kind, uint32_t reg, uint32_t cur, uint32_t src) {
-    return emit(c, kind == STEM_RANGE ? PNX_ABC(PNX_MOVI, reg, cur, 0) : PNX_ABC(PNX_SBYTE, reg, src, cur)) != NONE;
+    return emit(c, kind == STEM_RANGE  ? PNX_ABC(PNX_MOVI, reg, cur, 0)
+                   : kind == STEM_COLL ? PNX_ABC(PNX_AGET, reg, cur, src)
+                                       : PNX_ABC(PNX_SBYTE, reg, src, cur)) != NONE;
 }
 
 static bool loop_back(comp *c, uint32_t head, uint32_t cur, int step) {
     fn *f = c->f;
-    if (emit(c, PNX_ABC(PNX_ADDI, cur, cur, (uint8_t)(int8_t)step)) == NONE)
+    if (step && emit(c, PNX_ABC(PNX_ADDI, cur, cur, (uint8_t)(int8_t)step)) == NONE)
         return false;
     uint32_t n = f->code.n - head + 2;
     if (n > 0xffffu)
@@ -1864,8 +1936,9 @@ static bool do_block(comp *c) {
         return false;
     if (bs.fails)
         return error_at(c, PINAX_ERR_SYNTAX, at.line, at.column, "a block that can fail is not supported yet");
-    const bool has_stem = f->depth > f->floor && f->stack[f->depth - 1].type == TY_STEM;
+    const bool has_stem = f->depth > f->floor && bank_of(f->stack[f->depth - 1].type) == BANK_NONE;
     uint8_t use, kind = STEM_TIMES, cur = 0, lim = 0, src = 0, hidden = 0;
+    tid     element = TY_INT;
     if (name_is(user, "times")) {
         use = USE_TIMES;
         if (has_stem || !need(c, 1) || f->stack[f->depth - 1].type != TY_INT)
@@ -1882,14 +1955,13 @@ static bool do_block(comp *c) {
         if (!has_stem)
             return error_at(c, PINAX_ERR_TYPE, at.line, at.column,
                             "this combining word needs a stem before its block (for example lo hi range)");
-        if (!stem_begin(c, &kind, &cur, &lim, &src, &hidden))
+        if (!stem_begin(c, &kind, &cur, &lim, &src, &hidden, &element))
             return false;
     } else {
         return error_at(c, PINAX_ERR_SYNTAX, at.line, at.column,
                         "this block is used by a word the compiler does not expand yet");
     }
-    const tid element = TY_INT; // ranges and bytes give int
-    uint32_t      init = NONE;
+    uint32_t init = NONE;
     if (use == USE_EACH) {
         if (bs.n_out || bs.n_in > 1 || (bs.n_in == 1 && bs.in[0] != element))
             return error_at(c, PINAX_ERR_TYPE, at.line, at.column, "the block of each takes one element and gives nothing");
@@ -1924,22 +1996,28 @@ static bool do_block(comp *c) {
     }
     b->head = f->code.n;
     f->def_at = NONE;
-    // the test: go on while cur < lim (or, for times, while the count is at least 1)
-    if (emit(c, use == USE_TIMES ? PNX_ABC(PNX_JGEI, cur, 1, 1) : PNX_ABC(PNX_JLT, cur, lim, 1)) == NONE ||
-        !jump_later(c, &b->exits))
-        return false;
+    // where the element goes: a named parameter, or the stack
+    uint32_t reg = 0;
     if (use != USE_TIMES) {
         const uint32_t param = use == USE_FOLD ? 1 : 0;
         if (bs.n_in > param && bs.in_name[param].length) {
             const local *l = new_local(c, bs.in_name[param], element);
-            if (!l || !stem_element(c, kind, l->reg, cur, src))
+            if (!l)
                 return false;
-        } else { // no name: the element starts on the stack
-            if (!push_slot(c, element) || !stem_element(c, kind, slot_of(c, f->depth - 1), cur, src))
+            reg = l->reg;
+        } else {
+            if (!push_slot(c, element))
                 return false;
+            reg = slot_of(c, f->depth - 1);
         }
     }
-    return true;
+    if (kind == STEM_WORDS) // takes the next word, or leaves when none is left
+        return emit(c, PNX_ABC(PNX_SWORD, src, reg, 0)) != NONE && jump_later(c, &b->exits);
+    // go on while cur < lim (for times: while the count is at least 1), then fetch the element
+    if (emit(c, use == USE_TIMES ? PNX_ABC(PNX_JGEI, cur, 1, 1) : PNX_ABC(PNX_JLT, cur, lim, 1)) == NONE ||
+        !jump_later(c, &b->exits))
+        return false;
+    return use == USE_TIMES || stem_element(c, kind, reg, cur, src);
 }
 
 static bool end_do(comp *c, block *b) {
@@ -1955,7 +2033,7 @@ static bool end_do(comp *c, block *b) {
             return false;
         if (!same_stack(f, &b->in))
             return type_error(c, "this block must leave the stack as it found it");
-        if (!loop_back(c, b->head, b->cur, b->use == USE_TIMES ? -1 : 1))
+        if (!loop_back(c, b->head, b->cur, b->use == USE_TIMES ? -1 : b->stem == STEM_WORDS ? 0 : 1))
             return false;
     }
     land(c, &b->exits);
@@ -1981,11 +2059,14 @@ static bool end_do(comp *c, block *b) {
 // stem sum
 static bool do_sum(comp *c) {
     fn *f = c->f;
-    if (f->depth == f->floor || f->stack[f->depth - 1].type != TY_STEM)
+    if (f->depth == f->floor || bank_of(f->stack[f->depth - 1].type) != BANK_NONE)
         return type_error(c, "sum takes a stem (for example lo hi range sum)");
     uint8_t kind, cur, lim, src, hidden;
-    if (!stem_begin(c, &kind, &cur, &lim, &src, &hidden))
+    tid     element_type;
+    if (!stem_begin(c, &kind, &cur, &lim, &src, &hidden, &element_type))
         return false;
+    if (element_type != TY_INT)
+        return type_error(c, "sum adds int values");
     if (!push_slot(c, TY_INT))
         return false;
     const uint32_t acc = slot_of(c, f->depth - 1), element = top_slot(c, BANK_I, 1);
@@ -2008,9 +2089,26 @@ static bool do_sum(comp *c) {
     return push_slot(c, TY_INT) && move_slot(c, TY_INT, slot_of(c, f->depth - 1), acc);
 }
 
-// The words the compiler expands itself. The current token is the word.
+// The word after an instruction that can fail. `out` is the type of its one result, TY_NONE
+// when it has none; the instruction wrote the result where the stack will hold it.
+static bool guard_op(comp *c, tid out) {
+    sig s = {0};
+    if (out != TY_NONE) {
+        s.n_out = 1;
+        s.out[0] = out;
+    }
+    s.fails = true;
+    const uint32_t base[2] = {0, 0}, in[2] = {0, 0};
+    return advance(c) && guard(c, &s, base, in, false);
+}
+
+// The words the compiler expands itself. The current token is the word; like a call, this
+// ends with the token after the word (and after its guard) current.
 static bool builtin(comp *c, const struct builtin *w) {
     fn *f = c->f;
+    const globalsym *g;
+    uint32_t         gi, ra, rb;
+    const bool       on_coll = f->depth > f->floor && f->stack[f->depth - 1].type == TY_COLL;
     switch (w->id) {
     case BW_RANGE:
         if (!need(c, 2))
@@ -2018,43 +2116,175 @@ static bool builtin(comp *c, const struct builtin *w) {
         if (f->stack[f->depth - 1].type != TY_INT || f->stack[f->depth - 2].type != TY_INT)
             return type_error(c, "range takes two int values: lo hi range");
         return settle(c, f->depth - 2) && settle(c, f->depth - 1) &&
-               push(c, (entry){.type = TY_STEM, .kind = E_SLOT, .op = STEM_RANGE});
+               push(c, (entry){.type = TY_STEM, .kind = E_SLOT, .op = STEM_RANGE}) && advance(c);
     case BW_BYTES:
         if (!need(c, 1))
             return false;
         if (f->stack[f->depth - 1].type != TY_STR)
             return type_error(c, "bytes takes a str");
-        return settle(c, f->depth - 1) && push(c, (entry){.type = TY_STEM, .kind = E_SLOT, .op = STEM_BYTES});
-    case BW_SUM: return do_sum(c);
-    case BW_LEN:
-    case BW_IS_EMPTY: {
+        return settle(c, f->depth - 1) && push(c, (entry){.type = TY_STEM, .kind = E_SLOT, .op = STEM_BYTES}) &&
+               advance(c);
+    case BW_WORDS:
         if (!need(c, 1))
             return false;
         if (f->stack[f->depth - 1].type != TY_STR)
-            return type_error(c, "this word takes a str");
-        uint32_t reg;
-        if (!reg_of(c, f->depth - 1, &reg))
+            return type_error(c, "words takes a str");
+        return settle(c, f->depth - 1) && push(c, (entry){.type = TY_STEM, .kind = E_SLOT, .op = STEM_WORDS}) &&
+               advance(c);
+    case BW_ERR_TEXT: {
+        if (!need(c, 1))
+            return false;
+        if (f->stack[f->depth - 1].type != TY_ERR)
+            return type_error(c, "err_text takes an error number");
+        if (!reg_of(c, f->depth - 1, &ra))
+            return false;
+        --f->depth;
+        if (!push_slot(c, TY_STR))
+            return false;
+        return emit_def(c, PNX_ABC(PNX_ERRTEXT, slot_of(c, f->depth - 1), ra, 0), BANK_S) != NONE && advance(c);
+    }
+    case BW_SUM: return do_sum(c) && advance(c);
+    case BW_LEN:
+    case BW_IS_EMPTY: {
+        if (on_coll) {
+            if (!need_coll(c, &g, &gi))
+                return false;
+            if (g->kind == GK_ARRAY) { // an array is always full
+                return push(c, w->id == BW_LEN ? (entry){.type = TY_INT, .kind = E_CONST, .value = g->capacity}
+                                               : (entry){.type = TY_BOOL, .kind = E_CONST, .value = 0}) &&
+                       advance(c);
+            }
+            const uint32_t dst = top_slot(c, BANK_I, 1);
+            if (emit_def(c, PNX_ABX(PNX_GLEN, dst, gi), BANK_I) == NONE)
+                return false;
+            if (w->id == BW_LEN)
+                return push_slot(c, TY_INT) && advance(c);
+            f->def_at = NONE;
+            return push(c, (entry){.type = TY_BOOL, .kind = E_COND, .op = PNX_JEQI, .a = (uint8_t)dst, .b = 0}) &&
+                   advance(c);
+        }
+        if (!need(c, 1))
+            return false;
+        if (f->stack[f->depth - 1].type != TY_STR)
+            return type_error(c, "this word takes a str, or the name of an array or list");
+        if (!c->use_strings)
+            return error(c, PINAX_ERR_NOT_FOUND, "len and is_empty of a str are words of the module strings: use strings");
+        if (!reg_of(c, f->depth - 1, &ra))
             return false;
         --f->depth;
         const uint32_t dst = top_slot(c, BANK_I, 1);
-        if (emit_def(c, PNX_ABC(PNX_SLEN, dst, reg, 0), BANK_I) == NONE)
+        if (emit_def(c, PNX_ABC(PNX_SLEN, dst, ra, 0), BANK_I) == NONE)
             return false;
         if (w->id == BW_LEN)
-            return push_slot(c, TY_INT);
-        c->f->def_at = NONE;
-        return push(c, (entry){.type = TY_BOOL, .kind = E_COND, .op = PNX_JEQI, .a = (uint8_t)dst, .b = 0});
+            return push_slot(c, TY_INT) && advance(c);
+        f->def_at = NONE;
+        return push(c, (entry){.type = TY_BOOL, .kind = E_COND, .op = PNX_JEQI, .a = (uint8_t)dst, .b = 0}) &&
+               advance(c);
     }
     case BW_BYTE_AT: {
         if (!need(c, 2))
             return false;
         if (f->stack[f->depth - 2].type != TY_STR || f->stack[f->depth - 1].type != TY_INT)
             return type_error(c, "byte_at takes a str and an index: s i byte_at");
-        uint32_t rs, ri;
-        if (!reg_of(c, f->depth - 2, &rs) || !reg_of(c, f->depth - 1, &ri))
+        if (!reg_of(c, f->depth - 2, &ra) || !reg_of(c, f->depth - 1, &rb))
             return false;
         f->depth -= 2;
         const uint32_t dst = top_slot(c, BANK_I, 1);
-        return emit_def(c, PNX_ABC(PNX_SBYTE, dst, rs, ri), BANK_I) != NONE && push_slot(c, TY_INT);
+        return emit_def(c, PNX_ABC(PNX_SBYTE, dst, ra, rb), BANK_I) != NONE && push_slot(c, TY_INT) && advance(c);
+    }
+    case BW_IDX: { // i names idx
+        if (!need_coll(c, &g, &gi) || !need(c, 1))
+            return false;
+        if (f->stack[f->depth - 1].type != TY_INT)
+            return type_error(c, "idx takes an index and the name: i names idx");
+        if (!reg_of(c, f->depth - 1, &ra))
+            return false;
+        --f->depth;
+        const uint32_t dst = top_slot(c, BANK_I, 1);
+        return emit_def(c, PNX_ABC(PNX_AGET, dst, ra, gi), BANK_I) != NONE && push_slot(c, g->type) && advance(c);
+    }
+    case BW_CAPACITY:
+        return need_coll(c, &g, &gi) && push(c, (entry){.type = TY_INT, .kind = E_CONST, .value = g->capacity}) &&
+               advance(c);
+    case BW_IS_FULL: {
+        if (!need_coll(c, &g, &gi))
+            return false;
+        if (g->kind == GK_ARRAY)
+            return push(c, (entry){.type = TY_BOOL, .kind = E_CONST, .value = 1}) && advance(c);
+        const uint32_t dst = top_slot(c, BANK_I, 2);
+        if (emit(c, PNX_ABX(PNX_GLEN, dst, gi)) == NONE)
+            return false;
+        if (fits8(g->capacity))
+            return push(c, (entry){.type = TY_BOOL, .kind = E_COND, .op = PNX_JEQI, .a = (uint8_t)dst,
+                                   .b = (uint8_t)g->capacity}) && advance(c);
+        if (!load_int(c, dst + 1, g->capacity))
+            return false;
+        f->def_at = NONE;
+        return push(c, (entry){.type = TY_BOOL, .kind = E_COND, .op = PNX_JEQ, .a = (uint8_t)dst, .b = (uint8_t)(dst + 1)}) &&
+               advance(c);
+    }
+    case BW_CLEAR: return need_coll(c, &g, &gi) && emit(c, PNX_ABX(PNX_GCLEAR, 0, gi)) != NONE && advance(c);
+    case BW_PUSH: { // v names push : fails when the list is full
+        if (!need_coll(c, &g, &gi) || !need(c, 1))
+            return false;
+        if (g->kind != GK_LIST)
+            return type_error(c, "push adds to a list; an array is always full");
+        if (f->stack[f->depth - 1].type != g->type)
+            return type_error(c, "the value pushed has another type than the cells of the list");
+        if (!settle(c, f->depth - 1))
+            return false;
+        ra = slot_of(c, f->depth - 1);
+        --f->depth;
+        return settle_all(c) && emit(c, PNX_ABX(PNX_LPUSH, ra, gi)) != NONE && guard_op(c, TY_NONE);
+    }
+    case BW_POP: { // names pop : fails when the list is empty
+        if (!need_coll(c, &g, &gi))
+            return false;
+        if (g->kind != GK_LIST)
+            return type_error(c, "pop takes from a list");
+        if (!settle_all(c))
+            return false;
+        return emit(c, PNX_ABX(PNX_LPOP, top_slot(c, BANK_I, 1), gi)) != NONE && guard_op(c, g->type);
+    }
+    case BW_FIND:
+    case BW_TO_INT: {
+        const uint32_t args = w->id == BW_FIND ? 2 : 1;
+        if (!need(c, args))
+            return false;
+        for (uint32_t k = 0; k < args; ++k) {
+            if (f->stack[f->depth - 1 - k].type != TY_STR)
+                return type_error(c, w->id == BW_FIND ? "find takes two str values: s part find" : "to_int takes a str");
+            if (!settle(c, f->depth - 1 - k))
+                return false;
+        }
+        ra = slot_of(c, f->depth - args);
+        rb = slot_of(c, f->depth - 1);
+        f->depth -= args;
+        if (!settle_all(c))
+            return false;
+        const uint32_t dst = top_slot(c, BANK_I, 1);
+        return emit(c, w->id == BW_FIND ? PNX_ABC(PNX_SFIND, dst, ra, rb) : PNX_ABC(PNX_TOINT, dst, ra, 0)) != NONE &&
+               guard_op(c, TY_INT);
+    }
+    case BW_TO_STR: { // the decimal text, in the region
+        if (!need(c, 1))
+            return false;
+        if (f->stack[f->depth - 1].type != TY_INT)
+            return type_error(c, "to_str takes an int");
+        if (!reg_of(c, f->depth - 1, &ra))
+            return false;
+        --f->depth;
+        const uint32_t scratch = top_slot(c, BANK_S, 2) + 1;
+        if (emit(c, PNX_ABC(PNX_RMARK, scratch, 0, 0)) == NONE || emit(c, PNX_ABC(PNX_RCATI, scratch, ra, 0)) == NONE ||
+            !push_slot(c, TY_STR))
+            return false;
+        return move_slot(c, TY_STR, slot_of(c, f->depth - 1), scratch) && advance(c);
+    }
+    case BW_ASSERT: { // a fault when the value is false
+        entry e;
+        if (!pop_cond(c, &e))
+            return false;
+        return cond_jump(c, &e, 1) && emit(c, PNX_ABX(PNX_FAULT, 0, PINAX_ERR_FAILED)) != NONE && advance(c);
     }
     default: return syntax(c, "this word follows the end of its block");
     }
@@ -2157,6 +2387,8 @@ static bool body_name(comp *c) {
         const uint32_t g = find_global(c, n);
         if (g != NONE) {
             const globalsym *sym = (const globalsym *)c->globals.ptr + g;
+            if (sym->kind != GK_SCALAR)
+                return push(c, (entry){.type = TY_COLL, .kind = E_SLOT, .value = g}) && advance(c);
             if (!push_slot(c, sym->type))
                 return false;
             return emit_def(c, PNX_ABX(PNX_GETG, slot_of(c, f->depth - 1), g), BANK_I) != NONE && advance(c);
@@ -2169,7 +2401,7 @@ static bool body_name(comp *c) {
             return core(c, w) && advance(c);
         const struct builtin *bw = find_builtin(c, n);
         if (bw)
-            return builtin(c, bw) && advance(c);
+            return builtin(c, bw);
     }
     bool ambiguous;
     const uint32_t host = find_host(c, module, n, &ambiguous);
@@ -2329,17 +2561,31 @@ static void fn_reset(fn *f, bool is_top) {
     f->is_top = is_top;
 }
 
-// word NAME ( effect ) body end
-static bool definition(comp *c) {
+// word NAME ( effect ) body end        test NAME body end
+// A test is a word without inputs and results, stored under the name "test.NAME" so that it
+// cannot be called from the source and the tool that runs tests can find it.
+static bool definition(comp *c, bool is_test) {
     if (c->top_fn->n_blocks)
         return syntax(c, "a definition does not belong inside a block");
     if (!advance(c))
         return false;
     if (c->tok.kind != PNX_T_NAME)
-        return syntax(c, "word is followed by the name of the new word");
-    const name n = tok_name(c);
-    if (name_is_global(c, n))
+        return syntax(c, is_test ? "test is followed by the name of the test" : "word is followed by the name of the new word");
+    name n = tok_name(c);
+    if (is_test) {
+        if (n.length > 26)
+            return syntax(c, "a test name is at most 26 bytes long");
+        uint8_t *text = arena_alloc(c, n.length + 5);
+        if (!text)
+            return false;
+        __builtin_memcpy(text, "test.", 5);
+        __builtin_memcpy(text + 5, n.text, n.length);
+        n = (name){text, n.length + 5};
+        if (find_word(c, n, NULL))
+            return type_error(c, "a test of this name is already defined");
+    } else if (name_is_global(c, n)) {
         return type_error(c, "this name is already defined");
+    }
     if (n.length > 31)
         return syntax(c, "a word name is at most 31 bytes long");
     if (!advance(c))
@@ -2349,7 +2595,7 @@ static bool definition(comp *c) {
         return false;
     __builtin_memset(w, 0, sizeof *w);
     w->name = n;
-    if (!parse_sig(c, &w->sig))
+    if (!is_test && !parse_sig(c, &w->sig))
         return false;
     char text[72];
     if (!sig_text(&w->sig, text, sizeof text))
@@ -2493,7 +2739,7 @@ static bool declare_global(comp *c) {
         return false;
     if (c->tok.kind != PNX_T_NAME)
         return syntax(c, "global is followed by a name and a type");
-    globalsym g = {.name = tok_name(c)};
+    globalsym g = {.name = tok_name(c), .kind = GK_SCALAR, .capacity = 1};
     if (name_is_global(c, g.name))
         return type_error(c, "this name is already defined");
     if (g.name.length > 31)
@@ -2512,6 +2758,103 @@ static bool declare_global(comp *c) {
     if (!slot)
         return false;
     *slot = g;
+    return advance(c);
+}
+
+// A size in a declaration: an integer literal or the name of an int const.
+static bool declared_size(comp *c, uint32_t *out) {
+    int64_t n;
+    if (c->tok.kind == PNX_T_INT) {
+        n = c->tok.integer;
+    } else if (c->tok.kind == PNX_T_NAME && find_const(c, tok_name(c)) && find_const(c, tok_name(c))->type == TY_INT) {
+        n = find_const(c, tok_name(c))->value;
+    } else {
+        return syntax(c, "a size is an integer literal or the name of an int const");
+    }
+    if (n < 1 || n > 0x7fffffff)
+        return type_error(c, "a size is at least 1 and fits in 31 bits");
+    *out = (uint32_t)n;
+    return advance(c);
+}
+
+// array NAME type size        list NAME type size
+static bool declare_collection(comp *c, uint8_t kind) {
+    if (!advance(c))
+        return false;
+    if (c->tok.kind != PNX_T_NAME)
+        return syntax(c, "the declaration is: array name type size");
+    globalsym g = {.name = tok_name(c), .kind = kind};
+    if (name_is_global(c, g.name))
+        return type_error(c, "this name is already defined");
+    if (g.name.length > 31)
+        return syntax(c, "a global name is at most 31 bytes long");
+    if (!advance(c))
+        return false;
+    if (c->tok.kind != PNX_T_NAME)
+        return syntax(c, "the declaration is: array name type size");
+    g.type = type_of_name(tok_name(c));
+    if (g.type != TY_INT && g.type != TY_BOOL && g.type != TY_ERR)
+        return type_error(c, "cells of this type are not supported yet");
+    if (!advance(c) || !declared_size(c, &g.capacity))
+        return false;
+    if (c->globals.n >= 0xfffu)
+        return syntax(c, "too many globals");
+    globalsym *slot = vec_push(c, &c->globals, sizeof(globalsym));
+    if (!slot)
+        return false;
+    *slot = g;
+    return true;
+}
+
+// assign NAME ( value , ... ) : fills an array from cell 0, when the source is loaded
+static bool assign_item(comp *c) {
+    fn *f = c->f;
+    if (f->dead)
+        return syntax(c, "this code cannot be reached: the code before it always leaves");
+    if (!advance(c))
+        return false;
+    const uint32_t gi = c->tok.kind == PNX_T_NAME ? find_global(c, tok_name(c)) : NONE;
+    const globalsym *g = gi == NONE ? NULL : (const globalsym *)c->globals.ptr + gi;
+    if (!g || g->kind != GK_ARRAY)
+        return type_error(c, "assign fills a declared array: assign name (values)");
+    if (gi > 255)
+        return syntax(c, "only the first 256 globals can be arrays or lists for now");
+    if (!advance(c))
+        return false;
+    if (c->tok.kind != PNX_T_LPAREN)
+        return syntax(c, "the values of assign are in parentheses");
+    if (!advance(c))
+        return false;
+    const uint32_t value = top_slot(c, BANK_I, 2), index = value + 1;
+    for (uint32_t k = 0;; ++k) {
+        tid     type;
+        int64_t v = c->tok.integer;
+        if (c->tok.kind == PNX_T_INT || c->tok.kind == PNX_T_CHAR) {
+            type = TY_INT;
+        } else if (is_word(c, PNX_KW_true) || is_word(c, PNX_KW_false)) {
+            type = TY_BOOL;
+            v = is_word(c, PNX_KW_true);
+        } else if (c->tok.kind == PNX_T_NAME && find_const(c, tok_name(c))) {
+            type = find_const(c, tok_name(c))->type;
+            v = find_const(c, tok_name(c))->value;
+        } else {
+            return syntax(c, "a value of assign is a literal or the name of a const");
+        }
+        if (type != g->type)
+            return type_error(c, "a value has another type than the cells of the array");
+        if (k >= g->capacity)
+            return type_error(c, "assign has more values than the array has cells");
+        if (!load_int(c, value, v) || !load_int(c, index, k) || emit(c, PNX_ABC(PNX_ASET, value, index, gi)) == NONE)
+            return false;
+        if (!advance(c))
+            return false;
+        if (c->tok.kind == PNX_T_RPAREN)
+            break;
+        if (c->tok.kind != PNX_T_COMMA)
+            return syntax(c, "values are separated by commas");
+        if (!advance(c))
+            return false;
+    }
     return advance(c);
 }
 
@@ -2563,9 +2906,9 @@ static bool compile(comp *c, image *im, bool *has_top) {
                 return false;
             if (!is_word(c, PNX_KW_word))
                 return syntax(c, "export is followed by a definition or a declaration");
-        } else if (is_word(c, PNX_KW_word)) {
+        } else if (is_word(c, PNX_KW_word) || is_word(c, PNX_KW_test)) {
             wordsym *last;
-            if (!definition(c))
+            if (!definition(c, is_word(c, PNX_KW_test)))
                 return false;
             last = (wordsym *)c->words.ptr + (c->words.n - 1);
             last->entry = im->code.n;
@@ -2576,6 +2919,12 @@ static bool compile(comp *c, image *im, bool *has_top) {
                 return false;
         } else if (is_word(c, PNX_KW_global) && !c->top_fn->n_blocks) {
             if (!declare_global(c))
+                return false;
+        } else if ((is_word(c, PNX_KW_array) || is_word(c, PNX_KW_list)) && !c->top_fn->n_blocks) {
+            if (!declare_collection(c, is_word(c, PNX_KW_array) ? GK_ARRAY : GK_LIST))
+                return false;
+        } else if (is_word(c, PNX_KW_assign) && !c->top_fn->n_blocks) {
+            if (!assign_item(c))
                 return false;
         } else if (is_word(c, PNX_KW_pinax)) {
             return syntax(c, "the version line is the first thing in a source");
@@ -2640,7 +2989,9 @@ static bool serialize(comp *c, const image *im, uint8_t **out, size_t *out_len) 
     }
     for (uint32_t k = 0; k < head.n_globals; ++k) {
         const globalsym *g = (const globalsym *)c->globals.ptr + k;
-        pnx_globalrec rec = {.kind = PNX_G_INT, .elem_bytes = 8, .capacity = 1};
+        pnx_globalrec rec = {.kind = g->kind == GK_ARRAY ? PNX_G_ARRAY : g->kind == GK_LIST ? PNX_G_LIST : PNX_G_INT,
+                             .elem_bytes = 8,
+                             .capacity = g->kind == GK_SCALAR ? 1 : g->capacity};
         put_text(rec.name, sizeof rec.name, g->name);
         __builtin_memcpy(p, &rec, sizeof rec);
         p += sizeof rec;

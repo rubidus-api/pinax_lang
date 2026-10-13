@@ -174,6 +174,7 @@ pinax_err pinax_open(pinax_mem block, const pinax_config *config, pinax_state **
     for (unsigned k = 0; k < PNX_SEG_COUNT; ++k)
         st->segment[k] = empty_bytes;
     st->segment[PNX_SEG_REGION] = st->region;
+    st->segment[PNX_SEG_STATIC] = (const uint8_t *)pnx_static_text;
     *out = st;
     return PINAX_OK;
 }
@@ -321,14 +322,18 @@ static const char *check_word(const pinax_state *st, uint32_t index, span range,
         uint32_t want = PNX_G_COUNT, global = 0;
         switch (op) {
         case PNX_GETG: case PNX_SETG: want = PNX_G_INT; global = bx; break;
-        case PNX_AGET: case PNX_ASET: want = PNX_G_ARRAY; global = c; break;
+        case PNX_AGET: case PNX_ASET: want = PNX_G_ARRAY; global = c; break; // or a list, below
+        case PNX_GLEN: case PNX_GCLEAR: want = PNX_G_ARRAY; global = bx; break;
+        case PNX_LPUSH: case PNX_LPOP: want = PNX_G_LIST; global = bx; break;
         case PNX_ROW: want = PNX_G_TABLE; global = c; break;
         case PNX_BCLEAR: case PNX_BVIEW: want = PNX_G_BUFFER; global = bx; break;
         case PNX_BPUT: case PNX_BPUTS: want = PNX_G_BUFFER; global = c; break;
         case PNX_FGET: case PNX_FSET: case PNX_FGETS: case PNX_FSETS: want = PNX_G_TABLE; global = x & 0xfffu; break;
         default: break;
         }
-        if (want != PNX_G_COUNT && (global >= head->n_globals || st->globals[global].kind != want))
+        if (want != PNX_G_COUNT &&
+            (global >= head->n_globals ||
+             (st->globals[global].kind != want && !(want == PNX_G_ARRAY && st->globals[global].kind == PNX_G_LIST))))
             return "code: global of the wrong kind";
         if (info.second == PNX_X_FIELD) {
             const uint32_t offset = (x >> 12) & 0xfffu, extra = x >> 24;
@@ -462,7 +467,8 @@ pinax_err pinax_load_bytecode(pinax_state *st, pinax_str bytecode) {
             goto rollback;
         switch (rec->kind) {
         case PNX_G_INT: bytes = 8; break;
-        case PNX_G_ARRAY: bytes = (uint64_t)rec->capacity * 8; break;
+        case PNX_G_ARRAY:
+        case PNX_G_LIST: bytes = (uint64_t)rec->capacity * 8; break;
         case PNX_G_BUFFER: bytes = (uint64_t)rec->capacity + 8; break;
         case PNX_G_TABLE:
             if (rec->elem_bytes == 0)
@@ -481,6 +487,7 @@ pinax_err pinax_load_bytecode(pinax_state *st, pinax_str bytecode) {
         g->kind = rec->kind;
         g->elem_bytes = rec->kind == PNX_G_TABLE ? rec->elem_bytes : 8;
         g->capacity = rec->kind == PNX_G_INT ? 1 : rec->capacity;
+        g->length = rec->kind == PNX_G_LIST ? 0 : g->capacity;
         if (!first_global)
             first_global = g->ptr;
     }
