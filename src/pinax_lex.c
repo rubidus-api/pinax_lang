@@ -22,13 +22,13 @@ const char *pnx_word_name(pnx_word_id word) {
 static bool is_letter(uint8_t c) {
     return (c >= 'A' && c <= 'Z') || (c >= 'a' && c <= 'z') || c == '_';
 }
-static bool is_digit(uint8_t c) {
+static bool lex_is_digit(uint8_t c) {
     return c >= '0' && c <= '9';
 }
 static bool is_run(uint8_t c) {
-    return is_letter(c) || is_digit(c);
+    return is_letter(c) || lex_is_digit(c);
 }
-static int hex_value(uint8_t c) {
+static int lex_hex_value(uint8_t c) {
     if (c >= '0' && c <= '9')
         return c - '0';
     if (c >= 'a' && c <= 'f')
@@ -76,7 +76,7 @@ static pnx_word_id reserved_word(const uint8_t *p, uint32_t n) {
 // digit { [ "_" ] digit } in the given base; copies the digits without underscores.
 static bool digit_run(pnx_lexer *lx, uint32_t *at, int base, char *out, uint32_t *n, uint32_t cap) {
     uint32_t i = *at;
-    int v = hex_value(peek(lx, i));
+    int v = lex_hex_value(peek(lx, i));
     if (v < 0 || v >= base)
         return fail_at(lx, i, "a digit is expected here");
     for (;;) {
@@ -84,13 +84,13 @@ static bool digit_run(pnx_lexer *lx, uint32_t *at, int base, char *out, uint32_t
             return fail_at(lx, i, "the number is too long");
         out[(*n)++] = (char)lx->source[i++];
         if (peek(lx, i) == '_') {
-            v = hex_value(peek(lx, i + 1));
+            v = lex_hex_value(peek(lx, i + 1));
             if (v < 0 || v >= base)
                 return fail_at(lx, i, "an underscore stands between two digits");
             ++i;
             continue;
         }
-        v = hex_value(peek(lx, i));
+        v = lex_hex_value(peek(lx, i));
         if (v < 0 || v >= base)
             break;
     }
@@ -124,7 +124,7 @@ static bool exponent(pnx_lexer *lx, uint32_t *at, int32_t *value) {
 static bool magnitude(pnx_lexer *lx, uint32_t at, const char *digits, uint32_t n, int base, uint64_t *out) {
     uint64_t v = 0;
     for (uint32_t k = 0; k < n; ++k) {
-        if (ckd_mul(&v, v, (uint64_t)base) || ckd_add(&v, v, (uint64_t)hex_value((uint8_t)digits[k])))
+        if (ckd_mul(&v, v, (uint64_t)base) || ckd_add(&v, v, (uint64_t)lex_hex_value((uint8_t)digits[k])))
             return fail_at(lx, at, "the integer does not fit in 64 bits");
     }
     *out = v;
@@ -157,7 +157,7 @@ static bool number(pnx_lexer *lx, pnx_token *t) {
         if (!digit_run(lx, &i, base, digits, &nd, sizeof digits))
             return false;
         bool dot = false;
-        if (base == 16 && peek(lx, i) == '.' && hex_value(peek(lx, i + 1)) >= 0) {
+        if (base == 16 && peek(lx, i) == '.' && lex_hex_value(peek(lx, i + 1)) >= 0) {
             dot = true;
             ++i;
             if (!digit_run(lx, &i, 16, fraction, &nf, sizeof fraction))
@@ -170,10 +170,10 @@ static bool number(pnx_lexer *lx, pnx_token *t) {
                 return false;
             double v = 0.0;
             for (uint32_t k = 0; k < nd; ++k)
-                v = v * 16.0 + hex_value((uint8_t)digits[k]);
+                v = v * 16.0 + lex_hex_value((uint8_t)digits[k]);
             double scale = 1.0 / 16.0;
             for (uint32_t k = 0; k < nf; ++k, scale /= 16.0)
-                v += hex_value((uint8_t)fraction[k]) * scale;
+                v += lex_hex_value((uint8_t)fraction[k]) * scale;
             for (; e > 0; --e)
                 v *= 2.0;
             for (; e < 0; ++e)
@@ -190,15 +190,15 @@ static bool number(pnx_lexer *lx, pnx_token *t) {
     } else {
         if (!digit_run(lx, &i, 10, buf, &n, sizeof buf - 40))
             return false;
-        if (peek(lx, i) == '.' && is_digit(peek(lx, i + 1))) {
+        if (peek(lx, i) == '.' && lex_is_digit(peek(lx, i + 1))) {
             real = true;
             buf[n++] = '.';
             ++i;
             if (!digit_run(lx, &i, 10, buf, &n, sizeof buf - 20))
                 return false;
         }
-        if (peek(lx, i) == 'e' && (is_digit(peek(lx, i + 1)) ||
-                                   ((peek(lx, i + 1) == '+' || peek(lx, i + 1) == '-') && is_digit(peek(lx, i + 2))))) {
+        if (peek(lx, i) == 'e' && (lex_is_digit(peek(lx, i + 1)) ||
+                                   ((peek(lx, i + 1) == '+' || peek(lx, i + 1) == '-') && lex_is_digit(peek(lx, i + 2))))) {
             real = true;
             buf[n++] = 'e';
             ++i;
@@ -256,7 +256,7 @@ static bool escape(pnx_lexer *lx, uint32_t at, uint32_t *length, uint32_t *value
     }
     uint32_t v = 0;
     for (uint32_t k = 0; k < digits; ++k) {
-        const int h = hex_value(peek(lx, at + 2 + k));
+        const int h = lex_hex_value(peek(lx, at + 2 + k));
         if (h < 0)
             return fail_at(lx, at, "the escape needs more hexadecimal digits");
         v = v << 4 | (uint32_t)h;
@@ -479,7 +479,7 @@ bool pnx_lex_next(pnx_lexer *lx, pnx_token *t) {
             ++lx->at;
             return true;
         }
-        if (is_digit(c) || ((c == '+' || c == '-') && is_digit(peek(lx, lx->at + 1)))) {
+        if (lex_is_digit(c) || ((c == '+' || c == '-') && lex_is_digit(peek(lx, lx->at + 1)))) {
             if (!number(lx, t))
                 return false;
             t->length = lx->at - t->start;

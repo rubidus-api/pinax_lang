@@ -9,6 +9,7 @@
  *   file    open_read open_write (path str gives owned file or fail)
  *           write (s str, f file or fail)          read_line (f file gives line str or fail)
  *           read_all (path str gives body str or fail)        close (f owned file)
+ *           read (f file, buf buffer gives n int or fail): appends to the buffer; 0 at the end
  *   clock   now_ms monotonic_ns (gives int)        sleep (ms int)
  *   random  random (gives int)   random_below (n int gives int)   seed (n int)
  *   env     arg_count (gives int)   arg (i int gives s str or fail)   getenv (name str gives s str or fail)
