@@ -25,7 +25,9 @@ typedef uint16_t tid;
 #define TY_SBANK 0x8000u
 // TY_STEM and TY_COLL are not values: a stem (lo hi range) and the name of an array or list
 // exist only at compile time and are taken by the word that follows.
-enum { TY_NONE, TY_INT, TY_BOOL, TY_ERR, TY_STEM, TY_COLL, TY_STR = TY_SBANK | 6, TY_MARK = 7, TY_FIRST_DECLARED = 16 };
+enum { TY_NONE, TY_INT, TY_BOOL, TY_ERR, TY_STEM, TY_COLL, TY_STR = TY_SBANK | 6, TY_MARK = 7,
+       TY_BUF = 8, // a buffer handed to a host word: only in the signatures of host words
+       TY_FIRST_DECLARED = 16 };
 enum { BANK_I, BANK_S, BANK_NONE };
 enum { E_SLOT, E_LOCAL, E_CONST, E_COND };
 enum { B_IF, B_LOOP, B_ORELSE, B_CASE, B_OF, B_DO };
@@ -256,6 +258,7 @@ typedef struct comp {
     } base;
     vec          externs;   // externsym
     bool         in_extern; // a signature of an extern is being read: cstr is a type there
+    bool         in_host;   // a signature of a host word is being read: buffer is a type there
     uint32_t     cstr_mask; // and these of its inputs were written cstr
     uint16_t     module;    // the number of the module being compiled
     vec          srcmods;   // name: the modules loaded so far, this one last
@@ -392,7 +395,8 @@ static name type_name(const comp *c, tid type) {
         return cname(c->st->handle_types[type - TY_HANDLE].name);
     if (base_of(c, type) != type)
         return ((const dtype *)c->dtypes.ptr + ((type & ~TY_SBANK) - TY_DISTINCT))->name;
-    return cname(type == TY_INT ? "int" : type == TY_BOOL ? "bool" : type == TY_ERR ? "err" : type == TY_MARK ? "mark" : "str");
+    return cname(type == TY_INT ? "int" : type == TY_BOOL ? "bool" : type == TY_ERR ? "err" : type == TY_MARK ? "mark"
+                 : type == TY_BUF ? "buffer" : "str");
 }
 
 static tid basic_type(name n) {
@@ -513,7 +517,8 @@ static bool parse_sig(comp *c, sig *s) {
             type = tok_name(c);
             if (!advance(c))
                 return false;
-            if (c->tok.kind == PNX_T_NAME || is_word(c, PNX_KW_owned) || is_word(c, PNX_KW_word)) {
+            if (c->tok.kind == PNX_T_NAME || is_word(c, PNX_KW_owned) || is_word(c, PNX_KW_word) ||
+                (c->in_host && is_word(c, PNX_KW_buffer))) {
                 param = type; // it was the name of the parameter
                 type = (name){0};
             }
@@ -530,6 +535,10 @@ static bool parse_sig(comp *c, sig *s) {
                     return false;
             } else if (c->tok.kind == PNX_T_NAME) {
                 type = tok_name(c);
+                if (!advance(c))
+                    return false;
+            } else if (c->in_host && !outputs && !owned && is_word(c, PNX_KW_buffer)) {
+                t = TY_BUF;
                 if (!advance(c))
                     return false;
             } else {
@@ -646,8 +655,9 @@ static bool host_sig(comp *c, const pnx_host *h, sig *s) {
     pnx_lex_init(&temp, (const uint8_t *)h->signature, __builtin_strlen(h->signature));
     c->lx = &temp;
     c->in_extern = h->module[0] == '@';
+    c->in_host = !c->in_extern;
     const bool ok = advance(c) && parse_sig(c, s);
-    c->in_extern = false;
+    c->in_extern = c->in_host = false;
     c->lx = saved_lx;
     c->tok = saved_tok;
     if (!ok) { // registration accepted it, so this is a type the compiler does not have yet
@@ -1478,6 +1488,14 @@ static bool check_before_call(comp *c) {
 // the first register of each bank. Leaves the arguments popped.
 static bool call_args(comp *c, const sig *s, uint32_t base[2]) {
     fn *f = c->f;
+    for (uint32_t k = 0; k < s->n_in && f->depth - f->floor >= s->n_in; ++k) {
+        if (s->in[k] == TY_BUF) { // a buffer goes to a host word as its number
+            entry *e = &f->stack[f->depth - s->n_in + k];
+            if (e->type != TY_COLL || ((const globalsym *)c->globals.ptr + e->value)->kind != GK_BUFFER)
+                return type_error(c, "this host word takes a buffer here");
+            *e = (entry){.type = TY_BUF, .kind = E_CONST, .value = e->value};
+        }
+    }
     c->sink = true;
     if (!need(c, s->n_in))
         return false;
@@ -4358,7 +4376,7 @@ static bool declare_collection(comp *c, uint8_t kind) {
         return false;
     if (c->tok.kind != PNX_T_NAME)
         return syntax(c, "the declaration is: array name type size");
-    g.record = find_record(c, tok_name(c));
+    g.record = find_record_any(c, tok_name(c));
     g.type = basic_type(tok_name(c));
     if (g.record == NONE && g.type != TY_INT && g.type != TY_BOOL && g.type != TY_ERR && g.type != TY_STR)
         return type_error(c, "the cells are int, bool, err, str(N) or a record; other types are not supported yet");
@@ -4371,6 +4389,10 @@ static bool declare_collection(comp *c, uint8_t kind) {
     if (!advance(c) || (g.record == NONE && g.type == TY_STR && !str_capacity(c, &g.strcap)) ||
         !declared_size(c, &g.capacity))
         return false;
+    if (slot) { // announced by forward: export on either line exports the table
+        g.exported = slot->exported || c->exporting;
+        g.module = slot->module;
+    }
     if (!slot) {
         if (c->globals.n >= 0xfffu)
             return syntax(c, "too many globals");
@@ -5354,6 +5376,17 @@ static bool take_symbols(comp *c, image *im) {
 #undef COPY
     c->base = (struct counts){c->words.n, c->consts.n, c->globals.n, c->records.n, c->dtypes.n, c->externs.n};
     return true;
+}
+
+pinax_str pnx_module_name(const pinax_state *st, uint32_t number) {
+    const symtab *t = st->symbols;
+    pinax_str out = {(const unsigned char *)"", 0};
+    if (t && number < t->srcmods.n) {
+        const name *n = (const name *)t->srcmods.ptr + number;
+        if (n->length)
+            out = (pinax_str){(const unsigned char *)n->text, n->length};
+    }
+    return out;
 }
 
 uint32_t pnx_module_number(const pinax_state *st, const char *text, size_t length) {

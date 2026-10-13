@@ -298,6 +298,24 @@ pinax_mem pinax_call_alloc(pinax_call *call, size_t bytes) {
     return mem;
 }
 
+pinax_mem pinax_call_buffer(pinax_call *call, int64_t buffer, size_t written) {
+    const pinax_state *st = call->state;
+    const pinax_mem none = {NULL, 0};
+    if (!st->head || buffer < 0 || buffer >= (int64_t)st->head->n_globals)
+        return none;
+    const pnx_global *g = &st->globals[buffer];
+    if (g->kind != PNX_G_BUFFER)
+        return none;
+    uint64_t used;
+    __builtin_memcpy(&used, g->ptr, 8);
+    if (written > g->capacity - used)
+        return none;
+    used += written;
+    __builtin_memcpy(g->ptr, &used, 8);
+    const pinax_mem room = {g->ptr + 8 + used, (size_t)(g->capacity - used)};
+    return room;
+}
+
 // ---- loading -----------------------------------------------------------------------------
 
 typedef struct span {
@@ -698,6 +716,24 @@ pinax_err pinax_find(pinax_state *st, const char *name, const char *signature, u
         word = dot + 1;
     }
     return fail(st, PINAX_ERR_NOT_FOUND, "no such word");
+}
+
+pinax_err pinax_word_at(const pinax_state *st, uint32_t index, pinax_word_info *out) {
+    if (!st || !out)
+        return PINAX_ERR_ARGUMENT;
+    for (uint32_t k = 0; st->head && k < st->head->n_words; ++k) {
+        const pnx_wordrec *w = &st->words[k];
+        if (w->name[0] == '(') // the code outside definitions, value blocks
+            continue;
+        if (index-- == 0) {
+            out->word = k;
+            out->module = pnx_module_name(st, w->module);
+            out->name = (pinax_str){(const unsigned char *)w->name, __builtin_strlen(w->name)};
+            out->signature = (pinax_str){(const unsigned char *)w->signature, __builtin_strlen(w->signature)};
+            return PINAX_OK;
+        }
+    }
+    return PINAX_ERR_NOT_FOUND;
 }
 
 static pinax_err deliver(pinax_state *st, pinax_err err, const pinax_args *results) {

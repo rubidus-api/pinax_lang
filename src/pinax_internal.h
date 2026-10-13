@@ -185,6 +185,8 @@ void *pnx_take(pinax_state *state, size_t bytes, size_t align);
 // the resolver for it when it is not there yet.
 pinax_err pnx_extern_link(pinax_state *state, const char *module, const char *name, const char *signature,
                           uint32_t *index);
+// The name of source module `number`; empty when it has none.
+pinax_str pnx_module_name(const pinax_state *state, uint32_t number);
 uint32_t pnx_module_number(const pinax_state *state, const char *name, size_t length);
 
 // Bytes in the main task's region; NULL when it is full.

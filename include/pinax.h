@@ -143,6 +143,13 @@ PINAX_API pinax_err pinax_register(pinax_state *state, const char *module,
 PINAX_API pinax_state *pinax_call_state(pinax_call *call);
 PINAX_API pinax_mem    pinax_call_alloc(pinax_call *call, size_t bytes); /* caller's region; len 0 = full */
 PINAX_API pinax_token  pinax_call_pending(pinax_call *call);             /* then return PINAX_PENDING */
+/* A parameter written `buffer` in a host word's signature takes a buffer the script declared;
+ * the word finds it in args->i like an integer and hands that value to this function. It
+ * counts `written` more bytes as part of the buffer's contents and gives the free room after
+ * them: ask with 0, fill the room, then tell how much was filled. When `written` is more than
+ * the room, or the value is not a buffer, nothing changes and the answer is {NULL, 0}. To read
+ * a buffer, let the script pass its contents as a str. */
+PINAX_API pinax_mem    pinax_call_buffer(pinax_call *call, int64_t buffer, size_t written);
 
 /* Finishes a pending operation; the waiting task becomes runnable. results may be NULL on failure.
  * Like every call, only from the thread that is using the state: a completion that arrives on
@@ -237,6 +244,16 @@ enum {
  * only words found with that flag. */
 PINAX_API pinax_err pinax_find(pinax_state *state, const char *name, const char *signature,
                                uint32_t flags, pinax_word *out);
+
+/* The words of a state, one by one: index 0, 1, 2 ... until PINAX_ERR_NOT_FOUND. `module` is
+ * empty for a source loaded under no module name; "module.name" (or the name alone, for the
+ * first source) is what pinax_find() takes. Tests are listed too, as "test.name". The strings
+ * stay valid as long as the words do. */
+typedef struct pinax_word_info {
+    pinax_word word;
+    pinax_str  module, name, signature;
+} pinax_word_info;
+PINAX_API pinax_err pinax_word_at(const pinax_state *state, uint32_t index, pinax_word_info *out);
 
 /* Runs a word. args->i/s/f are the inputs; results are written through ri/rs/rf and stay
  * valid until the next call on this state. PINAX_SUSPENDED and PINAX_WAITING are not failures. */

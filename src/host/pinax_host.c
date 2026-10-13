@@ -132,6 +132,23 @@ static pinax_err file_read_line(pinax_call *call, void *user, const pinax_args *
         return PINAX_ERR_STALE;
     return line_from(call, *file, &args->rs[0]);
 }
+// (f file, buf buffer gives n int or fail): appends what one read gives to the buffer; n is 0
+// at the end of the file. Fails with full when the buffer has no room left.
+static pinax_err file_read(pinax_call *call, void *user, const pinax_args *args) {
+    proven_file_t *file = pinax_handle_get(pinax_call_state(call), file_type(user), (pinax_handle)args->i[0]);
+    if (!file)
+        return PINAX_ERR_STALE;
+    const pinax_mem room = pinax_call_buffer(call, args->i[1], 0);
+    if (!room.len)
+        return PINAX_ERR_FULL;
+    const proven_result_size_t got = proven_fs_read(*file, (proven_mem_mut_t){room.ptr, room.len});
+    if (got.err != PROVEN_OK && got.err != PROVEN_ERR_EOF)
+        return from(got.err);
+    const size_t n = got.err == PROVEN_ERR_EOF ? 0 : got.value;
+    (void)pinax_call_buffer(call, args->i[1], n);
+    args->ri[0] = (int64_t)n;
+    return PINAX_OK;
+}
 static pinax_err file_close(pinax_call *call, void *user, const pinax_args *args) {
     pinax_state *state = pinax_call_state(call);
     proven_file_t *file = pinax_handle_get(state, file_type(user), (pinax_handle)args->i[0]);
@@ -306,6 +323,7 @@ pinax_err pinax_host_register(pinax_state *state, const char *module) {
             {"open_write", "(path str gives owned file or fail)", file_open_write, tag, 0},
             {"write", "(s str, f file or fail)", file_write, tag, 0},
             {"read_line", "(f file gives line str or fail)", file_read_line, tag, 0},
+            {"read", "(f file, buf buffer gives n int or fail)", file_read, tag, 0},
             {"read_all", "(path str gives body str or fail)", file_read_all, tag, 0},
             {"close", "(f owned file)", file_close, tag, 0},
         };
