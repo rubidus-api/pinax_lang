@@ -81,6 +81,8 @@ typedef struct wordsym {
     sig      sig;
     uint32_t entry;
     uint16_t cells[2];
+    uint16_t module;   // the source module it was declared in (set when the load is done)
+    bool     exported; // visible to other modules as module.name
 } wordsym;
 
 typedef struct local {
@@ -157,6 +159,8 @@ typedef struct constant {
     name     name;
     tid      type;
     int64_t  value; // integer, or the string constant number
+    uint16_t module;   // the source module it was declared in (set when the load is done)
+    bool     exported; // visible to other modules as module.name
 } constant;
 
 typedef struct globalsym {
@@ -170,6 +174,8 @@ typedef struct globalsym {
     uint32_t record;   // NONE, or the record a table holds
     uint32_t rows;     // rows written by `row` items so far
     uint32_t table, key; // an index: its table (a global) and its key field (in comp.fields)
+    uint16_t module;   // the source module it was declared in (set when the load is done)
+    bool     exported; // visible to other modules as module.name
 } globalsym;
 
 // A field of a record: where it lies and how it is read. `extra` is the width code, or the
@@ -186,6 +192,8 @@ typedef struct record {
     name     name;
     uint32_t first, count; // its fields in comp.fields
     uint32_t size;
+    uint16_t module;   // the source module it was declared in (set when the load is done)
+    bool     exported; // visible to other modules as module.name
 } record;
 
 // forward word NAME ( effect ) : a word called before it is defined
@@ -193,12 +201,15 @@ typedef struct fwd {
     name     name;
     sig      sig;
     uint32_t index; // its word number once defined, NONE before
+    bool     exported;
 } fwd;
 
 // type NAME base : the same representation, another type
 typedef struct dtype {
     name name;
     tid  base;
+    uint16_t module;   // the source module it was declared in (set when the load is done)
+    bool     exported; // visible to other modules as module.name
 } dtype;
 
 // The finished code of a value block, kept until the word around it has been stored: words lie
@@ -230,6 +241,15 @@ typedef struct comp {
     fn          *block_fn[MAX_NESTED];
     uint32_t     nested;   // value blocks open
     uint32_t     def_index; // the word a definition just made
+    // Several loads make one program (RFC-0014). What earlier loads declared lies below these
+    // counts and belongs to other modules: a bare name finds only what lies above them.
+    struct counts {
+        uint32_t words, consts, globals, records, dtypes;
+    } base;
+    uint16_t     module;    // the number of the module being compiled
+    vec          srcmods;   // name: the modules loaded so far, this one last
+    bool         exporting; // `export` stands before the item being compiled
+    uint32_t     path_global; // to module.name : the global the path names, for store_local
     vec          dtypes;   // dtype
     bool         data_only; // PINAX_LOAD_DATA: declarations, literals, stores and rows only
     bool         sink;      // the word being compiled may take an owned value off the stack
@@ -380,11 +400,13 @@ static tid basic_type(name n) {
 
 // A type as written in a signature or a declaration: a basic type, or the name of a table of
 // records, which is the type of its rows.
+static bool source_used(const comp *c, uint32_t m);
+
 static tid type_of_name(const comp *c, name n) {
     const tid basic = basic_type(n);
     if (basic != TY_NONE)
         return basic;
-    for (uint32_t k = 0; k < c->dtypes.n; ++k) {
+    for (uint32_t k = c->base.dtypes; k < c->dtypes.n; ++k) {
         const dtype *d = (const dtype *)c->dtypes.ptr + k;
         if (name_eq(d->name, n))
             return (tid)((TY_DISTINCT + k) | (d->base & TY_SBANK));
@@ -398,6 +420,18 @@ static tid type_of_name(const comp *c, name n) {
         const globalsym *sym = (const globalsym *)c->globals.ptr + g;
         if (sym->kind != GK_SCALAR && (sym->forward || sym->record != NONE))
             return row_type(g);
+    }
+    // a type or a table of records that a module in use exports
+    for (uint32_t k = 0; k < c->base.dtypes; ++k) {
+        const dtype *d = (const dtype *)c->dtypes.ptr + k;
+        if (d->exported && name_eq(d->name, n) && source_used(c, d->module))
+            return (tid)((TY_DISTINCT + k) | (d->base & TY_SBANK));
+    }
+    for (uint32_t k = 0; k < c->base.globals; ++k) {
+        const globalsym *sym = (const globalsym *)c->globals.ptr + k;
+        if (sym->exported && sym->kind != GK_SCALAR && sym->record != NONE && name_eq(sym->name, n) &&
+            source_used(c, sym->module))
+            return row_type(k);
     }
     return TY_NONE;
 }
@@ -883,7 +917,7 @@ static local *find_local(fn *f, name n) {
 
 static wordsym *find_word(comp *c, name n, uint32_t *index) {
     wordsym *all = c->words.ptr;
-    for (uint32_t k = 0; k < c->words.n; ++k) {
+    for (uint32_t k = c->base.words; k < c->words.n; ++k) {
         if (name_eq(all[k].name, n)) {
             if (index)
                 *index = k;
@@ -924,6 +958,23 @@ static bool module_used(const comp *c, name module) {
             return true;
     }
     return false;
+}
+
+// The number of the loaded source module called `n`, or NONE. The module being compiled is
+// not among them: it cannot use itself.
+static uint32_t source_module(const comp *c, name n) {
+    const name *all = c->srcmods.ptr;
+    for (uint32_t k = 0; k + 1 < c->srcmods.n; ++k) {
+        if (all[k].length && name_eq(all[k], n))
+            return k;
+    }
+    return NONE;
+}
+
+// Whether this source opened source module number `m` with `use`.
+static bool source_used(const comp *c, uint32_t m) {
+    return m + 1 < c->srcmods.n && ((const name *)c->srcmods.ptr)[m].length &&
+           module_used(c, ((const name *)c->srcmods.ptr)[m]);
 }
 
 // The host word `word` of module `module`: its index into state->hosts, or NONE.
@@ -979,7 +1030,7 @@ static const core_word *find_core(name n) {
 
 static const constant *find_const(const comp *c, name n) {
     const constant *all = c->consts.ptr;
-    for (uint32_t k = 0; k < c->consts.n; ++k) {
+    for (uint32_t k = c->base.consts; k < c->consts.n; ++k) {
         if (name_eq(all[k].name, n))
             return &all[k];
     }
@@ -988,7 +1039,7 @@ static const constant *find_const(const comp *c, name n) {
 
 static uint32_t find_global(const comp *c, name n) {
     const globalsym *all = c->globals.ptr;
-    for (uint32_t k = 0; k < c->globals.n; ++k) {
+    for (uint32_t k = c->base.globals; k < c->globals.n; ++k) {
         if (name_eq(all[k].name, n))
             return k;
     }
@@ -997,8 +1048,21 @@ static uint32_t find_global(const comp *c, name n) {
 
 static uint32_t find_record(const comp *c, name n) {
     const record *all = c->records.ptr;
-    for (uint32_t k = 0; k < c->records.n; ++k) {
+    for (uint32_t k = c->base.records; k < c->records.n; ++k) {
         if (name_eq(all[k].name, n))
+            return k;
+    }
+    return NONE;
+}
+
+// The record a field path begins with: one of this source, or one a module in use exports.
+static uint32_t find_record_any(const comp *c, name n) {
+    const uint32_t own = find_record(c, n);
+    if (own != NONE)
+        return own;
+    const record *all = c->records.ptr;
+    for (uint32_t k = 0; k < c->base.records; ++k) {
+        if (all[k].exported && name_eq(all[k].name, n) && source_used(c, all[k].module))
             return k;
     }
     return NONE;
@@ -1612,7 +1676,7 @@ static bool store_local(comp *c, name n) {
     const uint32_t top = f->depth - 1;
     entry    e = f->stack[top];
     const int bank = bank_of(e.type);
-    const uint32_t g = find_local(f, n) ? NONE : find_global(c, n);
+    const uint32_t g = c->path_global != NONE ? c->path_global : find_local(f, n) ? NONE : find_global(c, n);
     if (g != NONE && ((const globalsym *)c->globals.ptr + g)->kind != GK_SCALAR) { // value index to names
         const globalsym *sym = (const globalsym *)c->globals.ptr + g;
         uint32_t rv, ri;
@@ -1696,7 +1760,7 @@ static bool field_access(comp *c, bool write) {
     uint32_t dot = 0;
     while (path.text[dot] != '.')
         ++dot;
-    const uint32_t r = find_record(c, (name){path.text, dot});
+    const uint32_t r = find_record_any(c, (name){path.text, dot});
     if (r == NONE)
         return error(c, PINAX_ERR_NOT_FOUND, "this path names neither a module in use nor a record");
     const field *fd = find_field(c, r, (name){path.text + dot + 1, path.length - dot - 1});
@@ -1766,8 +1830,28 @@ static bool store(comp *c) {
         }
         return advance(c);
     }
-    if (c->tok.kind == PNX_T_PATH)
+    if (c->tok.kind == PNX_T_PATH) {
+        const name path = tok_name(c);
+        uint32_t dot = 0;
+        while (path.text[dot] != '.')
+            ++dot;
+        name real;
+        const uint32_t m = module_of(c, (name){path.text, dot}, &real) ? source_module(c, real) : NONE;
+        if (m != NONE) { // to module.name : a global that module exports
+            const name n = {path.text + dot + 1, path.length - dot - 1};
+            const globalsym *all = c->globals.ptr;
+            for (uint32_t k = 0; k < c->base.globals; ++k) {
+                if (all[k].module == m && all[k].exported && name_eq(all[k].name, n)) {
+                    c->path_global = k;
+                    const bool ok = store_local(c, n);
+                    c->path_global = NONE;
+                    return ok && advance(c);
+                }
+            }
+            return error(c, PINAX_ERR_NOT_FOUND, "the module exports no global of this name");
+        }
         return field_access(c, true) && advance(c);
+    }
     return syntax(c, "to is followed by a name or a list of names");
 }
 
@@ -3546,6 +3630,47 @@ static bool err_constant(name n, int64_t *value) {
 
 // ---- one token of a body ------------------------------------------------------------------
 
+// The name of a global in a body: a scalar is read; an array, list, buffer or index is named.
+static bool read_global(comp *c, uint32_t g) {
+    fn *f = c->f;
+    const globalsym *sym = (const globalsym *)c->globals.ptr + g;
+    if (sym->kind != GK_SCALAR)
+        return push(c, (entry){.type = TY_COLL, .kind = E_SLOT, .value = g}) && advance(c);
+    if (sym->strcap) { // stored text: the one row of a table of one
+        const uint32_t one = top_slot(c, BANK_I, 1);
+        if (!push_slot(c, TY_STR) || emit(c, PNX_ABX(PNX_LOADI, one, 1)) == NONE)
+            return false;
+        return emit_def(c, PNX_ABC(PNX_FGETS, slot_of(c, f->depth - 1), one, 0), BANK_S) != NONE &&
+               emit(c, PNX_FIELD(g, 0, sym->strcap)) != NONE && advance(c);
+    }
+    if (!push_slot(c, sym->type))
+        return false;
+    return emit_def(c, PNX_ABX(PNX_GETG, slot_of(c, f->depth - 1), g), BANK_I) != NONE && advance(c);
+}
+
+// A word, constant or global that module `m` exports, written m.name here.
+static bool module_symbol(comp *c, uint16_t m, name n) {
+    const wordsym *words = c->words.ptr;
+    for (uint32_t k = 0; k < c->base.words; ++k) {
+        if (words[k].module == m && words[k].exported && name_eq(words[k].name, n))
+            return call_word(c, &words[k].sig, k);
+    }
+    const constant *consts = c->consts.ptr;
+    for (uint32_t k = 0; k < c->base.consts; ++k) {
+        if (consts[k].module == m && consts[k].exported && name_eq(consts[k].name, n)) {
+            if (consts[k].type == TY_STR)
+                return push_string(c, (uint32_t)consts[k].value) && advance(c);
+            return push(c, (entry){.type = consts[k].type, .kind = E_CONST, .value = consts[k].value}) && advance(c);
+        }
+    }
+    const globalsym *globals = c->globals.ptr;
+    for (uint32_t k = 0; k < c->base.globals; ++k) {
+        if (globals[k].module == m && globals[k].exported && name_eq(globals[k].name, n))
+            return read_global(c, k);
+    }
+    return error(c, PINAX_ERR_NOT_FOUND, "the module exports nothing of this name");
+}
+
 static bool body_name(comp *c) {
     fn *f = c->f;
     name n = tok_name(c), module = {0};
@@ -3567,6 +3692,9 @@ static bool body_name(comp *c) {
         if (!module_of(c, module, &real)) // not a module in use: a field of a record
             return field_access(c, false) && advance(c);
         module = real;
+        const uint32_t source = source_module(c, module);
+        if (source != NONE)
+            return module_symbol(c, (uint16_t)source, n);
         const uint8_t standard = name_is(module, "str") ? 1 : name_is(module, "fmt") ? 2 : 0;
         if (standard) { // a word of a standard module
             if (c->data_only)
@@ -3591,21 +3719,8 @@ static bool body_name(comp *c) {
             return push(c, (entry){.type = k->type, .kind = E_CONST, .value = k->value}) && advance(c);
         }
         const uint32_t g = find_global(c, n);
-        if (g != NONE) {
-            const globalsym *sym = (const globalsym *)c->globals.ptr + g;
-            if (sym->kind != GK_SCALAR)
-                return push(c, (entry){.type = TY_COLL, .kind = E_SLOT, .value = g}) && advance(c);
-            if (sym->strcap) { // stored text: the one row of a table of one
-                const uint32_t one = top_slot(c, BANK_I, 1);
-                if (!push_slot(c, TY_STR) || emit(c, PNX_ABX(PNX_LOADI, one, 1)) == NONE)
-                    return false;
-                return emit_def(c, PNX_ABC(PNX_FGETS, slot_of(c, f->depth - 1), one, 0), BANK_S) != NONE &&
-                       emit(c, PNX_FIELD(g, 0, sym->strcap)) != NONE && advance(c);
-            }
-            if (!push_slot(c, sym->type))
-                return false;
-            return emit_def(c, PNX_ABX(PNX_GETG, slot_of(c, f->depth - 1), g), BANK_I) != NONE && advance(c);
-        }
+        if (g != NONE)
+            return read_global(c, g);
         if (c->data_only)
             return syntax(c, "a data source calls no words; only literals, const names and stores");
         uint32_t index;
@@ -3953,6 +4068,8 @@ static bool definition(comp *c, bool is_test) {
         if (!sig_text(c, &ahead->sig, promised, sizeof promised) || __builtin_strcmp(promised, text) != 0)
             return type_error(c, "the definition has another signature than its forward declaration");
         ahead->index = c->def_index;
+        if (ahead->exported)
+            ((wordsym *)c->words.ptr + c->def_index)->exported = true;
     }
 
     fn *f = c->word_fn;
@@ -3988,10 +4105,10 @@ static bool use_module(comp *c) {
     bool known = name_is(n, "str") || name_is(n, "fmt"); // standard modules: part of the language
     for (uint32_t k = 0; !known && k < c->st->n_hosts; ++k)
         known = name_eq(cname(c->st->hosts[k].module), n);
-    if (!known)
+    if (!known && source_module(c, n) == NONE)
         return error(c, PINAX_ERR_NOT_FOUND, name_is(n, "strings") || name_is(n, "format")
                                                  ? "the standard modules are named str and fmt"
-                                                 : "the host has not registered this module");
+                                                 : "no module of this name is registered or loaded");
     if (!advance(c))
         return false;
     name prefix = n;
@@ -4007,7 +4124,7 @@ static bool use_module(comp *c) {
     name other;
     if (module_of(c, prefix, &other))
         return name_eq(other, n) ? true : type_error(c, "this name already stands for another module");
-    if (name_is(prefix, "err") || find_record(c, prefix) != NONE)
+    if (name_is(prefix, "err") || find_record_any(c, prefix) != NONE)
         return type_error(c, "this name is already the first part of other paths (err, or a record)");
     if (c->n_modules == MAX_MODULES)
         return syntax(c, "too many modules in use");
@@ -4200,7 +4317,7 @@ static bool declare_forward(comp *c) {
             return false;
         if (c->tok.kind != PNX_T_NAME)
             return syntax(c, "forward word names the word: forward word name (effect)");
-        fwd ahead = {.name = tok_name(c), .index = NONE};
+        fwd ahead = {.name = tok_name(c), .index = NONE, .exported = c->exporting};
         if (name_is_global(c, ahead.name))
             return type_error(c, "this name is already defined");
         if (!advance(c) || !parse_sig(c, &ahead.sig))
@@ -4745,6 +4862,26 @@ static void put_text(char *out, size_t cap, name n) {
 
 #define LOAD_WORD "(load)"
 
+// What the item just compiled declared belongs to this module, and is exported when `export`
+// stood before it. A data source exports all it declares.
+static void mark_new(comp *c, struct counts *seen) {
+    const bool out = c->exporting || c->data_only;
+#define MARK(vec_, type_, field_)                                         \
+    for (uint32_t k = seen->field_; k < c->vec_.n; ++k) {                 \
+        type_ *e = (type_ *)c->vec_.ptr + k;                              \
+        e->module = c->module;                                            \
+        e->exported = e->exported || out;                                 \
+    }                                                                     \
+    seen->field_ = c->vec_.n
+    MARK(words, wordsym, words);
+    MARK(consts, constant, consts);
+    MARK(globals, globalsym, globals);
+    MARK(records, record, records);
+    MARK(dtypes, dtype, dtypes);
+#undef MARK
+    c->exporting = false;
+}
+
 static bool compile(comp *c, image *im, bool *has_top) {
     if (!advance(c))
         return false;
@@ -4758,15 +4895,24 @@ static bool compile(comp *c, image *im, bool *has_top) {
         if (!advance(c))
             return false;
     }
+    struct counts seen = {c->base.words, c->base.consts, c->base.globals, c->base.records, c->base.dtypes};
     while (c->tok.kind != PNX_T_END) {
         if (is_word(c, PNX_KW_use)) {
             if (!use_module(c))
                 return false;
-        } else if (is_word(c, PNX_KW_export)) {
-            if (!advance(c)) // every word is visible to the host for now; modules come later
-                return false;
-            if (!is_word(c, PNX_KW_word))
+        } else if (is_word(c, PNX_KW_export)) { // what other modules may name (RFC-0014)
+            if (c->exporting || c->top_fn->n_blocks || !advance(c))
+                return c->err == PINAX_OK ? syntax(c, "export stands once, before a definition or a declaration") : false;
+            static const pnx_word_id may[] = {PNX_KW_word,  PNX_KW_const,  PNX_KW_global, PNX_KW_array, PNX_KW_list,
+                                              PNX_KW_queue, PNX_KW_pool,   PNX_KW_type,   PNX_KW_buffer,
+                                              PNX_KW_index, PNX_KW_record, PNX_KW_forward, PNX_KW_bound};
+            bool ok = false;
+            for (uint32_t k = 0; k < sizeof may / sizeof may[0]; ++k)
+                ok = ok || is_word(c, may[k]);
+            if (!ok)
                 return syntax(c, "export is followed by a definition or a declaration");
+            c->exporting = true;
+            continue;
         } else if (c->data_only && (is_word(c, PNX_KW_word) || is_word(c, PNX_KW_test) || is_word(c, PNX_KW_use))) {
             return syntax(c, "a data source defines no words and uses no modules");
         } else if (is_word(c, PNX_KW_word) || is_word(c, PNX_KW_test)) {
@@ -4830,7 +4976,9 @@ static bool compile(comp *c, image *im, bool *has_top) {
         } else if (!body_token(c) || !store_pending(c, im)) {
             return false;
         }
+        mark_new(c, &seen);
     }
+    mark_new(c, &seen);
     fn *top = c->top_fn;
     if (top->n_blocks)
         return syntax(c, "the source ends inside an open block");
@@ -4888,7 +5036,7 @@ static bool serialize(comp *c, const image *im, uint8_t **out, size_t *out_len) 
     for (uint32_t k = 0; k < head.n_words; ++k) {
         const wordsym *w = (const wordsym *)c->words.ptr + k;
         pnx_wordrec rec = {.entry = w->entry, .int_cells = w->cells[0], .str_cells = w->cells[1], .counted = 1,
-                           .fails = w->sig.fails};
+                           .fails = w->sig.fails, .module = (uint8_t)w->module};
         uint32_t in[2], out[2];
         count_sig(&w->sig, in, out);
         rec.int_args = (uint8_t)in[0];
@@ -4966,11 +5114,193 @@ static bool serialize(comp *c, const image *im, uint8_t **out, size_t *out_len) 
     return true;
 }
 
+// ---- the declarations, kept for the next load (RFC-0014) -----------------------------------
+
+// What a load leaves in the block for the loads after it: the compiler's tables in one piece,
+// with every name it holds copied in, so the host may let go of the source.
+typedef struct symtab {
+    vec    words, consts, globals, records, fields, btypes, dtypes, srcmods;
+    size_t bytes;
+} symtab;
+
+typedef void name_fn(name *n, void *user);
+
+static void sig_names(sig *s, name_fn *f, void *user) {
+    for (uint32_t k = 0; k < s->n_in; ++k)
+        f(&s->in_name[k], user);
+    for (uint32_t k = 0; k < s->n_out; ++k)
+        f(&s->out_name[k], user);
+}
+
+static void each_name(symtab *t, name_fn *f, void *user) {
+    for (uint32_t k = 0; k < t->words.n; ++k) {
+        wordsym *w = (wordsym *)t->words.ptr + k;
+        f(&w->name, user);
+        sig_names(&w->sig, f, user);
+    }
+    for (uint32_t k = 0; k < t->consts.n; ++k)
+        f(&((constant *)t->consts.ptr + k)->name, user);
+    for (uint32_t k = 0; k < t->globals.n; ++k)
+        f(&((globalsym *)t->globals.ptr + k)->name, user);
+    for (uint32_t k = 0; k < t->records.n; ++k)
+        f(&((record *)t->records.ptr + k)->name, user);
+    for (uint32_t k = 0; k < t->fields.n; ++k)
+        f(&((field *)t->fields.ptr + k)->name, user);
+    for (uint32_t k = 0; k < t->btypes.n; ++k)
+        sig_names((sig *)t->btypes.ptr + k, f, user);
+    for (uint32_t k = 0; k < t->dtypes.n; ++k)
+        f(&((dtype *)t->dtypes.ptr + k)->name, user);
+    for (uint32_t k = 0; k < t->srcmods.n; ++k)
+        f((name *)t->srcmods.ptr + k, user);
+}
+
+#define TABLES(X)                                                                                            \
+    X(words, wordsym) X(consts, constant) X(globals, globalsym) X(records, record) X(fields, field)          \
+    X(btypes, sig) X(dtypes, dtype) X(srcmods, name)
+
+// A name whose bytes will not outlive this load lies in the source or in the working memory.
+typedef struct keeper {
+    const uint8_t *lo[2], *hi[2];
+    uint8_t       *at;
+    size_t         total;
+} keeper;
+
+static bool passing(const keeper *k, const name *n) {
+    const uint8_t *p = (const uint8_t *)n->text;
+    return n->length && ((p >= k->lo[0] && p < k->hi[0]) || (p >= k->lo[1] && p < k->hi[1]));
+}
+
+static void name_size(name *n, void *user) {
+    keeper *k = user;
+    if (passing(k, n))
+        k->total += n->length;
+}
+
+static void name_keep(name *n, void *user) {
+    keeper *k = user;
+    if (passing(k, n)) {
+        __builtin_memcpy(k->at, n->text, n->length);
+        n->text = (void *)k->at;
+        k->at += n->length;
+    }
+}
+
+typedef struct shift {
+    const uint8_t *lo, *hi;
+    ptrdiff_t      by;
+} shift;
+
+static void name_shift(name *n, void *user) {
+    const shift *s = user;
+    const uint8_t *p = (const uint8_t *)n->text;
+    if (n->length && p >= s->lo && p < s->hi)
+        n->text = (void *)(p + s->by);
+}
+
+// The tables as one piece in the working memory.
+static symtab *keep_symbols(comp *c, pinax_str source, const uint8_t *work) {
+    symtab now = {c->words, c->consts, c->globals, c->records, c->fields, c->btypes, c->dtypes, c->srcmods, 0};
+    keeper k = {{source.ptr, work}, {source.ptr + source.len, c->arena_end}, NULL, 0};
+    each_name(&now, name_size, &k);
+    size_t bytes = sizeof(symtab) + ((k.total + 7u) & ~(size_t)7u);
+#define X(v, t) bytes += ((size_t)now.v.n * sizeof(t) + 7u) & ~(size_t)7u;
+    TABLES(X)
+#undef X
+    uint8_t *p = arena_alloc(c, bytes);
+    if (!p)
+        return NULL;
+    symtab *t = (symtab *)p;
+    p += sizeof(symtab);
+#define X(v, t_)                                                          \
+    t->v = (vec){p, now.v.n, now.v.n};                                    \
+    if (now.v.n)                                                          \
+        __builtin_memcpy(p, now.v.ptr, (size_t)now.v.n * sizeof(t_));     \
+    p += ((size_t)now.v.n * sizeof(t_) + 7u) & ~(size_t)7u;
+    TABLES(X)
+#undef X
+    t->bytes = bytes;
+    k.at = p;
+    each_name(t, name_keep, &k);
+    return t;
+}
+
+// The tables have moved by `by` bytes: what points into them moves along.
+static void move_symbols(symtab *t, const uint8_t *from, ptrdiff_t by) {
+    const size_t bytes = t->bytes;
+#define X(v, t_) t->v.ptr = (uint8_t *)t->v.ptr + by;
+    TABLES(X)
+#undef X
+    shift s = {from, from + bytes, by};
+    each_name(t, name_shift, &s);
+}
+
+// The tables of the loads before this one, copied into the working memory to grow there.
+static bool take_symbols(comp *c, image *im) {
+    const pinax_state *st = c->st;
+    const symtab *t = st->symbols;
+    if (!t)
+        return true;
+#define COPY(dst, src, count, type_)                                       \
+    if (count) {                                                           \
+        void *p = arena_alloc(c, (size_t)(count) * sizeof(type_));         \
+        if (!p)                                                            \
+            return false;                                                  \
+        __builtin_memcpy(p, src, (size_t)(count) * sizeof(type_));         \
+        dst = (vec){p, (uint32_t)(count), (uint32_t)(count)};              \
+    }
+#define X(v, t_) COPY(c->v, t->v.ptr, t->v.n, t_)
+    TABLES(X)
+#undef X
+    const pnx_head *h = st->head;
+    COPY(c->iconst, st->iconst, h->n_iconst, int64_t)
+    COPY(c->sconst, st->sconst, h->n_sconst, pnx_sconst)
+    COPY(c->strbytes, st->segment[PNX_SEG_CONST], h->n_strbytes, uint8_t)
+    COPY(im->code, st->code, h->n_code, uint32_t)
+    if (h->n_imports) {
+        uint32_t *p = arena_alloc(c, (size_t)h->n_imports * sizeof(uint32_t));
+        if (!p)
+            return false;
+        for (uint32_t k = 0; k < h->n_imports; ++k)
+            p[k] = (uint32_t)(st->imports[k] - st->hosts);
+        c->imports = (vec){p, h->n_imports, h->n_imports};
+    }
+#undef COPY
+    c->base = (struct counts){c->words.n, c->consts.n, c->globals.n, c->records.n, c->dtypes.n};
+    return true;
+}
+
+uint32_t pnx_module_number(const pinax_state *st, const char *text, size_t length) {
+    const symtab *t = st->symbols;
+    for (uint32_t k = 0; t && k < t->srcmods.n; ++k) {
+        const name *n = (const name *)t->srcmods.ptr + k;
+        if (n->length == length && length && __builtin_memcmp(n->text, text, length) == 0)
+            return k;
+    }
+    return UINT32_MAX;
+}
+
+// The name a source is loaded under is the name of its module when it is written like a name.
+static bool module_name(const char *file, size_t *length) {
+    size_t n = 0;
+    for (; file[n]; ++n) {
+        const char ch = file[n];
+        const bool letter = (ch >= 'a' && ch <= 'z') || (ch >= 'A' && ch <= 'Z') || ch == '_';
+        if (!letter && !(n && ch >= '0' && ch <= '9'))
+            return false;
+    }
+    *length = n;
+    return n > 0 && n <= 31;
+}
+
 pinax_err pinax_load(pinax_state *st, const char *file, pinax_str source, uint32_t mode) {
     if (!st || (!source.ptr && source.len))
         return PINAX_ERR_ARGUMENT;
-    if (st->head || st->suspended) {
-        st->error_text = "one source or container per state for now; load before running";
+    if (st->suspended) {
+        st->error_text = "a run is suspended; finish it before loading";
+        return PINAX_ERR_STATE;
+    }
+    if (st->head && !st->symbols) {
+        st->error_text = "a state that loaded bytecode takes no source after it";
         return PINAX_ERR_STATE;
     }
     if (mode != PINAX_LOAD_CODE && mode != PINAX_LOAD_DATA)
@@ -4979,13 +5309,15 @@ pinax_err pinax_load(pinax_state *st, const char *file, pinax_str source, uint32
         st->error_text = "the source is longer than 4 GiB";
         return PINAX_ERR_ARGUMENT;
     }
+    const pnx_program before = pnx_program_now(st);
 
     // the unused tail of the block is the compiler's working memory
     uint8_t *const tail = st->block + ((st->used + 15u) & ~(size_t)15u);
     uint8_t *const end = st->block + st->block_len;
-    comp      c = {.st = st, .file = file ? file : "", .data_only = mode == PINAX_LOAD_DATA};
+    comp      c = {.st = st, .file = file ? file : "", .data_only = mode == PINAX_LOAD_DATA, .path_global = NONE};
     c.arena = tail < end ? tail : end;
     c.arena_end = end;
+    const uint8_t *const work = c.arena;
     c.lx = &c.lexer;
     pnx_lex_init(&c.lexer, source.ptr, source.len);
 
@@ -4993,16 +5325,41 @@ pinax_err pinax_load(pinax_state *st, const char *file, pinax_str source, uint32
     bool     has_top = false;
     uint8_t *container = NULL;
     size_t   length = 0;
+    symtab  *tables = NULL;
     c.word_fn = arena_alloc(&c, sizeof(fn));
     c.top_fn = c.word_fn ? arena_alloc(&c, sizeof(fn)) : NULL;
-    if (c.top_fn) {
+    if (c.top_fn && take_symbols(&c, &im)) {
+        // this module: the number after those loaded, and its name when the host gave one
+        name   self = {0};
+        size_t self_len = 0;
+        if (module_name(c.file, &self_len)) {
+            uint8_t *text = arena_alloc(&c, self_len);
+            if (text) {
+                __builtin_memcpy(text, c.file, self_len);
+                self = (name){(void *)text, (uint32_t)self_len};
+            }
+        }
+        c.module = (uint16_t)c.srcmods.n;
+        name *slot = c.err == PINAX_OK ? vec_push(&c, &c.srcmods, sizeof(name)) : NULL;
+        if (slot) {
+            *slot = self;
+            bool taken = self.length && (name_is(self, "str") || name_is(self, "fmt") || source_module(&c, self) != NONE);
+            for (uint32_t k = 0; self.length && !taken && k < st->n_hosts; ++k)
+                taken = name_eq(cname(st->hosts[k].module), self);
+            if (taken)
+                error_at(&c, PINAX_ERR_STATE, 0, 0, "a module of this name is already loaded or registered");
+            else if (c.module > 255)
+                error_at(&c, PINAX_ERR_NO_ROOM, 0, 0, "a state holds at most 256 sources");
+        }
+    }
+    if (c.err == PINAX_OK && c.top_fn) {
         fn_reset(c.word_fn, false);
         fn_reset(c.top_fn, true);
         static const sig no_results = {0};
         c.top_fn->sig = &no_results;
         c.f = c.top_fn;
-        if (compile(&c, &im, &has_top))
-            (void)serialize(&c, &im, &container, &length);
+        if (compile(&c, &im, &has_top) && serialize(&c, &im, &container, &length))
+            tables = keep_symbols(&c, source, work);
     }
     if (c.err != PINAX_OK) {
         st->error_text = c.message;
@@ -5014,19 +5371,38 @@ pinax_err pinax_load(pinax_state *st, const char *file, pinax_str source, uint32
         return c.err;
     }
 
-    // The container moves to the very end of the block, out of the way of the loader, which
-    // takes its room from the front; the block is shortened for that moment.
-    uint8_t *const parked = end - length;
+    // The tables and the container move to the very end of the block, out of the way of the
+    // loader, which takes its room from the front; the block is shortened for that moment.
+    // The tables were made last and lie higher, so they move first.
+    const size_t   table_bytes = tables->bytes;
+    const uint8_t *const made_at = (const uint8_t *)tables;
+    uint8_t *const parked_tables = end - table_bytes;
+    __builtin_memmove(parked_tables, tables, table_bytes);
+    uint8_t *const parked = parked_tables - length;
     __builtin_memmove(parked, container, length);
-    const size_t full = st->block_len, mark = st->used;
+    const size_t full = st->block_len;
     st->block_len = (size_t)(parked - st->block);
     const pinax_str bytes = {parked, length};
-    pinax_err err = pinax_load_bytecode(st, bytes);
+    pinax_err err = pnx_load_container(st, bytes, before.head ? before.head->n_globals : 0);
+    symtab *kept = NULL;
+    if (err == PINAX_OK) {
+        st->block_len = (size_t)(parked_tables - st->block);
+        kept = pnx_take(st, table_bytes, 8);
+        if (!kept) {
+            pnx_program_restore(st, &before);
+            st->error_text = "block too small for the code and its globals";
+            err = PINAX_ERR_NO_ROOM;
+        }
+    }
     st->block_len = full;
     if (err == PINAX_ERR_NO_ROOM)
-        st->needed += length;
+        st->needed += length + table_bytes;
     if (err != PINAX_OK)
         return err;
+    __builtin_memcpy(kept, parked_tables, table_bytes);
+    move_symbols(kept, made_at, (const uint8_t *)kept - made_at);
+    st->symbols = kept;
+
     if (has_top) { // code outside definitions runs once, now
         const uint64_t budget = st->budget;
         if (mode == PINAX_LOAD_DATA) // its stores run on a small budget of their own, not the host's
@@ -5039,12 +5415,12 @@ pinax_err pinax_load(pinax_state *st, const char *file, pinax_str source, uint32
         }
         if (err == PINAX_SUSPENDED) { // pinax_resume() finishes the load, or undoes it on a fault
             st->loading = true;
-            st->load_mark = mark;
+            st->before_load = before;
         }
         if (err != PINAX_OK && err != PINAX_SUSPENDED) {
-            // a fault while loading: nothing stays loaded, as after any other load error
+            // a fault while loading: what this load added does not stay, as after any other load error
             const char *text = st->error_text;
-            pnx_unload(st, mark);
+            pnx_program_restore(st, &before);
             st->error_text = text;
         }
     }

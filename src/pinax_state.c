@@ -59,6 +59,34 @@ static void *take(pinax_state *st, size_t bytes, size_t align) {
     return st->block + at;
 }
 
+void *pnx_take(pinax_state *st, size_t bytes, size_t align) {
+    return take(st, bytes, align);
+}
+
+pnx_program pnx_program_now(const pinax_state *st) {
+    return (pnx_program){st->head, st->words, st->importrecs, st->iconst, st->sconst, st->code, st->word_counts,
+                         st->imports, st->globals, st->segment[PNX_SEG_CONST], st->segment[PNX_SEG_GLOBAL],
+                         st->symbols, st->used};
+}
+
+void pnx_program_restore(pinax_state *st, const pnx_program *p) {
+    st->head = p->head;
+    st->words = p->words;
+    st->importrecs = p->importrecs;
+    st->iconst = p->iconst;
+    st->sconst = p->sconst;
+    st->code = p->code;
+    st->word_counts = p->word_counts;
+    st->imports = p->imports;
+    st->globals = p->globals;
+    st->segment[PNX_SEG_CONST] = p->seg_const;
+    st->segment[PNX_SEG_GLOBAL] = p->seg_global;
+    st->symbols = p->symbols;
+    st->used = p->used;
+    st->suspended = false;
+    st->loading = false;
+}
+
 // ---- signatures ------------------------------------------------------------------------
 
 static bool is_name_char(char c) {
@@ -444,7 +472,12 @@ pinax_err pinax_load_bytecode(pinax_state *st, pinax_str bytecode) {
     if (!st || !bytecode.ptr)
         return PINAX_ERR_ARGUMENT;
     if (st->head)
-        return fail(st, PINAX_ERR_STATE, "P0 loads one container per state");
+        return fail(st, PINAX_ERR_STATE, "a state takes one bytecode container; sources can be added with pinax_load");
+    return pnx_load_container(st, bytecode, 0);
+}
+
+pinax_err pnx_load_container(pinax_state *st, pinax_str bytecode, uint32_t keep) {
+    const pnx_program before = pnx_program_now(st);
     pnx_head h;
     if (bytecode.len < sizeof h)
         return fail(st, PINAX_ERR_FORMAT, "bytecode: too short");
@@ -565,6 +598,14 @@ pinax_err pinax_load_bytecode(pinax_state *st, pinax_str bytecode) {
         }
         default: goto rollback;
         }
+        if (k < keep) { // a global of the program being extended: its storage and state stay
+            if (before.globals[k].kind != rec->kind)
+                goto rollback;
+            *g = before.globals[k];
+            if (!first_global)
+                first_global = (uint8_t *)before.seg_global;
+            continue;
+        }
         err = PINAX_ERR_NO_ROOM;
         why = "block too small for the code and its globals";
         if (bytes > SIZE_MAX / 2)
@@ -610,17 +651,9 @@ pinax_err pinax_load_bytecode(pinax_state *st, pinax_str bytecode) {
     return PINAX_OK;
 
 rollback:
-    pnx_unload(st, mark);
+    (void)mark;
+    pnx_program_restore(st, &before);
     return fail(st, err, why);
-}
-
-void pnx_unload(pinax_state *st, size_t mark) {
-    st->used = mark;
-    st->head = NULL;
-    st->suspended = false;
-    st->loading = false;
-    st->segment[PNX_SEG_CONST] = empty_bytes;
-    st->segment[PNX_SEG_GLOBAL] = empty_bytes;
 }
 
 // ---- finding and running -----------------------------------------------------------------
@@ -631,13 +664,27 @@ pinax_err pinax_find(pinax_state *st, const char *name, const char *signature, u
         return PINAX_ERR_ARGUMENT;
     if (!st->head)
         return fail(st, PINAX_ERR_STATE, "no code loaded");
-    for (uint32_t k = 0; k < st->head->n_words; ++k) {
-        if (text_equal(st->words[k].name, name)) {
-            if (!text_equal(st->words[k].signature, signature)) // P0 compares the text as written
-                return fail(st, PINAX_ERR_SIGNATURE, "the word has another signature");
-            *out = k;
-            return PINAX_OK;
+    // a plain name is a word of the first source; module.word names a word of that module
+    uint32_t module = 0;
+    const char *word = name;
+    for (int pass = 0; pass < 2; ++pass) {
+        for (uint32_t k = 0; k < st->head->n_words; ++k) {
+            if (st->words[k].module == module && text_equal(st->words[k].name, word)) {
+                if (!text_equal(st->words[k].signature, signature)) // the text as written
+                    return fail(st, PINAX_ERR_SIGNATURE, "the word has another signature");
+                *out = k;
+                return PINAX_OK;
+            }
         }
+        const char *dot = name;
+        while (*dot && *dot != '.')
+            ++dot;
+        if (pass == 1 || !*dot)
+            break;
+        module = pnx_module_number(st, name, (size_t)(dot - name));
+        if (module == UINT32_MAX)
+            break;
+        word = dot + 1;
     }
     return fail(st, PINAX_ERR_NOT_FOUND, "no such word");
 }
@@ -709,7 +756,8 @@ pinax_err pinax_resume(pinax_state *st, const pinax_args *results) {
         st->loading = false;
         if (err != PINAX_OK) {
             const char *text = st->error_text;
-            pnx_unload(st, st->load_mark);
+            const pnx_program before = st->before_load;
+            pnx_program_restore(st, &before);
             st->error_text = text;
         }
     }

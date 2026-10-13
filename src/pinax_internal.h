@@ -70,6 +70,22 @@ struct pinax_call {
     pinax_state *state;
 };
 
+// What a load replaces, kept so that a failed load can put it back.
+typedef struct pnx_program {
+    const pnx_head      *head;
+    const pnx_wordrec   *words;
+    const pnx_importrec *importrecs;
+    const int64_t       *iconst;
+    const pnx_sconst    *sconst;
+    const uint32_t      *code;
+    pnx_counts          *word_counts;
+    const pnx_host     **imports;
+    pnx_global          *globals;
+    const uint8_t       *seg_const, *seg_global;
+    void                *symbols;
+    size_t               used;
+} pnx_program;
+
 struct pinax_state {
     uint8_t *block;
     size_t   block_len, used, needed;
@@ -102,7 +118,8 @@ struct pinax_state {
     uint32_t top_word;
     bool     suspended;
     bool     loading;   // the suspended run is the code outside definitions of a load
-    size_t   load_mark; // where the block stood before that load
+    pnx_program before_load; // what that load would be undone to
+    void    *symbols;   // the compiler's declaration tables, kept for the next load (pinax_compile.c)
     pinax_err   fail;
     const char *error_text;
     void (*diag)(void *user, pinax_str file, uint32_t line, uint32_t column, pinax_str message);
@@ -144,8 +161,16 @@ uint32_t pnx_find_last(const uint8_t *bytes, uint32_t length, const uint8_t *par
 // Offset of the first `byte`, or UINT32_MAX.
 uint32_t pnx_find_byte(const uint8_t *bytes, uint32_t length, uint8_t byte);
 
-// Forgets the loaded code and gives back the block from `mark` on.
-void pnx_unload(pinax_state *state, size_t mark);
+// The loaded program as it is now, and putting an earlier one back (a failed load).
+pnx_program pnx_program_now(const pinax_state *state);
+void pnx_program_restore(pinax_state *state, const pnx_program *program);
+// Loads a container in place of the present program. The first `keep` globals keep their
+// storage and what it holds: they are the globals of the program being extended.
+pinax_err pnx_load_container(pinax_state *state, pinax_str bytecode, uint32_t keep);
+// Bytes from the block, zeroed; NULL when it is full (pinax_needed() then tells how much).
+void *pnx_take(pinax_state *state, size_t bytes, size_t align);
+// The number of the source module called `name` (of `length` bytes), or UINT32_MAX.
+uint32_t pnx_module_number(const pinax_state *state, const char *name, size_t length);
 
 // Bytes in the main task's region; NULL when it is full.
 uint8_t *pnx_region_alloc(pinax_state *state, size_t bytes);

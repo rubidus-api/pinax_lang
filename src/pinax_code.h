@@ -296,7 +296,8 @@ typedef struct pnx_wordrec {
     // off the signature, where every type but str is an integer; a compiler that knows
     // declared types (a type made of str) writes them here.
     uint8_t  counted, int_args, str_args, int_results, str_results, fails;
-    uint8_t  reserved[2];
+    uint8_t  module;   // the source module the word belongs to: 0 is the first source loaded
+    uint8_t  reserved;
 } pnx_wordrec;
 
 typedef struct pnx_globalrec {

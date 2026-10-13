@@ -195,9 +195,16 @@ enum {
                             uses a small budget proportional to the source size, not config.budget */
 };
 /* Compiles the source and then runs, once, the code written outside definitions.
- *  - A fault in that code fails the load with the fault's number and nothing stays loaded: no
- *    word, no global. The same holds for every other load error. What host words did before
- *    the fault is not undone. The state can be loaded again.
+ *  - A state takes any number of sources, one after the other; each adds to the program. `name`
+ *    is the name of the module the source is: a later source writes `use name` and then
+ *    name.word for what this one marked `export` (a data source exports all it declares). A
+ *    module must be loaded before a source that uses it. A name that is not written like a word
+ *    (a path, say) or NULL loads a source no other can use; a name already taken by a module
+ *    is refused with PINAX_ERR_STATE.
+ *  - A fault in that code fails the load with the fault's number and nothing of this load stays
+ *    loaded: no word, no global. The same holds for every other load error. The sources loaded
+ *    before stay as they were, except for what the failed code stored into their globals; what
+ *    host words did before the fault is not undone either. The state can be loaded again.
  *  - PINAX_LOAD_CODE: that code runs on config.budget like any other. When the budget runs out
  *    pinax_load() returns PINAX_SUSPENDED and pinax_resume() continues it; until it has finished
  *    pinax_run() is refused, and a fault met while resuming fails the load as above.
@@ -212,7 +219,9 @@ PINAX_API pinax_err pinax_eval(pinax_state *state, pinax_str line);
 enum {
     PINAX_FIND_NESTED = 1u << 0 /* the word will be run from inside a host word */
 };
-/* Looks a word up and checks that it has exactly this signature. A word that may yield cannot
+/* Looks a word up and checks that it has exactly this signature. A plain name is a word of the
+ * first source loaded; "module.word" is a word of that module, exported or not, and
+ * "module.test.name" one of its tests. A word that may yield cannot
  * be run from inside a host word (the C stack is in the way): with PINAX_FIND_NESTED such a
  * word is refused here with PINAX_ERR_SIGNATURE, and pinax_run() inside a host word accepts
  * only words found with that flag. */
