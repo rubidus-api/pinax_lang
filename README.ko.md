@@ -56,7 +56,7 @@ word sum_to (last int gives total int)
   total
 end
 
-cat ("1 to 100 is ", 100 sum_to) println
+cat ("1 to 100 is ", 100 sum_to) io.println
 ```
 
 ```sh
@@ -90,7 +90,7 @@ int main(void) {
 
     static const char source[] =
         "use calc\n"
-        "word answer (n int gives r int) n tenfold 2 add end\n";
+        "word answer (n int gives r int) n calc.tenfold 2 add end\n";
     pinax_str text = {(const unsigned char *)source, sizeof source - 1};
     if (pinax_load(st, "main", text, PINAX_LOAD_CODE) != PINAX_OK)
         return 1;

@@ -10,7 +10,7 @@
 // Reserved words. The order is the order of the table in pinax_lex.c.
 #define PNX_RESERVED(X)                                                                            \
     X(rem) X(note) X(text) X(true) X(false) X(pinax)                                               \
-    X(use) X(export)                                                                               \
+    X(use) X(as) X(export)                                                                         \
     X(word) X(global) X(const) X(array) X(list) X(pool) X(queue) X(buffer) X(tasks) X(record)     \
     X(type) X(extern) X(from) X(forward) X(index) X(bound) X(make) X(test)                         \
     X(row) X(assign) X(big_endian) X(columns)                                                      \

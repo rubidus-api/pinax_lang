@@ -231,10 +231,10 @@ typedef struct comp {
     uint32_t     nested;   // value blocks open
     uint32_t     def_index; // the word a definition just made
     vec          dtypes;   // dtype
-    bool         use_strings, use_format;
     bool         data_only; // PINAX_LOAD_DATA: declarations, literals, stores and rows only
     bool         sink;      // the word being compiled may take an owned value off the stack
-    name         modules[MAX_MODULES];
+    name         modules[MAX_MODULES]; // the names the source writes: `use rex as rx` opens rx
+    name         module_real[MAX_MODULES]; // and the modules they stand for
     uint32_t     n_modules;
     pinax_err    err;
     const char  *message;
@@ -905,30 +905,35 @@ static fwd *find_fwd(const comp *c, name n, uint32_t *index) {
     return NULL;
 }
 
+// The module a path prefix stands for: `use io` opens io, `use rex as rx` opens rx for rex.
+// False when no `use` opened that prefix.
+static bool module_of(const comp *c, name prefix, name *real) {
+    for (uint32_t k = 0; k < c->n_modules; ++k) {
+        if (name_eq(c->modules[k], prefix)) {
+            *real = c->module_real[k];
+            return true;
+        }
+    }
+    return false;
+}
+
+// Whether a `use` opened module `module` under any name.
 static bool module_used(const comp *c, name module) {
     for (uint32_t k = 0; k < c->n_modules; ++k) {
-        if (name_eq(c->modules[k], module))
+        if (name_eq(c->module_real[k], module))
             return true;
     }
     return false;
 }
 
-// A host word by bare name among the modules in use, or by module and name. Returns the index
-// into state->hosts, NONE when there is none; *ambiguous when two modules have the name.
-static uint32_t find_host(const comp *c, name module, name word, bool *ambiguous) {
-    uint32_t found = NONE;
-    *ambiguous = false;
+// The host word `word` of module `module`: its index into state->hosts, or NONE.
+static uint32_t find_host(const comp *c, name module, name word) {
     for (uint32_t k = 0; k < c->st->n_hosts; ++k) {
         const pnx_host *h = &c->st->hosts[k];
-        if (!name_eq(cname(h->name), word))
-            continue;
-        if (module.length ? !name_eq(cname(h->module), module) : !module_used(c, cname(h->module)))
-            continue;
-        if (found != NONE)
-            *ambiguous = true;
-        found = k;
+        if (name_eq(cname(h->name), word) && name_eq(cname(h->module), module))
+            return k;
     }
-    return found;
+    return NONE;
 }
 
 typedef struct core_word {
@@ -1024,27 +1029,27 @@ enum {
 static const struct builtin {
     const char *name;
     uint8_t     id;
-    uint8_t     module; // 0: core, 1: needs `use strings`, 2: needs `use format`
+    uint8_t     module; // 0: core, written bare; 1: module str; 2: module fmt - written str.word, fmt.word
 } builtins[] = {
-    {"range", BW_RANGE, false},     {"sum", BW_SUM, false},        {"each", BW_EACH, false},
-    {"fold", BW_FOLD, false},       {"times", BW_TIMES, false},    {"len", BW_LEN, false},
-    {"is_empty", BW_IS_EMPTY, false}, {"byte_at", BW_BYTE_AT, true}, {"bytes", BW_BYTES, true},
-    {"idx", BW_IDX, false},         {"capacity", BW_CAPACITY, false}, {"is_full", BW_IS_FULL, false},
-    {"clear", BW_CLEAR, false},     {"push", BW_PUSH, false},      {"pop", BW_POP, false},
-    {"find", BW_FIND, true},        {"to_int", BW_TO_INT, true},   {"to_str", BW_TO_STR, true},
-    {"assert", BW_ASSERT, false},   {"words", BW_WORDS, true},     {"err_text", BW_ERR_TEXT, false},
-    {"add_row", BW_ADD_ROW, false}, {"is_none", BW_IS_NONE, false}, {"none", BW_NONE, false},
-    {"row_index", BW_ROW_INDEX, false}, {"max", BW_MAX, false},    {"min", BW_MIN, false},
-    {"append", BW_APPEND, false},   {"append_byte", BW_APPEND_BYTE, false}, {"append_int", BW_APPEND_INT, false},
-    {"contents", BW_CONTENTS, false}, {"take", BW_TAKE, false},    {"skip", BW_SKIP, true},
-    {"take_last", BW_TAKE_LAST, true}, {"skip_last", BW_SKIP_LAST, true},
-    {"starts_with", BW_STARTS_WITH, true}, {"ends_with", BW_ENDS_WITH, true}, {"contains", BW_CONTAINS, true},
-    {"lookup", BW_LOOKUP, false},   {"insert", BW_INSERT, false},  {"remove", BW_REMOVE, false},
-    {"replace", BW_REPLACE, true},  {"put", BW_PUT, false},        {"peek", BW_PEEK, false},
-    {"alloc", BW_ALLOC, false},     {"free", BW_FREE, false},      {"is_alive", BW_IS_ALIVE, false},
-    {"count", BW_COUNT, false},     {"any", BW_ANY, false},        {"all", BW_ALL, false},
-    {"first", BW_FIRST, false},     {"each_index", BW_EACH_INDEX, false},
-    {"minimum", BW_MINIMUM, false}, {"maximum", BW_MAXIMUM, false},
+    {"range", BW_RANGE, 0},     {"sum", BW_SUM, 0},        {"each", BW_EACH, 0},
+    {"fold", BW_FOLD, 0},       {"times", BW_TIMES, 0},    {"len", BW_LEN, 0},
+    {"is_empty", BW_IS_EMPTY, 0}, {"byte_at", BW_BYTE_AT, 1}, {"bytes", BW_BYTES, 1},
+    {"idx", BW_IDX, 0},         {"capacity", BW_CAPACITY, 0}, {"is_full", BW_IS_FULL, 0},
+    {"clear", BW_CLEAR, 0},     {"push", BW_PUSH, 0},      {"pop", BW_POP, 0},
+    {"find", BW_FIND, 1},        {"to_int", BW_TO_INT, 1},   {"to_str", BW_TO_STR, 1},
+    {"assert", BW_ASSERT, 0},   {"words", BW_WORDS, 1},     {"err_text", BW_ERR_TEXT, 0},
+    {"add_row", BW_ADD_ROW, 0}, {"is_none", BW_IS_NONE, 0}, {"none", BW_NONE, 0},
+    {"row_index", BW_ROW_INDEX, 0}, {"max", BW_MAX, 0},    {"min", BW_MIN, 0},
+    {"append", BW_APPEND, 0},   {"append_byte", BW_APPEND_BYTE, 0}, {"append_int", BW_APPEND_INT, 0},
+    {"contents", BW_CONTENTS, 0}, {"take", BW_TAKE, 0},    {"skip", BW_SKIP, 1},
+    {"take_last", BW_TAKE_LAST, 1}, {"skip_last", BW_SKIP_LAST, 1},
+    {"starts_with", BW_STARTS_WITH, 1}, {"ends_with", BW_ENDS_WITH, 1}, {"contains", BW_CONTAINS, 1},
+    {"lookup", BW_LOOKUP, 0},   {"insert", BW_INSERT, 0},  {"remove", BW_REMOVE, 0},
+    {"replace", BW_REPLACE, 1},  {"put", BW_PUT, 0},        {"peek", BW_PEEK, 0},
+    {"alloc", BW_ALLOC, 0},     {"free", BW_FREE, 0},      {"is_alive", BW_IS_ALIVE, 0},
+    {"count", BW_COUNT, 0},     {"any", BW_ANY, 0},        {"all", BW_ALL, 0},
+    {"first", BW_FIRST, 0},     {"each_index", BW_EACH_INDEX, 0},
+    {"minimum", BW_MINIMUM, 0}, {"maximum", BW_MAXIMUM, 0},
     {"slice", BW_SLICE, 1},         {"cut", BW_CUT, 1},            {"try_cut", BW_TRY_CUT, 1},
     {"trim", BW_TRIM, 1},           {"trim_left", BW_TRIM_LEFT, 1}, {"trim_right", BW_TRIM_RIGHT, 1},
     {"lines", BW_LINES, 1},         {"split", BW_SPLIT, 1},        {"find_last", BW_FIND_LAST, 1},
@@ -1052,15 +1057,15 @@ static const struct builtin {
     {"hex", BW_HEX, 2},             {"bin", BW_BIN, 2},            {"hex_pad", BW_HEX_PAD, 2},
     {"zero_pad", BW_ZERO_PAD, 2},   {"call", BW_CALL, 0},          {"mark", BW_MARK, 0},
     {"release", BW_RELEASE, 0},     {"region_free", BW_REGION_FREE, 0},
+    {"len", BW_LEN, 1},             {"is_empty", BW_IS_EMPTY, 1},  {"take", BW_TAKE, 1},
 };
 
-// `len` and `is_empty` belong to the core for arrays and lists and to `strings` for a str; the
-// others marked so are words of `strings` only.
-static const struct builtin *find_builtin(const comp *c, name n) {
+// A word of the core (module 0, written bare) or of a standard module (1: str, 2: fmt, written
+// with the module: str.len). `len`, `is_empty` and `take` exist twice: bare for collections
+// and queues, in `str` for strings.
+static const struct builtin *find_builtin(name n, uint8_t module) {
     for (size_t k = 0; k < sizeof builtins / sizeof builtins[0]; ++k) {
-        if (name_is(n, builtins[k].name) &&
-            (builtins[k].module == 0 || (builtins[k].module == 1 && c->use_strings) ||
-             (builtins[k].module == 2 && c->use_format)))
+        if (builtins[k].module == module && name_is(n, builtins[k].name))
             return &builtins[k];
     }
     return NULL;
@@ -1068,12 +1073,10 @@ static const struct builtin *find_builtin(const comp *c, name n) {
 
 // A name every part of the source sees: a word, a constant, a global, a type, a core word.
 static bool name_is_global(comp *c, name n) {
-    bool ambiguous;
     return find_word(c, n, NULL) || find_fwd(c, n, NULL) || find_core(n) || type_of_name(c, n) != TY_NONE ||
            name_is(n, "float") || name_is(n, "raw") ||
            find_record(c, n) != NONE ||
-           name_is(n, "err") || find_const(c, n) || find_global(c, n) != NONE || find_builtin(c, n) ||
-           find_host(c, (name){0}, n, &ambiguous) != NONE;
+           name_is(n, "err") || find_const(c, n) || find_global(c, n) != NONE || find_builtin(n, 0);
 }
 
 // No shadowing (RFC-0008 section 3.3): a new local or loop name must not be a visible name.
@@ -3086,7 +3089,7 @@ static bool builtin(comp *c, const struct builtin *w) {
     }
     case BW_LEN:
     case BW_IS_EMPTY: {
-        if (on_coll) {
+        if (on_coll && w->module == 0) {
             if (!need_coll(c, &g, &gi))
                 return false;
             if (g->kind == GK_INDEX || g->kind == GK_POOL)
@@ -3116,12 +3119,12 @@ static bool builtin(comp *c, const struct builtin *w) {
             return push(c, (entry){.type = TY_BOOL, .kind = E_COND, .op = PNX_JEQI, .a = (uint8_t)dst, .b = 0}) &&
                    advance(c);
         }
+        if (w->module == 0)
+            return type_error(c, "this word takes the name of an array, list, queue or buffer; of a str it is str.len");
         if (!need(c, 1))
             return false;
         if (f->stack[f->depth - 1].type != TY_STR)
-            return type_error(c, "this word takes a str, or the name of an array or list");
-        if (!c->use_strings)
-            return error(c, PINAX_ERR_NOT_FOUND, "len and is_empty of a str are words of the module strings: use strings");
+            return type_error(c, "this word takes a str");
         if (!reg_of(c, f->depth - 1, &ra))
             return false;
         --f->depth;
@@ -3318,7 +3321,7 @@ static bool builtin(comp *c, const struct builtin *w) {
     }
     case BW_PEEK:
     case BW_TAKE:
-        if (on_coll) { // jobs take : the oldest value; fails when the queue is empty
+        if (w->module == 0) { // jobs take : the oldest value; fails when the queue is empty
             if (!need_coll(c, &g, &gi))
                 return false;
             if (g->kind != GK_QUEUE)
@@ -3328,9 +3331,7 @@ static bool builtin(comp *c, const struct builtin *w) {
             return emit(c, PNX_ABX(w->id == BW_TAKE ? PNX_QTAKE : PNX_QPEEK, top_slot(c, BANK_I, 1), gi)) != NONE &&
                    guard_op(c, g->type);
         }
-        if (w->id == BW_PEEK || !c->use_strings)
-            return type_error(c, "this word takes the name of a queue (take of a str needs use strings)");
-        [[fallthrough]];
+        [[fallthrough]]; // str.take
     case BW_SKIP:
     case BW_TAKE_LAST:
     case BW_SKIP_LAST: { // s n take : a view, as many bytes as there are
@@ -3560,8 +3561,21 @@ static bool body_name(comp *c) {
                 return error(c, PINAX_ERR_NOT_FOUND, "there is no error number of this name");
             return push(c, (entry){.type = TY_ERR, .kind = E_CONST, .value = value}) && advance(c);
         }
-        if (!module_used(c, module))
+        if (c->data_only)
+            return syntax(c, "a data source calls no words and reads no fields; only literals, const names and stores");
+        name real;
+        if (!module_of(c, module, &real)) // not a module in use: a field of a record
             return field_access(c, false) && advance(c);
+        module = real;
+        const uint8_t standard = name_is(module, "str") ? 1 : name_is(module, "fmt") ? 2 : 0;
+        if (standard) { // a word of a standard module
+            if (c->data_only)
+                return syntax(c, "a data source calls no words; only literals, const names and stores");
+            const struct builtin *bw = find_builtin(n, standard);
+            if (!bw)
+                return error(c, PINAX_ERR_NOT_FOUND, "the module has no word of this name");
+            return builtin(c, bw);
+        }
     } else {
         const local *l = find_local(f, n);
         if (l) {
@@ -3619,18 +3633,23 @@ static bool body_name(comp *c) {
         const core_word *w = find_core(n);
         if (w)
             return core(c, w);
-        const struct builtin *bw = find_builtin(c, n);
+        const struct builtin *bw = find_builtin(n, 0);
         if (bw)
             return builtin(c, bw);
+        // not a name of the core: say so when it is a word of a module, which is written with it
+        if (find_builtin(n, 1) || find_builtin(n, 2))
+            return error(c, PINAX_ERR_NOT_FOUND, "a word of a module is written with the module: str.len, fmt.hex");
+        for (uint32_t k = 0; k < c->st->n_hosts; ++k) {
+            if (name_eq(cname(c->st->hosts[k].name), n) && module_used(c, cname(c->st->hosts[k].module)))
+                return error(c, PINAX_ERR_NOT_FOUND, "a word of a module is written with the module: io.println");
+        }
+        return error(c, PINAX_ERR_NOT_FOUND, "this name is not declared before this place");
     }
     if (c->data_only)
         return syntax(c, "a data source calls no words; only literals, const names and stores");
-    bool ambiguous;
-    const uint32_t host = find_host(c, module, n, &ambiguous);
-    if (ambiguous)
-        return type_error(c, "two modules in use have a word of this name; write module.word");
+    const uint32_t host = find_host(c, module, n);
     if (host == NONE)
-        return error(c, PINAX_ERR_NOT_FOUND, "this name is not declared before this place");
+        return error(c, PINAX_ERR_NOT_FOUND, "the module has no word of this name");
     return call_host(c, host);
 }
 
@@ -3966,24 +3985,35 @@ static bool use_module(comp *c) {
     if (c->tok.kind != PNX_T_NAME)
         return syntax(c, "use is followed by the name of a module");
     const name n = tok_name(c);
-    if (name_is(n, "strings") || name_is(n, "format")) { // standard modules: part of the language
-        if (name_is(n, "strings"))
-            c->use_strings = true;
-        else
-            c->use_format = true;
-        return advance(c);
+    bool known = name_is(n, "str") || name_is(n, "fmt"); // standard modules: part of the language
+    for (uint32_t k = 0; !known && k < c->st->n_hosts; ++k)
+        known = name_eq(cname(c->st->hosts[k].module), n);
+    if (!known)
+        return error(c, PINAX_ERR_NOT_FOUND, name_is(n, "strings") || name_is(n, "format")
+                                                 ? "the standard modules are named str and fmt"
+                                                 : "the host has not registered this module");
+    if (!advance(c))
+        return false;
+    name prefix = n;
+    if (is_word(c, PNX_KW_as)) { // use rex as rx : the source writes rx.match
+        if (!advance(c))
+            return false;
+        if (c->tok.kind != PNX_T_NAME)
+            return syntax(c, "as is followed by the name the module gets here: use rex as rx");
+        prefix = tok_name(c);
+        if (!advance(c))
+            return false;
     }
-    bool registered = false;
-    for (uint32_t k = 0; k < c->st->n_hosts; ++k)
-        registered = registered || name_eq(cname(c->st->hosts[k].module), n);
-    if (!registered)
-        return error(c, PINAX_ERR_NOT_FOUND, "the host has not registered this module");
-    if (!module_used(c, n)) {
-        if (c->n_modules == MAX_MODULES)
-            return syntax(c, "too many modules in use");
-        c->modules[c->n_modules++] = n;
-    }
-    return advance(c);
+    name other;
+    if (module_of(c, prefix, &other))
+        return name_eq(other, n) ? true : type_error(c, "this name already stands for another module");
+    if (name_is(prefix, "err") || find_record(c, prefix) != NONE)
+        return type_error(c, "this name is already the first part of other paths (err, or a record)");
+    if (c->n_modules == MAX_MODULES)
+        return syntax(c, "too many modules in use");
+    c->modules[c->n_modules] = prefix;
+    c->module_real[c->n_modules++] = n;
+    return true;
 }
 
 // const NAME literal
