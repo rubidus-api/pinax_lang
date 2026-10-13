@@ -8,6 +8,7 @@
 #include <stdbool.h>
 
 #define PNX_MAX_HOSTS 64
+#define PNX_MAX_HANDLE_TYPES 16
 #define PNX_MAX_STR_ARGS 8
 #define PNX_MAX_STR_RESULTS 4
 
@@ -39,6 +40,22 @@ typedef struct pnx_host {
     uint32_t      flags;
     pnx_counts    counts;
 } pnx_host;
+
+// A kind of host object scripts can hold (pinax_handle_type).
+typedef struct pnx_handle_type {
+    char  name[32];
+    void (*close)(void *object, void *user);
+    void *user;
+} pnx_handle_type;
+
+// One slot of the handle table. A handle is the slot number plus one in the low 32 bits and
+// the slot's generation in the high 32; the generation is odd while the slot is in use.
+typedef struct pnx_handle_slot {
+    void    *object;
+    uint32_t generation, type; // type: number of its pnx_handle_type plus one
+    uint32_t next_free;        // free list: slot number plus one
+    uint32_t run;              // the run that opened it, so that a fault can close it
+} pnx_handle_slot;
 
 typedef struct pnx_global {
     uint8_t *ptr; // a buffer starts with its 64-bit length
@@ -91,6 +108,11 @@ struct pinax_state {
     void (*diag)(void *user, pinax_str file, uint32_t line, uint32_t column, pinax_str message);
     void *diag_user;
     uint8_t hash_key[16]; // of the lookup indexes; inside the block, so images carry it
+
+    pnx_handle_type  handle_types[PNX_MAX_HANDLE_TYPES];
+    pnx_handle_slot *handles;
+    uint32_t         n_handle_types, handle_slots, handle_free, handles_open, handles_peak;
+    uint32_t         run_serial; // counts runs; see pnx_handle_slot.run
 };
 
 // The instruction table as data: operand kinds, shape, second word (pinax_code.h).

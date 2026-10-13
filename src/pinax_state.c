@@ -180,8 +180,13 @@ pinax_err pinax_open(pinax_mem block, const pinax_config *config, pinax_state **
     st->sbank = st->ibank ? take(st, sizeof(pnx_scell) * st->str_slots, 16) : NULL;
     st->ctrl = st->sbank ? take(st, sizeof(pnx_frame) * st->depth_max, 16) : NULL;
     st->region = st->ctrl ? take(st, st->region_len, 16) : NULL;
-    if (!st->region)
+    st->handle_slots = config->handle_slots ? config->handle_slots : 64;
+    st->handles = st->region ? take(st, sizeof(pnx_handle_slot) * st->handle_slots, 16) : NULL;
+    if (!st->handles)
         return PINAX_ERR_NO_ROOM;
+    for (uint32_t k = 0; k < st->handle_slots; ++k) // every slot is free: slot k links to k + 1
+        st->handles[k].next_free = k + 1 < st->handle_slots ? k + 2 : 0;
+    st->handle_free = 1;
     for (unsigned k = 0; k < PNX_SEG_COUNT; ++k)
         st->segment[k] = empty_bytes;
     st->segment[PNX_SEG_REGION] = st->region;
@@ -190,8 +195,32 @@ pinax_err pinax_open(pinax_mem block, const pinax_config *config, pinax_state **
     return PINAX_OK;
 }
 
+// Gives a slot back and, when asked, tells the host through the type's close function.
+static void handle_drop(pinax_state *st, uint32_t slot, bool call_close) {
+    pnx_handle_slot *h = &st->handles[slot];
+    const pnx_handle_type *type = &st->handle_types[h->type - 1];
+    void *object = h->object;
+    ++h->generation; // even: free
+    h->object = NULL;
+    h->type = 0;
+    h->next_free = st->handle_free;
+    st->handle_free = slot + 1;
+    --st->handles_open;
+    if (call_close && type->close)
+        type->close(object, type->user);
+}
+
+// Closes every handle that is still open, or only those opened by run `run` (0: all).
+static void handles_close(pinax_state *st, uint32_t run) {
+    for (uint32_t k = 0; k < st->handle_slots; ++k) {
+        if (st->handles[k].type && (run == 0 || st->handles[k].run == run))
+            handle_drop(st, k, true);
+    }
+}
+
 void pinax_close(pinax_state *state) {
-    (void)state; // nothing outside the block to release in P0
+    if (state)
+        handles_close(state, 0);
 }
 
 size_t pinax_needed(const pinax_state *state) {
@@ -615,8 +644,10 @@ pinax_err pinax_find(pinax_state *st, const char *name, const char *signature, u
 
 static pinax_err deliver(pinax_state *st, pinax_err err, const pinax_args *results) {
     if (err != PINAX_OK) {
-        if (err != PINAX_SUSPENDED)
+        if (err != PINAX_SUSPENDED) {
             st->error_text = "the script ended with a fault or a failure";
+            handles_close(st, st->run_serial); // what this run opened and still holds
+        }
         return err;
     }
     const pnx_counts n = st->word_counts[st->top_word];
@@ -656,6 +687,8 @@ pinax_err pinax_run(pinax_state *st, pinax_word word, const pinax_args *args) {
         st->sbank[k] = (pnx_scell){PNX_SEG_HOST + k, (uint32_t)args->s[k].len, 0};
     }
     st->top_word = word;
+    if (++st->run_serial == 0)
+        st->run_serial = 1;
     st->pc = rec->entry;
     st->int_base = st->str_base = st->depth = 0;
     st->left = st->budget;
@@ -694,6 +727,7 @@ void pinax_stats_get(const pinax_state *st, pinax_stats *out) {
     __builtin_memset(out, 0, sizeof *out);
     out->struct_size = size;
     out->depth_peak = st->depth_peak;
+    out->handles_peak = st->handles_peak;
     out->instructions = st->instructions; // an upper bound, see CHECK
     out->block_bytes_used = st->used;
 }
@@ -739,23 +773,64 @@ void pinax_set_resolver(pinax_state *st, pinax_resolve_fn resolve, void *user) {
 
 pinax_err pinax_handle_type(pinax_state *st, const char *name, void (*close)(void *object, void *user),
                             void *user, uint32_t *out_type) {
-    (void)st, (void)name, (void)close, (void)user, (void)out_type;
-    return PINAX_ERR_STATE;
+    if (!st || !name || !out_type)
+        return PINAX_ERR_ARGUMENT;
+    if (st->head)
+        return fail(st, PINAX_ERR_STATE, "handle types must be given before code is loaded");
+    if (st->n_handle_types == PNX_MAX_HANDLE_TYPES)
+        return fail(st, PINAX_ERR_NO_ROOM, "too many handle types");
+    for (uint32_t k = 0; k < st->n_handle_types; ++k) {
+        if (text_equal(st->handle_types[k].name, name))
+            return fail(st, PINAX_ERR_ARGUMENT, "a handle type of this name exists");
+    }
+    pnx_handle_type *type = &st->handle_types[st->n_handle_types];
+    if (!copy_text(type->name, sizeof type->name, name))
+        return fail(st, PINAX_ERR_ARGUMENT, "handle type: the name is too long");
+    type->close = close;
+    type->user = user;
+    *out_type = ++st->n_handle_types;
+    return PINAX_OK;
+}
+
+// The slot a handle of this type names, or NULL when it is stale or of another type.
+static pnx_handle_slot *handle_slot(pinax_state *st, uint32_t type, pinax_handle handle) {
+    const uint32_t slot = (uint32_t)handle - 1;
+    if (!st || type == 0 || slot >= st->handle_slots)
+        return NULL;
+    pnx_handle_slot *h = &st->handles[slot];
+    return h->type == type && h->generation == (uint32_t)(handle >> 32) ? h : NULL;
 }
 
 pinax_err pinax_handle_new(pinax_state *st, uint32_t type, void *object, pinax_handle *out) {
-    (void)st, (void)type, (void)object, (void)out;
-    return PINAX_ERR_STATE;
+    if (!st || !out || type == 0 || type > st->n_handle_types)
+        return PINAX_ERR_ARGUMENT;
+    if (st->handle_free == 0)
+        return fail(st, PINAX_ERR_FULL, "the handle table is full (config.handle_slots)");
+    const uint32_t slot = st->handle_free - 1;
+    pnx_handle_slot *h = &st->handles[slot];
+    st->handle_free = h->next_free;
+    ++h->generation; // odd: in use
+    h->object = object;
+    h->type = type;
+    h->run = st->run_serial;
+    if (++st->handles_open > st->handles_peak)
+        st->handles_peak = st->handles_open;
+    *out = (uint64_t)h->generation << 32 | (slot + 1u);
+    return PINAX_OK;
 }
 
 void *pinax_handle_get(pinax_state *st, uint32_t type, pinax_handle handle) {
-    (void)st, (void)type, (void)handle;
-    return NULL;
+    const pnx_handle_slot *h = handle_slot(st, type, handle);
+    return h ? h->object : NULL;
 }
 
+// The host took the object back (it closes it itself); the handle is dead from now on.
 pinax_err pinax_handle_release(pinax_state *st, uint32_t type, pinax_handle handle) {
-    (void)st, (void)type, (void)handle;
-    return PINAX_ERR_STATE;
+    pnx_handle_slot *h = handle_slot(st, type, handle);
+    if (!h)
+        return st ? fail(st, PINAX_ERR_STALE, "the handle is not open") : PINAX_ERR_ARGUMENT;
+    handle_drop(st, (uint32_t)(h - st->handles), false);
+    return PINAX_OK;
 }
 
 pinax_err pinax_global_find(pinax_state *st, const char *name, pinax_global *out) {

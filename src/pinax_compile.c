@@ -38,6 +38,7 @@ enum { L_PLAIN, L_OWNS, L_MOVED }; // what a local holds of a value that must be
 #define FWD_MARK 0x80000000u // in a call: the number of a forward declaration, patched at the end
 #define TY_DISTINCT 0x4000u  // declared by `type`: this plus its number
 #define TY_BLOCK 0x2000u     // word (effect): this plus the number of the effect in comp.btypes
+#define TY_HANDLE 0x1800u    // a handle type of the host: this plus its number
 #define MAX_NESTED 4         // value blocks inside value blocks
 enum { USE_EACH, USE_FOLD, USE_TIMES, USE_COUNT, USE_ANY, USE_ALL, USE_FIRST, USE_EACH_INDEX };
 
@@ -333,7 +334,11 @@ static tid row_type(uint32_t index) {
 }
 
 static bool is_row(tid type) {
-    return type >= TY_FIRST_DECLARED && type < TY_BLOCK;
+    return type >= TY_FIRST_DECLARED && type < TY_HANDLE;
+}
+
+static bool is_handle(tid type) {
+    return type >= TY_HANDLE && type < TY_BLOCK;
 }
 
 static bool is_block(tid type) {
@@ -352,6 +357,8 @@ static uint32_t find_global(const comp *c, name n);
 static name type_name(const comp *c, tid type) {
     if (is_row(type))
         return ((const globalsym *)c->globals.ptr + (type - TY_FIRST_DECLARED))->name;
+    if (is_handle(type))
+        return cname(c->st->handle_types[type - TY_HANDLE].name);
     if (base_of(c, type) != type)
         return ((const dtype *)c->dtypes.ptr + ((type & ~TY_SBANK) - TY_DISTINCT))->name;
     return cname(type == TY_INT ? "int" : type == TY_BOOL ? "bool" : type == TY_ERR ? "err" : type == TY_MARK ? "mark" : "str");
@@ -381,6 +388,10 @@ static tid type_of_name(const comp *c, name n) {
         const dtype *d = (const dtype *)c->dtypes.ptr + k;
         if (name_eq(d->name, n))
             return (tid)((TY_DISTINCT + k) | (d->base & TY_SBANK));
+    }
+    for (uint32_t k = 0; k < c->st->n_handle_types; ++k) { // a type the host gave
+        if (name_is(n, c->st->handle_types[k].name))
+            return (tid)(TY_HANDLE + k);
     }
     const uint32_t g = find_global(c, n);
     if (g != NONE) {
