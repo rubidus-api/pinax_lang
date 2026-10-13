@@ -18,13 +18,17 @@
 #include "pinax_internal.h"
 #include "pinax_lex.h"
 
-enum { TY_NONE, TY_INT, TY_BOOL, TY_STR, TY_ERR, TY_STEM };
+// A type is a number. The built-in ones are fixed; declared ones (rows of a table, distinct
+// types) are entries of the compiler's type table. The bank a value lives in is part of the
+// number, so that it can be asked without the table.
+typedef uint16_t tid;
+#define TY_SBANK 0x8000u
+enum { TY_NONE, TY_INT, TY_BOOL, TY_ERR, TY_STEM, TY_STR = TY_SBANK | 5, TY_FIRST_DECLARED = 16 };
 enum { BANK_I, BANK_S, BANK_NONE };
 enum { E_SLOT, E_LOCAL, E_CONST, E_COND };
 enum { B_IF, B_LOOP, B_ORELSE, B_CASE, B_OF, B_DO };
 enum { STEM_RANGE, STEM_BYTES, STEM_TIMES };
 enum { USE_EACH, USE_FOLD, USE_TIMES };
-#define HIDDEN 0x80u // in a stack snapshot: the entry belongs to a running block, not to the code
 
 #define MAX_STACK 64
 #define MAX_BLOCKS 32
@@ -41,7 +45,8 @@ typedef struct name {
 } name;
 
 typedef struct entry {
-    uint8_t type, kind;
+    tid     type;
+    uint8_t kind;
     uint8_t reg;     // E_LOCAL: the local's register
     uint8_t op, a, b; // E_COND: branch instruction and its two fields (b: register or immediate)
                       // a stem: op is its kind
@@ -52,7 +57,7 @@ typedef struct entry {
 typedef struct sig {
     uint8_t n_in, n_out;
     bool    fails, named;
-    uint8_t in[MAX_PARAMS], out[MAX_PARAMS];
+    tid     in[MAX_PARAMS], out[MAX_PARAMS];
     name    in_name[MAX_PARAMS], out_name[MAX_PARAMS];
 } sig;
 
@@ -65,8 +70,17 @@ typedef struct wordsym {
 
 typedef struct local {
     name    name;
-    uint8_t type, reg;
+    tid     type;
+    uint8_t reg;
 } local;
+
+// The types of the stack at one moment; `hidden` marks the entries that belong to a running
+// block and not to the code.
+typedef struct shot {
+    tid      types[MAX_STACK];
+    uint64_t hidden;
+    uint8_t  depth;
+} shot;
 
 typedef struct block {
     uint8_t  kind;
@@ -77,16 +91,17 @@ typedef struct block {
     uint32_t else_jump;  // if: the jump taken when the condition is false
     uint32_t locals_mark;
     uint8_t  nloc_mark[2];
-    uint8_t  depth, out_depth;
-    uint8_t  types[MAX_STACK], out_types[MAX_STACK];
+    shot     in, out; // the stack when the block began; what a finished branch left
     // case
     uint32_t next_test;   // jump of the last test, taken when no value matched
-    uint8_t  subject, subject_type;
+    uint8_t  subject;
+    tid      subject_type;
     bool     has_otherwise;
     uint32_t n_values;
     int64_t  values[MAX_CASE]; // integers, or string constant numbers
     // do block of a combining word
-    uint8_t  use, stem, cur, lim, acc, acc_type, n_hidden;
+    uint8_t  use, stem, cur, lim, acc, n_hidden;
+    tid      acc_type;
     uint32_t floor_mark;
     name     user;       // the combining word that follows the block
 } block;
@@ -117,13 +132,13 @@ typedef struct fn {
 
 typedef struct constant {
     name     name;
-    uint8_t  type;
+    tid      type;
     int64_t  value; // integer, or the string constant number
 } constant;
 
 typedef struct globalsym {
-    name    name;
-    uint8_t type;
+    name name;
+    tid  type;
 } globalsym;
 
 typedef struct comp {
@@ -231,15 +246,15 @@ static name cname(const char *text) {
 
 // ---- types and signatures ---------------------------------------------------------------
 
-static int bank_of(uint8_t type) {
-    return type == TY_STR ? BANK_S : type == TY_STEM ? BANK_NONE : BANK_I;
+static int bank_of(tid type) {
+    return type == TY_STEM ? BANK_NONE : (type & TY_SBANK) ? BANK_S : BANK_I;
 }
 
-static const char *type_name(uint8_t type) {
+static const char *type_name(tid type) {
     return type == TY_INT ? "int" : type == TY_BOOL ? "bool" : type == TY_ERR ? "err" : "str";
 }
 
-static uint8_t type_of_name(name n) {
+static tid type_of_name(name n) {
     if (name_is(n, "int"))
         return TY_INT;
     if (name_is(n, "bool"))
@@ -293,7 +308,7 @@ static bool parse_sig(comp *c, sig *s) {
             if (!advance(c))
                 return false;
         }
-        const uint8_t t = type_of_name(type);
+        const tid t = type_of_name(type);
         if (t == TY_NONE)
             return type_error(c, name_is(type, "float") ? "float is not available: this build has no F bank"
                                                         : "this type is not known here");
@@ -494,7 +509,7 @@ static bool push(comp *c, entry e) {
     return true;
 }
 
-static bool push_slot(comp *c, uint8_t type) {
+static bool push_slot(comp *c, tid type) {
     if (!push(c, (entry){.type = type, .kind = E_SLOT}))
         return false;
     (void)slot_of(c, c->f->depth - 1); // counts the register
@@ -736,7 +751,7 @@ static bool name_is_free(comp *c, name n) {
 
 // ---- words of the core --------------------------------------------------------------------
 
-static bool move_slot(comp *c, uint8_t type, uint32_t to, uint32_t from) {
+static bool move_slot(comp *c, tid type, uint32_t to, uint32_t from) {
     return emit_def(c, PNX_ABC(type == TY_STR ? PNX_MOVS : PNX_MOVI, to, from, 0), bank_of(type)) != NONE;
 }
 
@@ -781,7 +796,7 @@ static bool stack_word(comp *c, int which) {
                 return false;
             const uint32_t lo = slot_of(c, f->depth - 2), hi = slot_of(c, f->depth - 1);
             const uint32_t spare = top_slot(c, bank_of(top->type), 1);
-            const uint8_t  t = top->type, u = under->type;
+            const tid      t = top->type, u = under->type;
             if (!move_slot(c, t, spare, hi) || !move_slot(c, u, hi, lo) || !move_slot(c, t, lo, spare))
                 return false;
         }
@@ -971,7 +986,7 @@ static bool push_results(comp *c, const sig *s, const uint32_t base[2], const ui
 
 static bool emit_return(comp *c);
 static block *open_block(comp *c, uint8_t kind);
-static void snapshot(const fn *f, uint8_t *types, uint8_t *depth);
+static void snapshot(const fn *f, shot *out);
 static bool name_is_free(comp *c, name n);
 
 // The word after a call that can fail (RFC-0008 section 7.2). The call has been emitted; the
@@ -1009,9 +1024,9 @@ static bool guard(comp *c, const sig *s, const uint32_t base[2], const uint32_t 
     block *b = open_block(c, B_ORELSE);
     if (!b)
         return false;
-    snapshot(f, b->out_types, &b->out_depth);
+    snapshot(f, &b->out);
     b->has_out = true;
-    b->depth = (uint8_t)before;
+    b->in.depth = (uint8_t)before;
     f->depth = before;
     if (!jump_later(c, &b->exits))
         return false;
@@ -1204,23 +1219,27 @@ static bool store(comp *c) {
 
 // ---- control ------------------------------------------------------------------------------
 
-static void snapshot(const fn *f, uint8_t *types, uint8_t *depth) {
-    for (uint32_t k = 0; k < f->depth; ++k)
-        types[k] = (uint8_t)(f->stack[k].type | (f->stack[k].hidden ? HIDDEN : 0));
-    *depth = (uint8_t)f->depth;
+static void snapshot(const fn *f, shot *out) {
+    out->hidden = 0;
+    for (uint32_t k = 0; k < f->depth; ++k) {
+        out->types[k] = f->stack[k].type;
+        if (f->stack[k].hidden)
+            out->hidden |= (uint64_t)1 << k;
+    }
+    out->depth = (uint8_t)f->depth;
 }
 
-static void restore(fn *f, const uint8_t *types, uint8_t depth) {
-    for (uint32_t k = 0; k < depth; ++k)
-        f->stack[k] = (entry){.type = (uint8_t)(types[k] & ~HIDDEN), .kind = E_SLOT, .hidden = (types[k] & HIDDEN) != 0};
-    f->depth = depth;
+static void restore(fn *f, const shot *from) {
+    for (uint32_t k = 0; k < from->depth; ++k)
+        f->stack[k] = (entry){.type = from->types[k], .kind = E_SLOT, .hidden = (from->hidden >> k & 1u) != 0};
+    f->depth = from->depth;
 }
 
-static bool same_stack(const fn *f, const uint8_t *types, uint8_t depth) {
-    if (f->depth != depth)
+static bool same_stack(const fn *f, const shot *as) {
+    if (f->depth != as->depth)
         return false;
-    for (uint32_t k = 0; k < depth; ++k) {
-        if (f->stack[k].type != (types[k] & ~HIDDEN))
+    for (uint32_t k = 0; k < as->depth; ++k) {
+        if (f->stack[k].type != as->types[k])
             return false;
     }
     return true;
@@ -1239,7 +1258,7 @@ static block *open_block(comp *c, uint8_t kind) {
     b->locals_mark = f->n_locals;
     b->nloc_mark[0] = f->nloc[0];
     b->nloc_mark[1] = f->nloc[1];
-    snapshot(f, b->types, &b->depth);
+    snapshot(f, &b->in);
     return b;
 }
 
@@ -1282,14 +1301,14 @@ static bool do_else(comp *c) {
     if (!f->dead) {
         if (!settle_all(c))
             return false;
-        snapshot(f, b->out_types, &b->out_depth);
+        snapshot(f, &b->out);
         b->has_out = true;
         if (!jump_later(c, &b->exits))
             return false;
     }
     land(c, &b->else_jump);
     close_scope(f, b);
-    restore(f, b->types, b->depth);
+    restore(f, &b->in);
     f->dead = false;
     b->has_else = true;
     return advance(c);
@@ -1300,15 +1319,15 @@ static bool end_if(comp *c, block *b) {
     if (!f->dead) {
         if (!settle_all(c))
             return false;
-        if (b->has_out ? !same_stack(f, b->out_types, b->out_depth)
-                       : !b->has_else && !same_stack(f, b->types, b->depth))
+        if (b->has_out ? !same_stack(f, &b->out)
+                       : !b->has_else && !same_stack(f, &b->in))
             return type_error(c, b->has_else ? "the two branches of this if leave different stacks"
                                              : "an if without else must leave the stack as it found it");
     } else if (b->has_out) {
-        restore(f, b->out_types, b->out_depth);
+        restore(f, &b->out);
         f->dead = false;
     } else if (!b->has_else) {
-        restore(f, b->types, b->depth);
+        restore(f, &b->in);
         f->dead = false;
     }
     land(c, &b->else_jump);
@@ -1398,7 +1417,7 @@ static bool do_leave(comp *c, pnx_word_id which) {
         cond_negate(&cond); // leave when the condition is false
     if (!settle_all(c))
         return false;
-    if (!same_stack(f, target->types, target->depth))
+    if (!same_stack(f, &target->in))
         return error_at(c, PINAX_ERR_TYPE, at.line, at.column,
                         "where a loop is left the stack must be as it was when the loop began");
     target->targeted = true;
@@ -1416,7 +1435,7 @@ static bool end_loop(comp *c, block *b) {
     if (!f->dead) {
         if (!settle_all(c))
             return false;
-        if (!same_stack(f, b->types, b->depth))
+        if (!same_stack(f, &b->in))
             return type_error(c, "one turn of a loop must leave the stack as it found it");
         uint32_t n = f->code.n - b->head + 2;
         if (n > 0xffffu)
@@ -1431,7 +1450,7 @@ static bool end_loop(comp *c, block *b) {
     }
     land(c, &b->exits);
     close_scope(f, b);
-    restore(f, b->types, b->depth);
+    restore(f, &b->in);
     f->dead = !b->targeted; // a loop nothing leaves never ends (D0022)
     --f->n_blocks;
     return true;
@@ -1485,10 +1504,10 @@ static bool end_orelse(comp *c, block *b) {
     if (!f->dead) {
         if (!settle_all(c))
             return false;
-        if (!same_stack(f, b->out_types, b->out_depth))
+        if (!same_stack(f, &b->out))
             return type_error(c, "the body of or_else must leave what the word would have given, or leave");
     }
-    restore(f, b->out_types, b->out_depth);
+    restore(f, &b->out);
     f->dead = false;
     land(c, &b->exits);
     close_scope(f, b);
@@ -1505,7 +1524,7 @@ static bool do_case(comp *c) {
     fn *f = c->f;
     if (!need(c, 1))
         return false;
-    const uint8_t type = f->stack[f->depth - 1].type;
+    const tid type = f->stack[f->depth - 1].type;
     if (type != TY_INT && type != TY_STR && type != TY_ERR)
         return type_error(c, "case compares an int, an err or a str");
     if (!settle(c, f->depth - 1))
@@ -1526,7 +1545,7 @@ static bool err_constant(name n, int64_t *value);
 
 // One value of a case branch; the current token is the value.
 static bool case_value(comp *c, block *b, int64_t *value) {
-    uint8_t type = TY_NONE;
+    tid type = TY_NONE;
     const name n = tok_name(c);
     switch (c->tok.kind) {
     case PNX_T_INT:
@@ -1610,7 +1629,7 @@ static bool case_item(comp *c) {
         if (!b->has_otherwise && emit(c, PNX_ABX(PNX_FAULT, 0, PINAX_ERR_RANGE)) == NONE)
             return false; // no branch matched: a fault (RFC-0008 section 5.7)
         if (b->has_out) {
-            restore(f, b->out_types, b->out_depth);
+            restore(f, &b->out);
             f->dead = false;
         } else {
             f->dead = true;
@@ -1667,10 +1686,10 @@ static bool end_of(comp *c, block *b) {
         if (!settle_all(c))
             return false;
         if (parent->has_out) {
-            if (!same_stack(f, parent->out_types, parent->out_depth))
+            if (!same_stack(f, &parent->out))
                 return type_error(c, "the branches of this case leave different stacks");
         } else {
-            snapshot(f, parent->out_types, &parent->out_depth);
+            snapshot(f, &parent->out);
             parent->has_out = true;
         }
         if (!jump_later(c, &parent->exits))
@@ -1678,7 +1697,7 @@ static bool end_of(comp *c, block *b) {
     }
     close_scope(f, b);
     --f->n_blocks;
-    restore(f, parent->types, parent->depth);
+    restore(f, &parent->in);
     f->dead = false;
     return true;
 }
@@ -1714,7 +1733,7 @@ static bool do_cat(comp *c) {
             return syntax(c, "something opened inside this item of cat is not closed");
         if (f->dead || f->depth != before + 1)
             return type_error(c, "each item of cat leaves exactly one value");
-        const uint8_t type = f->stack[before].type;
+        const tid type = f->stack[before].type;
         if (type != TY_STR && type != TY_INT && type != TY_BOOL)
             return type_error(c, "cat joins str, int and bool values");
         if (!settle(c, before))
@@ -1728,7 +1747,7 @@ static bool do_cat(comp *c) {
     if (emit(c, PNX_ABC(PNX_RMARK, scratch, 0, 0)) == NONE)
         return false;
     for (uint32_t k = first; k < f->depth; ++k) {
-        const uint8_t type = f->stack[k].type;
+        const tid type = f->stack[k].type;
         const uint32_t op = type == TY_STR ? PNX_RCATS : type == TY_INT ? PNX_RCATI : PNX_RCATB;
         if (emit(c, PNX_ABC(op, scratch, slot_of(c, k), 0)) == NONE)
             return false;
@@ -1815,7 +1834,7 @@ static bool loop_back(comp *c, uint32_t head, uint32_t cur, int step) {
     return true;
 }
 
-static local *new_local(comp *c, name n, uint8_t type) {
+static local *new_local(comp *c, name n, tid type) {
     fn *f = c->f;
     const int bank = bank_of(type);
     if (n.length && !name_is_free(c, n))
@@ -1869,7 +1888,7 @@ static bool do_block(comp *c) {
         return error_at(c, PINAX_ERR_SYNTAX, at.line, at.column,
                         "this block is used by a word the compiler does not expand yet");
     }
-    const uint8_t element = TY_INT; // ranges and bytes give int
+    const tid element = TY_INT; // ranges and bytes give int
     uint32_t      init = NONE;
     if (use == USE_EACH) {
         if (bs.n_out || bs.n_in > 1 || (bs.n_in == 1 && bs.in[0] != element))
@@ -1878,7 +1897,7 @@ static bool do_block(comp *c) {
         init = f->depth - hidden - 1;
         if (f->depth - f->floor < (uint32_t)hidden + 1 || f->stack[init].type == TY_STEM)
             return error_at(c, PINAX_ERR_TYPE, at.line, at.column, "fold takes a first value before the stem");
-        const uint8_t acc = f->stack[init].type;
+        const tid acc = f->stack[init].type;
         if (bs.n_in != 2 || !bs.named || bs.n_out != 1 || bs.in[0] != acc || bs.out[0] != acc || bs.in[1] != element)
             return error_at(c, PINAX_ERR_TYPE, at.line, at.column,
                             "the block of fold is (acc U, x T gives U): U the first value's type, T the element's");
@@ -1927,14 +1946,14 @@ static bool end_do(comp *c, block *b) {
     fn *f = c->f;
     if (!f->dead) {
         if (b->use == USE_FOLD) {
-            if (f->depth != (uint32_t)b->depth + 1 || f->stack[f->depth - 1].type != b->acc_type)
+            if (f->depth != (uint32_t)b->in.depth + 1 || f->stack[f->depth - 1].type != b->acc_type)
                 return type_error(c, "the block of fold leaves the new value of its first parameter");
             if (!write_reg(c, b->acc))
                 return false;
         }
         if (!settle_all(c))
             return false;
-        if (!same_stack(f, b->types, b->depth))
+        if (!same_stack(f, &b->in))
             return type_error(c, "this block must leave the stack as it found it");
         if (!loop_back(c, b->head, b->cur, b->use == USE_TIMES ? -1 : 1))
             return false;
@@ -1944,7 +1963,7 @@ static bool end_do(comp *c, block *b) {
     f->floor = b->floor_mark;
     const block done = *b;
     --f->n_blocks;
-    restore(f, done.types, done.depth);
+    restore(f, &done.in);
     f->dead = false;
     f->depth -= done.n_hidden;
     if (done.use == USE_FOLD) {
