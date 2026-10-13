@@ -4905,7 +4905,8 @@ static bool compile(comp *c, image *im, bool *has_top) {
                 return c->err == PINAX_OK ? syntax(c, "export stands once, before a definition or a declaration") : false;
             static const pnx_word_id may[] = {PNX_KW_word,  PNX_KW_const,  PNX_KW_global, PNX_KW_array, PNX_KW_list,
                                               PNX_KW_queue, PNX_KW_pool,   PNX_KW_type,   PNX_KW_buffer,
-                                              PNX_KW_index, PNX_KW_record, PNX_KW_forward, PNX_KW_bound};
+                                              PNX_KW_index, PNX_KW_record, PNX_KW_forward, PNX_KW_bound,
+                                              PNX_KW_row};
             bool ok = false;
             for (uint32_t k = 0; k < sizeof may / sizeof may[0]; ++k)
                 ok = ok || is_word(c, may[k]);
@@ -5001,6 +5002,7 @@ static bool compile(comp *c, image *im, bool *has_top) {
             return false;
         __builtin_memset(w, 0, sizeof *w);
         w->name = cname(LOAD_WORD);
+        w->module = c->module;
         w->entry = im->code.n;
         if (!finish_registers(c, top, w->cells) || !append_code(c, im, top))
             return false;
