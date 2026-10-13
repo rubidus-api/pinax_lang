@@ -5026,16 +5026,20 @@ static bool compile(comp *c, image *im, bool *has_top) {
             // the declaration has storage of its own, so nothing is ever unbacked
             if (!advance(c))
                 return false;
-            const bool scalar = is_word(c, PNX_KW_global);
-            if (!scalar && !is_word(c, PNX_KW_array))
-                return syntax(c, is_word(c, PNX_KW_buffer) ? "a bound buffer is not supported yet"
-                                                           : "bound stands before global, array or buffer");
-            if (scalar ? !declare_global(c) : !declare_collection(c, GK_ARRAY))
+            const bool scalar = is_word(c, PNX_KW_global), bytes = is_word(c, PNX_KW_buffer);
+            if (!scalar && !bytes && !is_word(c, PNX_KW_array))
+                return syntax(c, "bound stands before global, array or buffer");
+            pnx_lexer peek = *c->lx; // the name follows; the declaration may fill a slot announced earlier
+            pnx_token named;
+            if (!pnx_lex_next(&peek, &named))
+                named.length = 0;
+            const name bound_name = {c->lx->source + named.start, named.length};
+            if (scalar ? !declare_global(c) : bytes ? !declare_buffer(c) : !declare_collection(c, GK_ARRAY))
                 return false;
-            globalsym *g = (globalsym *)c->globals.ptr + (c->globals.n - 1);
-            if (g->record != NONE || g->strcap || bank_of(g->type) != BANK_I)
-                return type_error(c, "bound storage holds int, bool or err values for now");
-            g->bound = true;
+            const uint32_t gi = find_global(c, bound_name);
+            if (gi == NONE)
+                return syntax(c, "bound stands before global, array or buffer");
+            ((globalsym *)c->globals.ptr + gi)->bound = true;
         } else if (is_word(c, PNX_KW_extern) && !c->top_fn->n_blocks) {
             if (c->data_only)
                 return syntax(c, "a data source names no C functions");
@@ -5415,8 +5419,8 @@ static bool module_name(const char *file, size_t *length) {
 pinax_err pinax_load(pinax_state *st, const char *file, pinax_str source, uint32_t mode) {
     if (!st || (!source.ptr && source.len))
         return PINAX_ERR_ARGUMENT;
-    if (st->suspended) {
-        st->error_text = "a run is suspended; finish it before loading";
+    if (st->suspended || st->in_host) {
+        st->error_text = "a run is suspended or a host word is running; finish it before loading";
         return PINAX_ERR_STATE;
     }
     if (st->head && !st->symbols) {

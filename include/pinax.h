@@ -191,8 +191,12 @@ PINAX_API pinax_err pinax_handle_release(pinax_state *state, uint32_t type, pina
 
 /* ---- host memory as globals --------------------------------------------------------- */
 
-/* Gives the storage of a global the script declares `bound`. Checked against the declaration
- * at load; bind again after pinax_image_open(). The memory must outlive the state. */
+/* Gives the storage of a global the script declares `bound`: a scalar, an array (of integers,
+ * of str(N), of records) or a buffer. `bytes` must be the declared size. A buffer's memory
+ * begins with its length, a uint64_t, and its declared bytes follow (so `bound buffer b 100`
+ * takes 108 bytes); the length found there at binding must not exceed the declared size.
+ * Until a global is bound it has storage of its own. Bind again after pinax_image_open(). The
+ * memory must outlive the state. */
 PINAX_API pinax_err pinax_bind(pinax_state *state, const char *global, void *memory, size_t bytes);
 
 /* Where a declared global lives, to read or write it in place between calls. */
@@ -256,7 +260,10 @@ typedef struct pinax_word_info {
 PINAX_API pinax_err pinax_word_at(const pinax_state *state, uint32_t index, pinax_word_info *out);
 
 /* Runs a word. args->i/s/f are the inputs; results are written through ri/rs/rf and stay
- * valid until the next call on this state. PINAX_SUSPENDED and PINAX_WAITING are not failures. */
+ * valid until the next call on this state. PINAX_SUSPENDED and PINAX_WAITING are not failures.
+ * From inside a host word the word runs to its end before pinax_run() returns: when the
+ * instruction budget runs out there the answer is PINAX_ERR_INTERRUPTED, and the host word
+ * should pass it on. */
 PINAX_API pinax_err pinax_run(pinax_state *state, pinax_word word, const pinax_args *args);
 /* Continues after PINAX_SUSPENDED, or after pinax_complete() following PINAX_WAITING. results is
  * where the outputs of the original pinax_run() land; pass the same pointers again. */

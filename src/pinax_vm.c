@@ -39,7 +39,15 @@ static pinax_err host_call(pinax_state *st, const pnx_host *h, int64_t *ia, pnx_
     }
     pinax_args args = {ia, ia + n.int_args, sv, rs, NULL, NULL};
     pinax_call call = {st};
+    // where a word run from inside this host word may put its window
+    const uint32_t itop = st->host_itop, stop = st->host_stop;
+    st->host_itop = (uint32_t)(ia - st->ibank) + n.int_args + n.int_results;
+    st->host_stop = (uint32_t)(sa - st->sbank) + n.str_args + n.str_results;
+    ++st->in_host;
     pinax_err err = h->fn(&call, h->user, &args);
+    --st->in_host;
+    st->host_itop = itop;
+    st->host_stop = stop;
     *fault = false;
     if (err != PINAX_OK) {
         if (err < PINAX_ERR_FAILED) { // suspending or pending host words are not in P0
@@ -84,6 +92,7 @@ pinax_err pnx_execute(pinax_state *st) {
     const uint32_t *const code = st->code;
     const uint32_t *pc = code + st->pc;
     uint32_t ibase = st->int_base, sbase = st->str_base, depth = st->depth;
+    const uint32_t floor = st->depth_floor;
     int64_t *R = st->ibank + ibase;
     pnx_scell *S = st->sbank + sbase;
     const uint64_t budget = st->budget;
@@ -305,6 +314,10 @@ pinax_err pnx_execute(pinax_state *st) {
             st->ctrl[depth++] = (pnx_frame){(uint32_t)(pc - code), ibase, sbase, 0};
             if (depth > st->depth_peak)
                 st->depth_peak = depth;
+            if (new_ibase + callee->int_cells > st->int_peak)
+                st->int_peak = new_ibase + callee->int_cells;
+            if (new_sbase + callee->str_cells > st->str_peak)
+                st->str_peak = new_sbase + callee->str_cells;
             ibase = new_ibase;
             sbase = new_sbase;
             R = st->ibank + ibase;
@@ -330,6 +343,10 @@ pinax_err pnx_execute(pinax_state *st) {
             st->ctrl[depth++] = (pnx_frame){(uint32_t)(pc - code), ibase, sbase, 0};
             if (depth > st->depth_peak)
                 st->depth_peak = depth;
+            if (new_ibase + callee->int_cells > st->int_peak)
+                st->int_peak = new_ibase + callee->int_cells;
+            if (new_sbase + callee->str_cells > st->str_peak)
+                st->str_peak = new_sbase + callee->str_cells;
             ibase = new_ibase;
             sbase = new_sbase;
             R = st->ibank + ibase;
@@ -341,11 +358,15 @@ pinax_err pnx_execute(pinax_state *st) {
             const pnx_wordrec *callee = &st->words[*pc++];
             if (ibase + callee->int_cells > st->int_slots || sbase + callee->str_cells > st->str_slots)
                 FAULT(PINAX_ERR_DEPTH);
+            if (ibase + callee->int_cells > st->int_peak)
+                st->int_peak = ibase + callee->int_cells;
+            if (sbase + callee->str_cells > st->str_peak)
+                st->str_peak = sbase + callee->str_cells;
             pc = code + callee->entry;
             NEXT();
         }
         CASE(RET) {
-            if (depth == 0)
+            if (depth == floor)
                 goto finished;
             const pnx_frame f = st->ctrl[--depth];
             pc = code + f.pc;
@@ -356,7 +377,7 @@ pinax_err pnx_execute(pinax_state *st) {
             NEXT();
         }
         CASE(RETOK) { // success of a word that may fail: skip the caller's failure word
-            if (depth == 0)
+            if (depth == floor)
                 goto finished;
             const pnx_frame f = st->ctrl[--depth];
             pc = code + f.pc + 1;
@@ -376,7 +397,7 @@ pinax_err pnx_execute(pinax_state *st) {
         }
         CASE(RETF) {
         fail_return:
-            if (depth == 0)
+            if (depth == floor)
                 FAULT(st->fail);
             const pnx_frame f = st->ctrl[--depth];
             pc = code + f.pc; // the caller's failure word
@@ -388,7 +409,10 @@ pinax_err pnx_execute(pinax_state *st) {
         }
         CASE(HCALL) {
             bool fault;
+            st->depth = depth; // a word run from inside the host word goes on from here
+            st->left = left;
             const pinax_err err = host_call(st, st->imports[*pc], R + OP_A(w), S + OP_B(w), &fault);
+            left = st->left;
             ++pc;
             if (err != PINAX_OK)
                 FAULT(err);
@@ -396,7 +420,10 @@ pinax_err pnx_execute(pinax_state *st) {
         }
         CASE(HCALLF) {
             bool fault;
+            st->depth = depth;
+            st->left = left;
             const pinax_err err = host_call(st, st->imports[*pc], R + OP_A(w), S + OP_B(w), &fault);
+            left = st->left;
             ++pc;
             if (err == PINAX_OK)
                 ++pc;
@@ -445,12 +472,16 @@ suspended:
     st->left = 0;
     st->instructions += count;
     st->suspended = true;
+    if (st->region_used > st->region_peak)
+        st->region_peak = st->region_used;
     return PINAX_SUSPENDED;
 
 finished:
     st->left = left;
     st->instructions += count;
     st->suspended = false;
-    st->depth = 0;
+    st->depth = floor;
+    if (st->region_used > st->region_peak)
+        st->region_peak = st->region_used;
     return result;
 }

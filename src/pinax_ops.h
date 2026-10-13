@@ -777,6 +777,8 @@ PNX_OP(RCUT) {
     const uint64_t top = (uint64_t)R[OP_A(w)];
     if (top > st->region_used)
         return PINAX_ERR_RANGE;
+    if (st->region_used > st->region_peak)
+        st->region_peak = st->region_used;
     st->region_used = (uint32_t)top;
     return PNX_R_OK;
 }

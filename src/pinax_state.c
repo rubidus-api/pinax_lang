@@ -756,6 +756,66 @@ static pinax_err deliver(pinax_state *st, pinax_err err, const pinax_args *resul
     return PINAX_OK;
 }
 
+// A word run from inside a host word (the host word was itself called by a running word). The
+// word gets its window above the slots of that call and runs to its end here: it cannot be
+// suspended, since the C stack of the host word is in the way.
+static pinax_err run_nested(pinax_state *st, pinax_word word, const pinax_args *args) {
+    const pnx_wordrec *rec = &st->words[word];
+    const pnx_counts n = st->word_counts[word];
+    const uint32_t ibase = st->host_itop, sbase = st->host_stop;
+    if (st->depth == st->depth_max || ibase + rec->int_cells > st->int_slots ||
+        sbase + rec->str_cells > st->str_slots)
+        return fail(st, PINAX_ERR_DEPTH, "the word's window does not fit the banks");
+    for (uint32_t k = 0; k < n.int_args; ++k)
+        st->ibank[ibase + k] = args->i[k];
+    for (uint32_t k = 0; k < n.str_args; ++k) { // the bytes move into the region: they may not outlive the call
+        if (args->s[k].len > UINT32_MAX)
+            return fail(st, PINAX_ERR_ARGUMENT, "a string argument is longer than 4 GiB");
+        uint8_t *copy = pnx_region_alloc(st, args->s[k].len);
+        if (!copy)
+            return fail(st, PINAX_ERR_FULL, "the region has no room for the string arguments");
+        if (args->s[k].len)
+            __builtin_memcpy(copy, args->s[k].ptr, args->s[k].len);
+        st->sbank[sbase + k] = (pnx_scell){PNX_SEG_REGION, (uint32_t)args->s[k].len, (uint64_t)(copy - st->region)};
+    }
+    if (ibase + rec->int_cells > st->int_peak)
+        st->int_peak = ibase + rec->int_cells;
+    if (sbase + rec->str_cells > st->str_peak)
+        st->str_peak = sbase + rec->str_cells;
+    const uint32_t pc = st->pc, int_base = st->int_base, str_base = st->str_base, floor = st->depth_floor;
+    const uint32_t depth = st->depth;
+    const pinax_err outer_fail = st->fail;
+    st->pc = rec->entry;
+    st->int_base = ibase;
+    st->str_base = sbase;
+    st->depth_floor = depth;
+    st->fail = PINAX_ERR_FAILED;
+    pinax_err err = pnx_execute(st);
+    if (err == PINAX_SUSPENDED) { // the budget ran out: this run ends, and the host word says so
+        st->suspended = false;
+        st->error_text = "the instruction budget ran out in a word run from a host word";
+        err = PINAX_ERR_INTERRUPTED;
+    }
+    st->pc = pc;
+    st->int_base = int_base;
+    st->str_base = str_base;
+    st->depth_floor = floor;
+    st->depth = depth;
+    st->fail = outer_fail;
+    if (err != PINAX_OK)
+        return err;
+    if ((n.int_results && !(args && args->ri)) || (n.str_results && !(args && args->rs)))
+        return fail(st, PINAX_ERR_ARGUMENT, "no place given for the results");
+    for (uint32_t k = 0; k < n.int_results; ++k)
+        args->ri[k] = st->ibank[ibase + k];
+    for (uint32_t k = 0; k < n.str_results; ++k) {
+        const pnx_scell cell = st->sbank[sbase + k];
+        args->rs[k].ptr = st->segment[cell.segment] + cell.offset;
+        args->rs[k].len = cell.length;
+    }
+    return PINAX_OK;
+}
+
 pinax_err pinax_run(pinax_state *st, pinax_word word, const pinax_args *args) {
     if (!st)
         return PINAX_ERR_ARGUMENT;
@@ -767,9 +827,17 @@ pinax_err pinax_run(pinax_state *st, pinax_word word, const pinax_args *args) {
     const pnx_counts n = st->word_counts[word];
     if ((n.int_args && !(args && args->i)) || (n.str_args && !(args && args->s)))
         return fail(st, PINAX_ERR_ARGUMENT, "arguments missing");
+    if (st->in_host)
+        return run_nested(st, word, args);
     if (rec->int_cells > st->int_slots || rec->str_cells > st->str_slots)
         return fail(st, PINAX_ERR_DEPTH, "the word's window does not fit the banks");
 
+    if (st->region_used > st->region_peak)
+        st->region_peak = st->region_used;
+    if (rec->int_cells > st->int_peak)
+        st->int_peak = rec->int_cells;
+    if (rec->str_cells > st->str_peak)
+        st->str_peak = rec->str_cells;
     st->region_used = 0; // results of the previous run end here
     st->host_segments = n.str_args;
     for (uint32_t k = 0; k < n.int_args; ++k)
@@ -784,7 +852,7 @@ pinax_err pinax_run(pinax_state *st, pinax_word word, const pinax_args *args) {
     if (++st->run_serial == 0)
         st->run_serial = 1;
     st->pc = rec->entry;
-    st->int_base = st->str_base = st->depth = 0;
+    st->int_base = st->str_base = st->depth = st->depth_floor = 0;
     st->left = st->budget;
     st->charge = 0;
     st->fail = PINAX_ERR_FAILED;
@@ -794,7 +862,7 @@ pinax_err pinax_run(pinax_state *st, pinax_word word, const pinax_args *args) {
 pinax_err pinax_resume(pinax_state *st, const pinax_args *results) {
     if (!st)
         return PINAX_ERR_ARGUMENT;
-    if (!st->suspended)
+    if (!st->suspended || st->in_host)
         return fail(st, PINAX_ERR_STATE, "nothing is suspended");
     st->left = st->budget > st->owed ? st->budget : st->owed;
     st->owed = 0;
@@ -822,6 +890,9 @@ void pinax_stats_get(const pinax_state *st, pinax_stats *out) {
     __builtin_memset(out, 0, sizeof *out);
     out->struct_size = size;
     out->depth_peak = st->depth_peak;
+    out->int_slots_peak = st->int_peak;
+    out->str_slots_peak = st->str_peak;
+    out->region_bytes_peak = st->region_used > st->region_peak ? st->region_used : st->region_peak;
     out->handles_peak = st->handles_peak;
     out->instructions = st->instructions; // an upper bound, see CHECK
     out->block_bytes_used = st->used;
@@ -829,7 +900,9 @@ void pinax_stats_get(const pinax_state *st, pinax_stats *out) {
 
 // ---- host memory as globals ---------------------------------------------------------------
 
-// P0: scalars and integer arrays only. A bound buffer would need a segment of its own.
+// The storage of a global declared `bound`: a scalar, an array (of integers, of str(N), of
+// records) or a buffer. A buffer's memory begins with its length, a uint64_t, and its declared
+// bytes follow.
 pinax_err pinax_bind(pinax_state *st, const char *global, void *memory, size_t bytes) {
     if (!st || !global || !memory)
         return PINAX_ERR_ARGUMENT;
@@ -840,10 +913,22 @@ pinax_err pinax_bind(pinax_state *st, const char *global, void *memory, size_t b
         if (!text_equal(recs[k].name, global))
             continue;
         pnx_global *g = &st->globals[k];
-        if (g->kind != PNX_G_INT && g->kind != PNX_G_ARRAY)
-            return fail(st, PINAX_ERR_STATE, "P0 binds integers and integer arrays only");
-        if (bytes != (size_t)g->capacity * 8)
+        if (recs[k].reserved != 2)
+            return fail(st, PINAX_ERR_STATE, "the script did not declare this global bound");
+        const size_t want = g->kind == PNX_G_INT || g->kind == PNX_G_ARRAY ? (size_t)g->capacity * 8
+                            : g->kind == PNX_G_TABLE                       ? (size_t)g->capacity * g->elem_bytes
+                            : g->kind == PNX_G_BUFFER                      ? (size_t)g->capacity + 8
+                                                                           : 0;
+        if (!want)
+            return fail(st, PINAX_ERR_STATE, "a global of this kind cannot be bound");
+        if (bytes != want)
             return fail(st, PINAX_ERR_ARGUMENT, "the memory does not have the declared size");
+        if (g->kind == PNX_G_BUFFER) { // a length the host left there must fit
+            uint64_t used;
+            __builtin_memcpy(&used, memory, 8);
+            if (used > g->capacity)
+                return fail(st, PINAX_ERR_ARGUMENT, "the buffer's length is more than its declared size");
+        }
         g->ptr = memory;
         return PINAX_OK;
     }

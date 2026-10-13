@@ -124,6 +124,10 @@ struct pinax_state {
     uint64_t charge; // bytes scanned by string words since the last CHECK; 16 of them count as one instruction
     uint32_t owed; // cost of the CHECK a run was suspended at
     uint32_t pc, int_base, str_base, depth, depth_peak;
+    uint32_t depth_floor;          // the depth at which the running word returns to the host
+    uint32_t int_peak, str_peak, region_peak;
+    uint32_t in_host;              // host words running now, one inside the other
+    uint32_t host_itop, host_stop; // the first slots free above the host word running now
     uint32_t top_word;
     bool     suspended;
     bool     loading;   // the suspended run is the code outside definitions of a load
