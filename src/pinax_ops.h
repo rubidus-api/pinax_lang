@@ -624,6 +624,124 @@ PNX_OP(PALIVE) {
     return PNX_R_OK;
 }
 
+PNX_OP(SETFAIL) { st->fail = (pinax_err)OP_BX(w); return PNX_R_OK; }
+
+// ---- the other integer words --------------------------------------------------------------
+
+#define PNX_BIN(name, expr)                                                                        \
+    PNX_OP(name) {                                                                                 \
+        const int64_t a = R[OP_B(w)], b = R[OP_C(w)];                                              \
+        (void)a, (void)b;                                                                          \
+        R[OP_A(w)] = (expr);                                                                       \
+        return PNX_R_OK;                                                                           \
+    }
+#define PNX_UN(name, expr)                                                                         \
+    PNX_OP(name) {                                                                                 \
+        const int64_t a = R[OP_B(w)];                                                              \
+        R[OP_A(w)] = (expr);                                                                       \
+        return PNX_R_OK;                                                                           \
+    }
+
+PNX_INLINE int64_t pnx_sat(int64_t a, int64_t b, int op) {
+    int64_t r;
+    const bool over = op == 0 ? ckd_add(&r, a, b) : op == 1 ? ckd_sub(&r, a, b) : ckd_mul(&r, a, b);
+    if (!over)
+        return r;
+    const bool negative = op == 0 ? a < 0 : op == 1 ? a < 0 : (a < 0) != (b < 0);
+    return negative ? INT64_MIN : INT64_MAX;
+}
+// The upper 64 bits of the 128-bit product, from 32-bit halves (no wider type is assumed).
+PNX_INLINE uint64_t pnx_umulhi(uint64_t a, uint64_t b) {
+    const uint64_t al = (uint32_t)a, ah = a >> 32, bl = (uint32_t)b, bh = b >> 32;
+    const uint64_t ll = al * bl, lh = al * bh, hl = ah * bl, hh = ah * bh;
+    const uint64_t mid = (ll >> 32) + (uint32_t)lh + (uint32_t)hl;
+    return hh + (lh >> 32) + (hl >> 32) + (mid >> 32);
+}
+PNX_INLINE int64_t pnx_mulhi(int64_t a, int64_t b) {
+    uint64_t hi = pnx_umulhi((uint64_t)a, (uint64_t)b);
+    if (a < 0)
+        hi -= (uint64_t)b;
+    if (b < 0)
+        hi -= (uint64_t)a;
+    return (int64_t)hi;
+}
+
+PNX_BIN(SATADD, pnx_sat(a, b, 0))
+PNX_BIN(SATSUB, pnx_sat(a, b, 1))
+PNX_BIN(SATMUL, pnx_sat(a, b, 2))
+PNX_BIN(ROTL, (int64_t)((uint64_t)a << (b & 63) | (uint64_t)a >> ((64 - (b & 63)) & 63)))
+PNX_BIN(ROTR, (int64_t)((uint64_t)a >> (b & 63) | (uint64_t)a << ((64 - (b & 63)) & 63)))
+PNX_BIN(MULHI, pnx_mulhi(a, b))
+PNX_BIN(UMULHI, (int64_t)pnx_umulhi((uint64_t)a, (uint64_t)b))
+PNX_BIN(ULT, (uint64_t)a < (uint64_t)b)
+PNX_BIN(ULE, (uint64_t)a <= (uint64_t)b)
+PNX_OP(UDIV) {
+    if (R[OP_C(w)] == 0)
+        return PINAX_ERR_DIV_ZERO;
+    R[OP_A(w)] = (int64_t)((uint64_t)R[OP_B(w)] / (uint64_t)R[OP_C(w)]);
+    return PNX_R_OK;
+}
+PNX_OP(UMOD) {
+    if (R[OP_C(w)] == 0)
+        return PINAX_ERR_DIV_ZERO;
+    R[OP_A(w)] = (int64_t)((uint64_t)R[OP_B(w)] % (uint64_t)R[OP_C(w)]);
+    return PNX_R_OK;
+}
+PNX_OP(FDIV) { // rounds toward minus infinity
+    const int64_t a = R[OP_B(w)], b = R[OP_C(w)];
+    if (b == 0)
+        return PINAX_ERR_DIV_ZERO;
+    if (a == INT64_MIN && b == -1)
+        return PINAX_ERR_OVERFLOW;
+    const int64_t q = a / b;
+    R[OP_A(w)] = (a % b != 0 && (a < 0) != (b < 0)) ? q - 1 : q;
+    return PNX_R_OK;
+}
+PNX_OP(FMOD) { // the remainder has the sign of the divisor
+    const int64_t a = R[OP_B(w)], b = R[OP_C(w)];
+    if (b == 0)
+        return PINAX_ERR_DIV_ZERO;
+    const int64_t r = b == -1 ? 0 : a % b;
+    R[OP_A(w)] = (r != 0 && (r < 0) != (b < 0)) ? r + b : r;
+    return PNX_R_OK;
+}
+PNX_OP(ABS) {
+    const int64_t a = R[OP_B(w)];
+    if (a == INT64_MIN)
+        return PINAX_ERR_OVERFLOW;
+    R[OP_A(w)] = a < 0 ? -a : a;
+    return PNX_R_OK;
+}
+PNX_UN(BNOT, ~a)
+PNX_UN(POPC, __builtin_popcountll((unsigned long long)a))
+PNX_UN(CLZ, a == 0 ? 64 : __builtin_clzll((unsigned long long)a))
+PNX_UN(CTZ, a == 0 ? 64 : __builtin_ctzll((unsigned long long)a))
+PNX_UN(BSWAP, (int64_t)__builtin_bswap64((uint64_t)a))
+
+#define PNX_CHK(name, call)                                                                        \
+    PNX_OP(name) {                                                                                 \
+        const int64_t a = R[OP_B(w)], b = R[OP_C(w)];                                              \
+        int64_t r;                                                                                 \
+        if (call) {                                                                                \
+            st->fail = PINAX_ERR_OVERFLOW;                                                         \
+            return PNX_R_FAILED;                                                                   \
+        }                                                                                          \
+        R[OP_A(w)] = r;                                                                            \
+        return PNX_R_OK;                                                                           \
+    }
+PNX_CHK(CHKADD, ckd_add(&r, a, b))
+PNX_CHK(CHKSUB, ckd_sub(&r, a, b))
+PNX_CHK(CHKMUL, ckd_mul(&r, a, b))
+PNX_OP(CHKDIV) { // fails on a zero divisor and on the one quotient that does not fit
+    const int64_t a = R[OP_B(w)], b = R[OP_C(w)];
+    if (b == 0 || (a == INT64_MIN && b == -1)) {
+        st->fail = b == 0 ? PINAX_ERR_DIV_ZERO : PINAX_ERR_OVERFLOW;
+        return PNX_R_FAILED;
+    }
+    R[OP_A(w)] = a / b;
+    return PNX_R_OK;
+}
+
 // An index is an open-addressed table of rows (row number plus one; 0 is empty, all ones a
 // removed entry). The keys are read from the rows themselves.
 #define PNX_IX_GONE UINT32_MAX

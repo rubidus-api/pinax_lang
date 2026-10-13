@@ -73,6 +73,11 @@ enum {
 // PALLOC takes a free row of a pool (fails when none is left), PFREE gives one back, PALIVE
 // says whether a row is still the one that was handed out. A row of a pool carries the
 // generation of its slot in the upper 32 bits; using it after PFREE is the fault STALE.
+// SETFAIL sets the number a failure word after it would pass on (for words the compiler
+// expands, like first, that fail without a failing instruction).
+// The rest of the integer words of RFC-0009 section 3.2: saturating (SAT*), unsigned (U*),
+// rotating, the upper half of a product (MULHI, UMULHI), flooring division (FDIV, FMOD),
+// bit counts, and the checked ones that fail instead of faulting (CHK*).
 #define PNX_OPS(X)                                                                                 \
     X(MOVI, PNX_K_I, PNX_K_I, PNX_K_NONE, PNX_F_ABC, PNX_X_NONE, 0)                                \
     X(MOVS, PNX_K_S, PNX_K_S, PNX_K_NONE, PNX_F_ABC, PNX_X_NONE, 0)                                \
@@ -169,7 +174,31 @@ enum {
     X(QPEEK, PNX_K_I, PNX_K_NONE, PNX_K_NONE, PNX_F_GLOBAL, PNX_X_NONE, 1)                         \
     X(PALLOC, PNX_K_I, PNX_K_NONE, PNX_K_NONE, PNX_F_GLOBAL, PNX_X_NONE, 1)                        \
     X(PFREE, PNX_K_I, PNX_K_NONE, PNX_K_NONE, PNX_F_GLOBAL, PNX_X_NONE, 0)                         \
-    X(PALIVE, PNX_K_I, PNX_K_I, PNX_K_G, PNX_F_ABC, PNX_X_NONE, 0)
+    X(PALIVE, PNX_K_I, PNX_K_I, PNX_K_G, PNX_F_ABC, PNX_X_NONE, 0)                                 \
+    X(SETFAIL, PNX_K_NONE, PNX_K_NONE, PNX_K_NONE, PNX_F_IMM, PNX_X_NONE, 0)                       \
+    X(SATADD, PNX_K_I, PNX_K_I, PNX_K_I, PNX_F_ABC, PNX_X_NONE, 0) \
+    X(SATSUB, PNX_K_I, PNX_K_I, PNX_K_I, PNX_F_ABC, PNX_X_NONE, 0) \
+    X(SATMUL, PNX_K_I, PNX_K_I, PNX_K_I, PNX_F_ABC, PNX_X_NONE, 0) \
+    X(UDIV, PNX_K_I, PNX_K_I, PNX_K_I, PNX_F_ABC, PNX_X_NONE, 0) \
+    X(UMOD, PNX_K_I, PNX_K_I, PNX_K_I, PNX_F_ABC, PNX_X_NONE, 0) \
+    X(ROTL, PNX_K_I, PNX_K_I, PNX_K_I, PNX_F_ABC, PNX_X_NONE, 0) \
+    X(ROTR, PNX_K_I, PNX_K_I, PNX_K_I, PNX_F_ABC, PNX_X_NONE, 0) \
+    X(MULHI, PNX_K_I, PNX_K_I, PNX_K_I, PNX_F_ABC, PNX_X_NONE, 0) \
+    X(UMULHI, PNX_K_I, PNX_K_I, PNX_K_I, PNX_F_ABC, PNX_X_NONE, 0) \
+    X(FDIV, PNX_K_I, PNX_K_I, PNX_K_I, PNX_F_ABC, PNX_X_NONE, 0) \
+    X(FMOD, PNX_K_I, PNX_K_I, PNX_K_I, PNX_F_ABC, PNX_X_NONE, 0) \
+    X(ULT, PNX_K_I, PNX_K_I, PNX_K_I, PNX_F_ABC, PNX_X_NONE, 0) \
+    X(ULE, PNX_K_I, PNX_K_I, PNX_K_I, PNX_F_ABC, PNX_X_NONE, 0) \
+    X(ABS, PNX_K_I, PNX_K_I, PNX_K_NONE, PNX_F_ABC, PNX_X_NONE, 0) \
+    X(BNOT, PNX_K_I, PNX_K_I, PNX_K_NONE, PNX_F_ABC, PNX_X_NONE, 0) \
+    X(POPC, PNX_K_I, PNX_K_I, PNX_K_NONE, PNX_F_ABC, PNX_X_NONE, 0) \
+    X(CLZ, PNX_K_I, PNX_K_I, PNX_K_NONE, PNX_F_ABC, PNX_X_NONE, 0) \
+    X(CTZ, PNX_K_I, PNX_K_I, PNX_K_NONE, PNX_F_ABC, PNX_X_NONE, 0) \
+    X(BSWAP, PNX_K_I, PNX_K_I, PNX_K_NONE, PNX_F_ABC, PNX_X_NONE, 0) \
+    X(CHKADD, PNX_K_I, PNX_K_I, PNX_K_I, PNX_F_ABC, PNX_X_NONE, 1) \
+    X(CHKSUB, PNX_K_I, PNX_K_I, PNX_K_I, PNX_F_ABC, PNX_X_NONE, 1) \
+    X(CHKMUL, PNX_K_I, PNX_K_I, PNX_K_I, PNX_F_ABC, PNX_X_NONE, 1) \
+    X(CHKDIV, PNX_K_I, PNX_K_I, PNX_K_I, PNX_F_ABC, PNX_X_NONE, 1)
 
 enum {
 #define PNX_ENUM(name, a, b, c, shape, second, fails) PNX_##name,

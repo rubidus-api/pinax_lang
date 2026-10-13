@@ -34,7 +34,7 @@ enum { GK_SCALAR, GK_ARRAY, GK_LIST, GK_BUFFER, GK_INDEX, GK_QUEUE, GK_POOL };
 enum { L_PLAIN, L_OWNS, L_MOVED }; // what a local holds of a value that must be given exactly once
 #define FWD_MARK 0x80000000u // in a call: the number of a forward declaration, patched at the end
 #define TY_DISTINCT 0x4000u  // declared by `type`: this plus its number
-enum { USE_EACH, USE_FOLD, USE_TIMES };
+enum { USE_EACH, USE_FOLD, USE_TIMES, USE_COUNT, USE_ANY, USE_ALL, USE_FIRST, USE_EACH_INDEX };
 
 #define MAX_STACK 64
 #define MAX_BLOCKS 32
@@ -112,6 +112,8 @@ typedef struct block {
     int64_t  values[MAX_CASE]; // integers, or string constant numbers
     // do block of a combining word
     uint8_t  use, stem, cur, lim, acc, n_hidden;
+    uint8_t  val, idx;   // first: the register of the element found; each_index: the counter
+    tid      element;
     tid      acc_type;
     uint32_t floor_mark;
     name     user;       // the combining word that follows the block
@@ -135,6 +137,9 @@ typedef struct fn {
     bool     dead; // the code here cannot be reached
     vec      code; // of uint32_t
     uint32_t start, last_check;
+    // The call just emitted, when what it gives is what this word gives: a return right after
+    // it becomes a tail call, which reuses the window (RFC-0001 section 5.1).
+    uint32_t tail_at, tail_word, tail_base[2], tail_in[2], tail_depth;
     uint32_t def_at; // instruction that just wrote def_reg, for retargeting a store
     uint8_t  def_reg, def_bank;
     bool     is_top;
@@ -564,6 +569,7 @@ static void land(comp *c, uint32_t *chain) {
     }
     *chain = NONE;
     f->def_at = NONE;
+    f->tail_at = NONE; // another path arrives here
 }
 
 static uint32_t add_iconst(comp *c, int64_t value) {
@@ -849,7 +855,7 @@ typedef struct core_word {
     uint8_t     kind, op;
 } core_word;
 
-enum { C_STACK, C_ARITH, C_COMPARE, C_BOOL, C_NOT, C_NEG };
+enum { C_STACK, C_ARITH, C_COMPARE, C_BOOL, C_NOT, C_NEG, C_UNARY, C_UCMP, C_CHK, C_CLAMP, C_SELECT };
 enum { ST_DUP, ST_DROP, ST_SWAP, ST_OVER, ST_NIP };
 enum { CMP_EQ, CMP_NE, CMP_LT, CMP_LE, CMP_GT, CMP_GE };
 
@@ -864,6 +870,17 @@ static const core_word core_words[] = {
     {"eq", C_COMPARE, CMP_EQ},    {"ne", C_COMPARE, CMP_NE},    {"lt", C_COMPARE, CMP_LT},
     {"le", C_COMPARE, CMP_LE},    {"gt", C_COMPARE, CMP_GT},    {"ge", C_COMPARE, CMP_GE},
     {"and", C_BOOL, PNX_AND},     {"or", C_BOOL, PNX_OR},       {"not", C_NOT, 0},
+    {"sat_add", C_ARITH, PNX_SATADD}, {"sat_sub", C_ARITH, PNX_SATSUB}, {"sat_mul", C_ARITH, PNX_SATMUL},
+    {"u_div", C_ARITH, PNX_UDIV}, {"u_mod", C_ARITH, PNX_UMOD}, {"rotl", C_ARITH, PNX_ROTL},
+    {"rotr", C_ARITH, PNX_ROTR},  {"mul_hi", C_ARITH, PNX_MULHI}, {"u_mul_hi", C_ARITH, PNX_UMULHI},
+    {"floor_div", C_ARITH, PNX_FDIV}, {"floor_mod", C_ARITH, PNX_FMOD},
+    {"abs", C_UNARY, PNX_ABS},    {"bit_not", C_UNARY, PNX_BNOT}, {"count_ones", C_UNARY, PNX_POPC},
+    {"leading_zeros", C_UNARY, PNX_CLZ}, {"trailing_zeros", C_UNARY, PNX_CTZ}, {"byte_swap", C_UNARY, PNX_BSWAP},
+    {"u_lt", C_UCMP, CMP_LT},     {"u_le", C_UCMP, CMP_LE},     {"u_gt", C_UCMP, CMP_GT},
+    {"u_ge", C_UCMP, CMP_GE},
+    {"chk_add", C_CHK, PNX_CHKADD}, {"chk_sub", C_CHK, PNX_CHKSUB}, {"chk_mul", C_CHK, PNX_CHKMUL},
+    {"chk_div", C_CHK, PNX_CHKDIV},
+    {"clamp", C_CLAMP, 0},        {"select", C_SELECT, 0},
 };
 
 static const core_word *find_core(name n) {
@@ -919,7 +936,7 @@ enum {
     BW_WORDS, BW_ERR_TEXT, BW_ADD_ROW, BW_IS_NONE, BW_NONE, BW_ROW_INDEX, BW_MAX, BW_MIN,
     BW_APPEND, BW_APPEND_BYTE, BW_APPEND_INT, BW_CONTENTS, BW_TAKE, BW_SKIP, BW_TAKE_LAST, BW_SKIP_LAST,
     BW_STARTS_WITH, BW_ENDS_WITH, BW_CONTAINS, BW_LOOKUP, BW_INSERT, BW_REMOVE, BW_REPLACE, BW_PUT, BW_PEEK,
-    BW_ALLOC, BW_FREE, BW_IS_ALIVE
+    BW_ALLOC, BW_FREE, BW_IS_ALIVE, BW_COUNT, BW_ANY, BW_ALL, BW_FIRST, BW_EACH_INDEX, BW_MINIMUM, BW_MAXIMUM
 };
 static const struct builtin {
     const char *name;
@@ -942,6 +959,9 @@ static const struct builtin {
     {"lookup", BW_LOOKUP, false},   {"insert", BW_INSERT, false},  {"remove", BW_REMOVE, false},
     {"replace", BW_REPLACE, true},  {"put", BW_PUT, false},        {"peek", BW_PEEK, false},
     {"alloc", BW_ALLOC, false},     {"free", BW_FREE, false},      {"is_alive", BW_IS_ALIVE, false},
+    {"count", BW_COUNT, false},     {"any", BW_ANY, false},        {"all", BW_ALL, false},
+    {"first", BW_FIRST, false},     {"each_index", BW_EACH_INDEX, false},
+    {"minimum", BW_MINIMUM, false}, {"maximum", BW_MAXIMUM, false},
 };
 
 // `len` and `is_empty` belong to the core for arrays and lists and to `strings` for a str; the
@@ -1128,7 +1148,90 @@ static bool bool_word(comp *c, uint32_t op) {
     return push_slot(c, TY_BOOL);
 }
 
+static bool guard_op(comp *c, tid out);
+
+// Like the built-in words below, this ends with the token after the word current.
+static bool core_plain(comp *c, const core_word *w);
+
 static bool core(comp *c, const core_word *w) {
+    fn *f = c->f;
+    uint32_t ra, rb;
+    switch (w->kind) {
+    case C_UNARY: { // int gives int
+        if (!need(c, 1))
+            return false;
+        if (f->stack[f->depth - 1].type != TY_INT)
+            return type_error(c, "this word takes an int");
+        const uint32_t dst = slot_of(c, f->depth - 1);
+        if (!reg_of(c, f->depth - 1, &ra) || emit_def(c, PNX_ABC(w->op, dst, ra, 0), BANK_I) == NONE)
+            return false;
+        f->stack[f->depth - 1].kind = E_SLOT;
+        f->stack[f->depth - 1].src = 0;
+        return advance(c);
+    }
+    case C_UCMP:  // the two values compared as unsigned numbers
+    case C_CHK: { // the arithmetic that fails instead of faulting
+        if (!need(c, 2))
+            return false;
+        if (f->stack[f->depth - 1].type != TY_INT || f->stack[f->depth - 2].type != TY_INT)
+            return type_error(c, "this word takes two int values");
+        if (!settle(c, f->depth - 2) || !settle(c, f->depth - 1))
+            return false;
+        ra = slot_of(c, f->depth - 2);
+        rb = slot_of(c, f->depth - 1);
+        f->depth -= 2;
+        if (w->kind == C_CHK)
+            return settle_all(c) && emit(c, PNX_ABC(w->op, ra, ra, rb)) != NONE && guard_op(c, TY_INT);
+        const bool swap = w->op == CMP_GT || w->op == CMP_GE; // a > b is b < a
+        const uint32_t op = w->op == CMP_LT || w->op == CMP_GT ? PNX_ULT : PNX_ULE;
+        return emit_def(c, PNX_ABC(op, ra, swap ? rb : ra, swap ? ra : rb), BANK_I) != NONE && push_slot(c, TY_BOOL) &&
+               advance(c);
+    }
+    case C_CLAMP: { // n lo hi clamp : lo when n is below it, hi when above
+        if (!need(c, 3))
+            return false;
+        for (uint32_t k = 1; k <= 3; ++k) {
+            if (f->stack[f->depth - k].type != TY_INT)
+                return type_error(c, "clamp takes three int values: n lo hi clamp");
+        }
+        uint32_t lo, hi;
+        if (!settle(c, f->depth - 3) || !reg_of(c, f->depth - 2, &lo) || !reg_of(c, f->depth - 1, &hi))
+            return false;
+        const uint32_t dst = slot_of(c, f->depth - 3);
+        if (emit(c, PNX_ABC(PNX_JLE, lo, dst, 1)) == NONE || emit(c, PNX_ABC(PNX_MOVI, dst, lo, 0)) == NONE ||
+            emit(c, PNX_ABC(PNX_JLE, dst, hi, 1)) == NONE || emit(c, PNX_ABC(PNX_MOVI, dst, hi, 0)) == NONE)
+            return false;
+        f->depth -= 2;
+        f->def_at = NONE;
+        return advance(c);
+    }
+    case C_SELECT: { // flag a b select : a when the flag is true, else b; no branch in the source
+        if (!need(c, 3))
+            return false;
+        const tid type = f->stack[f->depth - 1].type;
+        if (f->stack[f->depth - 3].type != TY_BOOL || f->stack[f->depth - 2].type != type)
+            return type_error(c, "select takes a bool and two values of one type: flag a b select");
+        uint32_t flag;
+        if (!settle(c, f->depth - 3) || !settle(c, f->depth - 2) || !reg_of(c, f->depth - 1, &rb))
+            return false;
+        flag = slot_of(c, f->depth - 3);
+        ra = slot_of(c, f->depth - 2);
+        if (bank_of(type) == BANK_I) { // the result takes the flag's register
+            if (emit(c, PNX_ABC(PNX_JEQI, flag, 0, 2)) == NONE || emit(c, PNX_ABC(PNX_MOVI, flag, ra, 0)) == NONE ||
+                emit(c, PNX_AX(PNX_JMP, 1)) == NONE || emit(c, PNX_ABC(PNX_MOVI, flag, rb, 0)) == NONE)
+                return false;
+        } else if (emit(c, PNX_ABC(PNX_JNEI, flag, 0, 1)) == NONE || emit(c, PNX_ABC(PNX_MOVS, ra, rb, 0)) == NONE) {
+            return false; // the result stays in a's register
+        }
+        f->depth -= 3;
+        return push_slot(c, type) && advance(c);
+    }
+    default: break;
+    }
+    return core_plain(c, w) && advance(c);
+}
+
+static bool core_plain(comp *c, const core_word *w) {
     fn *f = c->f;
     switch (w->kind) {
     case C_STACK: return stack_word(c, w->op);
@@ -1311,7 +1414,24 @@ static bool call_word(comp *c, const sig *sp, uint32_t index) {
     if (!check_before_call(c) || emit(c, PNX_ABC(PNX_CALL, base[BANK_I], base[BANK_S], 0)) == NONE ||
         emit(c, index) == NONE || !advance(c))
         return false;
-    return s.fails ? guard(c, &s, base, in, false) : push_results(c, &s, base, in, false);
+    if (s.fails)
+        return guard(c, &s, base, in, false);
+    if (!push_results(c, &s, base, in, false))
+        return false;
+    fn *f = c->f;
+    bool same = !f->is_top && !f->sig->fails && f->sig->n_out == s.n_out;
+    for (uint32_t k = 0; same && k < s.n_out; ++k)
+        same = f->sig->out[k] == s.out[k] && f->sig->out_owned[k] == s.out_owned[k];
+    if (same) {
+        f->tail_at = f->code.n - 2;
+        f->tail_word = index;
+        f->tail_base[0] = base[0];
+        f->tail_base[1] = base[1];
+        f->tail_in[0] = in[0];
+        f->tail_in[1] = in[1];
+        f->tail_depth = f->depth;
+    }
+    return true;
 }
 
 static bool call_host(comp *c, uint32_t host) {
@@ -1850,6 +1970,24 @@ static bool emit_return(comp *c) {
         return type_error(c, "the stack does not hold exactly the results of the signature here");
     if (!nothing_owned(c))
         return false;
+    // a call in tail position: nothing was emitted since, and its results are the results
+    bool tail = f->tail_at != NONE && f->tail_at + 2 == f->code.n && f->tail_depth == f->depth;
+    for (uint32_t k = 0; tail && k < n; ++k)
+        tail = at[k] == f->depth - n + k && f->stack[at[k]].kind == E_SLOT;
+    if (tail) {
+        f->code.n = f->tail_at; // the call is taken back; its arguments move to the front of the window
+        for (uint32_t k = 0; k < f->tail_in[0]; ++k) {
+            if (emit(c, PNX_ABC(PNX_MOVI, k, f->tail_base[0] + k, 0)) == NONE)
+                return false;
+        }
+        for (uint32_t k = 0; k < f->tail_in[1]; ++k) {
+            if (emit(c, PNX_ABC(PNX_MOVS, k, f->tail_base[1] + k, 0)) == NONE)
+                return false;
+        }
+        const uint32_t word = f->tail_word;
+        f->tail_at = NONE;
+        return emit(c, PNX_ABC(PNX_TCALL, 0, 0, 0)) != NONE && emit(c, word) != NONE;
+    }
     // One result of a bank goes straight from where it is. Several are first all put into
     // their stack registers, which lie above the targets, and then moved down in rising order.
     for (uint32_t k = 0; k < n; ++k) {
@@ -2174,6 +2312,9 @@ static bool scan_user(comp *c, name *out) {
 
 // Turns the stem on top of the stack into the registers of a loop: `cur` runs up to `lim`.
 // The operands stay on the stack, marked as belonging to the block. Returns their count.
+static bool guard_op(comp *c, tid out);
+static bool found_or_fail(comp *c, tid type, uint32_t value, uint32_t flag);
+
 static bool stem_begin(comp *c, uint8_t *kind, uint8_t *cur, uint8_t *lim, uint8_t *src, uint8_t *count,
                        tid *element) {
     fn *f = c->f;
@@ -2300,8 +2441,11 @@ static bool do_block(comp *c) {
         f->stack[f->depth - 1].hidden = true;
         cur = (uint8_t)slot_of(c, f->depth - 1);
         hidden = 1;
-    } else if (name_is(user, "each") || name_is(user, "fold")) {
-        use = name_is(user, "each") ? USE_EACH : USE_FOLD;
+    } else if (name_is(user, "each") || name_is(user, "fold") || name_is(user, "count") || name_is(user, "any") ||
+               name_is(user, "all") || name_is(user, "first") || name_is(user, "each_index")) {
+        use = name_is(user, "each") ? USE_EACH : name_is(user, "fold") ? USE_FOLD : name_is(user, "count") ? USE_COUNT
+            : name_is(user, "any") ? USE_ANY : name_is(user, "all") ? USE_ALL : name_is(user, "first") ? USE_FIRST
+                                                                                                    : USE_EACH_INDEX;
         if (!has_stem)
             return error_at(c, PINAX_ERR_TYPE, at.line, at.column,
                             "this combining word needs a stem before its block (for example lo hi range)");
@@ -2323,12 +2467,44 @@ static bool do_block(comp *c) {
         if (bs.n_in != 2 || !bs.named || bs.n_out != 1 || bs.in[0] != acc || bs.out[0] != acc || bs.in[1] != element)
             return error_at(c, PINAX_ERR_TYPE, at.line, at.column,
                             "the block of fold is (acc U, x T gives U): U the first value's type, T the element's");
+    } else if (use == USE_EACH_INDEX) {
+        if (bs.n_out || bs.n_in != 2 || !bs.named || bs.in[0] != element || bs.in[1] != TY_INT)
+            return error_at(c, PINAX_ERR_TYPE, at.line, at.column, "the block of each_index is (x T, i int)");
+    } else if (use != USE_TIMES) { // count, any, all, first: a test of one element
+        if (bs.n_out != 1 || bs.out[0] != TY_BOOL || bs.n_in > 1 || (bs.n_in == 1 && bs.in[0] != element))
+            return error_at(c, PINAX_ERR_TYPE, at.line, at.column, "this block takes one element and gives a bool");
+    }
+    // what the word keeps while the block runs, above the operands of the stem
+    uint8_t keep = 0, val = 0, idx = cur;
+    if (use == USE_COUNT || use == USE_ANY || use == USE_ALL || use == USE_FIRST ||
+        (use == USE_EACH_INDEX && (kind == STEM_RANGE || kind == STEM_WORDS))) {
+        if (!push_slot(c, use == USE_COUNT || use == USE_EACH_INDEX ? TY_INT : TY_BOOL))
+            return false;
+        f->stack[f->depth - 1].hidden = true;
+        keep = (uint8_t)slot_of(c, f->depth - 1);
+        if (emit(c, PNX_ABX(PNX_LOADI, keep, use == USE_ALL)) == NONE)
+            return false;
+        ++hidden;
+        if (use == USE_EACH_INDEX)
+            idx = keep;
+    }
+    if (use == USE_FIRST) {
+        if (!push_slot(c, element))
+            return false;
+        f->stack[f->depth - 1].hidden = true;
+        val = (uint8_t)slot_of(c, f->depth - 1);
+        ++hidden;
     }
     if (!settle_all(c))
         return false;
     block *b = open_block(c, B_DO);
     if (!b)
         return false;
+    b->val = val;
+    b->idx = idx;
+    b->element = element;
+    if (use != USE_FOLD)
+        b->acc = keep;
     b->use = use;
     b->stem = kind;
     b->cur = cur;
@@ -2361,13 +2537,26 @@ static bool do_block(comp *c) {
             reg = slot_of(c, f->depth - 1);
         }
     }
-    if (kind == STEM_WORDS) // takes the next word, or leaves when none is left
-        return emit(c, PNX_ABC(PNX_SWORD, src, reg, 0)) != NONE && jump_later(c, &b->exits);
-    // go on while cur < lim (for times: while the count is at least 1), then fetch the element
-    if (emit(c, use == USE_TIMES ? PNX_ABC(PNX_JGEI, cur, 1, 1) : PNX_ABC(PNX_JLT, cur, lim, 1)) == NONE ||
-        !jump_later(c, &b->exits))
-        return false;
-    return use == USE_TIMES || stem_element(c, kind, reg, cur, src);
+    if (kind == STEM_WORDS) { // takes the next word, or leaves when none is left
+        if (emit(c, PNX_ABC(PNX_SWORD, src, reg, 0)) == NONE || !jump_later(c, &b->exits))
+            return false;
+    } else {
+        // go on while cur < lim (for times: while the count is at least 1), then fetch the element
+        if (emit(c, use == USE_TIMES ? PNX_ABC(PNX_JGEI, cur, 1, 1) : PNX_ABC(PNX_JLT, cur, lim, 1)) == NONE ||
+            !jump_later(c, &b->exits))
+            return false;
+        if (use != USE_TIMES && !stem_element(c, kind, reg, cur, src))
+            return false;
+    }
+    if (use == USE_EACH_INDEX) {
+        const local *l = new_local(c, bs.in_name[1], TY_INT);
+        if (!l || emit(c, PNX_ABC(PNX_MOVI, l->reg, idx, 0)) == NONE)
+            return false;
+    }
+    if (use == USE_FIRST && !move_slot(c, element, val, reg))
+        return false; // kept, in case this is the one
+    f->def_at = NONE;
+    return true;
 }
 
 static bool end_do(comp *c, block *b) {
@@ -2379,11 +2568,32 @@ static bool end_do(comp *c, block *b) {
             if (!write_reg(c, b->acc))
                 return false;
         }
+        entry verdict = {0};
+        const bool tests = b->use == USE_COUNT || b->use == USE_ANY || b->use == USE_ALL || b->use == USE_FIRST;
+        if (tests) {
+            if (f->depth != (uint32_t)b->in.depth + 1)
+                return type_error(c, "this block leaves one bool: its verdict on the element");
+            if (!pop_cond(c, &verdict))
+                return false;
+        }
         if (!settle_all(c))
             return false;
         if (!same_stack(f, &b->in))
             return type_error(c, "this block must leave the stack as it found it");
         if (!same_owns(c, b, b->owns_in))
+            return false;
+        if (b->use == USE_COUNT) { // one more when the verdict is true
+            cond_negate(&verdict);
+            if (!cond_jump(c, &verdict, 1) || emit(c, PNX_ABC(PNX_ADDI, b->acc, b->acc, 1)) == NONE)
+                return false;
+        } else if (tests) { // any, first: done at the first true; all: done at the first false
+            if (b->use != USE_ALL)
+                cond_negate(&verdict);
+            if (!cond_jump(c, &verdict, 2) || emit(c, PNX_ABX(PNX_LOADI, b->acc, b->use != USE_ALL)) == NONE ||
+                !jump_later(c, &b->exits))
+                return false;
+        }
+        if (b->use == USE_EACH_INDEX && b->idx != b->cur && emit(c, PNX_ABC(PNX_ADDI, b->idx, b->idx, 1)) == NONE)
             return false;
         if (!loop_back(c, b->head, b->cur, b->use == USE_TIMES ? -1 : b->stem == STEM_WORDS ? 0 : 1))
             return false;
@@ -2402,11 +2612,64 @@ static bool end_do(comp *c, block *b) {
         if (!push_slot(c, done.acc_type) || !move_slot(c, done.acc_type, slot_of(c, f->depth - 1), done.acc))
             return false;
     }
+    if (done.use == USE_COUNT || done.use == USE_ANY || done.use == USE_ALL) {
+        const tid type = done.use == USE_COUNT ? TY_INT : TY_BOOL;
+        if (!push_slot(c, type) || !move_slot(c, type, slot_of(c, f->depth - 1), done.acc))
+            return false;
+    }
     if (!advance(c)) // past the end
         return false;
     if (c->tok.kind != PNX_T_NAME || !name_eq(tok_name(c), done.user))
         return syntax(c, "the word that uses the block is expected right after its end");
-    return true; // the caller moves past the word
+    if (done.use == USE_FIRST) // the element found, or the failure not_found
+        return found_or_fail(c, done.element, done.val, done.acc);
+    return advance(c);
+}
+
+// The end of a word that gives a value when `flag` is set and fails with not_found otherwise.
+// `value` and `flag` are registers above the stack; the current token is the word.
+static bool found_or_fail(comp *c, tid type, uint32_t value, uint32_t flag) {
+    const uint32_t dst = top_slot(c, bank_of(type), 1);
+    if (!settle_all(c) || !move_slot(c, type, dst, value) ||
+        emit(c, PNX_ABX(PNX_SETFAIL, 0, PINAX_ERR_NOT_FOUND)) == NONE || emit(c, PNX_ABC(PNX_JNEI, flag, 0, 1)) == NONE)
+        return false;
+    c->f->def_at = NONE;
+    return guard_op(c, type);
+}
+
+// stem minimum | stem maximum : the smallest or largest int; fails on an empty stem
+static bool do_extreme(comp *c, bool largest) {
+    fn *f = c->f;
+    if (f->depth == f->floor || bank_of(f->stack[f->depth - 1].type) != BANK_NONE)
+        return type_error(c, "this word takes a stem of int values");
+    uint8_t kind, cur, lim, src, hidden;
+    tid     element_type;
+    if (!stem_begin(c, &kind, &cur, &lim, &src, &hidden, &element_type))
+        return false;
+    if (element_type != TY_INT || kind == STEM_WORDS)
+        return type_error(c, "this word takes a stem of int values");
+    if (!push_slot(c, TY_INT) || !push_slot(c, TY_INT))
+        return false;
+    const uint32_t best = slot_of(c, f->depth - 2), flag = slot_of(c, f->depth - 1);
+    uint32_t       element = top_slot(c, BANK_I, 1), exits = NONE;
+    if (emit(c, PNX_ABX(PNX_LOADI, flag, 0)) == NONE || !settle_all(c))
+        return false;
+    const uint32_t head = f->code.n;
+    if (emit(c, PNX_ABC(PNX_JLT, cur, lim, 1)) == NONE || !jump_later(c, &exits))
+        return false;
+    if (kind == STEM_RANGE)
+        element = cur;
+    else if (!stem_element(c, kind, element, cur, src))
+        return false;
+    // the first element is taken as it is; a later one only when it beats the best so far
+    if (emit(c, PNX_ABC(PNX_JEQI, flag, 0, 1)) == NONE ||
+        emit(c, largest ? PNX_ABC(PNX_JLE, element, best, 1) : PNX_ABC(PNX_JLE, best, element, 1)) == NONE ||
+        emit(c, PNX_ABC(PNX_MOVI, best, element, 0)) == NONE || emit(c, PNX_ABX(PNX_LOADI, flag, 1)) == NONE ||
+        !loop_back(c, head, cur, 1))
+        return false;
+    land(c, &exits);
+    f->depth -= (uint32_t)hidden + 2;
+    return found_or_fail(c, TY_INT, best, flag);
 }
 
 // stem sum
@@ -2497,6 +2760,8 @@ static bool builtin(comp *c, const struct builtin *w) {
         return emit_def(c, PNX_ABC(PNX_ERRTEXT, slot_of(c, f->depth - 1), ra, 0), BANK_S) != NONE && advance(c);
     }
     case BW_SUM: return do_sum(c) && advance(c);
+    case BW_MINIMUM:
+    case BW_MAXIMUM: return do_extreme(c, w->id == BW_MAXIMUM);
     case BW_LEN:
     case BW_IS_EMPTY: {
         if (on_coll) {
@@ -3031,7 +3296,7 @@ static bool body_name(comp *c) {
         }
         const core_word *w = find_core(n);
         if (w)
-            return core(c, w) && advance(c);
+            return core(c, w);
         const struct builtin *bw = find_builtin(c, n);
         if (bw)
             return builtin(c, bw);
@@ -3060,7 +3325,9 @@ static bool body_token(comp *c) {
         return syntax(c, "this code cannot be reached: the code before it always leaves");
     // a stem is taken at once by its block or by a word like sum
     if (f->depth > f->floor && f->stack[f->depth - 1].type == TY_STEM &&
-        !(t.kind == PNX_T_RESERVED && t.word == PNX_KW_do) && !(t.kind == PNX_T_NAME && name_is(tok_name(c), "sum")))
+        !(t.kind == PNX_T_RESERVED && t.word == PNX_KW_do) &&
+        !(t.kind == PNX_T_NAME && (name_is(tok_name(c), "sum") || name_is(tok_name(c), "minimum") ||
+                                   name_is(tok_name(c), "maximum"))))
         return type_error(c, "a stem is not a value: a block or a combining word takes it at once");
     // a pending condition survives only into the word that consumes it
     if (f->depth && f->stack[f->depth - 1].kind == E_COND) {
@@ -3089,7 +3356,7 @@ static bool body_token(comp *c) {
         return push(c, (entry){.type = TY_BOOL, .kind = E_CONST, .value = t.word == PNX_KW_true}) && advance(c);
     case PNX_KW_or: {
         const core_word *w = find_core(cname("or"));
-        return core(c, w) && advance(c);
+        return core(c, w);
     }
     case PNX_KW_to: return store(c);
     case PNX_KW_if: return do_if(c);
@@ -3140,7 +3407,7 @@ static bool body_token(comp *c) {
         case B_LOOP: return end_loop(c, b) && advance(c);
         case B_ORELSE: return end_orelse(c, b) && advance(c);
         case B_OF: return end_of(c, b) && advance(c);
-        default: return end_do(c, b) && advance(c);
+        default: return end_do(c, b);
         }
     }
     default: return syntax(c, "this construct is not supported by the compiler yet");
@@ -3198,6 +3465,7 @@ static void fn_reset(fn *f, bool is_top) {
     f->code = code;
     f->code.n = 0;
     f->def_at = NONE;
+    f->tail_at = NONE;
     f->is_top = is_top;
 }
 
