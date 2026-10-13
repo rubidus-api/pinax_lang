@@ -4,9 +4,9 @@
 
 A small, fast scripting language to embed in C programs, with fixed, flat memory.
 
-> **Status: early.** There is no compiler yet, so scripts cannot be run today. This page
-> states what the project is aiming for. The repository holds the host header, the build
-> driver and a first interpreter that runs hand-written bytecode (used to measure the design).
+> **Status: early, and it runs.** Source files compile and run, from the command `pnx` and
+> from a C program. The language is not complete (no floating point, no tasks, no modules
+> written in Pinax yet), nothing is released, and the bytecode format carries no promise.
 
 Pinax is meant to live inside a host program. The host hands it one block of memory,
 registers the functions it may call, and runs scripts in it. Every value has a type and a
@@ -40,14 +40,84 @@ extension a catalogue. The language keeps its data flat.
 Pure C23. The only dependency is a vendored copy of
 [proven_c_lib](https://github.com/rubidus-api/proven_c_lib) (MIT) under `vendor/proven/`.
 
-The host interface is one header, `include/pinax.h`; it declares the planned API and has no
-implementation behind it yet. The build driver compiles the vendored library and checks the
-header:
+Build with any C23 compiler:
 
 ```sh
 cc -std=c23 -o nob nob.c
-./nob all
+./nob build          # build/native/libpinax.a, libpinax_host.a and the command pnx
 ```
+
+A first script, `hello.pnx`. Arguments come before the word that takes them, and the only
+punctuation outside literals is `.` `(` `)` `,`:
+
+```text
+use io
+
+word sum_to (last int gives total int)
+  0 to total
+  1 last 1 add range do (i int) total i add to total end each
+  total
+end
+
+cat ("1 to 100 is ", 100 sum_to) println
+```
+
+```sh
+build/native/pnx hello.pnx        # 1 to 100 is 5050
+```
+
+## Embedding
+
+The host interface is one header, `include/pinax.h`. The host gives the state its memory,
+registers the C functions scripts may call, loads source and runs words:
+
+```c
+#include "pinax.h"
+#include <stdio.h>
+
+static pinax_err tenfold(pinax_call *call, void *user, const pinax_args *args) {
+    (void)call; (void)user;
+    args->ri[0] = args->i[0] * 10;
+    return PINAX_OK;
+}
+
+int main(void) {
+    static unsigned char block[1 << 20];
+    pinax_config config = {.struct_size = sizeof config, .budget = 100000};
+    pinax_state *st;
+    if (pinax_open((pinax_mem){block, sizeof block}, &config, &st) != PINAX_OK)
+        return 1;
+
+    static const pinax_word_def words[] = {{"tenfold", "(n int gives r int)", tenfold, NULL, 0}};
+    pinax_register(st, "calc", words, 1);
+
+    static const char source[] =
+        "use calc\n"
+        "word answer (n int gives r int) n tenfold 2 add end\n";
+    pinax_str text = {(const unsigned char *)source, sizeof source - 1};
+    if (pinax_load(st, "main", text, PINAX_LOAD_CODE) != PINAX_OK)
+        return 1;
+
+    pinax_word answer;
+    pinax_find(st, "answer", "(n int gives r int)", 0, &answer);
+    int64_t in = 4, out = 0;
+    pinax_args args = {.i = &in, .ri = &out};
+    pinax_err err = pinax_run(st, answer, &args);
+    while (err == PINAX_SUSPENDED)           /* the instruction budget ran out: go on */
+        err = pinax_resume(st, &args);
+    printf("%lld\n", (long long)out);        /* 42 */
+    pinax_close(st);
+    return 0;
+}
+```
+
+```sh
+cc -std=c99 -Iinclude host.c build/native/libpinax.a -lm -o host
+```
+
+The state lives entirely inside `block`; Pinax never asks the system for memory. The standard
+host modules (`io`, `file`, `clock`, `random`, `env`) are ordinary host words in
+`src/host/`, linked only by hosts that want them.
 
 ## License
 

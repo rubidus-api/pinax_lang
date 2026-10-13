@@ -1,9 +1,9 @@
 /*
  * pinax.h - host interface of the Pinax embeddable scripting language.
  *
- * Implemented so far: the P0 interpreter, which runs bytecode containers (open, register,
- * load_bytecode, find, run, resume, budget, bind, stats). Every other function is declared
- * and answers PINAX_ERR_STATE.
+ * Not implemented yet, and answering PINAX_ERR_STATE: pinax_eval, pinax_set_resolver (extern),
+ * pinax_call_pending and pinax_complete (awaitable host words), the images and pinax_clone.
+ * Everything else works.
  *
  * The whole interface is this one header. It needs only <stddef.h> and <stdint.h>.
  *

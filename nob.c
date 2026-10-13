@@ -66,6 +66,10 @@ static const char *const proven_hosted[] = {
     "platform/proven_sys_random.c", "platform/proven_sys_time.c",
 };
 
+// The standard host modules and the command pnx (RFC-0015): hosted, built on pinax.h.
+static const char *const host_sources[] = {"src/host/pinax_host.c"};
+static const char *const pnx_sources[] = {"src/host/pnx_main.c"};
+
 static const char *const test_sources[] = {"tests/test_main.c"};
 
 // Public files and directories; `git ls-files` must stay inside.
@@ -194,6 +198,24 @@ static int build_lib(const target_t *t, char *lib, size_t lib_cap, char *hosted_
                     hosted_cap))
         return 1;
     printf("nob: built %s\n", lib);
+
+    // libpinax_host.a and pnx; a public checkout always has them
+    static char host_objs[4096], pnx_objs[4096];
+    char host_lib[512], pnx[512];
+    host_objs[0] = pnx_objs[0] = '\0';
+    if (compile_set(t, own_flags(t), "", host_sources, COUNT(host_sources), objdir, host_objs, sizeof host_objs) ||
+        compile_set(t, own_flags(t), "", pnx_sources, COUNT(pnx_sources), objdir, pnx_objs, sizeof pnx_objs))
+        return 1;
+    snprintf(host_lib, sizeof host_lib, "%s/libpinax_host.a", dir);
+    snprintf(cmd, sizeof cmd, "rm -f %s && %s rcs %s%s", host_lib, t->ar, host_lib, host_objs);
+    if (run(cmd))
+        return 1;
+    snprintf(pnx, sizeof pnx, "%s/pnx%s", dir, t->exe);
+    snprintf(cmd, sizeof cmd, "%s %s -o %s%s %s%s %s %s", t->cc, t->sanitize ? "-fsanitize=address,undefined" : "", pnx,
+             pnx_objs, host_lib, hosted_objs, lib, strcmp(t->exe, ".exe") == 0 ? "-static -lbcrypt" : "-lm");
+    if (run(cmd))
+        return 1;
+    printf("nob: built %s\n", pnx);
     return 0;
 }
 
@@ -227,6 +249,19 @@ static int cmd_test(const target_t *t) {
     snprintf(cmd, sizeof cmd, "./%s", exe);
     if (run(cmd))
         return 1;
+    if (exists("tests/embed/host_min.c")) { // the embedding example: the public header and the library, nothing else
+        snprintf(cmd, sizeof cmd,
+                 "%s -std=c99 -Wall -Wextra -Werror %s -Iinclude tests/embed/host_min.c %s -lm -o %s/host_min && "
+                 "test \"$(./%s/host_min)\" = 42",
+                 t->cc, t->sanitize ? "-fsanitize=address,undefined" : "", lib, dir, dir);
+        if (run(cmd))
+            return 1;
+    }
+    if (exists("tests/pnx/run.sh")) { // the command and the host modules, through real files
+        snprintf(cmd, sizeof cmd, "sh tests/pnx/run.sh %s/pnx", dir);
+        if (run(cmd))
+            return 1;
+    }
     printf("nob: tests passed\n");
     return 0;
 }

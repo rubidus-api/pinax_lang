@@ -3005,6 +3005,18 @@ static bool builtin(comp *c, const struct builtin *w) {
     case BW_TRY_CUT: { // s sep cut : the parts before and after the first sep
         if (!need(c, 2))
             return false;
+        if (w->id == BW_CUT && f->stack[f->depth - 2].type == TY_STR && f->stack[f->depth - 1].type == TY_INT &&
+            f->stack[f->depth - 1].kind == E_CONST && f->stack[f->depth - 1].value >= 0 &&
+            f->stack[f->depth - 1].value <= 255) { // the separator is one byte, written as a character
+            const uint32_t byte = (uint32_t)f->stack[f->depth - 1].value;
+            --f->depth;
+            if (!settle(c, f->depth - 1))
+                return false;
+            ra = slot_of(c, f->depth - 1);
+            f->def_at = NONE;
+            return push_slot(c, TY_STR) && emit(c, PNX_ABC(PNX_SCUT, ra, slot_of(c, f->depth - 1), byte)) != NONE &&
+                   advance(c);
+        }
         if (f->stack[f->depth - 2].type != TY_STR || f->stack[f->depth - 1].type != TY_STR)
             return type_error(c, "this word takes two str values: s sep cut");
         if (!settle(c, f->depth - 2) || !settle(c, f->depth - 1))
