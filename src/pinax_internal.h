@@ -8,6 +8,9 @@
 #include <stdbool.h>
 
 #define PNX_MAX_HOSTS 64
+// Register slots a task gets for every level of its call depth.
+#define PNX_TASK_INTS 16
+#define PNX_TASK_STRS 4
 #define PNX_MAX_HANDLE_TYPES 16
 #define PNX_MAX_STR_ARGS 8
 #define PNX_MAX_STR_RESULTS 4
@@ -76,7 +79,46 @@ typedef struct pnx_global {
 
 struct pinax_call {
     pinax_state *state;
+    uint64_t     token; // of the operation the host word started and left pending; 0: none
 };
+
+// A run that waits for a host operation: where the results go when pinax_complete() brings them.
+typedef struct pnx_wait {
+    uint64_t        token; // 0: not waiting
+    const pnx_host *host;
+    uint32_t        ia, sa; // the first argument slots of the call, from the start of the banks
+    bool            fails;  // the call was made by HCALLF: a failure word follows
+} pnx_wait;
+
+// What a run works in: its registers, its control stack, its part of the region and where it
+// stands. The main run has one; every task has its own.
+typedef struct pnx_context {
+    int64_t   *ibank;
+    pnx_scell *sbank;
+    pnx_frame *ctrl;
+    uint32_t   int_slots, str_slots, depth_max, region_used, region_len;
+    uint32_t   pc, int_base, str_base, depth, depth_floor;
+    uint32_t   resume_dst; // the register that learns whether the task it resumed has ended; UINT32_MAX: none
+    bool       ends_task;  // returning at the floor ends a task, not the run
+} pnx_context;
+
+enum { PNX_TASK_FREE, PNX_TASK_READY, PNX_TASK_RUNNING, PNX_TASK_WAITING };
+
+typedef struct pnx_task {
+    pnx_context      ctx;    // where it stands while it is not the one running
+    struct pnx_task *parent; // who resumed it (NULL: the main run), while it runs
+    uint32_t         generation, in_host;
+    uint8_t          state;
+    bool             cancelled, yielded;
+    pnx_wait         wait;       // the host operation it waits for
+    pinax_err        wake_fail;  // what the operation failed with, for the failure word it goes on at
+    pinax_err        wake_fault; // or the fault it ended with
+    // its own memory, inside the block
+    int64_t   *ibank;
+    pnx_scell *sbank;
+    pnx_frame *ctrl;
+    uint32_t   int_slots, str_slots, depth_max, region_base, region_bytes;
+} pnx_task;
 
 // What a load replaces, kept so that a failed load can put it back.
 typedef struct pnx_program {
@@ -129,6 +171,15 @@ struct pinax_state {
     const uint8_t *lines;          // pnx_linerec records, head->n_lines of them (not aligned)
     char     where[112];           // "module:line: error" of the last fault, for pinax_error_text()
     uint32_t depth_floor;          // the depth at which the running word returns to the host
+    // tasks: the one running (NULL: the main run), and where the main run stands meanwhile
+    pnx_task   *task;
+    pnx_context main;
+    pnx_wait    main_wait;  // the main run waits for a host operation
+    pinax_err   main_fault; // that operation failed and the word that called it cannot fail
+    uint64_t    token_serial;
+    bool        waiting;    // the suspended run ended with PINAX_WAITING
+    uint32_t    resume_dst;
+    bool        ends_task;
     uint32_t int_peak, str_peak, region_peak;
     uint32_t in_host;              // host words running now, one inside the other
     uint32_t host_itop, host_stop; // the first slots free above the host word running now
@@ -193,6 +244,8 @@ void *pnx_take(pinax_state *state, size_t bytes, size_t align);
 // the resolver for it when it is not there yet.
 pinax_err pnx_extern_link(pinax_state *state, const char *module, const char *name, const char *signature,
                           uint32_t *index);
+// Ends every task and puts the main run back in place: after a fault inside a task.
+void pnx_tasks_abort(pinax_state *state);
 // The name of source module `number`; empty when it has none.
 pinax_str pnx_module_name(const pinax_state *state, uint32_t number);
 uint32_t pnx_module_number(const pinax_state *state, const char *name, size_t length);

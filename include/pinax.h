@@ -1,8 +1,7 @@
 /*
  * pinax.h - host interface of the Pinax embeddable scripting language.
  *
- * Not implemented yet, and answering PINAX_ERR_STATE: pinax_call_pending and pinax_complete
- * (awaitable host words), the images and pinax_clone.
+ * Not implemented yet, and answering PINAX_ERR_STATE: the images and pinax_clone.
  * Everything else works.
  *
  * The whole interface is this one header. It needs only <stddef.h> and <stdint.h>.
@@ -151,7 +150,16 @@ PINAX_API pinax_token  pinax_call_pending(pinax_call *call);             /* then
  * a buffer, let the script pass its contents as a str. */
 PINAX_API pinax_mem    pinax_call_buffer(pinax_call *call, int64_t buffer, size_t written);
 
-/* Finishes a pending operation; the waiting task becomes runnable. results may be NULL on failure.
+/* A host word registered PINAX_WORD_AWAITABLE may start an operation, take a token for it with
+ * pinax_call_pending() and return PINAX_PENDING. The run that called it then waits: a task
+ * gives way to the others, and when nothing else can run pinax_run() or pinax_resume() answers
+ * PINAX_WAITING. The host finishes the operation with pinax_complete() and calls pinax_resume().
+ *
+ * Finishes a pending operation; the waiting task becomes runnable. results may be NULL on failure.
+ * results->ri and results->rs hold the word's results from index 0; strings are copied. An
+ * outcome other than PINAX_OK is the word's failure when its signature has `or fail`, and a
+ * fault of the run otherwise. PINAX_ERR_NOT_FOUND: no run waits for this token (the run that
+ * did has ended in a fault, say).
  * Like every call, only from the thread that is using the state: a completion that arrives on
  * another thread must be handed over by the host first. */
 PINAX_API pinax_err pinax_complete(pinax_state *state, pinax_token token,

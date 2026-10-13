@@ -91,6 +91,13 @@ enum {
 // The rest of the integer words of RFC-0009 section 3.2: saturating (SAT*), unsigned (U*),
 // rotating, the upper half of a product (MULHI, UMULHI), flooring division (FDIV, FMOD),
 // bit counts, and the checked ones that fail instead of faulting (CHK*).
+// Tasks (RFC-0005). A task is the number of its slot plus one, with the slot's generation in
+// the upper 32 bits. TSPAWN A, B, G makes a task of set G that will run the word whose number
+// is in R[B] (a word that takes and gives nothing; fails when no slot is free). TRESUME A, B, G
+// runs task R[B] until it yields or ends and gives 1 in R[A] when it has ended. TYIELD gives
+// the run back to whoever resumed the task; it fails with cancelled once the task was
+// cancelled (TCANCEL); outside a task it does nothing. TDONE says whether a task has ended.
+// TRUNALL G resumes the tasks of set G in turn until all have ended.
 #define PNX_OPS(X)                                                                                 \
     X(MOVI, PNX_K_I, PNX_K_I, PNX_K_NONE, PNX_F_ABC, PNX_X_NONE, 0)                                \
     X(MOVS, PNX_K_S, PNX_K_S, PNX_K_NONE, PNX_F_ABC, PNX_X_NONE, 0)                                \
@@ -227,7 +234,13 @@ enum {
     X(CHKADD, PNX_K_I, PNX_K_I, PNX_K_I, PNX_F_ABC, PNX_X_NONE, 1) \
     X(CHKSUB, PNX_K_I, PNX_K_I, PNX_K_I, PNX_F_ABC, PNX_X_NONE, 1) \
     X(CHKMUL, PNX_K_I, PNX_K_I, PNX_K_I, PNX_F_ABC, PNX_X_NONE, 1) \
-    X(CHKDIV, PNX_K_I, PNX_K_I, PNX_K_I, PNX_F_ABC, PNX_X_NONE, 1)
+    X(CHKDIV, PNX_K_I, PNX_K_I, PNX_K_I, PNX_F_ABC, PNX_X_NONE, 1) \
+    X(TSPAWN, PNX_K_I, PNX_K_I, PNX_K_G, PNX_F_ABC, PNX_X_NONE, 1) \
+    X(TRESUME, PNX_K_I, PNX_K_I, PNX_K_G, PNX_F_ABC, PNX_X_NONE, 0) \
+    X(TYIELD, PNX_K_NONE, PNX_K_NONE, PNX_K_NONE, PNX_F_IMM, PNX_X_NONE, 1) \
+    X(TDONE, PNX_K_I, PNX_K_I, PNX_K_G, PNX_F_ABC, PNX_X_NONE, 0) \
+    X(TCANCEL, PNX_K_I, PNX_K_NONE, PNX_K_NONE, PNX_F_GLOBAL, PNX_X_NONE, 0) \
+    X(TRUNALL, PNX_K_NONE, PNX_K_NONE, PNX_K_NONE, PNX_F_GLOBAL, PNX_X_NONE, 0)
 
 enum {
 #define PNX_ENUM(name, a, b, c, shape, second, fails) PNX_##name,
@@ -261,6 +274,7 @@ enum {
     PNX_G_QUEUE,  // a ring of capacity 64-bit integers, first in first out
     PNX_G_POOL,   // capacity records of elem_bytes bytes, then per slot a 32-bit generation (odd while
                   // the slot is handed out) and a 32-bit link of the free list
+    PNX_G_TASKS,  // capacity tasks; elem_bytes is the call depth of each, reserved the bytes of its region
     PNX_G_COUNT
 };
 

@@ -23,9 +23,97 @@ uint8_t *pnx_region_alloc(pinax_state *st, size_t bytes) {
     return p;
 }
 
+// ---- tasks ---------------------------------------------------------------------------------
+
+static void ctx_save(const pinax_state *st, pnx_context *c) {
+    *c = (pnx_context){st->ibank,     st->sbank,       st->ctrl,     st->int_slots,   st->str_slots,
+                       st->depth_max, st->region_used, st->region_len, st->pc,        st->int_base,
+                       st->str_base,  st->depth,       st->depth_floor, st->resume_dst, st->ends_task};
+}
+
+static void ctx_load(pinax_state *st, const pnx_context *c) {
+    st->ibank = c->ibank;
+    st->sbank = c->sbank;
+    st->ctrl = c->ctrl;
+    st->int_slots = c->int_slots;
+    st->str_slots = c->str_slots;
+    st->depth_max = c->depth_max;
+    st->region_used = c->region_used;
+    st->region_len = c->region_len;
+    st->pc = c->pc;
+    st->int_base = c->int_base;
+    st->str_base = c->str_base;
+    st->depth = c->depth;
+    st->depth_floor = c->depth_floor;
+    st->resume_dst = c->resume_dst;
+    st->ends_task = c->ends_task;
+}
+
+// The task a value names, or NULL when that task has ended.
+static pnx_task *task_of(const pnx_global *g, int64_t value) {
+    const uint64_t slot = ((uint64_t)value & 0xffffffffu) - 1;
+    if (slot >= g->capacity)
+        return NULL;
+    pnx_task *t = (pnx_task *)(void *)g->ptr + slot;
+    return t->state != PNX_TASK_FREE && t->generation == (uint64_t)value >> 32 ? t : NULL;
+}
+
+// The run goes to task `t`. The state holds where the resumer stands (its pc already set to
+// where it goes on); `dst` is the resumer's register for "the task has ended".
+static void task_enter(pinax_state *st, pnx_task *t, uint32_t dst) {
+    st->resume_dst = dst;
+    ctx_save(st, st->task ? &st->task->ctx : &st->main);
+    t->parent = st->task;
+    t->in_host = st->in_host;
+    t->state = PNX_TASK_RUNNING;
+    st->task = t;
+    ctx_load(st, &t->ctx);
+    if (t->wake_fail != PINAX_OK) { // the operation it waited for failed: its failure word is next
+        st->fail = t->wake_fail;
+        t->wake_fail = PINAX_OK;
+    }
+}
+
+// The running task gives the run back to its resumer: it yielded, or (`ended`) it is over.
+static void task_leave(pinax_state *st, bool ended) {
+    pnx_task *t = st->task;
+    if (ended) {
+        t->state = PNX_TASK_FREE;
+        ++t->generation;
+    } else {
+        ctx_save(st, &t->ctx);
+        t->state = PNX_TASK_READY;
+    }
+    st->task = t->parent;
+    ctx_load(st, st->task ? &st->task->ctx : &st->main);
+    if (st->resume_dst != UINT32_MAX)
+        st->ibank[st->int_base + st->resume_dst] = ended;
+}
+
+void pnx_tasks_abort(pinax_state *st) {
+    if (st->task) {
+        st->task = NULL;
+        ctx_load(st, &st->main);
+    }
+    st->main_wait.token = 0;
+    for (uint32_t k = 0; st->head && k < st->head->n_globals; ++k) {
+        const pnx_global *g = &st->globals[k];
+        if (g->kind != PNX_G_TASKS)
+            continue;
+        for (uint32_t slot = 0; slot < g->capacity; ++slot) {
+            pnx_task *t = (pnx_task *)(void *)g->ptr + slot;
+            if (t->state != PNX_TASK_FREE) {
+                t->state = PNX_TASK_FREE;
+                ++t->generation;
+            }
+        }
+    }
+}
+
 // Calls a host word. Arguments start at ia / sa; results follow the arguments. Returns the
 // host's outcome; *fault is set when the interpreter itself cannot go on.
-static pinax_err host_call(pinax_state *st, const pnx_host *h, int64_t *ia, pnx_scell *sa, bool *fault) {
+static pinax_err host_call(pinax_state *st, const pnx_host *h, int64_t *ia, pnx_scell *sa, bool *fault,
+                           uint64_t *token) {
     pinax_str sv[PNX_MAX_STR_ARGS];
     pinax_str rs[PNX_MAX_STR_RESULTS];
     const pnx_counts n = h->counts;
@@ -38,7 +126,7 @@ static pinax_err host_call(pinax_state *st, const pnx_host *h, int64_t *ia, pnx_
         rs[k].len = 0;
     }
     pinax_args args = {ia, ia + n.int_args, sv, rs, NULL, NULL};
-    pinax_call call = {st};
+    pinax_call call = {st, 0};
     // where a word run from inside this host word may put its window
     const uint32_t itop = st->host_itop, stop = st->host_stop;
     st->host_itop = (uint32_t)(ia - st->ibank) + n.int_args + n.int_results;
@@ -49,9 +137,13 @@ static pinax_err host_call(pinax_state *st, const pnx_host *h, int64_t *ia, pnx_
     st->host_itop = itop;
     st->host_stop = stop;
     *fault = false;
+    if (err == PINAX_PENDING && call.token && (h->flags & PINAX_WORD_AWAITABLE) && st->in_host == 0) {
+        *token = call.token; // the result comes later, through pinax_complete()
+        return PINAX_PENDING;
+    }
     if (err != PINAX_OK) {
-        if (err < PINAX_ERR_FAILED) { // suspending or pending host words are not in P0
-            *fault = true;
+        if (err < PINAX_ERR_FAILED) { // pending without a token, from a word not registered awaitable,
+            *fault = true;            // or where a host word's C stack is in the way
             return PINAX_ERR_STATE;
         }
         return err;
@@ -92,7 +184,7 @@ pinax_err pnx_execute(pinax_state *st) {
     const uint32_t *const code = st->code;
     const uint32_t *pc = code + st->pc;
     uint32_t ibase = st->int_base, sbase = st->str_base, depth = st->depth;
-    const uint32_t floor = st->depth_floor;
+    uint32_t floor = st->depth_floor;
     int64_t *R = st->ibank + ibase;
     pnx_scell *S = st->sbank + sbase;
     const uint64_t budget = st->budget;
@@ -104,6 +196,26 @@ pinax_err pnx_execute(pinax_state *st) {
     do {                                                                                           \
         result = (error);                                                                          \
         goto finished;                                                                             \
+    } while (0)
+    // Where the run stands goes into the state before a task takes over, and comes back out of
+    // it when another one is in place.
+#define SAVE_CTX()                                                                                 \
+    do {                                                                                           \
+        st->pc = (uint32_t)(pc - code);                                                            \
+        st->int_base = ibase;                                                                      \
+        st->str_base = sbase;                                                                      \
+        st->depth = depth;                                                                         \
+        st->depth_floor = floor;                                                                   \
+    } while (0)
+#define LOAD_CTX()                                                                                 \
+    do {                                                                                           \
+        pc = code + st->pc;                                                                        \
+        ibase = st->int_base;                                                                      \
+        sbase = st->str_base;                                                                      \
+        depth = st->depth;                                                                         \
+        floor = st->depth_floor;                                                                   \
+        R = st->ibank + ibase;                                                                     \
+        S = st->sbank + sbase;                                                                     \
     } while (0)
 
 #if defined(PINAX_BUDGET_EACH)
@@ -366,8 +478,14 @@ pinax_err pnx_execute(pinax_state *st) {
             NEXT();
         }
         CASE(RET) {
-            if (depth == floor)
-                goto finished;
+            if (depth == floor) {
+                if (!st->ends_task)
+                    goto finished;
+                SAVE_CTX(); // the word of a task returned: the task is over
+                task_leave(st, true);
+                LOAD_CTX();
+                NEXT();
+            }
             const pnx_frame f = st->ctrl[--depth];
             pc = code + f.pc;
             ibase = f.int_base;
@@ -407,30 +525,166 @@ pinax_err pnx_execute(pinax_state *st) {
             S = st->sbank + sbase;
             NEXT();
         }
+        // The host word left its operation pending: this run waits. A task gives the run back
+        // to its resumer; the main run gives it back to the host.
+#define AWAIT(with_failure_word)                                                                   \
+    do {                                                                                           \
+        pnx_wait *wait = st->task ? &st->task->wait : &st->main_wait;                              \
+        *wait = (pnx_wait){token, st->imports[pc[-1]], ibase + OP_A(w), sbase + OP_B(w), with_failure_word}; \
+        if (!st->task)                                                                             \
+            goto waiting;                                                                          \
+        SAVE_CTX();                                                                                \
+        task_leave(st, false);                                                                     \
+        wait_task->state = PNX_TASK_WAITING;                                                       \
+        LOAD_CTX();                                                                                \
+        NEXT();                                                                                    \
+    } while (0)
         CASE(HCALL) {
             bool fault;
+            uint64_t token = 0;
             st->depth = depth; // a word run from inside the host word goes on from here
             st->left = left;
-            const pinax_err err = host_call(st, st->imports[*pc], R + OP_A(w), S + OP_B(w), &fault);
+            const pinax_err err = host_call(st, st->imports[*pc], R + OP_A(w), S + OP_B(w), &fault, &token);
             left = st->left;
             ++pc;
+            if (err == PINAX_PENDING) {
+                pnx_task *const wait_task = st->task;
+                AWAIT(false);
+            }
             if (err != PINAX_OK)
                 FAULT(err);
             NEXT();
         }
         CASE(HCALLF) {
             bool fault;
+            uint64_t token = 0;
             st->depth = depth;
             st->left = left;
-            const pinax_err err = host_call(st, st->imports[*pc], R + OP_A(w), S + OP_B(w), &fault);
+            const pinax_err err = host_call(st, st->imports[*pc], R + OP_A(w), S + OP_B(w), &fault, &token);
             left = st->left;
             ++pc;
+            if (err == PINAX_PENDING) { // it goes on at the failure word, or past it when the result is good
+                pnx_task *const wait_task = st->task;
+                AWAIT(true);
+            }
             if (err == PINAX_OK)
                 ++pc;
             else if (fault)
                 FAULT(err);
             else
                 st->fail = err;
+            NEXT();
+        }
+
+        CASE(TSPAWN) { // the next word runs when no slot is free
+            const pnx_global *g = &st->globals[OP_C(w)];
+            const uint64_t number = (uint64_t)R[OP_B(w)];
+            if (number >= st->head->n_words)
+                FAULT(PINAX_ERR_RANGE);
+            const pnx_counts have = st->word_counts[number];
+            const pnx_wordrec *callee = &st->words[number];
+            if (have.int_args || have.str_args || have.int_results || have.str_results || have.fails)
+                FAULT(PINAX_ERR_SIGNATURE);
+            pnx_task *t = NULL;
+            for (uint32_t slot = 0; slot < g->capacity && !t; ++slot) {
+                pnx_task *each = (pnx_task *)(void *)g->ptr + slot;
+                if (each->state == PNX_TASK_FREE)
+                    t = each;
+            }
+            if (!t) {
+                st->fail = PINAX_ERR_FULL;
+                NEXT();
+            }
+            if (callee->int_cells > t->int_slots || callee->str_cells > t->str_slots)
+                FAULT(PINAX_ERR_DEPTH);
+            ++t->generation; // odd: in use
+            t->state = PNX_TASK_READY;
+            t->cancelled = t->yielded = false;
+            t->wake_fail = t->wake_fault = PINAX_OK;
+            t->wait.token = 0;
+            t->ctx = (pnx_context){t->ibank,     t->sbank,       t->ctrl, t->int_slots, t->str_slots,
+                                   t->depth_max, t->region_base, t->region_base + t->region_bytes,
+                                   callee->entry, 0, 0, 0, 0, UINT32_MAX, true};
+            R[OP_A(w)] = (int64_t)((uint64_t)t->generation << 32 |
+                                   (uint64_t)(t - (pnx_task *)(void *)g->ptr + 1));
+            ++pc;
+            NEXT();
+        }
+        CASE(TRESUME) {
+            pnx_task *t = task_of(&st->globals[OP_C(w)], R[OP_B(w)]);
+            if (!t || t->state == PNX_TASK_WAITING) { // it has ended; or it waits for the host and cannot go on
+                R[OP_A(w)] = !t;
+                NEXT();
+            }
+            if (t->state != PNX_TASK_READY) // itself, or one that waits for this one
+                FAULT(PINAX_ERR_STATE);
+            SAVE_CTX();
+            task_enter(st, t, OP_A(w));
+            LOAD_CTX();
+            if (t->wake_fault != PINAX_OK)
+                FAULT(t->wake_fault);
+            NEXT();
+        }
+        CASE(TYIELD) { // the next word runs when the task was cancelled
+            pnx_task *t = st->task;
+            if (!t) { // the main run has no one to yield to
+                ++pc;
+                NEXT();
+            }
+            if (t->yielded) { // back from the yield
+                t->yielded = false;
+                if (t->cancelled) {
+                    st->fail = PINAX_ERR_CANCELLED;
+                    NEXT();
+                }
+                ++pc;
+                NEXT();
+            }
+            if (st->in_host != t->in_host) // a host word's C stack is in the way
+                FAULT(PINAX_ERR_STATE);
+            t->yielded = true;
+            --pc; // the task goes on from this instruction
+            SAVE_CTX();
+            task_leave(st, false);
+            LOAD_CTX();
+            NEXT();
+        }
+        CASE(TDONE) {
+            R[OP_A(w)] = task_of(&st->globals[OP_C(w)], R[OP_B(w)]) == NULL;
+            NEXT();
+        }
+        CASE(TCANCEL) {
+            pnx_task *t = task_of(&st->globals[OP_BX(w)], R[OP_A(w)]);
+            if (t)
+                t->cancelled = true;
+            NEXT();
+        }
+        CASE(TRUNALL) { // comes back here after every task's turn, until none is left
+            pnx_global *g = &st->globals[OP_BX(w)];
+            pnx_task *t = NULL;
+            bool any_waits = false;
+            for (uint32_t k = 0; k < g->capacity && !t; ++k) {
+                const uint32_t slot = (g->head + 1 + k) % g->capacity;
+                pnx_task *each = (pnx_task *)(void *)g->ptr + slot;
+                any_waits = any_waits || each->state == PNX_TASK_WAITING;
+                if (each->state == PNX_TASK_READY) {
+                    t = each;
+                    g->head = slot;
+                }
+            }
+            if (!t && !any_waits)
+                NEXT();
+            --pc;
+            if (!t) { // every task left waits for the host: so does the state
+                if (st->in_host)
+                    FAULT(PINAX_ERR_STATE);
+                goto waiting;
+            }
+            SAVE_CTX();
+            task_enter(st, t, UINT32_MAX);
+            LOAD_CTX();
+            if (t->wake_fault != PINAX_OK)
+                FAULT(t->wake_fault);
             NEXT();
         }
 
@@ -464,6 +718,17 @@ pinax_err pnx_execute(pinax_state *st) {
     }
 #endif
 
+waiting: // like suspended; the host goes on with pinax_resume() after pinax_complete()
+    st->waiting = true;
+    st->pc = (uint32_t)(pc - code);
+    st->int_base = ibase;
+    st->str_base = sbase;
+    st->depth = depth;
+    st->left = left;
+    st->instructions += count;
+    st->suspended = true;
+    return PINAX_WAITING;
+
 suspended:
     st->pc = (uint32_t)(pc - code);
     st->int_base = ibase;
@@ -477,8 +742,11 @@ suspended:
     return PINAX_SUSPENDED;
 
 finished:
-    if (result != PINAX_OK)
+    if (result != PINAX_OK) {
         st->fault_pc = (uint32_t)(pc - code);
+        if (st->task && st->in_host == 0) // a fault inside a task ends the run and every task
+            pnx_tasks_abort(st);
+    }
     st->left = left;
     st->instructions += count;
     st->suspended = false;

@@ -35,7 +35,7 @@ enum {
     STEM_RANGE, STEM_BYTES, STEM_TIMES, STEM_COLL, STEM_WORDS, STEM_ROWS, STEM_STRS,
     STEM_LINES, STEM_SPLIT, STEM_SPLIT_BYTE // like STEM_WORDS, these take their next piece off the string
 };
-enum { GK_SCALAR, GK_ARRAY, GK_LIST, GK_BUFFER, GK_INDEX, GK_QUEUE, GK_POOL };
+enum { GK_SCALAR, GK_ARRAY, GK_LIST, GK_BUFFER, GK_INDEX, GK_QUEUE, GK_POOL, GK_TASKS };
 enum { L_PLAIN, L_OWNS, L_MOVED }; // what a local holds of a value that must be given exactly once
 #define FWD_MARK 0x80000000u // in a call: the number of a forward declaration, patched at the end
 #define TY_DISTINCT 0x4000u  // declared by `type`: this plus its number
@@ -447,6 +447,8 @@ static tid type_of_name(const comp *c, name n) {
     if (g != NONE) {
         const globalsym *sym = (const globalsym *)c->globals.ptr + g;
         if (sym->kind != GK_SCALAR && (sym->forward || sym->record != NONE))
+            return row_type(g);
+        if (sym->kind == GK_TASKS) // a task of that set
             return row_type(g);
     }
     // a type or a table of records that a module in use exports
@@ -1141,6 +1143,7 @@ enum {
     BW_APPEND, BW_APPEND_BYTE, BW_APPEND_INT, BW_CONTENTS, BW_TAKE, BW_SKIP, BW_TAKE_LAST, BW_SKIP_LAST,
     BW_STARTS_WITH, BW_ENDS_WITH, BW_CONTAINS, BW_LOOKUP, BW_INSERT, BW_REMOVE, BW_REPLACE, BW_PUT, BW_PEEK,
     BW_ALLOC, BW_FREE, BW_IS_ALIVE, BW_COUNT, BW_ANY, BW_ALL, BW_FIRST, BW_EACH_INDEX, BW_MAP_INTO, BW_FILTER_INTO, BW_MINIMUM, BW_MAXIMUM,
+    BW_SPAWN, BW_YIELD, BW_RESUME, BW_IS_DONE, BW_CANCEL, BW_RUN_ALL,
     BW_SLICE, BW_CUT, BW_TRY_CUT, BW_TRIM, BW_TRIM_LEFT, BW_TRIM_RIGHT, BW_LINES, BW_SPLIT, BW_FIND_LAST, BW_COMPARE,
     BW_HEX, BW_BIN, BW_HEX_PAD, BW_ZERO_PAD, BW_PAD_LEFT, BW_PAD_RIGHT, BW_CALL, BW_MARK, BW_RELEASE, BW_REGION_FREE
 };
@@ -1168,6 +1171,8 @@ static const struct builtin {
     {"count", BW_COUNT, 0},     {"any", BW_ANY, 0},        {"all", BW_ALL, 0},
     {"first", BW_FIRST, 0},     {"each_index", BW_EACH_INDEX, 0},
     {"map_into", BW_MAP_INTO, 0}, {"filter_into", BW_FILTER_INTO, 0},
+    {"spawn", BW_SPAWN, 0},     {"yield", BW_YIELD, 0},    {"resume", BW_RESUME, 0},
+    {"is_done", BW_IS_DONE, 0}, {"cancel", BW_CANCEL, 0},  {"run_all", BW_RUN_ALL, 0},
     {"minimum", BW_MINIMUM, 0}, {"maximum", BW_MAXIMUM, 0},
     {"slice", BW_SLICE, 1},         {"cut", BW_CUT, 1},            {"try_cut", BW_TRY_CUT, 1},
     {"trim", BW_TRIM, 1},           {"trim_left", BW_TRIM_LEFT, 1}, {"trim_right", BW_TRIM_RIGHT, 1},
@@ -3642,6 +3647,52 @@ static bool builtin(comp *c, const struct builtin *w) {
         --f->depth;
         return settle_all(c) && emit(c, PNX_ABX(PNX_LPUSH, ra, gi)) != NONE && guard_op(c, TY_NONE);
     }
+    // ---- tasks (RFC-0005): a task is a value of the type its set names ----
+    case BW_SPAWN: { // block workers spawn : a task that will run the block; fails when the set is full
+        if (!need_coll(c, &g, &gi) || !need(c, 1))
+            return false;
+        const tid type = f->stack[f->depth - 1].type;
+        const sig *bs = is_block(type) ? (const sig *)c->btypes.ptr + (type - TY_BLOCK) : NULL;
+        if (g->kind != GK_TASKS || !bs || bs->n_in || bs->n_out || bs->fails)
+            return type_error(c, "spawn takes a block that takes and gives nothing, and a set of tasks: do ... end workers spawn");
+        if (!settle(c, f->depth - 1))
+            return false;
+        ra = slot_of(c, f->depth - 1);
+        --f->depth;
+        return settle_all(c) && emit(c, PNX_ABC(PNX_TSPAWN, top_slot(c, BANK_I, 1), ra, gi)) != NONE &&
+               guard_op(c, row_type(gi));
+    }
+    case BW_YIELD: // gives the run to whoever resumed this task; fails once the task was cancelled
+        return settle_all(c) && emit(c, PNX_ABX(PNX_TYIELD, 0, 0)) != NONE && guard_op(c, TY_NONE);
+    case BW_RESUME:
+    case BW_IS_DONE:
+    case BW_CANCEL: { // t resume : runs the task to its next yield; true when it has ended
+        if (!need(c, 1))
+            return false;
+        const tid type = f->stack[f->depth - 1].type;
+        gi = is_row(type) ? (uint32_t)(type - TY_FIRST_DECLARED) : NONE;
+        if (gi == NONE || ((const globalsym *)c->globals.ptr + gi)->kind != GK_TASKS)
+            return type_error(c, "this word takes a task");
+        if (gi > 255)
+            return syntax(c, "only the first 256 globals can be sets of tasks for now");
+        if (w->id == BW_RESUME && !settle_all(c))
+            return false;
+        if (!reg_of(c, f->depth - 1, &ra))
+            return false;
+        --f->depth;
+        if (w->id == BW_CANCEL)
+            return emit(c, PNX_ABX(PNX_TCANCEL, ra, gi)) != NONE && advance(c);
+        const uint32_t dst = top_slot(c, BANK_I, 1);
+        return emit_def(c, PNX_ABC(w->id == BW_RESUME ? PNX_TRESUME : PNX_TDONE, dst, ra, gi), BANK_I) != NONE &&
+               push_slot(c, TY_BOOL) && advance(c);
+    }
+    case BW_RUN_ALL: { // workers run_all : resumes the tasks of the set in turn until all have ended
+        if (!need_coll(c, &g, &gi))
+            return false;
+        if (g->kind != GK_TASKS)
+            return type_error(c, "run_all takes a set of tasks");
+        return settle_all(c) && emit(c, PNX_ABX(PNX_TRUNALL, 0, gi)) != NONE && advance(c);
+    }
     case BW_POP: { // names pop : fails when the list is empty
         if (!need_coll(c, &g, &gi))
             return false;
@@ -4351,6 +4402,48 @@ static bool declare_extern(comp *c) {
         return false;
     *slot = (externsym){.name = n, .host = host};
     return advance(c);
+}
+
+static bool declared_size(comp *c, uint32_t *out);
+
+// tasks NAME count [depth [region]] : a set of tasks (RFC-0005). Each has its own registers
+// for `depth` levels of calls and its own `region` bytes for the strings it builds.
+static bool declare_tasks(comp *c) {
+    if (!advance(c))
+        return false;
+    if (c->tok.kind != PNX_T_NAME)
+        return syntax(c, "the declaration is: tasks name count");
+    globalsym g = {.name = tok_name(c), .kind = GK_TASKS, .record = NONE, .table = 16, .key = 1024};
+    if (name_is_global(c, g.name))
+        return type_error(c, "this name is already defined");
+    if (g.name.length > 31)
+        return syntax(c, "a global name is at most 31 bytes long");
+    if (!advance(c) || !declared_size(c, &g.capacity))
+        return false;
+    if (c->tok.kind == PNX_T_INT) { // the call depth of a task
+        if (c->tok.integer < 1 || c->tok.integer > 4096)
+            return syntax(c, "the call depth of a task is 1 to 4096");
+        g.table = (uint32_t)c->tok.integer;
+        if (!advance(c))
+            return false;
+        if (c->tok.kind == PNX_T_INT) { // the bytes of its region
+            if (c->tok.integer < 0 || c->tok.integer > (1 << 24))
+                return syntax(c, "the region of a task is at most 16 MiB");
+            g.key = (uint32_t)c->tok.integer;
+            if (!advance(c))
+                return false;
+        }
+    }
+    if (g.capacity > 4096)
+        return syntax(c, "a set holds at most 4096 tasks");
+    if (c->globals.n >= 0xfffu)
+        return syntax(c, "too many globals");
+    globalsym *slot = vec_push(c, &c->globals, sizeof(globalsym));
+    if (!slot)
+        return false;
+    g.type = row_type((uint32_t)(slot - (globalsym *)c->globals.ptr));
+    *slot = g;
+    return true;
 }
 
 // const NAME literal
@@ -5167,7 +5260,7 @@ static bool compile(comp *c, image *im, bool *has_top) {
             static const pnx_word_id may[] = {PNX_KW_word,  PNX_KW_const,  PNX_KW_global, PNX_KW_array, PNX_KW_list,
                                               PNX_KW_queue, PNX_KW_pool,   PNX_KW_type,   PNX_KW_buffer,
                                               PNX_KW_index, PNX_KW_record, PNX_KW_forward, PNX_KW_bound,
-                                              PNX_KW_row,   PNX_KW_extern};
+                                              PNX_KW_row,   PNX_KW_extern, PNX_KW_tasks};
             bool ok = false;
             for (uint32_t k = 0; k < sizeof may / sizeof may[0]; ++k)
                 ok = ok || is_word(c, may[k]);
@@ -5230,6 +5323,11 @@ static bool compile(comp *c, image *im, bool *has_top) {
                 return false;
         } else if (is_word(c, PNX_KW_buffer) && !c->top_fn->n_blocks) {
             if (!declare_buffer(c))
+                return false;
+        } else if (is_word(c, PNX_KW_tasks) && !c->top_fn->n_blocks) {
+            if (c->data_only)
+                return syntax(c, "a data source runs no code and declares no tasks");
+            if (!declare_tasks(c))
                 return false;
         } else if (is_word(c, PNX_KW_index) && !c->top_fn->n_blocks) {
             if (!declare_index(c))
@@ -5372,6 +5470,10 @@ static bool serialize(comp *c, const image *im, uint8_t **out, size_t *out_len) 
         if (g->record != NONE) {
             rec.kind = g->kind == GK_ARRAY ? PNX_G_TABLE : g->kind == GK_POOL ? PNX_G_POOL : PNX_G_ROWS;
             rec.elem_bytes = ((const record *)c->records.ptr + g->record)->size;
+        } else if (g->kind == GK_TASKS) {
+            rec.kind = PNX_G_TASKS;
+            rec.elem_bytes = g->table; // the call depth
+            rec.reserved = g->key;     // the bytes of the region
         } else if (g->kind == GK_QUEUE) {
             rec.kind = PNX_G_QUEUE;
         } else if (g->strcap) { // text cells are rows of one length byte and N bytes
@@ -5396,6 +5498,8 @@ static bool serialize(comp *c, const image *im, uint8_t **out, size_t *out_len) 
             rec.type[4 + n] = ')';
         } else if (g->kind == GK_BUFFER) {
             put_text(rec.type, sizeof rec.type, cname("buffer"));
+        } else if (g->kind == GK_TASKS) {
+            put_text(rec.type, sizeof rec.type, cname("tasks"));
         } else if (g->kind != GK_INDEX) {
             put_text(rec.type, sizeof rec.type, type_name(c, g->type));
         }
@@ -5857,11 +5961,11 @@ static pinax_err load_source(pinax_state *st, const char *file, pinax_str source
             st->error_text = "the data source did not finish inside its budget";
             err = PINAX_ERR_STATE;
         }
-        if (err == PINAX_SUSPENDED) { // pinax_resume() finishes the load, or undoes it on a fault
+        if (err == PINAX_SUSPENDED || err == PINAX_WAITING) { // pinax_resume() finishes the load, or undoes it on a fault
             st->loading = true;
             st->before_load = before;
         }
-        if (err != PINAX_OK && err != PINAX_SUSPENDED) {
+        if (err != PINAX_OK && err != PINAX_SUSPENDED && err != PINAX_WAITING) {
             // a fault while loading: what this load added does not stay, as after any other load error
             const char *text = st->error_text;
             pnx_program_restore(st, &before);

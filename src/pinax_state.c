@@ -422,6 +422,8 @@ static const char *check_word(const pinax_state *st, uint32_t index, span range,
         case PNX_IXPUT: case PNX_IXDEL: want = PNX_G_INDEX; global = bx; break;
         case PNX_IXGET: case PNX_IXGETS: want = PNX_G_INDEX; global = c; break;
         case PNX_LPUSH: case PNX_LPOP: want = PNX_G_LIST; global = bx; break;
+        case PNX_TSPAWN: case PNX_TRESUME: case PNX_TDONE: want = PNX_G_TASKS; global = c; break;
+        case PNX_TCANCEL: case PNX_TRUNALL: want = PNX_G_TASKS; global = bx; break;
         case PNX_ROW: want = PNX_G_TABLE; global = c; break;
         case PNX_BCLEAR: case PNX_BVIEW: want = PNX_G_BUFFER; global = bx; break;
         case PNX_BPUT: case PNX_BPUTS: want = PNX_G_BUFFER; global = c; break;
@@ -435,7 +437,7 @@ static const char *check_word(const pinax_state *st, uint32_t index, span range,
             const bool ok = kind == want || (want == PNX_G_ARRAY && kind == PNX_G_LIST) ||
                             (want == PNX_G_TABLE && (kind == PNX_G_ROWS || (kind == PNX_G_POOL && op != PNX_ROW))) ||
                             (want == PNX_G_COUNT + 1 && kind != PNX_G_INT && kind != PNX_G_BUFFER &&
-                             kind != PNX_G_INDEX);
+                             kind != PNX_G_INDEX && kind != PNX_G_TASKS);
             if (!ok)
                 return "code: global of the wrong kind";
             if ((op == PNX_IXGET && st->globals[global].key_is_str) ||
@@ -508,7 +510,7 @@ static const char *const op_roles[PNX_OP_COUNT] = {
     [PNX_FAILR] = "r",   [PNX_RCATS] = "mr",  [PNX_RCATI] = "mr",  [PNX_RCATB] = "mr", [PNX_RCATX] = "mr",
     [PNX_RCATW] = "mrr", [PNX_RCATXW] = "mrr", [PNX_RPADL] = "mrr", [PNX_RPADR] = "mrr", [PNX_LPUSH] = "r",
     [PNX_BCAT] = "r",    [PNX_BCATI] = "r",   [PNX_IXPUT] = "r",   [PNX_IXDEL] = "r",  [PNX_QPUT] = "r",
-    [PNX_PFREE] = "r",   [PNX_RCUT] = "r",    [PNX_CALLR] = "--r",
+    [PNX_PFREE] = "r",   [PNX_RCUT] = "r",    [PNX_CALLR] = "--r", [PNX_TCANCEL] = "r",
 };
 
 typedef struct regset {
@@ -796,6 +798,14 @@ pinax_err pnx_load_container(pinax_state *st, pinax_str bytecode, uint32_t keep)
             bytes = (uint64_t)rec->capacity * 4;
             break;
         }
+        case PNX_G_TASKS: // elem_bytes: the call depth of a task; reserved: the bytes of its region
+            if (rec->capacity > 4096 || rec->elem_bytes == 0 || rec->elem_bytes > 4096 || rec->reserved > (1u << 24))
+                goto rollback;
+            bytes = (uint64_t)rec->capacity *
+                    (sizeof(pnx_task) + (uint64_t)rec->elem_bytes * (PNX_TASK_INTS * 8 + PNX_TASK_STRS * sizeof(pnx_scell) +
+                                                                     sizeof(pnx_frame)) +
+                     ((rec->reserved + 15u) & ~15u));
+            break;
         default: goto rollback;
         }
         if (k < keep) { // a global of the program being extended: its storage and state stay
@@ -824,6 +834,31 @@ pinax_err pnx_load_container(pinax_state *st, pinax_str bytecode, uint32_t keep)
                 __builtin_memcpy(meta + (size_t)slot * 8 + 4, &next, 4);
             }
             g->head = 1;
+        }
+        if (rec->kind == PNX_G_TASKS) { // every task gets its registers, its control stack and its region
+            pnx_task *tasks = (pnx_task *)(void *)g->ptr;
+            uint8_t  *room = (uint8_t *)(tasks + g->capacity);
+            const uint32_t depth = rec->elem_bytes, region = (rec->reserved + 15u) & ~15u;
+            if ((uint64_t)(room - st->region) + bytes > UINT32_MAX) {
+                why = "block too large for tasks: their regions must lie within 4 GiB of the main one";
+                goto rollback;
+            }
+            for (uint32_t slot = 0; slot < g->capacity; ++slot) {
+                pnx_task *t = &tasks[slot];
+                t->int_slots = depth * PNX_TASK_INTS;
+                t->str_slots = depth * PNX_TASK_STRS;
+                t->depth_max = depth;
+                t->ibank = (int64_t *)(void *)room;
+                room += (size_t)t->int_slots * 8;
+                t->sbank = (pnx_scell *)(void *)room;
+                room += (size_t)t->str_slots * sizeof(pnx_scell);
+                t->ctrl = (pnx_frame *)(void *)room;
+                room += (size_t)depth * sizeof(pnx_frame);
+                t->region_base = (uint32_t)(room - st->region);
+                t->region_bytes = rec->reserved;
+                room += region;
+            }
+            g->head = g->capacity - 1; // run_all takes the slot after the one it took last: slot 0 first
         }
         if (rec->kind == PNX_G_INDEX) {
             g->key = rec->elem_bytes;
@@ -962,7 +997,7 @@ static void fault_place(pinax_state *st, pinax_err err) {
 
 static pinax_err deliver(pinax_state *st, pinax_err err, const pinax_args *results) {
     if (err != PINAX_OK) {
-        if (err != PINAX_SUSPENDED) {
+        if (err != PINAX_SUSPENDED && err != PINAX_WAITING) {
             fault_place(st, err);
             st->error_text = st->where;
             handles_close(st, st->run_serial); // what this run opened and still holds
@@ -1012,6 +1047,8 @@ static pinax_err run_nested(pinax_state *st, pinax_word word, const pinax_args *
     const uint32_t pc = st->pc, int_base = st->int_base, str_base = st->str_base, floor = st->depth_floor;
     const uint32_t depth = st->depth;
     const pinax_err outer_fail = st->fail;
+    const bool ends_task = st->ends_task;
+    st->ends_task = false; // this word returns to the host word, whatever runs around it
     st->pc = rec->entry;
     st->int_base = ibase;
     st->str_base = sbase;
@@ -1029,6 +1066,7 @@ static pinax_err run_nested(pinax_state *st, pinax_word word, const pinax_args *
     st->depth_floor = floor;
     st->depth = depth;
     st->fail = outer_fail;
+    st->ends_task = ends_task;
     if (err != PINAX_OK)
         return err;
     if ((n.int_results && !(args && args->ri)) || (n.str_results && !(args && args->rs)))
@@ -1080,6 +1118,8 @@ pinax_err pinax_run(pinax_state *st, pinax_word word, const pinax_args *args) {
         st->run_serial = 1;
     st->pc = rec->entry;
     st->int_base = st->str_base = st->depth = st->depth_floor = 0;
+    st->ends_task = false;
+    st->resume_dst = UINT32_MAX;
     st->left = st->budget;
     st->charge = 0;
     st->fail = PINAX_ERR_FAILED;
@@ -1091,10 +1131,23 @@ pinax_err pinax_resume(pinax_state *st, const pinax_args *results) {
         return PINAX_ERR_ARGUMENT;
     if (!st->suspended || st->in_host)
         return fail(st, PINAX_ERR_STATE, "nothing is suspended");
+    if (st->main_wait.token)
+        return PINAX_WAITING; // the operation the main run waits for has not been completed
     st->left = st->budget > st->owed ? st->budget : st->owed;
+    st->waiting = false;
     st->owed = 0;
-    const pinax_err err = deliver(st, pnx_execute(st), results);
-    if (st->loading && err != PINAX_SUSPENDED) { // the load ends here: done, or failed and undone
+    pinax_err run = st->main_fault;
+    st->main_fault = PINAX_OK;
+    if (run != PINAX_OK) { // the operation failed and the word that called it has no `or fail`
+        st->suspended = false;
+        st->fault_pc = st->pc;
+        if (st->task)
+            pnx_tasks_abort(st);
+    } else {
+        run = pnx_execute(st);
+    }
+    const pinax_err err = deliver(st, run, results);
+    if (st->loading && err != PINAX_SUSPENDED && err != PINAX_WAITING) { // the load ends here: done, or failed and undone
         st->loading = false;
         if (err != PINAX_OK) {
             const char *text = st->error_text;
@@ -1165,13 +1218,74 @@ pinax_err pinax_bind(pinax_state *st, const char *global, void *memory, size_t b
 // ---- declared in pinax.h, not in P0 ---------------------------------------------------------
 
 pinax_token pinax_call_pending(pinax_call *call) {
-    (void)call;
-    return 0;
+    pinax_state *st = call->state;
+    if (!call->token)
+        call->token = ++st->token_serial;
+    return call->token;
+}
+
+// Puts the results of a host operation where the call that started it expected them. `region`
+// is the top of the region of the run that waits; strings are copied there.
+static pinax_err wake(pinax_state *st, const pnx_wait *w, int64_t *ibank, pnx_scell *sbank, uint32_t *region_used,
+                      uint32_t region_len, const pinax_args *results) {
+    const pnx_counts n = w->host->counts;
+    if ((n.int_results && !(results && results->ri)) || (n.str_results && !(results && results->rs)))
+        return PINAX_ERR_ARGUMENT;
+    for (uint32_t k = 0; k < n.int_results; ++k)
+        ibank[w->ia + n.int_args + k] = results->ri[k];
+    for (uint32_t k = 0; k < n.str_results; ++k) {
+        const pinax_str s = results->rs[k];
+        if (s.len > region_len - *region_used)
+            return PINAX_ERR_FULL;
+        if (s.len)
+            __builtin_memcpy(st->region + *region_used, s.ptr, s.len);
+        sbank[w->sa + n.str_args + k] = (pnx_scell){s.len ? PNX_SEG_REGION : PNX_SEG_EMPTY, (uint32_t)s.len,
+                                                    s.len ? *region_used : 0};
+        *region_used += (uint32_t)s.len;
+    }
+    return PINAX_OK;
 }
 
 pinax_err pinax_complete(pinax_state *st, pinax_token token, pinax_err outcome, const pinax_args *results) {
-    (void)st, (void)token, (void)outcome, (void)results;
-    return PINAX_ERR_STATE;
+    if (!st || !token)
+        return PINAX_ERR_ARGUMENT;
+    if (st->in_host)
+        return fail(st, PINAX_ERR_STATE, "a host word is running");
+    if (st->main_wait.token == token) { // the main run waits
+        const pnx_wait w = st->main_wait;
+        if (outcome == PINAX_OK)
+            outcome = wake(st, &w, st->ibank, st->sbank, &st->region_used, st->region_len, results);
+        st->main_wait.token = 0;
+        if (outcome == PINAX_OK)
+            st->pc += w.fails ? 1u : 0u; // past the failure word
+        else if (w.fails && outcome >= PINAX_ERR_FAILED)
+            st->fail = outcome;
+        else
+            st->main_fault = outcome >= PINAX_ERR_FAILED ? outcome : PINAX_ERR_STATE;
+        return PINAX_OK;
+    }
+    for (uint32_t k = 0; st->head && k < st->head->n_globals; ++k) {
+        const pnx_global *g = &st->globals[k];
+        for (uint32_t slot = 0; g->kind == PNX_G_TASKS && slot < g->capacity; ++slot) {
+            pnx_task *t = (pnx_task *)(void *)g->ptr + slot;
+            if (t->state != PNX_TASK_WAITING || t->wait.token != token)
+                continue;
+            if (outcome == PINAX_OK)
+                outcome = wake(st, &t->wait, t->ibank, t->sbank, &t->ctx.region_used, t->ctx.region_len, results);
+            if (t->cancelled && t->wait.fails) // cancelled while it waited: that is what it learns
+                outcome = PINAX_ERR_CANCELLED;
+            t->wait.token = 0;
+            t->state = PNX_TASK_READY;
+            if (outcome == PINAX_OK)
+                t->ctx.pc += t->wait.fails ? 1u : 0u;
+            else if (t->wait.fails && outcome >= PINAX_ERR_FAILED)
+                t->wake_fail = outcome;
+            else
+                t->wake_fault = outcome >= PINAX_ERR_FAILED ? outcome : PINAX_ERR_STATE;
+            return PINAX_OK;
+        }
+    }
+    return fail(st, PINAX_ERR_NOT_FOUND, "no run waits for this operation");
 }
 
 void pinax_set_resolver(pinax_state *st, pinax_resolve_fn resolve, void *user) {
