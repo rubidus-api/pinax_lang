@@ -2703,7 +2703,7 @@ pinax_err pinax_load(pinax_state *st, const char *file, pinax_str source, uint32
     // takes its room from the front; the block is shortened for that moment.
     uint8_t *const parked = end - length;
     __builtin_memmove(parked, container, length);
-    const size_t full = st->block_len;
+    const size_t full = st->block_len, mark = st->used;
     st->block_len = (size_t)(parked - st->block);
     const pinax_str bytes = {parked, length};
     pinax_err err = pinax_load_bytecode(st, bytes);
@@ -2714,6 +2714,12 @@ pinax_err pinax_load(pinax_state *st, const char *file, pinax_str source, uint32
         return err;
     if (has_top) { // code outside definitions runs once, now
         err = pinax_run(st, st->head->n_words - 1, NULL);
+        if (err != PINAX_OK && err != PINAX_SUSPENDED) {
+            // a fault while loading: nothing stays loaded, as after any other load error
+            const char *text = st->error_text;
+            pnx_unload(st, mark);
+            st->error_text = text;
+        }
     }
     return err;
 }

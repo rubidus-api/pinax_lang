@@ -105,6 +105,9 @@ uint32_t pnx_format_int(int64_t value, uint8_t out[24]);
 // Offset of the first `byte`, or UINT32_MAX.
 uint32_t pnx_find_byte(const uint8_t *bytes, uint32_t length, uint8_t byte);
 
+// Forgets the loaded code and gives back the block from `mark` on.
+void pnx_unload(pinax_state *state, size_t mark);
+
 // Bytes in the main task's region; NULL when it is full.
 uint8_t *pnx_region_alloc(pinax_state *state, size_t bytes);
 

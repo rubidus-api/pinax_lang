@@ -502,11 +502,16 @@ pinax_err pinax_load_bytecode(pinax_state *st, pinax_str bytecode) {
     return PINAX_OK;
 
 rollback:
+    pnx_unload(st, mark);
+    return fail(st, err, why);
+}
+
+void pnx_unload(pinax_state *st, size_t mark) {
     st->used = mark;
     st->head = NULL;
+    st->suspended = false;
     st->segment[PNX_SEG_CONST] = empty_bytes;
     st->segment[PNX_SEG_GLOBAL] = empty_bytes;
-    return fail(st, err, why);
 }
 
 // ---- finding and running -----------------------------------------------------------------
