@@ -375,8 +375,8 @@ PNX_OP(RCATB) {
 PNX_OP(GLEN) { R[OP_A(w)] = st->globals[OP_BX(w)].length; return PNX_R_OK; }
 PNX_OP(GCLEAR) { // an array is zeroed; a list becomes empty
     pnx_global *g = &st->globals[OP_BX(w)];
-    if (g->kind == PNX_G_LIST || g->kind == PNX_G_ROWS)
-        g->length = 0;
+    if (g->kind == PNX_G_LIST || g->kind == PNX_G_ROWS || g->kind == PNX_G_QUEUE)
+        g->length = g->head = 0;
     else
         __builtin_memset(g->ptr, 0, (size_t)g->capacity * g->elem_bytes);
     return PNX_R_OK;
@@ -527,6 +527,38 @@ PNX_OP(SREPL) {
     if (r != PNX_R_OK)
         return r;
     S[OP_A(w)] = out;
+    return PNX_R_OK;
+}
+
+PNX_OP(QPUT) {
+    pnx_global *g = &st->globals[OP_BX(w)];
+    if (g->length == g->capacity) {
+        st->fail = PINAX_ERR_FULL;
+        return PNX_R_FAILED;
+    }
+    const uint32_t at = (uint32_t)(((uint64_t)g->head + g->length) % g->capacity);
+    __builtin_memcpy(g->ptr + (size_t)at * 8, &R[OP_A(w)], 8);
+    ++g->length;
+    return PNX_R_OK;
+}
+PNX_OP(QTAKE) {
+    pnx_global *g = &st->globals[OP_BX(w)];
+    if (g->length == 0) {
+        st->fail = PINAX_ERR_RANGE;
+        return PNX_R_FAILED;
+    }
+    __builtin_memcpy(&R[OP_A(w)], g->ptr + (size_t)g->head * 8, 8);
+    g->head = g->head + 1 == g->capacity ? 0 : g->head + 1;
+    --g->length;
+    return PNX_R_OK;
+}
+PNX_OP(QPEEK) {
+    const pnx_global *g = &st->globals[OP_BX(w)];
+    if (g->length == 0) {
+        st->fail = PINAX_ERR_RANGE;
+        return PNX_R_FAILED;
+    }
+    __builtin_memcpy(&R[OP_A(w)], g->ptr + (size_t)g->head * 8, 8);
     return PNX_R_OK;
 }
 

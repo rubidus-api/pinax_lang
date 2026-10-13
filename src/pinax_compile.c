@@ -30,7 +30,9 @@ enum { BANK_I, BANK_S, BANK_NONE };
 enum { E_SLOT, E_LOCAL, E_CONST, E_COND };
 enum { B_IF, B_LOOP, B_ORELSE, B_CASE, B_OF, B_DO };
 enum { STEM_RANGE, STEM_BYTES, STEM_TIMES, STEM_COLL, STEM_WORDS, STEM_ROWS, STEM_STRS };
-enum { GK_SCALAR, GK_ARRAY, GK_LIST, GK_BUFFER, GK_INDEX };
+enum { GK_SCALAR, GK_ARRAY, GK_LIST, GK_BUFFER, GK_INDEX, GK_QUEUE };
+#define FWD_MARK 0x80000000u // in a call: the number of a forward declaration, patched at the end
+#define TY_DISTINCT 0x4000u  // declared by `type`: this plus its number
 enum { USE_EACH, USE_FOLD, USE_TIMES };
 
 #define MAX_STACK 64
@@ -167,6 +169,19 @@ typedef struct record {
     uint32_t size;
 } record;
 
+// forward word NAME ( effect ) : a word called before it is defined
+typedef struct fwd {
+    name     name;
+    sig      sig;
+    uint32_t index; // its word number once defined, NONE before
+} fwd;
+
+// type NAME base : the same representation, another type
+typedef struct dtype {
+    name name;
+    tid  base;
+} dtype;
+
 typedef struct comp {
     pinax_state *st;
     const char  *file;
@@ -183,6 +198,8 @@ typedef struct comp {
     vec          globals;  // globalsym
     vec          records;  // record
     vec          fields;   // field
+    vec          fwds;     // fwd
+    vec          dtypes;   // dtype
     bool         use_strings;
     bool         data_only; // PINAX_LOAD_DATA: declarations, literals, stores and rows only
     name         modules[MAX_MODULES];
@@ -285,7 +302,14 @@ static tid row_type(uint32_t index) {
 }
 
 static bool is_row(tid type) {
-    return type >= TY_FIRST_DECLARED && !(type & TY_SBANK);
+    return type >= TY_FIRST_DECLARED && type < TY_DISTINCT;
+}
+
+// The type a distinct type is made of; any other type is its own base.
+static tid base_of(const comp *c, tid type) {
+    if ((type & ~TY_SBANK) >= TY_DISTINCT && (type & ~TY_SBANK) - TY_DISTINCT < c->dtypes.n)
+        return ((const dtype *)c->dtypes.ptr + ((type & ~TY_SBANK) - TY_DISTINCT))->base;
+    return type;
 }
 
 static uint32_t find_global(const comp *c, name n);
@@ -293,6 +317,8 @@ static uint32_t find_global(const comp *c, name n);
 static name type_name(const comp *c, tid type) {
     if (is_row(type))
         return ((const globalsym *)c->globals.ptr + (type - TY_FIRST_DECLARED))->name;
+    if (base_of(c, type) != type)
+        return ((const dtype *)c->dtypes.ptr + ((type & ~TY_SBANK) - TY_DISTINCT))->name;
     return cname(type == TY_INT ? "int" : type == TY_BOOL ? "bool" : type == TY_ERR ? "err" : "str");
 }
 
@@ -314,6 +340,11 @@ static tid type_of_name(const comp *c, name n) {
     const tid basic = basic_type(n);
     if (basic != TY_NONE)
         return basic;
+    for (uint32_t k = 0; k < c->dtypes.n; ++k) {
+        const dtype *d = (const dtype *)c->dtypes.ptr + k;
+        if (name_eq(d->name, n))
+            return (tid)((TY_DISTINCT + k) | (d->base & TY_SBANK));
+    }
     const uint32_t g = find_global(c, n);
     if (g != NONE) {
         const globalsym *sym = (const globalsym *)c->globals.ptr + g;
@@ -711,6 +742,18 @@ static wordsym *find_word(comp *c, name n, uint32_t *index) {
     return NULL;
 }
 
+static fwd *find_fwd(const comp *c, name n, uint32_t *index) {
+    fwd *all = c->fwds.ptr;
+    for (uint32_t k = 0; k < c->fwds.n; ++k) {
+        if (name_eq(all[k].name, n)) {
+            if (index)
+                *index = k;
+            return &all[k];
+        }
+    }
+    return NULL;
+}
+
 static bool module_used(const comp *c, name module) {
     for (uint32_t k = 0; k < c->n_modules; ++k) {
         if (name_eq(c->modules[k], module))
@@ -811,7 +854,7 @@ enum {
     BW_IDX, BW_CAPACITY, BW_IS_FULL, BW_CLEAR, BW_PUSH, BW_POP, BW_FIND, BW_TO_INT, BW_TO_STR, BW_ASSERT,
     BW_WORDS, BW_ERR_TEXT, BW_ADD_ROW, BW_IS_NONE, BW_NONE, BW_ROW_INDEX, BW_MAX, BW_MIN,
     BW_APPEND, BW_APPEND_BYTE, BW_APPEND_INT, BW_CONTENTS, BW_TAKE, BW_SKIP, BW_TAKE_LAST, BW_SKIP_LAST,
-    BW_STARTS_WITH, BW_ENDS_WITH, BW_CONTAINS, BW_LOOKUP, BW_INSERT, BW_REMOVE, BW_REPLACE
+    BW_STARTS_WITH, BW_ENDS_WITH, BW_CONTAINS, BW_LOOKUP, BW_INSERT, BW_REMOVE, BW_REPLACE, BW_PUT, BW_PEEK
 };
 static const struct builtin {
     const char *name;
@@ -828,11 +871,11 @@ static const struct builtin {
     {"add_row", BW_ADD_ROW, false}, {"is_none", BW_IS_NONE, false}, {"none", BW_NONE, false},
     {"row_index", BW_ROW_INDEX, false}, {"max", BW_MAX, false},    {"min", BW_MIN, false},
     {"append", BW_APPEND, false},   {"append_byte", BW_APPEND_BYTE, false}, {"append_int", BW_APPEND_INT, false},
-    {"contents", BW_CONTENTS, false}, {"take", BW_TAKE, true},     {"skip", BW_SKIP, true},
+    {"contents", BW_CONTENTS, false}, {"take", BW_TAKE, false},    {"skip", BW_SKIP, true},
     {"take_last", BW_TAKE_LAST, true}, {"skip_last", BW_SKIP_LAST, true},
     {"starts_with", BW_STARTS_WITH, true}, {"ends_with", BW_ENDS_WITH, true}, {"contains", BW_CONTAINS, true},
     {"lookup", BW_LOOKUP, false},   {"insert", BW_INSERT, false},  {"remove", BW_REMOVE, false},
-    {"replace", BW_REPLACE, true},
+    {"replace", BW_REPLACE, true},  {"put", BW_PUT, false},        {"peek", BW_PEEK, false},
 };
 
 // `len` and `is_empty` belong to the core for arrays and lists and to `strings` for a str; the
@@ -848,7 +891,8 @@ static const struct builtin *find_builtin(const comp *c, name n) {
 // A name every part of the source sees: a word, a constant, a global, a type, a core word.
 static bool name_is_global(comp *c, name n) {
     bool ambiguous;
-    return find_word(c, n, NULL) || find_core(n) || basic_type(n) != TY_NONE || name_is(n, "float") ||
+    return find_word(c, n, NULL) || find_fwd(c, n, NULL) || find_core(n) || type_of_name(c, n) != TY_NONE ||
+           name_is(n, "float") || name_is(n, "raw") ||
            find_record(c, n) != NONE ||
            name_is(n, "err") || find_const(c, n) || find_global(c, n) != NONE || find_builtin(c, n) ||
            find_host(c, (name){0}, n, &ambiguous) != NONE;
@@ -933,8 +977,12 @@ static bool arith_word(comp *c, uint32_t op) {
     if (!need(c, 2))
         return false;
     entry *a = &f->stack[f->depth - 2], *b = &f->stack[f->depth - 1];
-    if (a->type != TY_INT || b->type != TY_INT)
-        return type_error(c, "this word takes two int values");
+    const tid result = a->type;
+    if (a->type != b->type || base_of(c, a->type) != TY_INT ||
+        (a->type != TY_INT && op != PNX_ADD && op != PNX_SUB))
+        return type_error(c, a->type == b->type && base_of(c, a->type) == TY_INT
+                                 ? "values of a declared type are added and subtracted; for other arithmetic take raw"
+                                 : "this word takes two int values, or two of the same declared type");
     const uint32_t dst = slot_of(c, f->depth - 2);
     uint32_t ra, rb;
     if ((op == PNX_ADD || op == PNX_SUB) && b->kind == E_CONST && fits8(op == PNX_ADD ? b->value : -b->value)) {
@@ -947,7 +995,7 @@ static bool arith_word(comp *c, uint32_t op) {
             return false;
     }
     f->depth -= 2;
-    return push_slot(c, TY_INT);
+    return push_slot(c, result);
 }
 
 static bool compare_word(comp *c, int which) {
@@ -957,7 +1005,7 @@ static bool compare_word(comp *c, int which) {
     entry *a = &f->stack[f->depth - 2], *b = &f->stack[f->depth - 1];
     if (a->type != b->type)
         return type_error(c, "the two values compared must have the same type");
-    if (a->type != TY_INT && which != CMP_EQ && which != CMP_NE)
+    if (base_of(c, a->type) != TY_INT && which != CMP_EQ && which != CMP_NE)
         return type_error(c, "values of this type are compared with eq and ne only");
     entry e = {.type = TY_BOOL, .kind = E_COND};
     uint32_t ra, rb;
@@ -1173,9 +1221,10 @@ static bool guard(comp *c, const sig *s, const uint32_t base[2], const uint32_t 
 }
 
 // Both call functions end with the token after the word (and after its guard) current.
-static bool call_word(comp *c, uint32_t index) {
-    const wordsym *w = (const wordsym *)c->words.ptr + index;
-    const sig s = w->sig;
+// Calls a word of the source: `index` is its number, or FWD_MARK and the number of its forward
+// declaration.
+static bool call_word(comp *c, const sig *sp, uint32_t index) {
+    const sig s = *sp;
     uint32_t base[2], in[2], out[2];
     if (!call_args(c, &s, base) || (s.fails && !settle_all(c)))
         return false;
@@ -2429,8 +2478,8 @@ static bool builtin(comp *c, const struct builtin *w) {
     case BW_IS_FULL: {
         if (!need_coll(c, &g, &gi))
             return false;
-        if (g->kind != GK_ARRAY && g->kind != GK_LIST)
-            return type_error(c, "is_full asks an array or a list");
+        if (g->kind != GK_ARRAY && g->kind != GK_LIST && g->kind != GK_QUEUE)
+            return type_error(c, "is_full asks an array, a list or a queue");
         if (g->kind == GK_ARRAY)
             return push(c, (entry){.type = TY_BOOL, .kind = E_CONST, .value = 1}) && advance(c);
         const uint32_t dst = top_slot(c, BANK_I, 2);
@@ -2478,7 +2527,34 @@ static bool builtin(comp *c, const struct builtin *w) {
         if (!push_slot(c, TY_STR))
             return false;
         return emit_def(c, PNX_ABX(PNX_BVIEW, slot_of(c, f->depth - 1), gi), BANK_S) != NONE && advance(c);
+    case BW_PUT: { // v jobs put : fails when the queue is full
+        if (!need_coll(c, &g, &gi) || !need(c, 1))
+            return false;
+        if (g->kind != GK_QUEUE)
+            return type_error(c, "put adds to a queue");
+        if (f->stack[f->depth - 1].type != g->type)
+            return type_error(c, "the value has another type than the queue holds");
+        if (!settle(c, f->depth - 1))
+            return false;
+        ra = slot_of(c, f->depth - 1);
+        --f->depth;
+        return settle_all(c) && emit(c, PNX_ABX(PNX_QPUT, ra, gi)) != NONE && guard_op(c, TY_NONE);
+    }
+    case BW_PEEK:
     case BW_TAKE:
+        if (on_coll) { // jobs take : the oldest value; fails when the queue is empty
+            if (!need_coll(c, &g, &gi))
+                return false;
+            if (g->kind != GK_QUEUE)
+                return type_error(c, "take and peek read the front of a queue");
+            if (!settle_all(c))
+                return false;
+            return emit(c, PNX_ABX(w->id == BW_TAKE ? PNX_QTAKE : PNX_QPEEK, top_slot(c, BANK_I, 1), gi)) != NONE &&
+                   guard_op(c, g->type);
+        }
+        if (w->id == BW_PEEK || !c->use_strings)
+            return type_error(c, "this word takes the name of a queue (take of a str needs use strings)");
+        [[fallthrough]];
     case BW_SKIP:
     case BW_TAKE_LAST:
     case BW_SKIP_LAST: { // s n take : a view, as many bytes as there are
@@ -2740,7 +2816,26 @@ static bool body_name(comp *c) {
             return syntax(c, "a data source calls no words; only literals, const names and stores");
         uint32_t index;
         if (find_word(c, n, &index))
-            return call_word(c, index);
+            return call_word(c, &((const wordsym *)c->words.ptr + index)->sig, index);
+        const fwd *ahead = find_fwd(c, n, &index);
+        if (ahead)
+            return call_word(c, &ahead->sig, FWD_MARK | index);
+        const tid made = type_of_name(c, n);
+        if (base_of(c, made) != made || name_is(n, "raw")) { // 5 meters ; m raw
+            if (!need(c, 1))
+                return false;
+            entry *e = &f->stack[f->depth - 1];
+            if (name_is(n, "raw")) {
+                if (base_of(c, e->type) == e->type)
+                    return type_error(c, "raw takes a value of a declared type and gives its plain value");
+                e->type = base_of(c, e->type);
+            } else {
+                if (e->type != base_of(c, made))
+                    return type_error(c, "a declared type is made from a value of the type it is declared with");
+                e->type = made;
+            }
+            return advance(c);
+        }
         const core_word *w = find_core(n);
         if (w)
             return core(c, w) && advance(c);
@@ -2933,7 +3028,7 @@ static bool definition(comp *c, bool is_test) {
         n = (name){text, n.length + 5};
         if (find_word(c, n, NULL))
             return type_error(c, "a test of this name is already defined");
-    } else if (name_is_global(c, n)) {
+    } else if (name_is_global(c, n) && !(find_fwd(c, n, NULL) && find_fwd(c, n, NULL)->index == NONE)) {
         return type_error(c, "this name is already defined");
     }
     if (n.length > 31)
@@ -2950,6 +3045,13 @@ static bool definition(comp *c, bool is_test) {
     char text[72];
     if (!sig_text(c, &w->sig, text, sizeof text))
         return syntax(c, "the signature is longer than 71 bytes");
+    fwd *ahead = is_test ? NULL : find_fwd(c, n, NULL);
+    if (ahead) { // the definition a forward declaration promised
+        char promised[72];
+        if (!sig_text(c, &ahead->sig, promised, sizeof promised) || __builtin_strcmp(promised, text) != 0)
+            return type_error(c, "the definition has another signature than its forward declaration");
+        ahead->index = c->words.n - 1;
+    }
 
     fn *f = c->word_fn;
     fn_reset(f, false);
@@ -3124,7 +3226,7 @@ static bool declare_global(comp *c) {
     if (g.type == TY_STR) {
         if (!str_capacity(c, &g.strcap))
             return false;
-    } else if (g.type != TY_INT && g.type != TY_BOOL && g.type != TY_ERR && !is_row(g.type)) {
+    } else if (g.type == TY_NONE || bank_of(g.type) != BANK_I) {
         return type_error(c, "this type is not known, or not supported for a global yet");
     }
     if (c->globals.n >= 0xfffu)
@@ -3181,6 +3283,8 @@ static bool declare_collection(comp *c, uint8_t kind) {
         return type_error(c, "the cells are int, bool, err, str(N) or a record; other types are not supported yet");
     if (slot && g.record == NONE)
         return type_error(c, "a table announced by forward holds a record");
+    if (kind == GK_QUEUE && (g.record != NONE || g.type == TY_STR))
+        return type_error(c, "a queue holds int, bool or err values");
     if (!advance(c) || (g.record == NONE && g.type == TY_STR && !str_capacity(c, &g.strcap)) ||
         !declared_size(c, &g.capacity))
         return false;
@@ -3201,8 +3305,24 @@ static bool declare_collection(comp *c, uint8_t kind) {
 static bool declare_forward(comp *c) {
     if (!advance(c))
         return false;
-    if (is_word(c, PNX_KW_word))
-        return syntax(c, "forward word is not supported by the compiler yet");
+    if (is_word(c, PNX_KW_word)) { // forward word NAME ( effect )
+        if (!advance(c))
+            return false;
+        if (c->tok.kind != PNX_T_NAME)
+            return syntax(c, "forward word names the word: forward word name (effect)");
+        fwd ahead = {.name = tok_name(c), .index = NONE};
+        if (name_is_global(c, ahead.name))
+            return type_error(c, "this name is already defined");
+        if (!advance(c) || !parse_sig(c, &ahead.sig))
+            return false;
+        if (c->fwds.n >= 0xffffu)
+            return syntax(c, "too many forward declarations");
+        fwd *slot = vec_push(c, &c->fwds, sizeof(fwd));
+        if (!slot)
+            return false;
+        *slot = ahead;
+        return true;
+    }
     if (!is_word(c, PNX_KW_list) && !is_word(c, PNX_KW_array))
         return syntax(c, is_word(c, PNX_KW_pool) ? "pools are not supported by the compiler yet"
                                                  : "forward is followed by array, list, pool or word");
@@ -3311,6 +3431,31 @@ static bool declare_record(comp *c) {
     if (!slot)
         return false;
     *slot = r;
+    return advance(c);
+}
+
+// type NAME base : a type with the representation of `base` that does not mix with it
+static bool declare_type(comp *c) {
+    if (!advance(c))
+        return false;
+    if (c->tok.kind != PNX_T_NAME)
+        return syntax(c, "the declaration is: type name base");
+    dtype d = {.name = tok_name(c)};
+    if (name_is_global(c, d.name))
+        return type_error(c, "this name is already defined");
+    if (!advance(c))
+        return false;
+    if (c->tok.kind != PNX_T_NAME)
+        return syntax(c, "the declaration is: type name base");
+    d.base = basic_type(tok_name(c));
+    if (d.base != TY_INT && d.base != TY_STR && d.base != TY_BOOL)
+        return type_error(c, "a declared type is made of int, bool or str");
+    if (c->dtypes.n >= 0x3000u)
+        return syntax(c, "too many declared types");
+    dtype *slot = vec_push(c, &c->dtypes, sizeof(dtype));
+    if (!slot)
+        return false;
+    *slot = d;
     return advance(c);
 }
 
@@ -3666,6 +3811,17 @@ static bool append_code(comp *c, image *im, const fn *f) {
     return true;
 }
 
+// Calls of words that were only announced carry the number of the announcement; now that
+// every word has its number, they get it.
+static void patch_forward_calls(const comp *c, uint32_t *code, uint32_t n) {
+    for (uint32_t i = 0; i < n;) {
+        const uint32_t op = code[i] & 0xffu;
+        if ((op == PNX_CALL || op == PNX_TCALL) && (code[i + 1] & FWD_MARK))
+            code[i + 1] = ((const fwd *)c->fwds.ptr + (code[i + 1] & ~FWD_MARK))->index;
+        i += pnx_ops_info[op].second ? 2 : 1;
+    }
+}
+
 static void put_text(char *out, size_t cap, name n) {
     const size_t len = n.length < cap - 1 ? n.length : cap - 1;
     __builtin_memcpy(out, n.text, len);
@@ -3712,8 +3868,12 @@ static bool compile(comp *c, image *im, bool *has_top) {
         } else if (is_word(c, PNX_KW_global) && !c->top_fn->n_blocks) {
             if (!declare_global(c))
                 return false;
-        } else if ((is_word(c, PNX_KW_array) || is_word(c, PNX_KW_list)) && !c->top_fn->n_blocks) {
-            if (!declare_collection(c, is_word(c, PNX_KW_array) ? GK_ARRAY : GK_LIST))
+        } else if ((is_word(c, PNX_KW_array) || is_word(c, PNX_KW_list) || is_word(c, PNX_KW_queue)) &&
+                   !c->top_fn->n_blocks) {
+            if (!declare_collection(c, is_word(c, PNX_KW_array) ? GK_ARRAY : is_word(c, PNX_KW_list) ? GK_LIST : GK_QUEUE))
+                return false;
+        } else if (is_word(c, PNX_KW_type) && !c->top_fn->n_blocks) {
+            if (!declare_type(c))
                 return false;
         } else if (is_word(c, PNX_KW_assign) && !c->top_fn->n_blocks) {
             if (!assign_item(c))
@@ -3745,6 +3905,10 @@ static bool compile(comp *c, image *im, bool *has_top) {
     for (uint32_t k = 0; k < c->globals.n; ++k) {
         if (((const globalsym *)c->globals.ptr + k)->forward)
             return type_error(c, "a table announced by forward is never declared");
+    }
+    for (uint32_t k = 0; k < c->fwds.n; ++k) {
+        if (((const fwd *)c->fwds.ptr + k)->index == NONE)
+            return type_error(c, "a word announced by forward is never defined");
     }
     *has_top = top->code.n != 0 || top->depth != 0;
     if (*has_top) {
@@ -3791,7 +3955,14 @@ static bool serialize(comp *c, const image *im, uint8_t **out, size_t *out_len) 
     p += sizeof head;
     for (uint32_t k = 0; k < head.n_words; ++k) {
         const wordsym *w = (const wordsym *)c->words.ptr + k;
-        pnx_wordrec rec = {.entry = w->entry, .int_cells = w->cells[0], .str_cells = w->cells[1]};
+        pnx_wordrec rec = {.entry = w->entry, .int_cells = w->cells[0], .str_cells = w->cells[1], .counted = 1,
+                           .fails = w->sig.fails};
+        uint32_t in[2], out[2];
+        count_sig(&w->sig, in, out);
+        rec.int_args = (uint8_t)in[0];
+        rec.str_args = (uint8_t)in[1];
+        rec.int_results = (uint8_t)out[0];
+        rec.str_results = (uint8_t)out[1];
         put_text(rec.name, sizeof rec.name, w->name);
         if (!sig_text(c, &w->sig, rec.signature, sizeof rec.signature))
             return syntax(c, "the signature is longer than 71 bytes");
@@ -3806,6 +3977,8 @@ static bool serialize(comp *c, const image *im, uint8_t **out, size_t *out_len) 
         if (g->record != NONE) {
             rec.kind = g->kind == GK_ARRAY ? PNX_G_TABLE : PNX_G_ROWS;
             rec.elem_bytes = ((const record *)c->records.ptr + g->record)->size;
+        } else if (g->kind == GK_QUEUE) {
+            rec.kind = PNX_G_QUEUE;
         } else if (g->strcap) { // text cells are rows of one length byte and N bytes
             rec.kind = g->kind == GK_LIST ? PNX_G_ROWS : PNX_G_TABLE;
             rec.elem_bytes = (uint32_t)g->strcap + 1;
@@ -3849,8 +4022,10 @@ static bool serialize(comp *c, const image *im, uint8_t **out, size_t *out_len) 
     if (head.n_sconst)
         __builtin_memcpy(p, c->sconst.ptr, (size_t)head.n_sconst * sizeof(pnx_sconst));
     p += (size_t)head.n_sconst * sizeof(pnx_sconst);
-    if (head.n_code)
+    if (head.n_code) {
+        patch_forward_calls(c, im->code.ptr, head.n_code);
         __builtin_memcpy(p, im->code.ptr, (size_t)head.n_code * 4);
+    }
     p += (size_t)head.n_code * 4;
     if (head.n_strbytes)
         __builtin_memcpy(p, c->strbytes.ptr, head.n_strbytes);

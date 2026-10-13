@@ -326,6 +326,7 @@ static const char *check_word(const pinax_state *st, uint32_t index, span range,
         case PNX_GLEN: case PNX_GCLEAR: want = PNX_G_COUNT + 1; global = bx; break; // any collection
         case PNX_ADDROW: want = PNX_G_ROWS; global = bx; break;
         case PNX_BCAT: case PNX_BCATI: want = PNX_G_BUFFER; global = bx; break;
+        case PNX_QPUT: case PNX_QTAKE: case PNX_QPEEK: want = PNX_G_QUEUE; global = bx; break;
         case PNX_IXPUT: case PNX_IXDEL: want = PNX_G_INDEX; global = bx; break;
         case PNX_IXGET: case PNX_IXGETS: want = PNX_G_INDEX; global = c; break;
         case PNX_LPUSH: case PNX_LPOP: want = PNX_G_LIST; global = bx; break;
@@ -436,8 +437,13 @@ pinax_err pinax_load_bytecode(pinax_state *st, pinax_str bytecode) {
     why = "bytecode: bad word record";
     for (uint32_t k = 0; k < h.n_words; ++k) {
         const pnx_wordrec *word = &st->words[k];
+        if (word->counted)
+            st->word_counts[k] = (pnx_counts){word->int_args, word->str_args, word->int_results, word->str_results,
+                                              word->fails != 0};
         if (!terminated(word->name, sizeof word->name) || !terminated(word->signature, sizeof word->signature) ||
-            !pnx_signature_counts(word->signature, &st->word_counts[k]) || word->entry >= h.n_code ||
+            (!word->counted && !pnx_signature_counts(word->signature, &st->word_counts[k])) ||
+            st->word_counts[k].str_args > PNX_MAX_STR_ARGS || st->word_counts[k].str_results > PNX_MAX_STR_RESULTS ||
+            word->entry >= h.n_code ||
             (k > 0 && word->entry <= st->words[k - 1].entry) || (k == 0 && word->entry != 0) ||
             word->int_cells > 256 || word->str_cells > 256)
             goto rollback;
@@ -484,7 +490,8 @@ pinax_err pinax_load_bytecode(pinax_state *st, pinax_str bytecode) {
         switch (rec->kind) {
         case PNX_G_INT: bytes = 8; break;
         case PNX_G_ARRAY:
-        case PNX_G_LIST: bytes = (uint64_t)rec->capacity * 8; break;
+        case PNX_G_LIST:
+        case PNX_G_QUEUE: bytes = (uint64_t)rec->capacity * 8; break;
         case PNX_G_BUFFER: bytes = (uint64_t)rec->capacity + 8; break;
         case PNX_G_TABLE:
         case PNX_G_ROWS:
@@ -515,7 +522,7 @@ pinax_err pinax_load_bytecode(pinax_state *st, pinax_str bytecode) {
         g->kind = rec->kind;
         g->elem_bytes = rec->kind == PNX_G_TABLE || rec->kind == PNX_G_ROWS ? rec->elem_bytes : 8;
         g->capacity = rec->kind == PNX_G_INT ? 1 : rec->capacity;
-        g->length = rec->kind == PNX_G_LIST || rec->kind == PNX_G_ROWS ? 0 : g->capacity;
+        g->length = rec->kind == PNX_G_LIST || rec->kind == PNX_G_ROWS || rec->kind == PNX_G_QUEUE ? 0 : g->capacity;
         if (rec->kind == PNX_G_INDEX) {
             g->key = rec->elem_bytes;
             g->key_is_str = rec->reserved != 0;

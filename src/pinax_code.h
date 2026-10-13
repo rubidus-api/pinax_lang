@@ -68,6 +68,8 @@ enum {
 // IXGET and IXGETS find the row with an int or str key in an index (fail when there is none);
 // IXPUT enters a row (fails when its key is there already); IXDEL takes a row out.
 // SREPL A, B: the string in S[B] with every S[B+1] replaced by S[B+2], built in the region.
+// QPUT adds at the back of a queue (fails when full); QTAKE and QPEEK take and read the front
+// (fail when empty).
 #define PNX_OPS(X)                                                                                 \
     X(MOVI, PNX_K_I, PNX_K_I, PNX_K_NONE, PNX_F_ABC, PNX_X_NONE, 0)                                \
     X(MOVS, PNX_K_S, PNX_K_S, PNX_K_NONE, PNX_F_ABC, PNX_X_NONE, 0)                                \
@@ -158,7 +160,10 @@ enum {
     X(IXGETS, PNX_K_I, PNX_K_S, PNX_K_G, PNX_F_ABC, PNX_X_NONE, 1)                                 \
     X(IXPUT, PNX_K_I, PNX_K_NONE, PNX_K_NONE, PNX_F_GLOBAL, PNX_X_NONE, 1)                         \
     X(IXDEL, PNX_K_I, PNX_K_NONE, PNX_K_NONE, PNX_F_GLOBAL, PNX_X_NONE, 0)                         \
-    X(SREPL, PNX_K_S, PNX_K_S, PNX_K_NONE, PNX_F_ABC, PNX_X_NONE, 0)
+    X(SREPL, PNX_K_S, PNX_K_S, PNX_K_NONE, PNX_F_ABC, PNX_X_NONE, 0)                               \
+    X(QPUT, PNX_K_I, PNX_K_NONE, PNX_K_NONE, PNX_F_GLOBAL, PNX_X_NONE, 1)                          \
+    X(QTAKE, PNX_K_I, PNX_K_NONE, PNX_K_NONE, PNX_F_GLOBAL, PNX_X_NONE, 1)                         \
+    X(QPEEK, PNX_K_I, PNX_K_NONE, PNX_K_NONE, PNX_F_GLOBAL, PNX_X_NONE, 1)
 
 enum {
 #define PNX_ENUM(name, a, b, c, shape, second, fails) PNX_##name,
@@ -189,6 +194,7 @@ enum {
     PNX_G_INDEX,  // lookup table of a table of records: capacity slots of 32 bits, each a row or 0;
                   // elem_bytes is the key field as PNX_FIELD(table, offset, extra), reserved is 1
                   // for a str(N) key (extra = N) and 0 for an integer key (extra = width code)
+    PNX_G_QUEUE,  // a ring of capacity 64-bit integers, first in first out
     PNX_G_COUNT
 };
 
@@ -220,7 +226,11 @@ typedef struct pnx_wordrec {
     char     signature[72];
     uint32_t entry; // index of the first instruction; words are stored in rising order
     uint16_t int_cells, str_cells;
-    uint8_t  reserved[8];
+    // How many arguments and results live in each bank. With `counted` 0 the loader reads them
+    // off the signature, where every type but str is an integer; a compiler that knows
+    // declared types (a type made of str) writes them here.
+    uint8_t  counted, int_args, str_args, int_results, str_results, fails;
+    uint8_t  reserved[2];
 } pnx_wordrec;
 
 typedef struct pnx_globalrec {
