@@ -36,7 +36,7 @@
 #define COUNT(a) (sizeof(a) / sizeof((a)[0]))
 
 // Pinax sources (no OS access; freestanding).
-static const char *const core_sources[] = {"src/pinax_state.c", "src/pinax_vm.c"};
+static const char *const core_sources[] = {"src/pinax_state.c", "src/pinax_text.c", "src/pinax_vm.c"};
 static const size_t core_count = COUNT(core_sources);
 
 // proven_c_lib files that build without an operating system.
@@ -51,13 +51,18 @@ static const char *const proven_portable[] = {
     "src/proven/utf.c",       "platform/proven_sys_math.c",
 };
 
+// Hosted builds of the library also carry proven's memory primitives: the portable files call
+// them (copy, compare, search), and the core now calls those files. A freestanding build gets
+// them inline from the compiler instead (PROVEN_FREESTANDING).
+static const char *const proven_lib_hosted[] = {"platform/proven_sys_mem.c"};
+
 // proven_c_lib files that need the operating system. Tools and tests link them; the
 // library itself stays freestanding.
 static const char *const proven_hosted[] = {
     "src/proven/alloc_check.c",  "src/proven/fs.c",            "src/proven/mmap.c",
     "src/proven/stream.c",       "src/proven/sysio.c",         "src/proven/u16str.c",
     "platform/proven_sys_env.c", "platform/proven_sys_fs.c",   "platform/proven_sys_io.c",
-    "platform/proven_sys_mem.c", "platform/proven_sys_random.c", "platform/proven_sys_time.c",
+    "platform/proven_sys_random.c", "platform/proven_sys_time.c",
 };
 
 static const char *const test_sources[] = {"tests/test_main.c"};
@@ -172,6 +177,8 @@ static int build_lib(const target_t *t, char *lib, size_t lib_cap, char *hosted_
     objs[0] = '\0';
     if (compile_set(t, own_flags(t), "", core_sources, core_count, objdir, objs, sizeof objs) ||
         compile_set(t, proven_flags(t), "vendor/proven/", proven_portable, COUNT(proven_portable), objdir, objs,
+                    sizeof objs) ||
+        compile_set(t, proven_flags(t), "vendor/proven/", proven_lib_hosted, COUNT(proven_lib_hosted), objdir, objs,
                     sizeof objs))
         return 1;
 

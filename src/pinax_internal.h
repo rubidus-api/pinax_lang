@@ -89,6 +89,12 @@ bool pnx_signature_counts(const char *signature, pnx_counts *out);
 // Runs from state->pc until the top word returns, faults, fails or the budget runs out.
 pinax_err pnx_execute(pinax_state *state);
 
+// Text helpers on the vendored proven (pinax_text.c).
+// Decimal integer with an optional sign; the whole view must be the number.
+bool pnx_parse_int(const uint8_t *bytes, uint32_t length, int64_t *out);
+// Offset of the first `byte`, or UINT32_MAX.
+uint32_t pnx_find_byte(const uint8_t *bytes, uint32_t length, uint8_t byte);
+
 // Bytes in the main task's region; NULL when it is full.
 uint8_t *pnx_region_alloc(pinax_state *state, size_t bytes);
 

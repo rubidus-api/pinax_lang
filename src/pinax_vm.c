@@ -1,4 +1,5 @@
-// pinax_vm.c - the P0 interpreter loop (RFC-0010).
+// pinax_vm.c - the interpreter loop (RFC-0010): fetch, dispatch, calls and returns.
+// What each instruction does is in pinax_ops.h (RFC-0013 J2).
 //
 // Registers are typed by the instruction, so nothing is tagged and nothing is checked at
 // run time except what the language defines as a fault: overflow, division by zero, an
@@ -8,76 +9,11 @@
 // charged by CHECK instructions before backward branches and calls; define
 // PINAX_BUDGET_EACH to charge every instruction instead.
 
-#include "pinax_internal.h"
-
-#include <stdckdint.h>
+#include "pinax_ops.h"
 
 #if !defined(PINAX_SWITCH_DISPATCH)
 #pragma GCC diagnostic ignored "-Wpedantic" // labels as values
 #endif
-
-#define OP_A(w) (((w) >> 8) & 0xffu)
-#define OP_B(w) (((w) >> 16) & 0xffu)
-#define OP_C(w) ((w) >> 24)
-#define OP_BX(w) ((w) >> 16)
-#define OP_SBX(w) ((int32_t)(int16_t)((w) >> 16))
-#define OP_SB(w) ((int32_t)(int8_t)(((w) >> 16) & 0xffu))
-#define OP_SC(w) ((int32_t)(int8_t)((w) >> 24))
-#define OP_SAX(w) ((int32_t)(w) >> 8)
-
-static const uint8_t width_bytes[PNX_W_COUNT] = {1, 2, 4, 8, 1, 2, 4};
-
-static inline int64_t load_width(const uint8_t *p, uint32_t width) {
-    switch (width) {
-    case PNX_W_U8: return *p;
-    case PNX_W_U16: { uint16_t v; __builtin_memcpy(&v, p, 2); return v; }
-    case PNX_W_U32: { uint32_t v; __builtin_memcpy(&v, p, 4); return v; }
-    case PNX_W_I8: return (int8_t)*p;
-    case PNX_W_I16: { int16_t v; __builtin_memcpy(&v, p, 2); return v; }
-    case PNX_W_I32: { int32_t v; __builtin_memcpy(&v, p, 4); return v; }
-    default: { int64_t v; __builtin_memcpy(&v, p, 8); return v; }
-    }
-}
-
-static inline bool fits_width(int64_t v, uint32_t width) {
-    switch (width) {
-    case PNX_W_U8: return v >= 0 && v <= UINT8_MAX;
-    case PNX_W_U16: return v >= 0 && v <= UINT16_MAX;
-    case PNX_W_U32: return v >= 0 && v <= UINT32_MAX;
-    case PNX_W_I8: return v >= INT8_MIN && v <= INT8_MAX;
-    case PNX_W_I16: return v >= INT16_MIN && v <= INT16_MAX;
-    case PNX_W_I32: return v >= INT32_MIN && v <= INT32_MAX;
-    default: return true;
-    }
-}
-
-static inline const uint8_t *view_bytes(const pinax_state *st, pnx_scell cell) {
-    return st->segment[cell.segment] + cell.offset;
-}
-
-// Decimal integer with an optional sign; the whole view must be the number.
-static bool parse_int(const uint8_t *p, uint32_t len, int64_t *out) {
-    uint32_t i = 0;
-    bool negative = false;
-    if (len > 0 && (p[0] == '-' || p[0] == '+')) {
-        negative = p[0] == '-';
-        i = 1;
-    }
-    if (i == len)
-        return false;
-    int64_t value = 0;
-    for (; i < len; ++i) {
-        unsigned digit = (unsigned)p[i] - '0';
-        if (digit > 9)
-            return false;
-        if (ckd_mul(&value, value, 10))
-            return false;
-        if (negative ? ckd_sub(&value, value, (int64_t)digit) : ckd_add(&value, value, (int64_t)digit))
-            return false;
-    }
-    *out = value;
-    return true;
-}
 
 uint8_t *pnx_region_alloc(pinax_state *st, size_t bytes) {
     if (bytes > st->region_len - st->region_used)
@@ -94,7 +30,7 @@ static pinax_err host_call(pinax_state *st, const pnx_host *h, int64_t *ia, pnx_
     pinax_str rs[PNX_MAX_STR_RESULTS];
     const pnx_counts n = h->counts;
     for (uint32_t k = 0; k < n.str_args; ++k) {
-        sv[k].ptr = view_bytes(st, sa[k]);
+        sv[k].ptr = pnx_view_bytes(st, sa[k]);
         sv[k].len = sa[k].length;
     }
     for (uint32_t k = 0; k < n.str_results; ++k) {
@@ -200,261 +136,92 @@ pinax_err pnx_execute(pinax_state *st) {
         {
 #endif
 
-        CASE(MOVI) { R[OP_A(w)] = R[OP_B(w)]; NEXT(); }
-        CASE(MOVS) { S[OP_A(w)] = S[OP_B(w)]; NEXT(); }
-        CASE(LOADI) { R[OP_A(w)] = OP_SBX(w); NEXT(); }
-        CASE(LOADK) { R[OP_A(w)] = st->iconst[OP_BX(w)]; NEXT(); }
-        CASE(LOADKS) {
-            const pnx_sconst k = st->sconst[OP_BX(w)];
-            S[OP_A(w)] = (pnx_scell){PNX_SEG_CONST, k.length, k.offset};
-            NEXT();
-        }
+        // Plain instructions: the function does the work; a result other than 0 is a fault.
+#define RUN(name)                                                                                  \
+    CASE(name) {                                                                                   \
+        const int r = pnx_op_##name(st, R, S, w, 0);                                               \
+        if (r != PNX_R_OK)                                                                         \
+            FAULT((pinax_err)r);                                                                   \
+        NEXT();                                                                                    \
+    }
+        // Instructions with a second word.
+#define RUN2(name)                                                                                 \
+    CASE(name) {                                                                                   \
+        const int r = pnx_op_##name(st, R, S, w, *pc);                                             \
+        ++pc;                                                                                      \
+        if (r != PNX_R_OK)                                                                         \
+            FAULT((pinax_err)r);                                                                   \
+        NEXT();                                                                                    \
+    }
+        // Instructions that can fail: on success the next word (the failure word) is skipped.
+#define RUNF(name)                                                                                 \
+    CASE(name) {                                                                                   \
+        const int r = pnx_op_##name(st, R, S, w, 0);                                               \
+        if (r == PNX_R_OK)                                                                         \
+            ++pc;                                                                                  \
+        else if (r != PNX_R_FAILED)                                                                \
+            FAULT((pinax_err)r);                                                                   \
+        NEXT();                                                                                    \
+    }
+        // Compare and branch: the function is the condition.
+#define RUNJ(name)                                                                                 \
+    CASE(name) {                                                                                   \
+        if (pnx_cond_##name(st, R, S, w))                                                          \
+            pc += OP_SC(w);                                                                        \
+        NEXT();                                                                                    \
+    }
 
-        CASE(ADD) { if (ckd_add(&R[OP_A(w)], R[OP_B(w)], R[OP_C(w)])) FAULT(PINAX_ERR_OVERFLOW); NEXT(); }
-        CASE(SUB) { if (ckd_sub(&R[OP_A(w)], R[OP_B(w)], R[OP_C(w)])) FAULT(PINAX_ERR_OVERFLOW); NEXT(); }
-        CASE(MUL) { if (ckd_mul(&R[OP_A(w)], R[OP_B(w)], R[OP_C(w)])) FAULT(PINAX_ERR_OVERFLOW); NEXT(); }
-        CASE(DIV) {
-            const int64_t a = R[OP_B(w)], b = R[OP_C(w)];
-            if (b == 0)
-                FAULT(PINAX_ERR_DIV_ZERO);
-            if (a == INT64_MIN && b == -1)
-                FAULT(PINAX_ERR_OVERFLOW);
-            R[OP_A(w)] = a / b;
-            NEXT();
-        }
-        CASE(MOD) {
-            const int64_t a = R[OP_B(w)], b = R[OP_C(w)];
-            if (b == 0)
-                FAULT(PINAX_ERR_DIV_ZERO);
-            R[OP_A(w)] = b == -1 ? 0 : a % b;
-            NEXT();
-        }
-        CASE(NEG) { if (ckd_sub(&R[OP_A(w)], (int64_t)0, R[OP_B(w)])) FAULT(PINAX_ERR_OVERFLOW); NEXT(); }
-        CASE(ADDI) { if (ckd_add(&R[OP_A(w)], R[OP_B(w)], (int64_t)OP_SC(w))) FAULT(PINAX_ERR_OVERFLOW); NEXT(); }
-        CASE(WADD) { R[OP_A(w)] = (int64_t)((uint64_t)R[OP_B(w)] + (uint64_t)R[OP_C(w)]); NEXT(); }
-        CASE(WSUB) { R[OP_A(w)] = (int64_t)((uint64_t)R[OP_B(w)] - (uint64_t)R[OP_C(w)]); NEXT(); }
-        CASE(WMUL) { R[OP_A(w)] = (int64_t)((uint64_t)R[OP_B(w)] * (uint64_t)R[OP_C(w)]); NEXT(); }
-        CASE(AND) { R[OP_A(w)] = R[OP_B(w)] & R[OP_C(w)]; NEXT(); }
-        CASE(OR) { R[OP_A(w)] = R[OP_B(w)] | R[OP_C(w)]; NEXT(); }
-        CASE(XOR) { R[OP_A(w)] = R[OP_B(w)] ^ R[OP_C(w)]; NEXT(); }
-        CASE(SHL) { R[OP_A(w)] = (int64_t)((uint64_t)R[OP_B(w)] << (R[OP_C(w)] & 63)); NEXT(); }
-        CASE(SHR) { R[OP_A(w)] = R[OP_B(w)] >> (R[OP_C(w)] & 63); NEXT(); }
-        CASE(USHR) { R[OP_A(w)] = (int64_t)((uint64_t)R[OP_B(w)] >> (R[OP_C(w)] & 63)); NEXT(); }
-
-        CASE(JEQ) { if (R[OP_A(w)] == R[OP_B(w)]) pc += OP_SC(w); NEXT(); }
-        CASE(JNE) { if (R[OP_A(w)] != R[OP_B(w)]) pc += OP_SC(w); NEXT(); }
-        CASE(JLT) { if (R[OP_A(w)] < R[OP_B(w)]) pc += OP_SC(w); NEXT(); }
-        CASE(JLE) { if (R[OP_A(w)] <= R[OP_B(w)]) pc += OP_SC(w); NEXT(); }
-        CASE(JEQI) { if (R[OP_A(w)] == OP_SB(w)) pc += OP_SC(w); NEXT(); }
-        CASE(JNEI) { if (R[OP_A(w)] != OP_SB(w)) pc += OP_SC(w); NEXT(); }
-        CASE(JLTI) { if (R[OP_A(w)] < OP_SB(w)) pc += OP_SC(w); NEXT(); }
-        CASE(JGEI) { if (R[OP_A(w)] >= OP_SB(w)) pc += OP_SC(w); NEXT(); }
+        RUN(MOVI)
+        RUN(MOVS)
+        RUN(LOADI)
+        RUN(LOADK)
+        RUN(LOADKS)
+        RUN(ADD)
+        RUN(SUB)
+        RUN(MUL)
+        RUN(DIV)
+        RUN(MOD)
+        RUN(NEG)
+        RUN(ADDI)
+        RUN(WADD)
+        RUN(WSUB)
+        RUN(WMUL)
+        RUN(AND)
+        RUN(OR)
+        RUN(XOR)
+        RUN(SHL)
+        RUN(SHR)
+        RUN(USHR)
+        RUNJ(JEQ)
+        RUNJ(JNE)
+        RUNJ(JLT)
+        RUNJ(JLE)
+        RUNJ(JEQI)
+        RUNJ(JNEI)
+        RUNJ(JLTI)
+        RUNJ(JGEI)
         CASE(JMP) { pc += OP_SAX(w); NEXT(); }
-
-        CASE(GETG) { __builtin_memcpy(&R[OP_A(w)], st->globals[OP_BX(w)].ptr, 8); NEXT(); }
-        CASE(SETG) { __builtin_memcpy(st->globals[OP_BX(w)].ptr, &R[OP_A(w)], 8); NEXT(); }
-        CASE(AGET) {
-            const pnx_global *g = &st->globals[OP_C(w)];
-            const uint64_t index = (uint64_t)R[OP_B(w)];
-            if (index >= g->capacity)
-                FAULT(PINAX_ERR_RANGE);
-            __builtin_memcpy(&R[OP_A(w)], g->ptr + index * 8, 8);
-            NEXT();
-        }
-        CASE(ASET) {
-            const pnx_global *g = &st->globals[OP_C(w)];
-            const uint64_t index = (uint64_t)R[OP_B(w)];
-            if (index >= g->capacity)
-                FAULT(PINAX_ERR_RANGE);
-            __builtin_memcpy(g->ptr + index * 8, &R[OP_A(w)], 8);
-            NEXT();
-        }
-        CASE(ROW) {
-            const uint64_t index = (uint64_t)R[OP_B(w)];
-            if (index >= st->globals[OP_C(w)].capacity)
-                FAULT(PINAX_ERR_RANGE);
-            R[OP_A(w)] = (int64_t)index;
-            NEXT();
-        }
-        CASE(FGET) {
-            const uint32_t x = *pc++;
-            const pnx_global *g = &st->globals[x & 0xfffu];
-            const uint64_t row = (uint64_t)R[OP_B(w)];
-            if (row >= g->capacity)
-                FAULT(PINAX_ERR_RANGE);
-            R[OP_A(w)] = load_width(g->ptr + row * g->elem_bytes + ((x >> 12) & 0xfffu), x >> 24);
-            NEXT();
-        }
-        CASE(FSET) {
-            const uint32_t x = *pc++;
-            const pnx_global *g = &st->globals[x & 0xfffu];
-            const uint64_t row = (uint64_t)R[OP_B(w)];
-            const int64_t value = R[OP_A(w)];
-            if (row >= g->capacity)
-                FAULT(PINAX_ERR_RANGE);
-            if (!fits_width(value, x >> 24))
-                FAULT(PINAX_ERR_OVERFLOW);
-            __builtin_memcpy(g->ptr + row * g->elem_bytes + ((x >> 12) & 0xfffu), &value, width_bytes[x >> 24]);
-            NEXT();
-        }
-        CASE(FGETS) {
-            const uint32_t x = *pc++;
-            const pnx_global *g = &st->globals[x & 0xfffu];
-            const uint64_t row = (uint64_t)R[OP_B(w)];
-            if (row >= g->capacity)
-                FAULT(PINAX_ERR_RANGE);
-            const uint8_t *field = g->ptr + row * g->elem_bytes + ((x >> 12) & 0xfffu);
-            S[OP_A(w)] = (pnx_scell){PNX_SEG_GLOBAL, field[0],
-                                     (uint64_t)(field + 1 - st->segment[PNX_SEG_GLOBAL])};
-            NEXT();
-        }
-        CASE(FSETS) {
-            const uint32_t x = *pc++;
-            const pnx_global *g = &st->globals[x & 0xfffu];
-            const uint64_t row = (uint64_t)R[OP_B(w)];
-            const pnx_scell value = S[OP_A(w)];
-            if (row >= g->capacity)
-                FAULT(PINAX_ERR_RANGE);
-            if (value.length > (x >> 24))
-                FAULT(PINAX_ERR_RANGE);
-            uint8_t *field = g->ptr + row * g->elem_bytes + ((x >> 12) & 0xfffu);
-            field[0] = (uint8_t)value.length;
-            __builtin_memmove(field + 1, view_bytes(st, value), value.length);
-            NEXT();
-        }
-
-        CASE(SLEN) { R[OP_A(w)] = S[OP_B(w)].length; NEXT(); }
-        CASE(SBYTE) {
-            const pnx_scell s = S[OP_B(w)];
-            const uint64_t index = (uint64_t)R[OP_C(w)];
-            if (index >= s.length)
-                FAULT(PINAX_ERR_RANGE);
-            R[OP_A(w)] = view_bytes(st, s)[index];
-            NEXT();
-        }
-        CASE(JSEQ) {
-            const pnx_scell a = S[OP_A(w)], b = S[OP_B(w)];
-            if (a.length == b.length &&
-                (a.length == 0 || __builtin_memcmp(view_bytes(st, a), view_bytes(st, b), a.length) == 0))
-                pc += OP_SC(w);
-            NEXT();
-        }
-        CASE(SNEXT) { // on a used-up sequence the next word runs; otherwise it is skipped
-            pnx_scell *rest = &S[OP_A(w)];
-            if (rest->offset == PNX_SNEXT_DONE)
-                NEXT();
-            const uint8_t *bytes = view_bytes(st, *rest);
-            const uint8_t *hit = rest->length ? __builtin_memchr(bytes, (int)OP_C(w), rest->length) : NULL;
-            if (hit) {
-                const uint32_t n = (uint32_t)(hit - bytes);
-                S[OP_B(w)] = (pnx_scell){rest->segment, n, rest->offset};
-                rest->offset += n + 1u;
-                rest->length -= n + 1u;
-            } else {
-                S[OP_B(w)] = *rest;
-                rest->length = 0;
-                rest->offset = PNX_SNEXT_DONE;
-            }
-            ++pc;
-            NEXT();
-        }
-        CASE(SCUT) {
-            pnx_scell *head = &S[OP_A(w)];
-            const uint8_t *bytes = view_bytes(st, *head);
-            const uint8_t *hit = head->length ? __builtin_memchr(bytes, (int)OP_C(w), head->length) : NULL;
-            if (hit) {
-                const uint32_t n = (uint32_t)(hit - bytes);
-                S[OP_B(w)] = (pnx_scell){head->segment, head->length - n - 1u, head->offset + n + 1u};
-                head->length = n;
-            } else {
-                S[OP_B(w)] = (pnx_scell){PNX_SEG_EMPTY, 0, 0};
-            }
-            NEXT();
-        }
-        CASE(TOINT) {
-            const pnx_scell s = S[OP_B(w)];
-            if (parse_int(view_bytes(st, s), s.length, &R[OP_A(w)]))
-                ++pc;
-            else
-                st->fail = PINAX_ERR_FORMAT;
-            NEXT();
-        }
-
-        CASE(BCLEAR) {
-            const uint64_t zero = 0;
-            __builtin_memcpy(st->globals[OP_BX(w)].ptr, &zero, 8);
-            NEXT();
-        }
-        CASE(BPUT) {
-            const pnx_global *g = &st->globals[OP_C(w)];
-            const uint32_t n = width_bytes[OP_B(w)];
-            const int64_t value = R[OP_A(w)];
-            uint64_t len;
-            __builtin_memcpy(&len, g->ptr, 8);
-            if (len + n > g->capacity) {
-                st->fail = PINAX_ERR_FULL;
-                NEXT();
-            }
-            if (!fits_width(value, OP_B(w)))
-                FAULT(PINAX_ERR_OVERFLOW);
-            __builtin_memcpy(g->ptr + 8 + len, &value, n);
-            len += n;
-            __builtin_memcpy(g->ptr, &len, 8);
-            ++pc;
-            NEXT();
-        }
-        CASE(BPUTS) { // one length byte, then the bytes
-            const pnx_global *g = &st->globals[OP_C(w)];
-            const pnx_scell s = S[OP_A(w)];
-            uint64_t len;
-            __builtin_memcpy(&len, g->ptr, 8);
-            if (s.length > 255)
-                FAULT(PINAX_ERR_RANGE);
-            if (len + 1 + s.length > g->capacity) {
-                st->fail = PINAX_ERR_FULL;
-                NEXT();
-            }
-            g->ptr[8 + len] = (uint8_t)s.length;
-            __builtin_memmove(g->ptr + 8 + len + 1, view_bytes(st, s), s.length);
-            len += 1 + s.length;
-            __builtin_memcpy(g->ptr, &len, 8);
-            ++pc;
-            NEXT();
-        }
-        CASE(BVIEW) {
-            const pnx_global *g = &st->globals[OP_BX(w)];
-            uint64_t len;
-            __builtin_memcpy(&len, g->ptr, 8);
-            S[OP_A(w)] = (pnx_scell){PNX_SEG_GLOBAL, (uint32_t)len,
-                                     (uint64_t)(g->ptr + 8 - st->segment[PNX_SEG_GLOBAL])};
-            NEXT();
-        }
-        CASE(SGET) {
-            pnx_scell *s = &S[OP_B(w)];
-            const uint32_t n = width_bytes[OP_C(w)];
-            if (s->length < n) {
-                st->fail = PINAX_ERR_FORMAT;
-                NEXT();
-            }
-            R[OP_A(w)] = load_width(view_bytes(st, *s), OP_C(w));
-            s->offset += n;
-            s->length -= n;
-            ++pc;
-            NEXT();
-        }
-        CASE(SGETS) {
-            pnx_scell *s = &S[OP_B(w)];
-            if (s->length < 1 || s->length - 1u < view_bytes(st, *s)[0]) {
-                st->fail = PINAX_ERR_FORMAT;
-                NEXT();
-            }
-            const uint32_t n = view_bytes(st, *s)[0];
-            S[OP_A(w)] = (pnx_scell){s->segment, n, s->offset + 1};
-            s->offset += n + 1u;
-            s->length -= n + 1u;
-            ++pc;
-            NEXT();
-        }
+        RUN(GETG)
+        RUN(SETG)
+        RUN(AGET)
+        RUN(ASET)
+        RUN(ROW)
+        RUN2(FGET)
+        RUN2(FSET)
+        RUN2(FGETS)
+        RUN2(FSETS)
+        RUN(SLEN)
+        RUN(SBYTE)
+        RUNJ(JSEQ)
+        RUNF(SNEXT)
+        RUN(SCUT)
+        RUNF(TOINT)
+        RUN(BCLEAR)
+        RUNF(BPUT)
+        RUNF(BPUTS)
+        RUN(BVIEW)
+        RUNF(SGET)
+        RUNF(SGETS)
 
         CASE(CALL) {
             const pnx_wordrec *callee = &st->words[*pc++];
