@@ -624,6 +624,145 @@ PNX_OP(PALIVE) {
     return PNX_R_OK;
 }
 
+// ---- more string words --------------------------------------------------------------------
+
+PNX_INLINE int pnx_cut(pinax_state *st, pnx_scell *S, uint32_t w, bool must) {
+    pnx_scell *head = &S[OP_A(w)], *sep = &S[OP_B(w)];
+    const uint32_t at = pnx_find(pnx_view_bytes(st, *head), head->length, pnx_view_bytes(st, *sep), sep->length);
+    if (at == UINT32_MAX) {
+        if (must) {
+            st->fail = PINAX_ERR_NOT_FOUND;
+            return PNX_R_FAILED;
+        }
+        *sep = (pnx_scell){PNX_SEG_EMPTY, 0, 0};
+        return PNX_R_OK;
+    }
+    const pnx_scell tail = {head->segment, head->length - at - sep->length, head->offset + at + sep->length};
+    head->length = at;
+    *sep = tail;
+    return PNX_R_OK;
+}
+PNX_OP(SCUTS) { return pnx_cut(st, S, w, false); }
+PNX_OP(SCUTSF) { return pnx_cut(st, S, w, true); }
+PNX_OP(STRIM) {
+    pnx_scell s = S[OP_B(w)];
+    const uint8_t *bytes = pnx_view_bytes(st, s);
+    uint32_t from = 0, to = s.length;
+    if (OP_C(w) & 1u)
+        while (from < to && pnx_is_space(bytes[from]))
+            ++from;
+    if (OP_C(w) & 2u)
+        while (to > from && pnx_is_space(bytes[to - 1]))
+            --to;
+    S[OP_A(w)] = (pnx_scell){s.segment, to - from, s.offset + from};
+    return PNX_R_OK;
+}
+PNX_OP(SLINE) { // PNX_R_FAILED: no line is left. A final line break does not start an empty line.
+    pnx_scell *rest = &S[OP_A(w)];
+    if (rest->length == 0)
+        return PNX_R_FAILED;
+    const uint8_t *bytes = pnx_view_bytes(st, *rest);
+    const uint32_t at = pnx_find_byte(bytes, rest->length, '\n');
+    uint32_t n = at == UINT32_MAX ? rest->length : at;
+    const uint32_t used = at == UINT32_MAX ? rest->length : at + 1;
+    if (at != UINT32_MAX && n > 0 && bytes[n - 1] == '\r')
+        --n;
+    S[OP_B(w)] = (pnx_scell){rest->segment, n, rest->offset};
+    rest->offset += used;
+    rest->length -= used;
+    return PNX_R_OK;
+}
+PNX_OP(SNEXTS) { // like SNEXT, with a separator string; an empty separator never matches
+    pnx_scell *rest = &S[OP_A(w)];
+    if (rest->offset == PNX_SNEXT_DONE)
+        return PNX_R_FAILED;
+    const pnx_scell sep = S[OP_C(w)];
+    const uint32_t at = sep.length ? pnx_find(pnx_view_bytes(st, *rest), rest->length, pnx_view_bytes(st, sep), sep.length)
+                                   : UINT32_MAX;
+    if (at != UINT32_MAX) {
+        S[OP_B(w)] = (pnx_scell){rest->segment, at, rest->offset};
+        rest->offset += at + sep.length;
+        rest->length -= at + sep.length;
+    } else {
+        S[OP_B(w)] = *rest;
+        rest->length = 0;
+        rest->offset = PNX_SNEXT_DONE;
+    }
+    return PNX_R_OK;
+}
+PNX_OP(SFINDL) {
+    const pnx_scell hay = S[OP_B(w)], part = S[OP_C(w)];
+    const uint32_t at = pnx_find_last(pnx_view_bytes(st, hay), hay.length, pnx_view_bytes(st, part), part.length);
+    if (at == UINT32_MAX) {
+        st->fail = PINAX_ERR_NOT_FOUND;
+        return PNX_R_FAILED;
+    }
+    R[OP_A(w)] = at;
+    return PNX_R_OK;
+}
+PNX_OP(SCMP) {
+    const pnx_scell a = S[OP_B(w)], b = S[OP_C(w)];
+    const uint32_t n = a.length < b.length ? a.length : b.length;
+    const int c = n ? __builtin_memcmp(pnx_view_bytes(st, a), pnx_view_bytes(st, b), n) : 0;
+    R[OP_A(w)] = c < 0 ? -1 : c > 0 ? 1 : a.length < b.length ? -1 : a.length > b.length;
+    return PNX_R_OK;
+}
+
+// Digits of `value` in base 16 or 2 (as an unsigned number), without leading zeros.
+PNX_INLINE uint32_t pnx_digits(uint64_t value, uint32_t shift, uint8_t out[64]) {
+    uint8_t reversed[64];
+    uint32_t n = 0;
+    do {
+        reversed[n++] = (uint8_t)"0123456789abcdef"[value & ((1u << shift) - 1u)];
+        value >>= shift;
+    } while (value);
+    for (uint32_t k = 0; k < n; ++k)
+        out[k] = reversed[n - 1 - k];
+    return n;
+}
+// Appends `n` bytes after `pad` copies of `fill`.
+PNX_INLINE int pnx_append_padded(pinax_state *st, pnx_scell *cell, const uint8_t *bytes, uint32_t n, int64_t width,
+                                 uint8_t fill, bool right) {
+    if (width < 0 || width > UINT32_MAX)
+        return PINAX_ERR_RANGE;
+    uint32_t pad = (uint64_t)width > n ? (uint32_t)width - n : 0;
+    int r = PNX_R_OK;
+    if (right)
+        r = pnx_region_append(st, cell, bytes, n);
+    for (; r == PNX_R_OK && pad; --pad)
+        r = pnx_region_append(st, cell, &fill, 1);
+    if (!right && r == PNX_R_OK)
+        r = pnx_region_append(st, cell, bytes, n);
+    return r;
+}
+PNX_OP(RCATX) {
+    uint8_t digits[64];
+    const uint32_t n = pnx_digits((uint64_t)R[OP_B(w)], OP_C(w) ? 1 : 4, digits);
+    return pnx_region_append(st, &S[OP_A(w)], digits, n);
+}
+PNX_OP(RCATXW) {
+    uint8_t digits[64];
+    const uint32_t n = pnx_digits((uint64_t)R[OP_B(w)], 4, digits);
+    return pnx_append_padded(st, &S[OP_A(w)], digits, n, R[OP_C(w)], '0', false);
+}
+PNX_OP(RCATW) { // a minus sign stays in front of the zeros
+    uint8_t digits[24];
+    const uint32_t n = pnx_format_int(R[OP_B(w)], digits);
+    if (n && digits[0] == '-') {
+        const int r = pnx_region_append(st, &S[OP_A(w)], digits, 1);
+        return r != PNX_R_OK ? r : pnx_append_padded(st, &S[OP_A(w)], digits + 1, n - 1, R[OP_C(w)] - 1, '0', false);
+    }
+    return pnx_append_padded(st, &S[OP_A(w)], digits, n, R[OP_C(w)], '0', false);
+}
+PNX_OP(RPADL) {
+    const pnx_scell s = S[OP_B(w)];
+    return pnx_append_padded(st, &S[OP_A(w)], pnx_view_bytes(st, s), s.length, R[OP_C(w)], ' ', false);
+}
+PNX_OP(RPADR) {
+    const pnx_scell s = S[OP_B(w)];
+    return pnx_append_padded(st, &S[OP_A(w)], pnx_view_bytes(st, s), s.length, R[OP_C(w)], ' ', true);
+}
+
 PNX_OP(SETFAIL) { st->fail = (pinax_err)OP_BX(w); return PNX_R_OK; }
 
 // ---- the other integer words --------------------------------------------------------------

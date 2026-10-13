@@ -75,6 +75,14 @@ enum {
 // generation of its slot in the upper 32 bits; using it after PFREE is the fault STALE.
 // SETFAIL sets the number a failure word after it would pass on (for words the compiler
 // expands, like first, that fail without a failing instruction).
+// SCUTS A, B: S[A] is cut at the first S[B]; S[A] becomes the part before and S[B] the part
+// after (empty when the separator is missing; SCUTSF fails then). STRIM takes white space off
+// (C: 1 the front, 2 the back, 3 both). SLINE and SNEXTS take the next line or the next piece
+// up to a separator string off S[A], as SWORD does for words. SFINDL finds the last
+// occurrence. SCMP gives -1, 0 or 1 for the byte order of two strings.
+// RCATX appends an integer in base 16 (C = 0) or 2 (C = 1) to a region string; RCATW and RCATXW
+// append it in decimal or hexadecimal padded with zeros to the width in R[C]; RPADL and RPADR
+// append a string padded with blanks on the left or right to that width.
 // The rest of the integer words of RFC-0009 section 3.2: saturating (SAT*), unsigned (U*),
 // rotating, the upper half of a product (MULHI, UMULHI), flooring division (FDIV, FMOD),
 // bit counts, and the checked ones that fail instead of faulting (CHK*).
@@ -176,6 +184,18 @@ enum {
     X(PFREE, PNX_K_I, PNX_K_NONE, PNX_K_NONE, PNX_F_GLOBAL, PNX_X_NONE, 0)                         \
     X(PALIVE, PNX_K_I, PNX_K_I, PNX_K_G, PNX_F_ABC, PNX_X_NONE, 0)                                 \
     X(SETFAIL, PNX_K_NONE, PNX_K_NONE, PNX_K_NONE, PNX_F_IMM, PNX_X_NONE, 0)                       \
+    X(SCUTS, PNX_K_S, PNX_K_S, PNX_K_NONE, PNX_F_ABC, PNX_X_NONE, 0)                               \
+    X(SCUTSF, PNX_K_S, PNX_K_S, PNX_K_NONE, PNX_F_ABC, PNX_X_NONE, 1)                              \
+    X(STRIM, PNX_K_S, PNX_K_S, PNX_K_IMM, PNX_F_ABC, PNX_X_NONE, 0)                                \
+    X(SLINE, PNX_K_S, PNX_K_S, PNX_K_NONE, PNX_F_ABC, PNX_X_NONE, 1)                               \
+    X(SNEXTS, PNX_K_S, PNX_K_S, PNX_K_S, PNX_F_ABC, PNX_X_NONE, 1)                                 \
+    X(SFINDL, PNX_K_I, PNX_K_S, PNX_K_S, PNX_F_ABC, PNX_X_NONE, 1)                                 \
+    X(SCMP, PNX_K_I, PNX_K_S, PNX_K_S, PNX_F_ABC, PNX_X_NONE, 0)                                   \
+    X(RCATX, PNX_K_S, PNX_K_I, PNX_K_IMM, PNX_F_ABC, PNX_X_NONE, 0)                                \
+    X(RCATW, PNX_K_S, PNX_K_I, PNX_K_I, PNX_F_ABC, PNX_X_NONE, 0)                                  \
+    X(RCATXW, PNX_K_S, PNX_K_I, PNX_K_I, PNX_F_ABC, PNX_X_NONE, 0)                                 \
+    X(RPADL, PNX_K_S, PNX_K_S, PNX_K_I, PNX_F_ABC, PNX_X_NONE, 0)                                  \
+    X(RPADR, PNX_K_S, PNX_K_S, PNX_K_I, PNX_F_ABC, PNX_X_NONE, 0)                                  \
     X(SATADD, PNX_K_I, PNX_K_I, PNX_K_I, PNX_F_ABC, PNX_X_NONE, 0) \
     X(SATSUB, PNX_K_I, PNX_K_I, PNX_K_I, PNX_F_ABC, PNX_X_NONE, 0) \
     X(SATMUL, PNX_K_I, PNX_K_I, PNX_K_I, PNX_F_ABC, PNX_X_NONE, 0) \

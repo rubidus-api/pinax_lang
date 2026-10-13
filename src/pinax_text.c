@@ -76,3 +76,13 @@ void pnx_err_name(int64_t err, uint32_t *offset, uint32_t *length) {
 uint64_t pnx_hash(const uint8_t *bytes, uint32_t length) {
     return proven_hash_bytes((proven_mem_view_t){bytes, length});
 }
+
+uint32_t pnx_find_last(const uint8_t *bytes, uint32_t length, const uint8_t *part, uint32_t part_length) {
+    if (part_length == 0)
+        return length;
+    if (part_length > length)
+        return UINT32_MAX;
+    const proven_size_t at =
+        proven_u8str_view_find_last((proven_u8str_view_t){bytes, length}, (proven_u8str_view_t){part, part_length});
+    return at == PROVEN_INDEX_NOT_FOUND ? UINT32_MAX : (uint32_t)at;
+}

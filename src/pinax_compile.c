@@ -29,7 +29,10 @@ enum { TY_NONE, TY_INT, TY_BOOL, TY_ERR, TY_STEM, TY_COLL, TY_STR = TY_SBANK | 6
 enum { BANK_I, BANK_S, BANK_NONE };
 enum { E_SLOT, E_LOCAL, E_CONST, E_COND };
 enum { B_IF, B_LOOP, B_ORELSE, B_CASE, B_OF, B_DO };
-enum { STEM_RANGE, STEM_BYTES, STEM_TIMES, STEM_COLL, STEM_WORDS, STEM_ROWS, STEM_STRS };
+enum {
+    STEM_RANGE, STEM_BYTES, STEM_TIMES, STEM_COLL, STEM_WORDS, STEM_ROWS, STEM_STRS,
+    STEM_LINES, STEM_SPLIT, STEM_SPLIT_BYTE // like STEM_WORDS, these take their next piece off the string
+};
 enum { GK_SCALAR, GK_ARRAY, GK_LIST, GK_BUFFER, GK_INDEX, GK_QUEUE, GK_POOL };
 enum { L_PLAIN, L_OWNS, L_MOVED }; // what a local holds of a value that must be given exactly once
 #define FWD_MARK 0x80000000u // in a call: the number of a forward declaration, patched at the end
@@ -212,7 +215,7 @@ typedef struct comp {
     vec          fields;   // field
     vec          fwds;     // fwd
     vec          dtypes;   // dtype
-    bool         use_strings;
+    bool         use_strings, use_format;
     bool         data_only; // PINAX_LOAD_DATA: declarations, literals, stores and rows only
     bool         sink;      // the word being compiled may take an owned value off the stack
     name         modules[MAX_MODULES];
@@ -936,12 +939,14 @@ enum {
     BW_WORDS, BW_ERR_TEXT, BW_ADD_ROW, BW_IS_NONE, BW_NONE, BW_ROW_INDEX, BW_MAX, BW_MIN,
     BW_APPEND, BW_APPEND_BYTE, BW_APPEND_INT, BW_CONTENTS, BW_TAKE, BW_SKIP, BW_TAKE_LAST, BW_SKIP_LAST,
     BW_STARTS_WITH, BW_ENDS_WITH, BW_CONTAINS, BW_LOOKUP, BW_INSERT, BW_REMOVE, BW_REPLACE, BW_PUT, BW_PEEK,
-    BW_ALLOC, BW_FREE, BW_IS_ALIVE, BW_COUNT, BW_ANY, BW_ALL, BW_FIRST, BW_EACH_INDEX, BW_MINIMUM, BW_MAXIMUM
+    BW_ALLOC, BW_FREE, BW_IS_ALIVE, BW_COUNT, BW_ANY, BW_ALL, BW_FIRST, BW_EACH_INDEX, BW_MINIMUM, BW_MAXIMUM,
+    BW_SLICE, BW_CUT, BW_TRY_CUT, BW_TRIM, BW_TRIM_LEFT, BW_TRIM_RIGHT, BW_LINES, BW_SPLIT, BW_FIND_LAST, BW_COMPARE,
+    BW_HEX, BW_BIN, BW_HEX_PAD, BW_ZERO_PAD, BW_PAD_LEFT, BW_PAD_RIGHT
 };
 static const struct builtin {
     const char *name;
     uint8_t     id;
-    bool        strings; // needs `use strings`
+    uint8_t     module; // 0: core, 1: needs `use strings`, 2: needs `use format`
 } builtins[] = {
     {"range", BW_RANGE, false},     {"sum", BW_SUM, false},        {"each", BW_EACH, false},
     {"fold", BW_FOLD, false},       {"times", BW_TIMES, false},    {"len", BW_LEN, false},
@@ -962,13 +967,21 @@ static const struct builtin {
     {"count", BW_COUNT, false},     {"any", BW_ANY, false},        {"all", BW_ALL, false},
     {"first", BW_FIRST, false},     {"each_index", BW_EACH_INDEX, false},
     {"minimum", BW_MINIMUM, false}, {"maximum", BW_MAXIMUM, false},
+    {"slice", BW_SLICE, 1},         {"cut", BW_CUT, 1},            {"try_cut", BW_TRY_CUT, 1},
+    {"trim", BW_TRIM, 1},           {"trim_left", BW_TRIM_LEFT, 1}, {"trim_right", BW_TRIM_RIGHT, 1},
+    {"lines", BW_LINES, 1},         {"split", BW_SPLIT, 1},        {"find_last", BW_FIND_LAST, 1},
+    {"compare", BW_COMPARE, 1},     {"pad_left", BW_PAD_LEFT, 1},  {"pad_right", BW_PAD_RIGHT, 1},
+    {"hex", BW_HEX, 2},             {"bin", BW_BIN, 2},            {"hex_pad", BW_HEX_PAD, 2},
+    {"zero_pad", BW_ZERO_PAD, 2},
 };
 
 // `len` and `is_empty` belong to the core for arrays and lists and to `strings` for a str; the
 // others marked so are words of `strings` only.
 static const struct builtin *find_builtin(const comp *c, name n) {
     for (size_t k = 0; k < sizeof builtins / sizeof builtins[0]; ++k) {
-        if (name_is(n, builtins[k].name) && (!builtins[k].strings || c->use_strings))
+        if (name_is(n, builtins[k].name) &&
+            (builtins[k].module == 0 || (builtins[k].module == 1 && c->use_strings) ||
+             (builtins[k].module == 2 && c->use_format)))
             return &builtins[k];
     }
     return NULL;
@@ -1091,10 +1104,22 @@ static bool compare_word(comp *c, int which) {
     entry *a = &f->stack[f->depth - 2], *b = &f->stack[f->depth - 1];
     if (a->type != b->type)
         return type_error(c, "the two values compared must have the same type");
-    if (base_of(c, a->type) != TY_INT && which != CMP_EQ && which != CMP_NE)
+    if (base_of(c, a->type) != TY_INT && a->type != TY_STR && which != CMP_EQ && which != CMP_NE)
         return type_error(c, "values of this type are compared with eq and ne only");
     entry e = {.type = TY_BOOL, .kind = E_COND};
     uint32_t ra, rb;
+    if (a->type == TY_STR && which != CMP_EQ && which != CMP_NE) { // byte order: compare, then test the sign
+        if (!reg_of(c, f->depth - 2, &ra) || !reg_of(c, f->depth - 1, &rb))
+            return false;
+        f->depth -= 2;
+        const uint32_t dst = top_slot(c, BANK_I, 1);
+        if (emit(c, PNX_ABC(PNX_SCMP, dst, ra, rb)) == NONE)
+            return false;
+        e.op = which == CMP_LT || which == CMP_LE ? PNX_JLTI : PNX_JGEI;
+        e.a = (uint8_t)dst;
+        e.b = which == CMP_LE || which == CMP_GT ? 1 : 0; // < 0 ; < 1 ; >= 1 ; >= 0
+        return push(c, e);
+    }
     if (a->type == TY_STR) {
         if (!reg_of(c, f->depth - 2, &ra) || !reg_of(c, f->depth - 1, &rb))
             return false;
@@ -2339,11 +2364,22 @@ static bool stem_begin(comp *c, uint8_t *kind, uint8_t *cur, uint8_t *lim, uint8
         *element = g->type;
         return emit(c, PNX_ABX(PNX_LOADI, *cur, 0)) != NONE && emit(c, PNX_ABX(PNX_GLEN, *lim, (uint32_t)stem.value)) != NONE;
     }
-    if (stem.op == STEM_WORDS) { // the string itself is the rest still to read
+    if (stem.op == STEM_WORDS || stem.op == STEM_LINES || stem.op == STEM_SPLIT_BYTE) {
+        // the string itself is the rest still to read; for a byte separator, `cur` is the byte
         f->stack[f->depth - 1].hidden = true;
         *src = (uint8_t)slot_of(c, f->depth - 1);
-        *cur = *lim = 0;
+        *cur = (uint8_t)stem.value;
+        *lim = 0;
         *count = 1;
+        *element = TY_STR;
+        return true;
+    }
+    if (stem.op == STEM_SPLIT) { // the string and, above it, the separator
+        f->stack[f->depth - 2].hidden = f->stack[f->depth - 1].hidden = true;
+        *src = (uint8_t)slot_of(c, f->depth - 2);
+        *lim = (uint8_t)slot_of(c, f->depth - 1);
+        *cur = 0;
+        *count = 2;
         *element = TY_STR;
         return true;
     }
@@ -2364,6 +2400,19 @@ static bool stem_begin(comp *c, uint8_t *kind, uint8_t *cur, uint8_t *lim, uint8
     *lim = (uint8_t)slot_of(c, f->depth - 1);
     *count = 3;
     return emit(c, PNX_ABX(PNX_LOADI, *cur, 0)) != NONE && emit(c, PNX_ABC(PNX_SLEN, *lim, *src, 0)) != NONE;
+}
+
+// Stems that hand out pieces of a string until none is left.
+static bool stem_takes(uint8_t kind) {
+    return kind == STEM_WORDS || kind == STEM_LINES || kind == STEM_SPLIT || kind == STEM_SPLIT_BYTE;
+}
+
+// Takes the next piece into `reg`; the instruction after it runs when there is none.
+static bool stem_take(comp *c, uint8_t kind, uint32_t reg, uint32_t src, uint32_t cur, uint32_t lim) {
+    return emit(c, kind == STEM_WORDS   ? PNX_ABC(PNX_SWORD, src, reg, 0)
+                   : kind == STEM_LINES ? PNX_ABC(PNX_SLINE, src, reg, 0)
+                   : kind == STEM_SPLIT ? PNX_ABC(PNX_SNEXTS, src, reg, lim)
+                                        : PNX_ABC(PNX_SNEXT, src, reg, cur)) != NONE;
 }
 
 // Puts the current element of the stem into `reg`.
@@ -2477,7 +2526,7 @@ static bool do_block(comp *c) {
     // what the word keeps while the block runs, above the operands of the stem
     uint8_t keep = 0, val = 0, idx = cur;
     if (use == USE_COUNT || use == USE_ANY || use == USE_ALL || use == USE_FIRST ||
-        (use == USE_EACH_INDEX && (kind == STEM_RANGE || kind == STEM_WORDS))) {
+        (use == USE_EACH_INDEX && (kind == STEM_RANGE || stem_takes(kind)))) {
         if (!push_slot(c, use == USE_COUNT || use == USE_EACH_INDEX ? TY_INT : TY_BOOL))
             return false;
         f->stack[f->depth - 1].hidden = true;
@@ -2537,8 +2586,8 @@ static bool do_block(comp *c) {
             reg = slot_of(c, f->depth - 1);
         }
     }
-    if (kind == STEM_WORDS) { // takes the next word, or leaves when none is left
-        if (emit(c, PNX_ABC(PNX_SWORD, src, reg, 0)) == NONE || !jump_later(c, &b->exits))
+    if (stem_takes(kind)) { // takes the next piece, or leaves when none is left
+        if (!stem_take(c, kind, reg, src, cur, lim) || !jump_later(c, &b->exits))
             return false;
     } else {
         // go on while cur < lim (for times: while the count is at least 1), then fetch the element
@@ -2595,7 +2644,7 @@ static bool end_do(comp *c, block *b) {
         }
         if (b->use == USE_EACH_INDEX && b->idx != b->cur && emit(c, PNX_ABC(PNX_ADDI, b->idx, b->idx, 1)) == NONE)
             return false;
-        if (!loop_back(c, b->head, b->cur, b->use == USE_TIMES ? -1 : b->stem == STEM_WORDS ? 0 : 1))
+        if (!loop_back(c, b->head, b->cur, b->use == USE_TIMES ? -1 : stem_takes(b->stem) ? 0 : 1))
             return false;
     }
     land(c, &b->exits);
@@ -2646,7 +2695,7 @@ static bool do_extreme(comp *c, bool largest) {
     tid     element_type;
     if (!stem_begin(c, &kind, &cur, &lim, &src, &hidden, &element_type))
         return false;
-    if (element_type != TY_INT || kind == STEM_WORDS)
+    if (element_type != TY_INT || stem_takes(kind))
         return type_error(c, "this word takes a stem of int values");
     if (!push_slot(c, TY_INT) || !push_slot(c, TY_INT))
         return false;
@@ -2723,7 +2772,7 @@ static bool guard_op(comp *c, tid out) {
 static bool builtin(comp *c, const struct builtin *w) {
     fn *f = c->f;
     const globalsym *g;
-    uint32_t         gi, ra, rb;
+    uint32_t         gi, ra, rb = 0;
     const bool       on_coll = f->depth > f->floor && f->stack[f->depth - 1].type == TY_COLL;
     switch (w->id) {
     case BW_RANGE:
@@ -2762,6 +2811,137 @@ static bool builtin(comp *c, const struct builtin *w) {
     case BW_SUM: return do_sum(c) && advance(c);
     case BW_MINIMUM:
     case BW_MAXIMUM: return do_extreme(c, w->id == BW_MAXIMUM);
+    case BW_LINES:
+        if (!need(c, 1))
+            return false;
+        if (f->stack[f->depth - 1].type != TY_STR)
+            return type_error(c, "lines takes a str");
+        return settle(c, f->depth - 1) && push(c, (entry){.type = TY_STEM, .kind = E_SLOT, .op = STEM_LINES}) &&
+               advance(c);
+    case BW_SPLIT: { // s sep split : sep is a str, or one byte written as a character
+        if (!need(c, 2))
+            return false;
+        const entry sep = f->stack[f->depth - 1];
+        if (f->stack[f->depth - 2].type != TY_STR)
+            return type_error(c, "split takes a str and a separator: s sep split");
+        if (sep.type == TY_INT) {
+            if (sep.kind != E_CONST || sep.value < 0 || sep.value > 255)
+                return type_error(c, "a separator given as a number is one byte written as a literal (',')");
+            --f->depth;
+            return settle(c, f->depth - 1) &&
+                   push(c, (entry){.type = TY_STEM, .kind = E_SLOT, .op = STEM_SPLIT_BYTE, .value = sep.value}) &&
+                   advance(c);
+        }
+        if (sep.type != TY_STR)
+            return type_error(c, "split takes a str and a separator: s sep split");
+        return settle(c, f->depth - 2) && settle(c, f->depth - 1) &&
+               push(c, (entry){.type = TY_STEM, .kind = E_SLOT, .op = STEM_SPLIT}) && advance(c);
+    }
+    case BW_TRIM:
+    case BW_TRIM_LEFT:
+    case BW_TRIM_RIGHT: {
+        if (!need(c, 1))
+            return false;
+        if (f->stack[f->depth - 1].type != TY_STR)
+            return type_error(c, "this word takes a str");
+        const uint32_t dst = slot_of(c, f->depth - 1);
+        if (!reg_of(c, f->depth - 1, &ra) ||
+            emit_def(c, PNX_ABC(PNX_STRIM, dst, ra, w->id == BW_TRIM ? 3 : w->id == BW_TRIM_LEFT ? 1 : 2), BANK_S) == NONE)
+            return false;
+        f->stack[f->depth - 1].kind = E_SLOT;
+        f->stack[f->depth - 1].src = 0;
+        return advance(c);
+    }
+    case BW_SLICE: { // s start n slice : a view; outside the string is a fault
+        if (!need(c, 3))
+            return false;
+        if (f->stack[f->depth - 3].type != TY_STR || f->stack[f->depth - 2].type != TY_INT ||
+            f->stack[f->depth - 1].type != TY_INT)
+            return type_error(c, "slice takes a str, a start and a count: s start n slice");
+        uint32_t rs, start, count;
+        if (!settle(c, f->depth - 3) || !reg_of(c, f->depth - 2, &start) || !reg_of(c, f->depth - 1, &count))
+            return false;
+        rs = slot_of(c, f->depth - 3);
+        const uint32_t end = top_slot(c, BANK_I, 2), len = end + 1;
+        if (emit(c, PNX_ABC(PNX_ADD, end, start, count)) == NONE || emit(c, PNX_ABC(PNX_SLEN, len, rs, 0)) == NONE ||
+            emit(c, PNX_ABC(PNX_JLE, end, len, 1)) == NONE || emit(c, PNX_ABX(PNX_FAULT, 0, PINAX_ERR_RANGE)) == NONE ||
+            emit(c, PNX_ABC(PNX_SSKIP, rs, rs, start)) == NONE || emit(c, PNX_ABC(PNX_STAKE, rs, rs, count)) == NONE)
+            return false;
+        f->depth -= 2;
+        f->def_at = NONE;
+        return advance(c);
+    }
+    case BW_CUT:
+    case BW_TRY_CUT: { // s sep cut : the parts before and after the first sep
+        if (!need(c, 2))
+            return false;
+        if (f->stack[f->depth - 2].type != TY_STR || f->stack[f->depth - 1].type != TY_STR)
+            return type_error(c, "this word takes two str values: s sep cut");
+        if (!settle(c, f->depth - 2) || !settle(c, f->depth - 1))
+            return false;
+        ra = slot_of(c, f->depth - 2);
+        rb = slot_of(c, f->depth - 1);
+        f->def_at = NONE;
+        if (w->id == BW_CUT)
+            return emit(c, PNX_ABC(PNX_SCUTS, ra, rb, 0)) != NONE && advance(c);
+        f->depth -= 2; // the two results come back to the same two registers
+        if (!settle_all(c) || emit(c, PNX_ABC(PNX_SCUTSF, ra, rb, 0)) == NONE || !advance(c))
+            return false;
+        sig two = {.n_out = 2, .fails = true};
+        two.out[0] = two.out[1] = TY_STR;
+        const uint32_t base[2] = {0, 0}, in[2] = {0, 0};
+        return guard(c, &two, base, in, false);
+    }
+    case BW_FIND_LAST: {
+        if (!need(c, 2))
+            return false;
+        if (f->stack[f->depth - 2].type != TY_STR || f->stack[f->depth - 1].type != TY_STR)
+            return type_error(c, "find_last takes two str values: s part find_last");
+        if (!settle(c, f->depth - 2) || !settle(c, f->depth - 1))
+            return false;
+        ra = slot_of(c, f->depth - 2);
+        rb = slot_of(c, f->depth - 1);
+        f->depth -= 2;
+        return settle_all(c) && emit(c, PNX_ABC(PNX_SFINDL, top_slot(c, BANK_I, 1), ra, rb)) != NONE &&
+               guard_op(c, TY_INT);
+    }
+    case BW_COMPARE: { // s t compare : -1, 0 or 1 by byte order
+        if (!need(c, 2))
+            return false;
+        if (f->stack[f->depth - 2].type != TY_STR || f->stack[f->depth - 1].type != TY_STR)
+            return type_error(c, "compare takes two str values");
+        if (!reg_of(c, f->depth - 2, &ra) || !reg_of(c, f->depth - 1, &rb))
+            return false;
+        f->depth -= 2;
+        const uint32_t dst = top_slot(c, BANK_I, 1);
+        return emit_def(c, PNX_ABC(PNX_SCMP, dst, ra, rb), BANK_I) != NONE && push_slot(c, TY_INT) && advance(c);
+    }
+    case BW_HEX:
+    case BW_BIN:
+    case BW_HEX_PAD:
+    case BW_ZERO_PAD:
+    case BW_PAD_LEFT:
+    case BW_PAD_RIGHT: { // text built in the region
+        const bool two = w->id != BW_HEX && w->id != BW_BIN;
+        const tid  what = w->id == BW_PAD_LEFT || w->id == BW_PAD_RIGHT ? TY_STR : TY_INT;
+        if (!need(c, two ? 2 : 1))
+            return false;
+        if (f->stack[f->depth - (two ? 2 : 1)].type != what || (two && f->stack[f->depth - 1].type != TY_INT))
+            return type_error(c, two ? "this word takes a value and a width" : "this word takes an int");
+        if (!reg_of(c, f->depth - (two ? 2 : 1), &ra) || (two && !reg_of(c, f->depth - 1, &rb)))
+            return false;
+        f->depth -= two ? 2 : 1;
+        const uint32_t scratch = top_slot(c, BANK_S, 2) + 1;
+        const uint32_t op = w->id == BW_HEX ? PNX_ABC(PNX_RCATX, scratch, ra, 0)
+                          : w->id == BW_BIN ? PNX_ABC(PNX_RCATX, scratch, ra, 1)
+                          : w->id == BW_HEX_PAD ? PNX_ABC(PNX_RCATXW, scratch, ra, rb)
+                          : w->id == BW_ZERO_PAD ? PNX_ABC(PNX_RCATW, scratch, ra, rb)
+                          : w->id == BW_PAD_LEFT ? PNX_ABC(PNX_RPADL, scratch, ra, rb)
+                                                 : PNX_ABC(PNX_RPADR, scratch, ra, rb);
+        if (emit(c, PNX_ABC(PNX_RMARK, scratch, 0, 0)) == NONE || emit(c, op) == NONE || !push_slot(c, TY_STR))
+            return false;
+        return move_slot(c, TY_STR, slot_of(c, f->depth - 1), scratch) && advance(c);
+    }
     case BW_LEN:
     case BW_IS_EMPTY: {
         if (on_coll) {
@@ -3574,8 +3754,11 @@ static bool use_module(comp *c) {
     if (c->tok.kind != PNX_T_NAME)
         return syntax(c, "use is followed by the name of a module");
     const name n = tok_name(c);
-    if (name_is(n, "strings")) { // a standard module: part of the language, not of the host
-        c->use_strings = true;
+    if (name_is(n, "strings") || name_is(n, "format")) { // standard modules: part of the language
+        if (name_is(n, "strings"))
+            c->use_strings = true;
+        else
+            c->use_format = true;
         return advance(c);
     }
     bool registered = false;
