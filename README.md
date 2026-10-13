@@ -5,7 +5,7 @@
 A small, fast scripting language to embed in C programs, with fixed, flat memory.
 
 > **Status: early, and it runs.** Source files compile and run, from the command `pnx` and
-> from a C program. The language is not complete (no floating point, no tasks
+> from a C program. The language is not complete (no floating point
 > yet), nothing is released, and the bytecode format carries no promise.
 
 Pinax is meant to live inside a host program. The host hands it one block of memory,

@@ -45,9 +45,9 @@ enum {
     PNX_X_FIELD,  // global 12 bits | byte offset 12 bits | width code or string capacity 8 bits
     PNX_X_COUNTS, // what a call through a register expects of the word: int args | str args << 8 |
                   // int results << 16 | str results << 24, and bit 31 when the word can fail
+    PNX_X_SREG,   // a register of the S bank that the instruction reads
 };
 
-// X(name, A, B, C, shape, second word, fails)
 // "fails": the next word is not skipped when the operation fails (or, for SNEXT, when the
 // sequence is used up); it must be JMP, RETF or FAIL.
 //
@@ -69,7 +69,8 @@ enum {
 // second string starts, ends or occurs in the first.
 // IXGET and IXGETS find the row with an int or str key in an index (fail when there is none);
 // IXPUT enters a row (fails when its key is there already); IXDEL takes a row out.
-// SREPL A, B: the string in S[B] with every S[B+1] replaced by S[B+2], built in the region.
+// SREPL A, B, C and a second word X: the string in S[B] with every S[C] replaced by S[X], built
+// in the region.
 // QPUT adds at the back of a queue (fails when full); QTAKE and QPEEK take and read the front
 // (fail when empty).
 // PALLOC takes a free row of a pool (fails when none is left), PFREE gives one back, PALIVE
@@ -98,155 +99,168 @@ enum {
 // the run back to whoever resumed the task; it fails with cancelled once the task was
 // cancelled (TCANCEL); outside a task it does nothing. TDONE says whether a task has ended.
 // TRUNALL G resumes the tasks of set G in turn until all have ended.
-#define PNX_OPS(X)                                                                                 \
-    X(MOVI, PNX_K_I, PNX_K_I, PNX_K_NONE, PNX_F_ABC, PNX_X_NONE, 0)                                \
-    X(MOVS, PNX_K_S, PNX_K_S, PNX_K_NONE, PNX_F_ABC, PNX_X_NONE, 0)                                \
-    X(LOADI, PNX_K_I, PNX_K_NONE, PNX_K_NONE, PNX_F_IMM, PNX_X_NONE, 0)                            \
-    X(LOADK, PNX_K_I, PNX_K_NONE, PNX_K_NONE, PNX_F_ICONST, PNX_X_NONE, 0)                         \
-    X(LOADKS, PNX_K_S, PNX_K_NONE, PNX_K_NONE, PNX_F_SCONST, PNX_X_NONE, 0)                        \
-    X(ADD, PNX_K_I, PNX_K_I, PNX_K_I, PNX_F_ABC, PNX_X_NONE, 0)                                    \
-    X(SUB, PNX_K_I, PNX_K_I, PNX_K_I, PNX_F_ABC, PNX_X_NONE, 0)                                    \
-    X(MUL, PNX_K_I, PNX_K_I, PNX_K_I, PNX_F_ABC, PNX_X_NONE, 0)                                    \
-    X(DIV, PNX_K_I, PNX_K_I, PNX_K_I, PNX_F_ABC, PNX_X_NONE, 0)                                    \
-    X(MOD, PNX_K_I, PNX_K_I, PNX_K_I, PNX_F_ABC, PNX_X_NONE, 0)                                    \
-    X(NEG, PNX_K_I, PNX_K_I, PNX_K_NONE, PNX_F_ABC, PNX_X_NONE, 0)                                 \
-    X(ADDI, PNX_K_I, PNX_K_I, PNX_K_IMM, PNX_F_ABC, PNX_X_NONE, 0)                                 \
-    X(WADD, PNX_K_I, PNX_K_I, PNX_K_I, PNX_F_ABC, PNX_X_NONE, 0)                                   \
-    X(WSUB, PNX_K_I, PNX_K_I, PNX_K_I, PNX_F_ABC, PNX_X_NONE, 0)                                   \
-    X(WMUL, PNX_K_I, PNX_K_I, PNX_K_I, PNX_F_ABC, PNX_X_NONE, 0)                                   \
-    X(AND, PNX_K_I, PNX_K_I, PNX_K_I, PNX_F_ABC, PNX_X_NONE, 0)                                    \
-    X(OR, PNX_K_I, PNX_K_I, PNX_K_I, PNX_F_ABC, PNX_X_NONE, 0)                                     \
-    X(XOR, PNX_K_I, PNX_K_I, PNX_K_I, PNX_F_ABC, PNX_X_NONE, 0)                                    \
-    X(SHL, PNX_K_I, PNX_K_I, PNX_K_I, PNX_F_ABC, PNX_X_NONE, 0)                                    \
-    X(SHR, PNX_K_I, PNX_K_I, PNX_K_I, PNX_F_ABC, PNX_X_NONE, 0)                                    \
-    X(USHR, PNX_K_I, PNX_K_I, PNX_K_I, PNX_F_ABC, PNX_X_NONE, 0)                                   \
-    X(JEQ, PNX_K_I, PNX_K_I, PNX_K_J, PNX_F_ABC, PNX_X_NONE, 0)                                    \
-    X(JNE, PNX_K_I, PNX_K_I, PNX_K_J, PNX_F_ABC, PNX_X_NONE, 0)                                    \
-    X(JLT, PNX_K_I, PNX_K_I, PNX_K_J, PNX_F_ABC, PNX_X_NONE, 0)                                    \
-    X(JLE, PNX_K_I, PNX_K_I, PNX_K_J, PNX_F_ABC, PNX_X_NONE, 0)                                    \
-    X(JEQI, PNX_K_I, PNX_K_IMM, PNX_K_J, PNX_F_ABC, PNX_X_NONE, 0)                                 \
-    X(JNEI, PNX_K_I, PNX_K_IMM, PNX_K_J, PNX_F_ABC, PNX_X_NONE, 0)                                 \
-    X(JLTI, PNX_K_I, PNX_K_IMM, PNX_K_J, PNX_F_ABC, PNX_X_NONE, 0)                                 \
-    X(JGEI, PNX_K_I, PNX_K_IMM, PNX_K_J, PNX_F_ABC, PNX_X_NONE, 0)                                 \
-    X(JMP, PNX_K_NONE, PNX_K_NONE, PNX_K_NONE, PNX_F_AX, PNX_X_NONE, 0)                            \
-    X(GETG, PNX_K_I, PNX_K_NONE, PNX_K_NONE, PNX_F_GLOBAL, PNX_X_NONE, 0)                          \
-    X(SETG, PNX_K_I, PNX_K_NONE, PNX_K_NONE, PNX_F_GLOBAL, PNX_X_NONE, 0)                          \
-    X(AGET, PNX_K_I, PNX_K_I, PNX_K_G, PNX_F_ABC, PNX_X_NONE, 0)                                   \
-    X(ASET, PNX_K_I, PNX_K_I, PNX_K_G, PNX_F_ABC, PNX_X_NONE, 0)                                   \
-    X(ROW, PNX_K_I, PNX_K_I, PNX_K_G, PNX_F_ABC, PNX_X_NONE, 0)                                    \
-    X(FGET, PNX_K_I, PNX_K_I, PNX_K_NONE, PNX_F_ABC, PNX_X_FIELD, 0)                               \
-    X(FSET, PNX_K_I, PNX_K_I, PNX_K_NONE, PNX_F_ABC, PNX_X_FIELD, 0)                               \
-    X(FGETS, PNX_K_S, PNX_K_I, PNX_K_NONE, PNX_F_ABC, PNX_X_FIELD, 0)                              \
-    X(FSETS, PNX_K_S, PNX_K_I, PNX_K_NONE, PNX_F_ABC, PNX_X_FIELD, 0)                              \
-    X(SLEN, PNX_K_I, PNX_K_S, PNX_K_NONE, PNX_F_ABC, PNX_X_NONE, 0)                                \
-    X(SBYTE, PNX_K_I, PNX_K_S, PNX_K_I, PNX_F_ABC, PNX_X_NONE, 0)                                  \
-    X(JSEQ, PNX_K_S, PNX_K_S, PNX_K_J, PNX_F_ABC, PNX_X_NONE, 0)                                   \
-    X(SNEXT, PNX_K_S, PNX_K_S, PNX_K_IMM, PNX_F_ABC, PNX_X_NONE, 1)                                \
-    X(SCUT, PNX_K_S, PNX_K_S, PNX_K_IMM, PNX_F_ABC, PNX_X_NONE, 0)                                 \
-    X(TOINT, PNX_K_I, PNX_K_S, PNX_K_NONE, PNX_F_ABC, PNX_X_NONE, 1)                               \
-    X(BCLEAR, PNX_K_NONE, PNX_K_NONE, PNX_K_NONE, PNX_F_GLOBAL, PNX_X_NONE, 0)                     \
-    X(BPUT, PNX_K_I, PNX_K_IMM, PNX_K_G, PNX_F_ABC, PNX_X_NONE, 1)                                 \
-    X(BPUTS, PNX_K_S, PNX_K_NONE, PNX_K_G, PNX_F_ABC, PNX_X_NONE, 1)                               \
-    X(BVIEW, PNX_K_S, PNX_K_NONE, PNX_K_NONE, PNX_F_GLOBAL, PNX_X_NONE, 0)                         \
-    X(SGET, PNX_K_I, PNX_K_S, PNX_K_IMM, PNX_F_ABC, PNX_X_NONE, 1)                                 \
-    X(SGETS, PNX_K_S, PNX_K_S, PNX_K_NONE, PNX_F_ABC, PNX_X_NONE, 1)                               \
-    X(CALL, PNX_K_IMM, PNX_K_IMM, PNX_K_NONE, PNX_F_ABC, PNX_X_WORD, 0)                            \
-    X(TCALL, PNX_K_NONE, PNX_K_NONE, PNX_K_NONE, PNX_F_ABC, PNX_X_WORD, 0)                         \
-    X(RET, PNX_K_NONE, PNX_K_NONE, PNX_K_NONE, PNX_F_ABC, PNX_X_NONE, 0)                           \
-    X(RETOK, PNX_K_NONE, PNX_K_NONE, PNX_K_NONE, PNX_F_ABC, PNX_X_NONE, 0)                         \
-    X(RETF, PNX_K_NONE, PNX_K_NONE, PNX_K_NONE, PNX_F_ABC, PNX_X_NONE, 0)                          \
-    X(FAIL, PNX_K_NONE, PNX_K_NONE, PNX_K_NONE, PNX_F_IMM, PNX_X_NONE, 0)                          \
-    X(HCALL, PNX_K_IMM, PNX_K_IMM, PNX_K_NONE, PNX_F_ABC, PNX_X_IMPORT, 0)                         \
-    X(HCALLF, PNX_K_IMM, PNX_K_IMM, PNX_K_NONE, PNX_F_ABC, PNX_X_IMPORT, 1)                        \
-    X(CHECK, PNX_K_NONE, PNX_K_NONE, PNX_K_NONE, PNX_F_IMM, PNX_X_NONE, 0)                         \
-    X(FAULT, PNX_K_NONE, PNX_K_NONE, PNX_K_NONE, PNX_F_IMM, PNX_X_NONE, 0)                         \
-    X(JSNE, PNX_K_S, PNX_K_S, PNX_K_J, PNX_F_ABC, PNX_X_NONE, 0)                                   \
-    X(GETFAIL, PNX_K_I, PNX_K_NONE, PNX_K_NONE, PNX_F_IMM, PNX_X_NONE, 0)                          \
-    X(FAILR, PNX_K_I, PNX_K_NONE, PNX_K_NONE, PNX_F_ABC, PNX_X_NONE, 0)                            \
-    X(RMARK, PNX_K_S, PNX_K_NONE, PNX_K_NONE, PNX_F_ABC, PNX_X_NONE, 0)                            \
-    X(RCATS, PNX_K_S, PNX_K_S, PNX_K_NONE, PNX_F_ABC, PNX_X_NONE, 0)                               \
-    X(RCATI, PNX_K_S, PNX_K_I, PNX_K_NONE, PNX_F_ABC, PNX_X_NONE, 0)                               \
-    X(RCATB, PNX_K_S, PNX_K_I, PNX_K_NONE, PNX_F_ABC, PNX_X_NONE, 0)                               \
-    X(GLEN, PNX_K_I, PNX_K_NONE, PNX_K_NONE, PNX_F_GLOBAL, PNX_X_NONE, 0)                          \
-    X(GCLEAR, PNX_K_NONE, PNX_K_NONE, PNX_K_NONE, PNX_F_GLOBAL, PNX_X_NONE, 0)                     \
-    X(LPUSH, PNX_K_I, PNX_K_NONE, PNX_K_NONE, PNX_F_GLOBAL, PNX_X_NONE, 1)                         \
-    X(LPOP, PNX_K_I, PNX_K_NONE, PNX_K_NONE, PNX_F_GLOBAL, PNX_X_NONE, 1)                          \
-    X(SFIND, PNX_K_I, PNX_K_S, PNX_K_S, PNX_F_ABC, PNX_X_NONE, 1)                                  \
-    X(SWORD, PNX_K_S, PNX_K_S, PNX_K_NONE, PNX_F_ABC, PNX_X_NONE, 1)                               \
-    X(ERRTEXT, PNX_K_S, PNX_K_I, PNX_K_NONE, PNX_F_ABC, PNX_X_NONE, 0)                             \
-    X(ADDROW, PNX_K_I, PNX_K_NONE, PNX_K_NONE, PNX_F_GLOBAL, PNX_X_NONE, 1)                        \
-    X(BCAT, PNX_K_S, PNX_K_NONE, PNX_K_NONE, PNX_F_GLOBAL, PNX_X_NONE, 1)                          \
-    X(BCATI, PNX_K_I, PNX_K_NONE, PNX_K_NONE, PNX_F_GLOBAL, PNX_X_NONE, 1)                         \
-    X(STAKE, PNX_K_S, PNX_K_S, PNX_K_I, PNX_F_ABC, PNX_X_NONE, 0)                                  \
-    X(SSKIP, PNX_K_S, PNX_K_S, PNX_K_I, PNX_F_ABC, PNX_X_NONE, 0)                                  \
-    X(STAKEL, PNX_K_S, PNX_K_S, PNX_K_I, PNX_F_ABC, PNX_X_NONE, 0)                                 \
-    X(SSKIPL, PNX_K_S, PNX_K_S, PNX_K_I, PNX_F_ABC, PNX_X_NONE, 0)                                 \
-    X(SPRE, PNX_K_I, PNX_K_S, PNX_K_S, PNX_F_ABC, PNX_X_NONE, 0)                                   \
-    X(SSUF, PNX_K_I, PNX_K_S, PNX_K_S, PNX_F_ABC, PNX_X_NONE, 0)                                   \
-    X(SHAS, PNX_K_I, PNX_K_S, PNX_K_S, PNX_F_ABC, PNX_X_NONE, 0)                                   \
-    X(IXGET, PNX_K_I, PNX_K_I, PNX_K_G, PNX_F_ABC, PNX_X_NONE, 1)                                  \
-    X(IXGETS, PNX_K_I, PNX_K_S, PNX_K_G, PNX_F_ABC, PNX_X_NONE, 1)                                 \
-    X(IXPUT, PNX_K_I, PNX_K_NONE, PNX_K_NONE, PNX_F_GLOBAL, PNX_X_NONE, 1)                         \
-    X(IXDEL, PNX_K_I, PNX_K_NONE, PNX_K_NONE, PNX_F_GLOBAL, PNX_X_NONE, 0)                         \
-    X(SREPL, PNX_K_S, PNX_K_S, PNX_K_NONE, PNX_F_ABC, PNX_X_NONE, 0)                               \
-    X(QPUT, PNX_K_I, PNX_K_NONE, PNX_K_NONE, PNX_F_GLOBAL, PNX_X_NONE, 1)                          \
-    X(QTAKE, PNX_K_I, PNX_K_NONE, PNX_K_NONE, PNX_F_GLOBAL, PNX_X_NONE, 1)                         \
-    X(QPEEK, PNX_K_I, PNX_K_NONE, PNX_K_NONE, PNX_F_GLOBAL, PNX_X_NONE, 1)                         \
-    X(PALLOC, PNX_K_I, PNX_K_NONE, PNX_K_NONE, PNX_F_GLOBAL, PNX_X_NONE, 1)                        \
-    X(PFREE, PNX_K_I, PNX_K_NONE, PNX_K_NONE, PNX_F_GLOBAL, PNX_X_NONE, 0)                         \
-    X(PALIVE, PNX_K_I, PNX_K_I, PNX_K_G, PNX_F_ABC, PNX_X_NONE, 0)                                 \
-    X(SETFAIL, PNX_K_NONE, PNX_K_NONE, PNX_K_NONE, PNX_F_IMM, PNX_X_NONE, 0)                       \
-    X(CALLR, PNX_K_IMM, PNX_K_IMM, PNX_K_I, PNX_F_ABC, PNX_X_COUNTS, 0)                            \
-    X(RTOP, PNX_K_I, PNX_K_NONE, PNX_K_NONE, PNX_F_IMM, PNX_X_NONE, 0)                             \
-    X(RCUT, PNX_K_I, PNX_K_NONE, PNX_K_NONE, PNX_F_IMM, PNX_X_NONE, 0)                             \
-    X(RFREE, PNX_K_I, PNX_K_NONE, PNX_K_NONE, PNX_F_IMM, PNX_X_NONE, 0)                            \
-    X(SCUTS, PNX_K_S, PNX_K_S, PNX_K_NONE, PNX_F_ABC, PNX_X_NONE, 0)                               \
-    X(SCUTSF, PNX_K_S, PNX_K_S, PNX_K_NONE, PNX_F_ABC, PNX_X_NONE, 1)                              \
-    X(STRIM, PNX_K_S, PNX_K_S, PNX_K_IMM, PNX_F_ABC, PNX_X_NONE, 0)                                \
-    X(SLINE, PNX_K_S, PNX_K_S, PNX_K_NONE, PNX_F_ABC, PNX_X_NONE, 1)                               \
-    X(SNEXTS, PNX_K_S, PNX_K_S, PNX_K_S, PNX_F_ABC, PNX_X_NONE, 1)                                 \
-    X(SFINDL, PNX_K_I, PNX_K_S, PNX_K_S, PNX_F_ABC, PNX_X_NONE, 1)                                 \
-    X(SCMP, PNX_K_I, PNX_K_S, PNX_K_S, PNX_F_ABC, PNX_X_NONE, 0)                                   \
-    X(RCATX, PNX_K_S, PNX_K_I, PNX_K_IMM, PNX_F_ABC, PNX_X_NONE, 0)                                \
-    X(RCATW, PNX_K_S, PNX_K_I, PNX_K_I, PNX_F_ABC, PNX_X_NONE, 0)                                  \
-    X(RCATXW, PNX_K_S, PNX_K_I, PNX_K_I, PNX_F_ABC, PNX_X_NONE, 0)                                 \
-    X(RPADL, PNX_K_S, PNX_K_S, PNX_K_I, PNX_F_ABC, PNX_X_NONE, 0)                                  \
-    X(RPADR, PNX_K_S, PNX_K_S, PNX_K_I, PNX_F_ABC, PNX_X_NONE, 0)                                  \
-    X(SATADD, PNX_K_I, PNX_K_I, PNX_K_I, PNX_F_ABC, PNX_X_NONE, 0) \
-    X(SATSUB, PNX_K_I, PNX_K_I, PNX_K_I, PNX_F_ABC, PNX_X_NONE, 0) \
-    X(SATMUL, PNX_K_I, PNX_K_I, PNX_K_I, PNX_F_ABC, PNX_X_NONE, 0) \
-    X(UDIV, PNX_K_I, PNX_K_I, PNX_K_I, PNX_F_ABC, PNX_X_NONE, 0) \
-    X(UMOD, PNX_K_I, PNX_K_I, PNX_K_I, PNX_F_ABC, PNX_X_NONE, 0) \
-    X(ROTL, PNX_K_I, PNX_K_I, PNX_K_I, PNX_F_ABC, PNX_X_NONE, 0) \
-    X(ROTR, PNX_K_I, PNX_K_I, PNX_K_I, PNX_F_ABC, PNX_X_NONE, 0) \
-    X(MULHI, PNX_K_I, PNX_K_I, PNX_K_I, PNX_F_ABC, PNX_X_NONE, 0) \
-    X(UMULHI, PNX_K_I, PNX_K_I, PNX_K_I, PNX_F_ABC, PNX_X_NONE, 0) \
-    X(FDIV, PNX_K_I, PNX_K_I, PNX_K_I, PNX_F_ABC, PNX_X_NONE, 0) \
-    X(FMOD, PNX_K_I, PNX_K_I, PNX_K_I, PNX_F_ABC, PNX_X_NONE, 0) \
-    X(ULT, PNX_K_I, PNX_K_I, PNX_K_I, PNX_F_ABC, PNX_X_NONE, 0) \
-    X(ULE, PNX_K_I, PNX_K_I, PNX_K_I, PNX_F_ABC, PNX_X_NONE, 0) \
-    X(ABS, PNX_K_I, PNX_K_I, PNX_K_NONE, PNX_F_ABC, PNX_X_NONE, 0) \
-    X(BNOT, PNX_K_I, PNX_K_I, PNX_K_NONE, PNX_F_ABC, PNX_X_NONE, 0) \
-    X(POPC, PNX_K_I, PNX_K_I, PNX_K_NONE, PNX_F_ABC, PNX_X_NONE, 0) \
-    X(CLZ, PNX_K_I, PNX_K_I, PNX_K_NONE, PNX_F_ABC, PNX_X_NONE, 0) \
-    X(CTZ, PNX_K_I, PNX_K_I, PNX_K_NONE, PNX_F_ABC, PNX_X_NONE, 0) \
-    X(BSWAP, PNX_K_I, PNX_K_I, PNX_K_NONE, PNX_F_ABC, PNX_X_NONE, 0) \
-    X(CHKADD, PNX_K_I, PNX_K_I, PNX_K_I, PNX_F_ABC, PNX_X_NONE, 1) \
-    X(CHKSUB, PNX_K_I, PNX_K_I, PNX_K_I, PNX_F_ABC, PNX_X_NONE, 1) \
-    X(CHKMUL, PNX_K_I, PNX_K_I, PNX_K_I, PNX_F_ABC, PNX_X_NONE, 1) \
-    X(CHKDIV, PNX_K_I, PNX_K_I, PNX_K_I, PNX_F_ABC, PNX_X_NONE, 1) \
-    X(TSPAWN, PNX_K_I, PNX_K_I, PNX_K_G, PNX_F_ABC, PNX_X_NONE, 1) \
-    X(TRESUME, PNX_K_I, PNX_K_I, PNX_K_G, PNX_F_ABC, PNX_X_NONE, 0) \
-    X(TYIELD, PNX_K_NONE, PNX_K_NONE, PNX_K_NONE, PNX_F_IMM, PNX_X_NONE, 1) \
-    X(TDONE, PNX_K_I, PNX_K_I, PNX_K_G, PNX_F_ABC, PNX_X_NONE, 0) \
-    X(TCANCEL, PNX_K_I, PNX_K_NONE, PNX_K_NONE, PNX_F_GLOBAL, PNX_X_NONE, 0) \
-    X(TRUNALL, PNX_K_NONE, PNX_K_NONE, PNX_K_NONE, PNX_F_GLOBAL, PNX_X_NONE, 0)
+// X(name, number, A, B, C, shape, second word, fails, roles)
+// The numbers are those of format 1 (RFC-0012): one range for each kind of instruction, with
+// room left in every range. "roles" says what the instruction does with the registers named
+// by A, B and C: r reads, w writes, m reads and leaves a value, - names no register.
+#define PNX_OPS(X) \
+    /* values */ \
+    X(MOVI, 0x00, PNX_K_I, PNX_K_I, PNX_K_NONE, PNX_F_ABC, PNX_X_NONE, 0, "wr-") \
+    X(MOVS, 0x01, PNX_K_S, PNX_K_S, PNX_K_NONE, PNX_F_ABC, PNX_X_NONE, 0, "wr-") \
+    X(LOADI, 0x02, PNX_K_I, PNX_K_NONE, PNX_K_NONE, PNX_F_IMM, PNX_X_NONE, 0, "w--") \
+    X(LOADK, 0x03, PNX_K_I, PNX_K_NONE, PNX_K_NONE, PNX_F_ICONST, PNX_X_NONE, 0, "w--") \
+    X(LOADKS, 0x04, PNX_K_S, PNX_K_NONE, PNX_K_NONE, PNX_F_SCONST, PNX_X_NONE, 0, "w--") \
+    /* integers */ \
+    X(ADD, 0x08, PNX_K_I, PNX_K_I, PNX_K_I, PNX_F_ABC, PNX_X_NONE, 0, "wrr") \
+    X(SUB, 0x09, PNX_K_I, PNX_K_I, PNX_K_I, PNX_F_ABC, PNX_X_NONE, 0, "wrr") \
+    X(MUL, 0x0a, PNX_K_I, PNX_K_I, PNX_K_I, PNX_F_ABC, PNX_X_NONE, 0, "wrr") \
+    X(DIV, 0x0b, PNX_K_I, PNX_K_I, PNX_K_I, PNX_F_ABC, PNX_X_NONE, 0, "wrr") \
+    X(MOD, 0x0c, PNX_K_I, PNX_K_I, PNX_K_I, PNX_F_ABC, PNX_X_NONE, 0, "wrr") \
+    X(NEG, 0x0d, PNX_K_I, PNX_K_I, PNX_K_NONE, PNX_F_ABC, PNX_X_NONE, 0, "wr-") \
+    X(ADDI, 0x0e, PNX_K_I, PNX_K_I, PNX_K_IMM, PNX_F_ABC, PNX_X_NONE, 0, "wr-") \
+    X(WADD, 0x0f, PNX_K_I, PNX_K_I, PNX_K_I, PNX_F_ABC, PNX_X_NONE, 0, "wrr") \
+    X(WSUB, 0x10, PNX_K_I, PNX_K_I, PNX_K_I, PNX_F_ABC, PNX_X_NONE, 0, "wrr") \
+    X(WMUL, 0x11, PNX_K_I, PNX_K_I, PNX_K_I, PNX_F_ABC, PNX_X_NONE, 0, "wrr") \
+    X(AND, 0x12, PNX_K_I, PNX_K_I, PNX_K_I, PNX_F_ABC, PNX_X_NONE, 0, "wrr") \
+    X(OR, 0x13, PNX_K_I, PNX_K_I, PNX_K_I, PNX_F_ABC, PNX_X_NONE, 0, "wrr") \
+    X(XOR, 0x14, PNX_K_I, PNX_K_I, PNX_K_I, PNX_F_ABC, PNX_X_NONE, 0, "wrr") \
+    X(SHL, 0x15, PNX_K_I, PNX_K_I, PNX_K_I, PNX_F_ABC, PNX_X_NONE, 0, "wrr") \
+    X(SHR, 0x16, PNX_K_I, PNX_K_I, PNX_K_I, PNX_F_ABC, PNX_X_NONE, 0, "wrr") \
+    X(USHR, 0x17, PNX_K_I, PNX_K_I, PNX_K_I, PNX_F_ABC, PNX_X_NONE, 0, "wrr") \
+    X(SATADD, 0x18, PNX_K_I, PNX_K_I, PNX_K_I, PNX_F_ABC, PNX_X_NONE, 0, "wrr") \
+    X(SATSUB, 0x19, PNX_K_I, PNX_K_I, PNX_K_I, PNX_F_ABC, PNX_X_NONE, 0, "wrr") \
+    X(SATMUL, 0x1a, PNX_K_I, PNX_K_I, PNX_K_I, PNX_F_ABC, PNX_X_NONE, 0, "wrr") \
+    X(UDIV, 0x1b, PNX_K_I, PNX_K_I, PNX_K_I, PNX_F_ABC, PNX_X_NONE, 0, "wrr") \
+    X(UMOD, 0x1c, PNX_K_I, PNX_K_I, PNX_K_I, PNX_F_ABC, PNX_X_NONE, 0, "wrr") \
+    X(ROTL, 0x1d, PNX_K_I, PNX_K_I, PNX_K_I, PNX_F_ABC, PNX_X_NONE, 0, "wrr") \
+    X(ROTR, 0x1e, PNX_K_I, PNX_K_I, PNX_K_I, PNX_F_ABC, PNX_X_NONE, 0, "wrr") \
+    X(MULHI, 0x1f, PNX_K_I, PNX_K_I, PNX_K_I, PNX_F_ABC, PNX_X_NONE, 0, "wrr") \
+    X(UMULHI, 0x20, PNX_K_I, PNX_K_I, PNX_K_I, PNX_F_ABC, PNX_X_NONE, 0, "wrr") \
+    X(FDIV, 0x21, PNX_K_I, PNX_K_I, PNX_K_I, PNX_F_ABC, PNX_X_NONE, 0, "wrr") \
+    X(FMOD, 0x22, PNX_K_I, PNX_K_I, PNX_K_I, PNX_F_ABC, PNX_X_NONE, 0, "wrr") \
+    X(ULT, 0x23, PNX_K_I, PNX_K_I, PNX_K_I, PNX_F_ABC, PNX_X_NONE, 0, "wrr") \
+    X(ULE, 0x24, PNX_K_I, PNX_K_I, PNX_K_I, PNX_F_ABC, PNX_X_NONE, 0, "wrr") \
+    X(ABS, 0x25, PNX_K_I, PNX_K_I, PNX_K_NONE, PNX_F_ABC, PNX_X_NONE, 0, "wr-") \
+    X(BNOT, 0x26, PNX_K_I, PNX_K_I, PNX_K_NONE, PNX_F_ABC, PNX_X_NONE, 0, "wr-") \
+    X(POPC, 0x27, PNX_K_I, PNX_K_I, PNX_K_NONE, PNX_F_ABC, PNX_X_NONE, 0, "wr-") \
+    X(CLZ, 0x28, PNX_K_I, PNX_K_I, PNX_K_NONE, PNX_F_ABC, PNX_X_NONE, 0, "wr-") \
+    X(CTZ, 0x29, PNX_K_I, PNX_K_I, PNX_K_NONE, PNX_F_ABC, PNX_X_NONE, 0, "wr-") \
+    X(BSWAP, 0x2a, PNX_K_I, PNX_K_I, PNX_K_NONE, PNX_F_ABC, PNX_X_NONE, 0, "wr-") \
+    X(CHKADD, 0x2b, PNX_K_I, PNX_K_I, PNX_K_I, PNX_F_ABC, PNX_X_NONE, 1, "wrr") \
+    X(CHKSUB, 0x2c, PNX_K_I, PNX_K_I, PNX_K_I, PNX_F_ABC, PNX_X_NONE, 1, "wrr") \
+    X(CHKMUL, 0x2d, PNX_K_I, PNX_K_I, PNX_K_I, PNX_F_ABC, PNX_X_NONE, 1, "wrr") \
+    X(CHKDIV, 0x2e, PNX_K_I, PNX_K_I, PNX_K_I, PNX_F_ABC, PNX_X_NONE, 1, "wrr") \
+    /* jumps */ \
+    X(JEQ, 0x48, PNX_K_I, PNX_K_I, PNX_K_J, PNX_F_ABC, PNX_X_NONE, 0, "rr-") \
+    X(JNE, 0x49, PNX_K_I, PNX_K_I, PNX_K_J, PNX_F_ABC, PNX_X_NONE, 0, "rr-") \
+    X(JLT, 0x4a, PNX_K_I, PNX_K_I, PNX_K_J, PNX_F_ABC, PNX_X_NONE, 0, "rr-") \
+    X(JLE, 0x4b, PNX_K_I, PNX_K_I, PNX_K_J, PNX_F_ABC, PNX_X_NONE, 0, "rr-") \
+    X(JEQI, 0x4c, PNX_K_I, PNX_K_IMM, PNX_K_J, PNX_F_ABC, PNX_X_NONE, 0, "r--") \
+    X(JNEI, 0x4d, PNX_K_I, PNX_K_IMM, PNX_K_J, PNX_F_ABC, PNX_X_NONE, 0, "r--") \
+    X(JLTI, 0x4e, PNX_K_I, PNX_K_IMM, PNX_K_J, PNX_F_ABC, PNX_X_NONE, 0, "r--") \
+    X(JGEI, 0x4f, PNX_K_I, PNX_K_IMM, PNX_K_J, PNX_F_ABC, PNX_X_NONE, 0, "r--") \
+    X(JMP, 0x50, PNX_K_NONE, PNX_K_NONE, PNX_K_NONE, PNX_F_AX, PNX_X_NONE, 0, "---") \
+    X(JSEQ, 0x51, PNX_K_S, PNX_K_S, PNX_K_J, PNX_F_ABC, PNX_X_NONE, 0, "rr-") \
+    X(JSNE, 0x52, PNX_K_S, PNX_K_S, PNX_K_J, PNX_F_ABC, PNX_X_NONE, 0, "rr-") \
+    /* calls, returns, failures */ \
+    X(CALL, 0x58, PNX_K_IMM, PNX_K_IMM, PNX_K_NONE, PNX_F_ABC, PNX_X_WORD, 0, "---") \
+    X(TCALL, 0x59, PNX_K_NONE, PNX_K_NONE, PNX_K_NONE, PNX_F_ABC, PNX_X_WORD, 0, "---") \
+    X(CALLR, 0x5a, PNX_K_IMM, PNX_K_IMM, PNX_K_I, PNX_F_ABC, PNX_X_COUNTS, 0, "--r") \
+    X(RET, 0x5b, PNX_K_NONE, PNX_K_NONE, PNX_K_NONE, PNX_F_ABC, PNX_X_NONE, 0, "---") \
+    X(RETOK, 0x5c, PNX_K_NONE, PNX_K_NONE, PNX_K_NONE, PNX_F_ABC, PNX_X_NONE, 0, "---") \
+    X(RETF, 0x5d, PNX_K_NONE, PNX_K_NONE, PNX_K_NONE, PNX_F_ABC, PNX_X_NONE, 0, "---") \
+    X(FAIL, 0x5e, PNX_K_NONE, PNX_K_NONE, PNX_K_NONE, PNX_F_IMM, PNX_X_NONE, 0, "---") \
+    X(FAILR, 0x5f, PNX_K_I, PNX_K_NONE, PNX_K_NONE, PNX_F_ABC, PNX_X_NONE, 0, "r--") \
+    X(GETFAIL, 0x60, PNX_K_I, PNX_K_NONE, PNX_K_NONE, PNX_F_IMM, PNX_X_NONE, 0, "w--") \
+    X(SETFAIL, 0x61, PNX_K_NONE, PNX_K_NONE, PNX_K_NONE, PNX_F_IMM, PNX_X_NONE, 0, "---") \
+    X(HCALL, 0x62, PNX_K_IMM, PNX_K_IMM, PNX_K_NONE, PNX_F_ABC, PNX_X_IMPORT, 0, "---") \
+    X(HCALLF, 0x63, PNX_K_IMM, PNX_K_IMM, PNX_K_NONE, PNX_F_ABC, PNX_X_IMPORT, 1, "---") \
+    X(CHECK, 0x64, PNX_K_NONE, PNX_K_NONE, PNX_K_NONE, PNX_F_IMM, PNX_X_NONE, 0, "---") \
+    X(FAULT, 0x65, PNX_K_NONE, PNX_K_NONE, PNX_K_NONE, PNX_F_IMM, PNX_X_NONE, 0, "---") \
+    /* globals, collections, records */ \
+    X(GETG, 0x70, PNX_K_I, PNX_K_NONE, PNX_K_NONE, PNX_F_GLOBAL, PNX_X_NONE, 0, "w--") \
+    X(SETG, 0x71, PNX_K_I, PNX_K_NONE, PNX_K_NONE, PNX_F_GLOBAL, PNX_X_NONE, 0, "r--") \
+    X(AGET, 0x72, PNX_K_I, PNX_K_I, PNX_K_G, PNX_F_ABC, PNX_X_NONE, 0, "wr-") \
+    X(ASET, 0x73, PNX_K_I, PNX_K_I, PNX_K_G, PNX_F_ABC, PNX_X_NONE, 0, "rr-") \
+    X(GLEN, 0x74, PNX_K_I, PNX_K_NONE, PNX_K_NONE, PNX_F_GLOBAL, PNX_X_NONE, 0, "w--") \
+    X(GCLEAR, 0x75, PNX_K_NONE, PNX_K_NONE, PNX_K_NONE, PNX_F_GLOBAL, PNX_X_NONE, 0, "---") \
+    X(LPUSH, 0x76, PNX_K_I, PNX_K_NONE, PNX_K_NONE, PNX_F_GLOBAL, PNX_X_NONE, 1, "r--") \
+    X(LPOP, 0x77, PNX_K_I, PNX_K_NONE, PNX_K_NONE, PNX_F_GLOBAL, PNX_X_NONE, 1, "w--") \
+    X(ROW, 0x78, PNX_K_I, PNX_K_I, PNX_K_G, PNX_F_ABC, PNX_X_NONE, 0, "wr-") \
+    X(FGET, 0x79, PNX_K_I, PNX_K_I, PNX_K_NONE, PNX_F_ABC, PNX_X_FIELD, 0, "wr-") \
+    X(FSET, 0x7a, PNX_K_I, PNX_K_I, PNX_K_NONE, PNX_F_ABC, PNX_X_FIELD, 0, "rr-") \
+    X(FGETS, 0x7b, PNX_K_S, PNX_K_I, PNX_K_NONE, PNX_F_ABC, PNX_X_FIELD, 0, "wr-") \
+    X(FSETS, 0x7c, PNX_K_S, PNX_K_I, PNX_K_NONE, PNX_F_ABC, PNX_X_FIELD, 0, "rr-") \
+    X(ADDROW, 0x7d, PNX_K_I, PNX_K_NONE, PNX_K_NONE, PNX_F_GLOBAL, PNX_X_NONE, 1, "w--") \
+    X(QPUT, 0x7e, PNX_K_I, PNX_K_NONE, PNX_K_NONE, PNX_F_GLOBAL, PNX_X_NONE, 1, "r--") \
+    X(QTAKE, 0x7f, PNX_K_I, PNX_K_NONE, PNX_K_NONE, PNX_F_GLOBAL, PNX_X_NONE, 1, "w--") \
+    X(QPEEK, 0x80, PNX_K_I, PNX_K_NONE, PNX_K_NONE, PNX_F_GLOBAL, PNX_X_NONE, 1, "w--") \
+    X(PALLOC, 0x81, PNX_K_I, PNX_K_NONE, PNX_K_NONE, PNX_F_GLOBAL, PNX_X_NONE, 1, "w--") \
+    X(PFREE, 0x82, PNX_K_I, PNX_K_NONE, PNX_K_NONE, PNX_F_GLOBAL, PNX_X_NONE, 0, "r--") \
+    X(PALIVE, 0x83, PNX_K_I, PNX_K_I, PNX_K_G, PNX_F_ABC, PNX_X_NONE, 0, "wr-") \
+    X(IXGET, 0x84, PNX_K_I, PNX_K_I, PNX_K_G, PNX_F_ABC, PNX_X_NONE, 1, "wr-") \
+    X(IXGETS, 0x85, PNX_K_I, PNX_K_S, PNX_K_G, PNX_F_ABC, PNX_X_NONE, 1, "wr-") \
+    X(IXPUT, 0x86, PNX_K_I, PNX_K_NONE, PNX_K_NONE, PNX_F_GLOBAL, PNX_X_NONE, 1, "r--") \
+    X(IXDEL, 0x87, PNX_K_I, PNX_K_NONE, PNX_K_NONE, PNX_F_GLOBAL, PNX_X_NONE, 0, "r--") \
+    /* strings */ \
+    X(SLEN, 0x90, PNX_K_I, PNX_K_S, PNX_K_NONE, PNX_F_ABC, PNX_X_NONE, 0, "wr-") \
+    X(SBYTE, 0x91, PNX_K_I, PNX_K_S, PNX_K_I, PNX_F_ABC, PNX_X_NONE, 0, "wrr") \
+    X(SNEXT, 0x92, PNX_K_S, PNX_K_S, PNX_K_IMM, PNX_F_ABC, PNX_X_NONE, 1, "mw-") \
+    X(SCUT, 0x93, PNX_K_S, PNX_K_S, PNX_K_IMM, PNX_F_ABC, PNX_X_NONE, 0, "mw-") \
+    X(TOINT, 0x94, PNX_K_I, PNX_K_S, PNX_K_NONE, PNX_F_ABC, PNX_X_NONE, 1, "wr-") \
+    X(SFIND, 0x95, PNX_K_I, PNX_K_S, PNX_K_S, PNX_F_ABC, PNX_X_NONE, 1, "wrr") \
+    X(SWORD, 0x96, PNX_K_S, PNX_K_S, PNX_K_NONE, PNX_F_ABC, PNX_X_NONE, 1, "mw-") \
+    X(ERRTEXT, 0x97, PNX_K_S, PNX_K_I, PNX_K_NONE, PNX_F_ABC, PNX_X_NONE, 0, "wr-") \
+    X(STAKE, 0x98, PNX_K_S, PNX_K_S, PNX_K_I, PNX_F_ABC, PNX_X_NONE, 0, "wrr") \
+    X(SSKIP, 0x99, PNX_K_S, PNX_K_S, PNX_K_I, PNX_F_ABC, PNX_X_NONE, 0, "wrr") \
+    X(STAKEL, 0x9a, PNX_K_S, PNX_K_S, PNX_K_I, PNX_F_ABC, PNX_X_NONE, 0, "wrr") \
+    X(SSKIPL, 0x9b, PNX_K_S, PNX_K_S, PNX_K_I, PNX_F_ABC, PNX_X_NONE, 0, "wrr") \
+    X(SPRE, 0x9c, PNX_K_I, PNX_K_S, PNX_K_S, PNX_F_ABC, PNX_X_NONE, 0, "wrr") \
+    X(SSUF, 0x9d, PNX_K_I, PNX_K_S, PNX_K_S, PNX_F_ABC, PNX_X_NONE, 0, "wrr") \
+    X(SHAS, 0x9e, PNX_K_I, PNX_K_S, PNX_K_S, PNX_F_ABC, PNX_X_NONE, 0, "wrr") \
+    X(SREPL, 0x9f, PNX_K_S, PNX_K_S, PNX_K_S, PNX_F_ABC, PNX_X_SREG, 0, "wrr") \
+    X(SCUTS, 0xa0, PNX_K_S, PNX_K_S, PNX_K_NONE, PNX_F_ABC, PNX_X_NONE, 0, "mm-") \
+    X(SCUTSF, 0xa1, PNX_K_S, PNX_K_S, PNX_K_NONE, PNX_F_ABC, PNX_X_NONE, 1, "mm-") \
+    X(STRIM, 0xa2, PNX_K_S, PNX_K_S, PNX_K_IMM, PNX_F_ABC, PNX_X_NONE, 0, "wr-") \
+    X(SLINE, 0xa3, PNX_K_S, PNX_K_S, PNX_K_NONE, PNX_F_ABC, PNX_X_NONE, 1, "mw-") \
+    X(SNEXTS, 0xa4, PNX_K_S, PNX_K_S, PNX_K_S, PNX_F_ABC, PNX_X_NONE, 1, "mwr") \
+    X(SFINDL, 0xa5, PNX_K_I, PNX_K_S, PNX_K_S, PNX_F_ABC, PNX_X_NONE, 1, "wrr") \
+    X(SCMP, 0xa6, PNX_K_I, PNX_K_S, PNX_K_S, PNX_F_ABC, PNX_X_NONE, 0, "wrr") \
+    X(SGET, 0xa7, PNX_K_I, PNX_K_S, PNX_K_IMM, PNX_F_ABC, PNX_X_NONE, 1, "wm-") \
+    X(SGETS, 0xa8, PNX_K_S, PNX_K_S, PNX_K_NONE, PNX_F_ABC, PNX_X_NONE, 1, "wm-") \
+    /* strings built in the region */ \
+    X(RMARK, 0xb8, PNX_K_S, PNX_K_NONE, PNX_K_NONE, PNX_F_ABC, PNX_X_NONE, 0, "w--") \
+    X(RCATS, 0xb9, PNX_K_S, PNX_K_S, PNX_K_NONE, PNX_F_ABC, PNX_X_NONE, 0, "mr-") \
+    X(RCATI, 0xba, PNX_K_S, PNX_K_I, PNX_K_NONE, PNX_F_ABC, PNX_X_NONE, 0, "mr-") \
+    X(RCATB, 0xbb, PNX_K_S, PNX_K_I, PNX_K_NONE, PNX_F_ABC, PNX_X_NONE, 0, "mr-") \
+    X(RCATX, 0xbc, PNX_K_S, PNX_K_I, PNX_K_IMM, PNX_F_ABC, PNX_X_NONE, 0, "mr-") \
+    X(RCATW, 0xbd, PNX_K_S, PNX_K_I, PNX_K_I, PNX_F_ABC, PNX_X_NONE, 0, "mrr") \
+    X(RCATXW, 0xbe, PNX_K_S, PNX_K_I, PNX_K_I, PNX_F_ABC, PNX_X_NONE, 0, "mrr") \
+    X(RPADL, 0xbf, PNX_K_S, PNX_K_S, PNX_K_I, PNX_F_ABC, PNX_X_NONE, 0, "mrr") \
+    X(RPADR, 0xc0, PNX_K_S, PNX_K_S, PNX_K_I, PNX_F_ABC, PNX_X_NONE, 0, "mrr") \
+    X(RTOP, 0xc1, PNX_K_I, PNX_K_NONE, PNX_K_NONE, PNX_F_IMM, PNX_X_NONE, 0, "w--") \
+    X(RCUT, 0xc2, PNX_K_I, PNX_K_NONE, PNX_K_NONE, PNX_F_IMM, PNX_X_NONE, 0, "r--") \
+    X(RFREE, 0xc3, PNX_K_I, PNX_K_NONE, PNX_K_NONE, PNX_F_IMM, PNX_X_NONE, 0, "w--") \
+    /* buffers */ \
+    X(BCLEAR, 0xc8, PNX_K_NONE, PNX_K_NONE, PNX_K_NONE, PNX_F_GLOBAL, PNX_X_NONE, 0, "---") \
+    X(BPUT, 0xc9, PNX_K_I, PNX_K_IMM, PNX_K_G, PNX_F_ABC, PNX_X_NONE, 1, "r--") \
+    X(BPUTS, 0xca, PNX_K_S, PNX_K_NONE, PNX_K_G, PNX_F_ABC, PNX_X_NONE, 1, "r--") \
+    X(BVIEW, 0xcb, PNX_K_S, PNX_K_NONE, PNX_K_NONE, PNX_F_GLOBAL, PNX_X_NONE, 0, "w--") \
+    X(BCAT, 0xcc, PNX_K_S, PNX_K_NONE, PNX_K_NONE, PNX_F_GLOBAL, PNX_X_NONE, 1, "r--") \
+    X(BCATI, 0xcd, PNX_K_I, PNX_K_NONE, PNX_K_NONE, PNX_F_GLOBAL, PNX_X_NONE, 1, "r--") \
+    /* tasks */ \
+    X(TSPAWN, 0xd0, PNX_K_I, PNX_K_I, PNX_K_G, PNX_F_ABC, PNX_X_NONE, 1, "wr-") \
+    X(TRESUME, 0xd1, PNX_K_I, PNX_K_I, PNX_K_G, PNX_F_ABC, PNX_X_NONE, 0, "wr-") \
+    X(TYIELD, 0xd2, PNX_K_NONE, PNX_K_NONE, PNX_K_NONE, PNX_F_IMM, PNX_X_NONE, 1, "---") \
+    X(TDONE, 0xd3, PNX_K_I, PNX_K_I, PNX_K_G, PNX_F_ABC, PNX_X_NONE, 0, "wr-") \
+    X(TCANCEL, 0xd4, PNX_K_I, PNX_K_NONE, PNX_K_NONE, PNX_F_GLOBAL, PNX_X_NONE, 0, "r--") \
+    X(TRUNALL, 0xd5, PNX_K_NONE, PNX_K_NONE, PNX_K_NONE, PNX_F_GLOBAL, PNX_X_NONE, 0, "---")
 
 enum {
-#define PNX_ENUM(name, a, b, c, shape, second, fails) PNX_##name,
+#define PNX_ENUM(name, number, a, b, c, shape, second, fails, roles) PNX_##name = number,
     PNX_OPS(PNX_ENUM)
 #undef PNX_ENUM
-    PNX_OP_COUNT
+    PNX_OP_COUNT = 256 // the numbers in between are not instructions
 };
 
 #define PNX_ABC(op, a, b, c)                                                                       \
@@ -290,7 +304,7 @@ enum {
 // records, integer constants, string constant records, code, string bytes, line records; in
 // this order, native byte order.
 #define PNX_MAGIC "PNXB"
-#define PNX_CONTAINER_VERSION 0
+#define PNX_CONTAINER_VERSION 1
 #define PNX_ORDER_MARK 0x0102
 
 typedef struct pnx_head {

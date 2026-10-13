@@ -181,8 +181,12 @@ struct pinax_state {
     uint32_t    resume_dst;
     bool        ends_task;
     uint32_t int_peak, str_peak, region_peak;
-    uint32_t in_host;              // host words running now, one inside the other
-    uint32_t host_itop, host_stop; // the first slots free above the host word running now
+    // the host word running now (NULL: none) and where its arguments lie: a word it runs
+    // gets its window above them. `nest` counts the runs started from inside host words.
+    const pnx_host *host_cur;
+    int64_t        *host_ia;
+    pnx_scell      *host_sa;
+    uint32_t        nest;
     uint32_t top_word;
     bool     suspended;
     bool     loading;   // the suspended run is the code outside definitions of a load
@@ -205,6 +209,8 @@ struct pinax_state {
 // The instruction table as data: operand kinds, shape, second word (pinax_code.h).
 typedef struct pnx_opinfo {
     uint8_t a, b, c, shape, second, fails;
+    uint8_t known;    // 0: this number is no instruction
+    char    roles[4]; // what it does with the registers named by A, B, C (pinax_code.h)
 } pnx_opinfo;
 extern const pnx_opinfo pnx_ops_info[PNX_OP_COUNT];
 

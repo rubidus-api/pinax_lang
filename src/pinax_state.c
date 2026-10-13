@@ -9,7 +9,7 @@
 static const uint8_t empty_bytes[1] = {0};
 
 const pnx_opinfo pnx_ops_info[PNX_OP_COUNT] = {
-#define PNX_INFO(name, a, b, c, shape, second, fails) [PNX_##name] = {a, b, c, shape, second, fails},
+#define PNX_INFO(name, number, a, b, c, shape, second, fails, roles) [PNX_##name] = {a, b, c, shape, second, fails, 1, roles},
     PNX_OPS(PNX_INFO)
 #undef PNX_INFO
 };
@@ -353,7 +353,7 @@ static const char *check_word(const pinax_state *st, uint32_t index, span range,
     uint32_t last = range.begin;
     for (uint32_t i = range.begin; i < range.end;) {
         const uint32_t op = code[i] & 0xffu;
-        if (op >= PNX_OP_COUNT)
+        if (!opinfo[op].known)
             return "code: unknown instruction";
         heads[i] = 1;
         last = i;
@@ -454,7 +454,7 @@ static const char *check_word(const pinax_state *st, uint32_t index, span range,
         }
         if ((op == PNX_BPUT && b >= PNX_W_COUNT) || (op == PNX_SGET && c >= PNX_W_COUNT))
             return "code: unknown width";
-        if (op == PNX_SREPL && b + 2 >= word->str_cells)
+        if (info.second == PNX_X_SREG && x >= word->str_cells)
             return "code: register outside the window";
 
         if (info.second == PNX_X_WORD) {
@@ -498,20 +498,6 @@ static const char *check_word(const pinax_state *st, uint32_t index, span range,
 // read. Without it a word could read a string cell left by an earlier run, whose bytes may be
 // gone. What a call leaves above its results is not a value either: the callee's window was
 // there.
-
-// How an instruction uses the registers named by A, B and C: 'r' reads, 'w' writes, 'm' reads
-// and leaves a value. Instructions not listed write A and read B and C.
-static const char *const op_roles[PNX_OP_COUNT] = {
-    [PNX_JEQ] = "rr",    [PNX_JNE] = "rr",    [PNX_JLT] = "rr",    [PNX_JLE] = "rr",   [PNX_JEQI] = "r",
-    [PNX_JNEI] = "r",    [PNX_JLTI] = "r",    [PNX_JGEI] = "r",    [PNX_JSEQ] = "rr",  [PNX_JSNE] = "rr",
-    [PNX_SETG] = "r",    [PNX_ASET] = "rr",   [PNX_FSET] = "rr",   [PNX_FSETS] = "rr", [PNX_SNEXT] = "mw",
-    [PNX_SWORD] = "mw",  [PNX_SLINE] = "mw",  [PNX_SNEXTS] = "mwr", [PNX_SCUT] = "mw", [PNX_SCUTS] = "mm",
-    [PNX_SCUTSF] = "mm", [PNX_SGET] = "wm",   [PNX_SGETS] = "wm",  [PNX_BPUT] = "r",   [PNX_BPUTS] = "r",
-    [PNX_FAILR] = "r",   [PNX_RCATS] = "mr",  [PNX_RCATI] = "mr",  [PNX_RCATB] = "mr", [PNX_RCATX] = "mr",
-    [PNX_RCATW] = "mrr", [PNX_RCATXW] = "mrr", [PNX_RPADL] = "mrr", [PNX_RPADR] = "mrr", [PNX_LPUSH] = "r",
-    [PNX_BCAT] = "r",    [PNX_BCATI] = "r",   [PNX_IXPUT] = "r",   [PNX_IXDEL] = "r",  [PNX_QPUT] = "r",
-    [PNX_PFREE] = "r",   [PNX_RCUT] = "r",    [PNX_CALLR] = "--r", [PNX_TCANCEL] = "r",
-};
 
 typedef struct regset {
     uint64_t i[4], s[4];
@@ -568,20 +554,13 @@ static const char *check_flow(const pinax_state *st, uint32_t index, span range,
             bool fails = info.fails, reads = true, falls = true;
             int64_t target = -1;
 
-            // the role of each of A, B, C that names a register; 0 for the others
-            const char *listed = op_roles[op] ? op_roles[op] : "wrr";
-            char role[3] = {0, 0, 0};
-            for (unsigned k = 0; k < 3; ++k) {
-                const bool named = (kind[k] == PNX_K_I || kind[k] == PNX_K_S) && (info.shape == PNX_F_ABC || k == 0);
-                if (named)
-                    role[k] = k < __builtin_strlen(listed) ? listed[k] : 'r';
-            }
+            const char *role = info.roles; // of each of A, B, C: r, w, m, or - for what names no register
             for (unsigned k = 0; k < 3; ++k) { // what it reads holds a value
                 if (role[k] == 'r' || role[k] == 'm')
                     reads = reads && set_has(kind[k] == PNX_K_I ? now.i : now.s, reg[k], 1);
             }
-            if (op == PNX_SREPL)
-                reads = reads && set_has(now.s, reg[1], 3);
+            if (info.second == PNX_X_SREG)
+                reads = reads && x < 256 && set_has(now.s, x, 1);
             pnx_counts callee = {0};
             uint32_t ibase = reg[0], sbase = reg[1];
             const bool calls = op == PNX_CALL || op == PNX_CALLR, hosts = op == PNX_HCALL || op == PNX_HCALLF;
@@ -1024,7 +1003,11 @@ static pinax_err deliver(pinax_state *st, pinax_err err, const pinax_args *resul
 static pinax_err run_nested(pinax_state *st, pinax_word word, const pinax_args *args) {
     const pnx_wordrec *rec = &st->words[word];
     const pnx_counts n = st->word_counts[word];
-    const uint32_t ibase = st->host_itop, sbase = st->host_stop;
+    const pnx_host *const host = st->host_cur;
+    int64_t *const   host_ia = st->host_ia;
+    pnx_scell *const host_sa = st->host_sa;
+    const uint32_t ibase = (uint32_t)(host_ia - st->ibank) + host->counts.int_args + host->counts.int_results;
+    const uint32_t sbase = (uint32_t)(host_sa - st->sbank) + host->counts.str_args + host->counts.str_results;
     if (st->depth == st->depth_max || ibase + rec->int_cells > st->int_slots ||
         sbase + rec->str_cells > st->str_slots)
         return fail(st, PINAX_ERR_DEPTH, "the word's window does not fit the banks");
@@ -1054,7 +1037,12 @@ static pinax_err run_nested(pinax_state *st, pinax_word word, const pinax_args *
     st->str_base = sbase;
     st->depth_floor = depth;
     st->fail = PINAX_ERR_FAILED;
+    ++st->nest;
     pinax_err err = pnx_execute(st);
+    --st->nest;
+    st->host_cur = host; // the host words that word called have come and gone
+    st->host_ia = host_ia;
+    st->host_sa = host_sa;
     if (err == PINAX_SUSPENDED) { // the budget ran out: this run ends, and the host word says so
         st->suspended = false;
         st->error_text = "the instruction budget ran out in a word run from a host word";
@@ -1092,7 +1080,7 @@ pinax_err pinax_run(pinax_state *st, pinax_word word, const pinax_args *args) {
     const pnx_counts n = st->word_counts[word];
     if ((n.int_args && !(args && args->i)) || (n.str_args && !(args && args->s)))
         return fail(st, PINAX_ERR_ARGUMENT, "arguments missing");
-    if (st->in_host)
+    if (st->host_cur)
         return run_nested(st, word, args);
     if (rec->int_cells > st->int_slots || rec->str_cells > st->str_slots)
         return fail(st, PINAX_ERR_DEPTH, "the word's window does not fit the banks");
@@ -1129,7 +1117,7 @@ pinax_err pinax_run(pinax_state *st, pinax_word word, const pinax_args *args) {
 pinax_err pinax_resume(pinax_state *st, const pinax_args *results) {
     if (!st)
         return PINAX_ERR_ARGUMENT;
-    if (!st->suspended || st->in_host)
+    if (!st->suspended || st->host_cur)
         return fail(st, PINAX_ERR_STATE, "nothing is suspended");
     if (st->main_wait.token)
         return PINAX_WAITING; // the operation the main run waits for has not been completed
@@ -1249,7 +1237,7 @@ static pinax_err wake(pinax_state *st, const pnx_wait *w, int64_t *ibank, pnx_sc
 pinax_err pinax_complete(pinax_state *st, pinax_token token, pinax_err outcome, const pinax_args *results) {
     if (!st || !token)
         return PINAX_ERR_ARGUMENT;
-    if (st->in_host)
+    if (st->host_cur)
         return fail(st, PINAX_ERR_STATE, "a host word is running");
     if (st->main_wait.token == token) { // the main run waits
         const pnx_wait w = st->main_wait;

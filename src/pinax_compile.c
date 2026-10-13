@@ -70,13 +70,23 @@ typedef struct entry {
     int64_t value;   // E_CONST
 } entry;
 
+// The names written in a signature. They are wanted while the source that wrote them is
+// compiled (to bind inputs, to print the signature); the tables kept for later loads drop them.
+typedef struct signames {
+    name in[MAX_PARAMS], out[MAX_PARAMS];
+} signames;
+
 typedef struct sig {
     uint8_t n_in, n_out;
     bool    fails, named;
     tid     in[MAX_PARAMS], out[MAX_PARAMS];
     bool    in_owned[MAX_PARAMS], out_owned[MAX_PARAMS];
-    name    in_name[MAX_PARAMS], out_name[MAX_PARAMS];
+    signames *names; // NULL: none written, or dropped
 } sig;
+
+static name sig_in_name(const sig *s, uint32_t k) {
+    return s->names ? s->names->in[k] : (name){0};
+}
 
 typedef struct wordsym {
     name     name;
@@ -269,6 +279,7 @@ typedef struct comp {
     sig          eval_sig;   // what the line leaves on the stack: the results of its code
     bool         in_extern; // a signature of an extern is being read: cstr is a type there
     bool         in_host;   // a signature of a host word is being read: buffer is a type there
+    bool         drop_names; // the names in the signature being read are not wanted
     uint32_t     cstr_mask; // and these of its inputs were written cstr
     uint16_t     module;    // the number of the module being compiled
     vec          srcmods;   // name: the modules loaded so far, this one last
@@ -486,8 +497,7 @@ static bool block_type(comp *c, const sig *s, tid *out) {
     if (!slot)
         return false;
     *slot = *s;
-    for (uint32_t j = 0; j < MAX_PARAMS; ++j)
-        slot->in_name[j] = slot->out_name[j] = (name){0};
+    slot->names = NULL;
     *out = (tid)(TY_BLOCK + c->btypes.n - 1);
     return true;
 }
@@ -571,14 +581,21 @@ static bool parse_sig(comp *c, sig *s) {
         uint8_t *count = outputs ? &s->n_out : &s->n_in;
         if (*count == MAX_PARAMS)
             return syntax(c, "too many parameters");
+        if (param.length && !s->names && !c->drop_names) {
+            s->names = arena_alloc(c, sizeof(signames));
+            if (!s->names)
+                return false;
+        }
         if (outputs) {
             s->out[*count] = t;
             s->out_owned[*count] = owned;
-            s->out_name[*count] = param;
+            if (s->names)
+                s->names->out[*count] = param;
         } else {
             s->in[*count] = t;
             s->in_owned[*count] = owned;
-            s->in_name[*count] = param;
+            if (s->names)
+                s->names->in[*count] = param;
             if (param.length)
                 any_named = true;
             else
@@ -619,7 +636,7 @@ static bool sig_text(const comp *c, const sig *s, char *out, size_t cap) {
             PUT("gives ", 6);
         }
         for (uint32_t k = 0; k < count; ++k) {
-            const name pn = side ? s->out_name[k] : s->in_name[k];
+            const name pn = !s->names ? (name){0} : side ? s->names->out[k] : s->names->in[k];
             const tid kt = side ? s->out[k] : s->in[k];
             if (is_block(kt)) { // word (effect), written out
                 char inner[72];
@@ -670,8 +687,9 @@ static bool host_sig(comp *c, const pnx_host *h, sig *s) {
     c->lx = &temp;
     c->in_extern = h->module[0] == '@';
     c->in_host = !c->in_extern;
+    c->drop_names = true; // a call needs the types only
     const bool ok = advance(c) && parse_sig(c, s);
-    c->in_extern = c->in_host = false;
+    c->in_extern = c->in_host = c->drop_names = false;
     c->lx = saved_lx;
     c->tok = saved_tok;
     if (!ok) { // registration accepted it, so this is a type the compiler does not have yet
@@ -2836,7 +2854,7 @@ static bool do_block(comp *c) {
     b->floor_mark = f->floor;
     f->floor = f->depth;
     if (use == USE_FOLD) {
-        const local *acc = new_local(c, bs.in_name[0], bs.in[0]);
+        const local *acc = new_local(c, sig_in_name(&bs, 0), bs.in[0]);
         if (!acc || !move_slot(c, acc->type, acc->reg, slot_of(c, init)))
             return false;
         b->acc = acc->reg;
@@ -2848,8 +2866,8 @@ static bool do_block(comp *c) {
     uint32_t reg = 0;
     if (use != USE_TIMES) {
         const uint32_t param = use == USE_FOLD ? 1 : 0;
-        if (bs.n_in > param && bs.in_name[param].length) {
-            const local *l = new_local(c, bs.in_name[param], element);
+        if (bs.n_in > param && sig_in_name(&bs, param).length) {
+            const local *l = new_local(c, sig_in_name(&bs, param), element);
             if (!l)
                 return false;
             reg = l->reg;
@@ -2871,7 +2889,7 @@ static bool do_block(comp *c) {
             return false;
     }
     if (use == USE_EACH_INDEX) {
-        const local *l = new_local(c, bs.in_name[1], TY_INT);
+        const local *l = new_local(c, sig_in_name(&bs, 1), TY_INT);
         if (!l || emit(c, PNX_ABC(PNX_MOVI, l->reg, idx, 0)) == NONE)
             return false;
     }
@@ -3596,7 +3614,8 @@ static bool builtin(comp *c, const struct builtin *w) {
         const uint32_t base = slot_of(c, f->depth - 3);
         (void)slot_of(c, f->depth - 1);
         f->depth -= 3;
-        return emit_def(c, PNX_ABC(PNX_SREPL, base, base, 0), BANK_S) != NONE && push_slot(c, TY_STR) && advance(c);
+        return emit(c, PNX_ABC(PNX_SREPL, base, base, base + 1)) != NONE && emit(c, base + 2) != NONE &&
+               push_slot(c, TY_STR) && advance(c);
     }
     case BW_LOOKUP: { // key index lookup : the row with that key, or failure
         if (!need_coll(c, &g, &gi) || !need(c, 1))
@@ -4132,6 +4151,12 @@ static bool finish_registers(comp *c, fn *f, uint16_t cells[2]) {
                 return false;
             *w = (*w & ~0xff00u) | a << 8;
         }
+        if (info.second == PNX_X_SREG) { // the second word names a register too
+            uint32_t x = w[1];
+            if (!remap(c, PNX_K_S, &x, f->maxloc))
+                return false;
+            w[1] = x;
+        }
         i += info.second ? 2 : 1;
     }
     for (int bank = 0; bank < 2; ++bank) {
@@ -4162,7 +4187,7 @@ static bool bind_inputs(comp *c, const sig *s) {
     for (uint32_t k = 0; k < s->n_in; ++k) {
         const int bank = bank_of(s->in[k]);
         local *l = &f->locals[f->n_locals++];
-        *l = (local){.name = s->in_name[k], .type = s->in[k], .reg = f->nloc[bank]++,
+        *l = (local){.name = sig_in_name(s, k), .type = s->in[k], .reg = f->nloc[bank]++,
                      .state = s->in_owned[k] ? L_OWNS : L_PLAIN};
         if (l->name.length) {
             for (uint32_t j = 0; j + 1 < f->n_locals; ++j) {
@@ -5229,7 +5254,11 @@ static bool compile(comp *c, image *im, bool *has_top) {
                 const wordsym *all = c->words.ptr;
                 for (uint32_t k = 0; k < c->words.n; ++k) {
                     char text[120], effect[72];
-                    if (all[k].name.text[0] == '(' || !sig_text(c, &all[k].sig, effect, sizeof effect))
+                    if (all[k].name.text[0] == '(')
+                        continue;
+                    if (k < c->base.words) // a word of an earlier load: its signature as it was written
+                        __builtin_memcpy(effect, c->st->words[k].signature, sizeof effect);
+                    else if (!sig_text(c, &all[k].sig, effect, sizeof effect))
                         continue;
                     size_t n = 0;
                     const name module = ((const name *)c->srcmods.ptr)[all[k].module];
@@ -5448,6 +5477,11 @@ static bool serialize(comp *c, const image *im, uint8_t **out, size_t *out_len) 
     p += sizeof head;
     for (uint32_t k = 0; k < head.n_words; ++k) {
         const wordsym *w = (const wordsym *)c->words.ptr + k;
+        if (k < c->base.words) { // a word of an earlier load: its record as it is
+            __builtin_memcpy(p, &st->words[k], sizeof(pnx_wordrec));
+            p += sizeof(pnx_wordrec);
+            continue;
+        }
         pnx_wordrec rec = {.entry = w->entry, .int_cells = w->cells[0], .str_cells = w->cells[1], .counted = 1,
                            .fails = w->sig.fails, .module = (uint8_t)w->module};
         uint32_t in[2], out[2];
@@ -5551,18 +5585,10 @@ typedef struct symtab {
 
 typedef void name_fn(name *n, void *user);
 
-static void sig_names(sig *s, name_fn *f, void *user) {
-    for (uint32_t k = 0; k < s->n_in; ++k)
-        f(&s->in_name[k], user);
-    for (uint32_t k = 0; k < s->n_out; ++k)
-        f(&s->out_name[k], user);
-}
-
 static void each_name(symtab *t, name_fn *f, void *user) {
     for (uint32_t k = 0; k < t->words.n; ++k) {
         wordsym *w = (wordsym *)t->words.ptr + k;
         f(&w->name, user);
-        sig_names(&w->sig, f, user);
     }
     for (uint32_t k = 0; k < t->consts.n; ++k)
         f(&((constant *)t->consts.ptr + k)->name, user);
@@ -5572,8 +5598,6 @@ static void each_name(symtab *t, name_fn *f, void *user) {
         f(&((record *)t->records.ptr + k)->name, user);
     for (uint32_t k = 0; k < t->fields.n; ++k)
         f(&((field *)t->fields.ptr + k)->name, user);
-    for (uint32_t k = 0; k < t->btypes.n; ++k)
-        sig_names((sig *)t->btypes.ptr + k, f, user);
     for (uint32_t k = 0; k < t->dtypes.n; ++k)
         f(&((dtype *)t->dtypes.ptr + k)->name, user);
     for (uint32_t k = 0; k < t->srcmods.n; ++k)
@@ -5663,6 +5687,10 @@ static symtab *keep_symbols(comp *c, pinax_str source, const uint8_t *work) {
     p += ((size_t)now.v.n * sizeof(t_) + 7u) & ~(size_t)7u;
     TABLES(X)
 #undef X
+    for (uint32_t k = 0; k < t->words.n; ++k) // the names of parameters stay behind
+        ((wordsym *)t->words.ptr + k)->sig.names = NULL;
+    for (uint32_t k = 0; k < t->btypes.n; ++k)
+        ((sig *)t->btypes.ptr + k)->names = NULL;
     t->bytes = bytes;
     t->session = now.session;
     t->n_opened = now.n_opened;
@@ -5809,7 +5837,7 @@ static void tell_values(pinax_state *st, const char *file, const char *tags, uin
 static pinax_err load_source(pinax_state *st, const char *file, pinax_str source, uint32_t mode, bool eval) {
     if (!st || (!source.ptr && source.len))
         return PINAX_ERR_ARGUMENT;
-    if (st->suspended || st->in_host) {
+    if (st->suspended || st->host_cur) {
         st->error_text = "a run is suspended or a host word is running; finish it before loading";
         return PINAX_ERR_STATE;
     }

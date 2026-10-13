@@ -64,7 +64,7 @@ static void task_enter(pinax_state *st, pnx_task *t, uint32_t dst) {
     st->resume_dst = dst;
     ctx_save(st, st->task ? &st->task->ctx : &st->main);
     t->parent = st->task;
-    t->in_host = st->in_host;
+    t->in_host = st->nest;
     t->state = PNX_TASK_RUNNING;
     st->task = t;
     ctx_load(st, &t->ctx);
@@ -127,17 +127,14 @@ static pinax_err host_call(pinax_state *st, const pnx_host *h, int64_t *ia, pnx_
     }
     pinax_args args = {ia, ia + n.int_args, sv, rs, NULL, NULL};
     pinax_call call = {st, 0};
-    // where a word run from inside this host word may put its window
-    const uint32_t itop = st->host_itop, stop = st->host_stop;
-    st->host_itop = (uint32_t)(ia - st->ibank) + n.int_args + n.int_results;
-    st->host_stop = (uint32_t)(sa - st->sbank) + n.str_args + n.str_results;
-    ++st->in_host;
+    // a word run from inside this host word puts its window above these arguments and results
+    st->host_cur = h;
+    st->host_ia = ia;
+    st->host_sa = sa;
     pinax_err err = h->fn(&call, h->user, &args);
-    --st->in_host;
-    st->host_itop = itop;
-    st->host_stop = stop;
+    st->host_cur = NULL;
     *fault = false;
-    if (err == PINAX_PENDING && call.token && (h->flags & PINAX_WORD_AWAITABLE) && st->in_host == 0) {
+    if (err == PINAX_PENDING && call.token && (h->flags & PINAX_WORD_AWAITABLE) && st->nest == 0) {
         *token = call.token; // the result comes later, through pinax_complete()
         return PINAX_PENDING;
     }
@@ -241,7 +238,7 @@ pinax_err pnx_execute(pinax_state *st) {
         switch (w & 0xffu) {
 #else
     static const void *const labels[PNX_OP_COUNT] = {
-#define PNX_LABEL(name, a, b, c, shape, second, fails) [PNX_##name] = &&L_##name,
+#define PNX_LABEL(name, number, a, b, c, shape, second, fails, roles) [PNX_##name] = &&L_##name,
         PNX_OPS(PNX_LABEL)
 #undef PNX_LABEL
     };
@@ -370,7 +367,7 @@ pinax_err pnx_execute(pinax_state *st) {
         RUNF(IXGETS)
         RUNF(IXPUT)
         RUN(IXDEL)
-        RUN(SREPL)
+        RUN2(SREPL)
         RUNF(QPUT)
         RUNF(QTAKE)
         RUNF(QPEEK)
@@ -640,7 +637,7 @@ pinax_err pnx_execute(pinax_state *st) {
                 ++pc;
                 NEXT();
             }
-            if (st->in_host != t->in_host) // a host word's C stack is in the way
+            if (st->nest != t->in_host) // a host word's C stack is in the way
                 FAULT(PINAX_ERR_STATE);
             t->yielded = true;
             --pc; // the task goes on from this instruction
@@ -676,7 +673,7 @@ pinax_err pnx_execute(pinax_state *st) {
                 NEXT();
             --pc;
             if (!t) { // every task left waits for the host: so does the state
-                if (st->in_host)
+                if (st->nest)
                     FAULT(PINAX_ERR_STATE);
                 goto waiting;
             }
@@ -691,8 +688,9 @@ pinax_err pnx_execute(pinax_state *st) {
         CASE(CHECK) {
 #if !defined(PINAX_BUDGET_EACH)
             uint64_t n = OP_BX(w);
-            if (st->charge >= 16) // bytes scanned since the last CHECK (D0022: 16 bytes as one instruction)
-                n += st->charge >> 4;
+            const uint64_t charge = st->charge;
+            if (charge >= 16) // bytes scanned since the last CHECK (D0022: 16 bytes as one instruction)
+                n += charge >> 4;
             if (budget) {
                 if (left < n) {
                     --pc;
@@ -702,7 +700,8 @@ pinax_err pnx_execute(pinax_state *st) {
                 left -= n;
             }
             count += n;
-            st->charge &= 15u;
+            if (charge >= 16)
+                st->charge = charge & 15u;
 #endif
             NEXT();
         }
@@ -744,7 +743,7 @@ suspended:
 finished:
     if (result != PINAX_OK) {
         st->fault_pc = (uint32_t)(pc - code);
-        if (st->task && st->in_host == 0) // a fault inside a task ends the run and every task
+        if (st->task && st->nest == 0) // a fault inside a task ends the run and every task
             pnx_tasks_abort(st);
     }
     st->left = left;

@@ -538,7 +538,7 @@ PNX_OP(SHAS) {
 }
 
 PNX_OP(SREPL) {
-    const pnx_scell s = S[OP_B(w)], old = S[OP_B(w) + 1], with = S[OP_B(w) + 2];
+    const pnx_scell s = S[OP_B(w)], old = S[OP_C(w)], with = S[x];
     const uint8_t *bytes = pnx_view_bytes(st, s), *from = pnx_view_bytes(st, old), *to = pnx_view_bytes(st, with);
     pnx_scell out = {PNX_SEG_REGION, 0, st->region_used};
     uint32_t at = 0;
