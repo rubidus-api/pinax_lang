@@ -253,6 +253,9 @@ pinax_err pnx_execute(pinax_state *st) {
         RUNF(QPUT)
         RUNF(QTAKE)
         RUNF(QPEEK)
+        RUNF(PALLOC)
+        RUN(PFREE)
+        RUN(PALIVE)
 
         CASE(CALL) {
             const pnx_wordrec *callee = &st->words[*pc++];

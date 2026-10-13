@@ -30,7 +30,8 @@ enum { BANK_I, BANK_S, BANK_NONE };
 enum { E_SLOT, E_LOCAL, E_CONST, E_COND };
 enum { B_IF, B_LOOP, B_ORELSE, B_CASE, B_OF, B_DO };
 enum { STEM_RANGE, STEM_BYTES, STEM_TIMES, STEM_COLL, STEM_WORDS, STEM_ROWS, STEM_STRS };
-enum { GK_SCALAR, GK_ARRAY, GK_LIST, GK_BUFFER, GK_INDEX, GK_QUEUE };
+enum { GK_SCALAR, GK_ARRAY, GK_LIST, GK_BUFFER, GK_INDEX, GK_QUEUE, GK_POOL };
+enum { L_PLAIN, L_OWNS, L_MOVED }; // what a local holds of a value that must be given exactly once
 #define FWD_MARK 0x80000000u // in a call: the number of a forward declaration, patched at the end
 #define TY_DISTINCT 0x4000u  // declared by `type`: this plus its number
 enum { USE_EACH, USE_FOLD, USE_TIMES };
@@ -56,6 +57,8 @@ typedef struct entry {
     uint8_t op, a, b; // E_COND: branch instruction and its two fields (b: register or immediate)
                       // a stem: op is its kind
     bool    hidden;  // an operand of a running block: code cannot reach it
+    bool    owned;   // a value that must be given on (RFC-0008 section 5.3), fresh on the stack
+    uint8_t src;     // read from this local (its number plus one): lent, or given when it reaches a taker
     int64_t value;   // E_CONST
 } entry;
 
@@ -63,6 +66,7 @@ typedef struct sig {
     uint8_t n_in, n_out;
     bool    fails, named;
     tid     in[MAX_PARAMS], out[MAX_PARAMS];
+    bool    in_owned[MAX_PARAMS], out_owned[MAX_PARAMS];
     name    in_name[MAX_PARAMS], out_name[MAX_PARAMS];
 } sig;
 
@@ -77,13 +81,14 @@ typedef struct local {
     name    name;
     tid     type;
     uint8_t reg;
+    uint8_t state; // L_PLAIN, L_OWNS, L_MOVED
 } local;
 
 // The types of the stack at one moment; `hidden` marks the entries that belong to a running
 // block and not to the code.
 typedef struct shot {
     tid      types[MAX_STACK];
-    uint64_t hidden;
+    uint64_t hidden, owned;
     uint8_t  depth;
 } shot;
 
@@ -97,6 +102,7 @@ typedef struct block {
     uint32_t locals_mark;
     uint8_t  nloc_mark[2];
     shot     in, out; // the stack when the block began; what a finished branch left
+    uint8_t  owns_in[MAX_LOCALS], owns_out[MAX_LOCALS]; // and the state of the locals then
     // case
     uint32_t next_test;   // jump of the last test, taken when no value matched
     uint8_t  subject;
@@ -147,6 +153,7 @@ typedef struct globalsym {
     uint8_t  kind;
     uint8_t  strcap;   // cells are str(N): N. Stored as rows of one length byte and N bytes
     bool     forward;  // announced by `forward`, not declared yet
+    bool     bound;    // `bound`: the host gives the storage with pinax_bind()
     uint32_t capacity; // cells of an array or list
     uint32_t record;   // NONE, or the record a table holds
     uint32_t rows;     // rows written by `row` items so far
@@ -202,6 +209,7 @@ typedef struct comp {
     vec          dtypes;   // dtype
     bool         use_strings;
     bool         data_only; // PINAX_LOAD_DATA: declarations, literals, stores and rows only
+    bool         sink;      // the word being compiled may take an owned value off the stack
     name         modules[MAX_MODULES];
     uint32_t     n_modules;
     pinax_err    err;
@@ -385,12 +393,30 @@ static bool parse_sig(comp *c, sig *s) {
             s->fails = true;
             break;
         }
+        bool owned = false;
+        if (is_word(c, PNX_KW_owned)) { // owned type
+            owned = true;
+            if (!advance(c))
+                return false;
+        }
         if (c->tok.kind != PNX_T_NAME)
             return syntax(c, "a parameter is a type, or a name and a type");
         name first = tok_name(c), param = {0}, type = first;
         if (!advance(c))
             return false;
-        if (c->tok.kind == PNX_T_NAME) {
+        if (!owned && is_word(c, PNX_KW_owned)) { // name owned type
+            owned = true;
+            param = first;
+            if (!advance(c))
+                return false;
+            if (c->tok.kind != PNX_T_NAME)
+                return syntax(c, "owned is followed by a type");
+            type = tok_name(c);
+            if (!advance(c))
+                return false;
+        } else if (c->tok.kind == PNX_T_NAME) {
+            if (owned)
+                return syntax(c, "owned stands right before the type: name owned type");
             param = first;
             type = tok_name(c);
             if (!advance(c))
@@ -405,9 +431,11 @@ static bool parse_sig(comp *c, sig *s) {
             return syntax(c, "too many parameters");
         if (outputs) {
             s->out[*count] = t;
+            s->out_owned[*count] = owned;
             s->out_name[*count] = param;
         } else {
             s->in[*count] = t;
+            s->in_owned[*count] = owned;
             s->in_name[*count] = param;
             if (param.length)
                 any_named = true;
@@ -418,7 +446,7 @@ static bool parse_sig(comp *c, sig *s) {
         if (c->tok.kind == PNX_T_COMMA) {
             if (!advance(c))
                 return false;
-            if (c->tok.kind != PNX_T_NAME)
+            if (c->tok.kind != PNX_T_NAME && !is_word(c, PNX_KW_owned))
                 return syntax(c, "a parameter is expected after the comma");
         } else if (c->tok.kind != PNX_T_RPAREN && !is_word(c, PNX_KW_gives) && !is_word(c, PNX_KW_or)) {
             return syntax(c, "parameters are separated by commas");
@@ -457,6 +485,8 @@ static bool sig_text(const comp *c, const sig *s, char *out, size_t cap) {
                 PUT(pn.text, pn.length);
                 PUT(" ", 1);
             }
+            if (side ? s->out_owned[k] : s->in_owned[k])
+                PUT("owned ", 6);
             PUT(tn.text, tn.length);
         }
     }
@@ -657,14 +687,48 @@ static bool reg_of(comp *c, uint32_t index, uint32_t *reg) {
 }
 
 static bool need(comp *c, uint32_t count) {
+    const bool sink = c->sink;
+    c->sink = false;
     if (c->f->depth - c->f->floor < count)
         return type_error(c, "the stack does not hold enough values for this word");
     for (uint32_t k = 0; k < count; ++k) {
         const tid type = c->f->stack[c->f->depth - 1 - k].type;
+        if (c->f->stack[c->f->depth - 1 - k].owned && !sink)
+            return type_error(c, "an owned value is kept in a local or given on at once; this word would lose it");
         if (type == TY_STEM)
             return type_error(c, "a stem is not a value: a combining word takes it at once");
         if (type == TY_COLL)
             return type_error(c, "the name of an array or list is not a value; a word like idx or len takes it");
+    }
+    return true;
+}
+
+// Entry `index` is given to something that takes over an owned value. True when it carried
+// one: a fresh owned value, or the value of a local that held one, which is then spent.
+static bool give(comp *c, uint32_t index) {
+    fn *f = c->f;
+    entry *e = &f->stack[index];
+    if (e->owned) {
+        e->owned = false;
+        return true;
+    }
+    if (e->src && f->locals[e->src - 1].state == L_OWNS) {
+        f->locals[e->src - 1].state = L_MOVED;
+        return true;
+    }
+    return false;
+}
+
+// Where a word is left, nothing owned may stay behind.
+static bool nothing_owned(comp *c) {
+    fn *f = c->f;
+    for (uint32_t k = 0; k < f->n_locals; ++k) {
+        if (f->locals[k].state == L_OWNS)
+            return type_error(c, "an owned value in a local is not given on every path (close, free or store it)");
+    }
+    for (uint32_t k = 0; k < f->depth; ++k) {
+        if (f->stack[k].owned)
+            return type_error(c, "an owned value on the stack is not given on every path");
     }
     return true;
 }
@@ -854,7 +918,8 @@ enum {
     BW_IDX, BW_CAPACITY, BW_IS_FULL, BW_CLEAR, BW_PUSH, BW_POP, BW_FIND, BW_TO_INT, BW_TO_STR, BW_ASSERT,
     BW_WORDS, BW_ERR_TEXT, BW_ADD_ROW, BW_IS_NONE, BW_NONE, BW_ROW_INDEX, BW_MAX, BW_MIN,
     BW_APPEND, BW_APPEND_BYTE, BW_APPEND_INT, BW_CONTENTS, BW_TAKE, BW_SKIP, BW_TAKE_LAST, BW_SKIP_LAST,
-    BW_STARTS_WITH, BW_ENDS_WITH, BW_CONTAINS, BW_LOOKUP, BW_INSERT, BW_REMOVE, BW_REPLACE, BW_PUT, BW_PEEK
+    BW_STARTS_WITH, BW_ENDS_WITH, BW_CONTAINS, BW_LOOKUP, BW_INSERT, BW_REMOVE, BW_REPLACE, BW_PUT, BW_PEEK,
+    BW_ALLOC, BW_FREE, BW_IS_ALIVE
 };
 static const struct builtin {
     const char *name;
@@ -876,6 +941,7 @@ static const struct builtin {
     {"starts_with", BW_STARTS_WITH, true}, {"ends_with", BW_ENDS_WITH, true}, {"contains", BW_CONTAINS, true},
     {"lookup", BW_LOOKUP, false},   {"insert", BW_INSERT, false},  {"remove", BW_REMOVE, false},
     {"replace", BW_REPLACE, true},  {"put", BW_PUT, false},        {"peek", BW_PEEK, false},
+    {"alloc", BW_ALLOC, false},     {"free", BW_FREE, false},      {"is_alive", BW_IS_ALIVE, false},
 };
 
 // `len` and `is_empty` belong to the core for arrays and lists and to `strings` for a str; the
@@ -1108,12 +1174,16 @@ static bool check_before_call(comp *c) {
 // the first register of each bank. Leaves the arguments popped.
 static bool call_args(comp *c, const sig *s, uint32_t base[2]) {
     fn *f = c->f;
+    c->sink = true;
     if (!need(c, s->n_in))
         return false;
     const uint32_t first = f->depth - s->n_in;
     for (uint32_t k = 0; k < s->n_in; ++k) {
         if (f->stack[first + k].type != s->in[k])
             return type_error(c, "an argument has another type than the word's signature asks for");
+        if (s->in_owned[k] ? !give(c, first + k) : f->stack[first + k].owned)
+            return type_error(c, s->in_owned[k] ? "this parameter takes an owned value; what is given here is not one"
+                                                : "an owned value is lent from a local, not straight from the stack");
     }
     for (uint32_t k = first; k < f->depth; ++k) {
         if (!settle(c, k))
@@ -1141,6 +1211,7 @@ static bool push_results(comp *c, const sig *s, const uint32_t base[2], const ui
         const int bank = bank_of(s->out[k]);
         if (!push_slot(c, s->out[k]))
             return false;
+        c->f->stack[c->f->depth - 1].owned = s->out_owned[k];
         if (host && in[bank] && !move_slot(c, s->out[k], base[bank] + seen[bank], base[bank] + in[bank] + seen[bank]))
             return false;
         ++seen[bank];
@@ -1161,7 +1232,8 @@ static bool guard(comp *c, const sig *s, const uint32_t base[2], const uint32_t 
     if (is_word(c, PNX_KW_or_fail)) {
         if (f->is_top || !f->sig->fails)
             return type_error(c, "or_fail passes the failure on, so this word needs `or fail` in its signature");
-        return emit(c, PNX_ABC(PNX_RETF, 0, 0, 0)) != NONE && push_results(c, s, base, in, host) && advance(c);
+        return nothing_owned(c) && emit(c, PNX_ABC(PNX_RETF, 0, 0, 0)) != NONE &&
+               push_results(c, s, base, in, host) && advance(c);
     }
     const bool returns = is_word(c, PNX_KW_or_return);
     if (!returns && !is_word(c, PNX_KW_or_else))
@@ -1178,8 +1250,13 @@ static bool guard(comp *c, const sig *s, const uint32_t base[2], const uint32_t 
             return false;
         land(c, &handler);
         f->depth = before;
+        uint8_t states[MAX_LOCALS]; // the return may give owned locals away; the path that goes on keeps them
+        for (uint32_t k = 0; k < f->n_locals; ++k)
+            states[k] = f->locals[k].state;
         if (!emit_return(c))
             return false;
+        for (uint32_t k = 0; k < f->n_locals; ++k)
+            f->locals[k].state = states[k];
         f->depth = after;
         land(c, &resume);
         return advance(c);
@@ -1302,6 +1379,7 @@ static bool write_reg(comp *c, uint32_t reg) {
 
 static bool store_local(comp *c, name n) {
     fn *f = c->f;
+    c->sink = true;
     if (!need(c, 1))
         return false;
     const uint32_t top = f->depth - 1;
@@ -1339,6 +1417,7 @@ static bool store_local(comp *c, name n) {
             return type_error(c, "this global has another type than the value stored into it");
         if (!reg_of(c, top, &reg))
             return false;
+        (void)give(c, top); // storing into a global hands an owned value over
         if (sym->strcap) {
             const uint32_t one = top_slot(c, BANK_I, 1);
             if (emit(c, PNX_ABX(PNX_LOADI, one, 1)) == NONE || emit(c, PNX_ABC(PNX_FSETS, reg, one, 0)) == NONE ||
@@ -1362,9 +1441,16 @@ static bool store_local(comp *c, name n) {
         *l = (local){.name = n, .type = e.type, .reg = f->nloc[bank]++};
         if (f->nloc[bank] > f->maxloc[bank])
             f->maxloc[bank] = f->nloc[bank];
+        l->state = give(c, top) ? L_OWNS : L_PLAIN;
     } else {
         if (l->type != e.type)
             return type_error(c, "this local variable has another type than the value stored into it");
+        const bool same = f->stack[top].src == (uint8_t)(l - f->locals + 1);
+        if (!same) {
+            if (l->state == L_OWNS)
+                return type_error(c, "this local still holds an owned value; give that on first");
+            l->state = give(c, top) ? L_OWNS : L_PLAIN;
+        }
         // values on the stack that were read from this local must keep the old value
         for (uint32_t k = 0; k < top; ++k) {
             if (f->stack[k].kind == E_LOCAL && bank_of(f->stack[k].type) == bank && f->stack[k].reg == l->reg &&
@@ -1389,10 +1475,13 @@ static bool field_access(comp *c, bool write) {
     const field *fd = find_field(c, r, (name){path.text + dot + 1, path.length - dot - 1});
     if (!fd)
         return error(c, PINAX_ERR_NOT_FOUND, "the record has no field of this name");
+    c->sink = write;
     if (!need(c, write ? 2 : 1))
         return false;
     const uint32_t top = f->depth - 1;
     const tid      row = f->stack[top].type;
+    if (f->stack[top].owned)
+        return type_error(c, "an owned row is kept in a local before its fields are used");
     if (!is_row(row) || ((const globalsym *)c->globals.ptr + (row - TY_FIRST_DECLARED))->record != r)
         return type_error(c, "a field is reached through a row of a table of that record: row record.field");
     const uint32_t table = row - TY_FIRST_DECLARED;
@@ -1404,6 +1493,7 @@ static bool field_access(comp *c, bool write) {
         if (!reg_of(c, top - 1, &rv) || !reg_of(c, top, &rr) ||
             emit(c, PNX_ABC(fd->is_str ? PNX_FSETS : PNX_FSET, rv, rr, 0)) == NONE || emit(c, where) == NONE)
             return false;
+        (void)give(c, top - 1); // storing into a field hands an owned value over
         f->depth -= 2;
         return true;
     }
@@ -1457,18 +1547,21 @@ static bool store(comp *c) {
 // ---- control ------------------------------------------------------------------------------
 
 static void snapshot(const fn *f, shot *out) {
-    out->hidden = 0;
+    out->hidden = out->owned = 0;
     for (uint32_t k = 0; k < f->depth; ++k) {
         out->types[k] = f->stack[k].type;
         if (f->stack[k].hidden)
             out->hidden |= (uint64_t)1 << k;
+        if (f->stack[k].owned)
+            out->owned |= (uint64_t)1 << k;
     }
     out->depth = (uint8_t)f->depth;
 }
 
 static void restore(fn *f, const shot *from) {
     for (uint32_t k = 0; k < from->depth; ++k)
-        f->stack[k] = (entry){.type = from->types[k], .kind = E_SLOT, .hidden = (from->hidden >> k & 1u) != 0};
+        f->stack[k] = (entry){.type = from->types[k], .kind = E_SLOT, .hidden = (from->hidden >> k & 1u) != 0,
+                              .owned = (from->owned >> k & 1u) != 0};
     f->depth = from->depth;
 }
 
@@ -1476,8 +1569,32 @@ static bool same_stack(const fn *f, const shot *as) {
     if (f->depth != as->depth)
         return false;
     for (uint32_t k = 0; k < as->depth; ++k) {
-        if (f->stack[k].type != as->types[k])
+        if (f->stack[k].type != as->types[k] || f->stack[k].owned != ((as->owned >> k & 1u) != 0))
             return false;
+    }
+    return true;
+}
+
+// The state of the locals (what they own) is part of what must agree where paths meet.
+static void save_owns(const fn *f, uint8_t *out) {
+    for (uint32_t k = 0; k < f->n_locals; ++k)
+        out[k] = f->locals[k].state;
+}
+
+static void restore_owns(fn *f, const uint8_t *from, uint32_t count) {
+    for (uint32_t k = 0; k < count && k < f->n_locals; ++k)
+        f->locals[k].state = from[k];
+}
+
+// The locals that existed when block `b` began hold what `as` says, and those made inside it
+// hold nothing owned any more.
+static bool same_owns(comp *c, const block *b, const uint8_t *as) {
+    const fn *f = c->f;
+    for (uint32_t k = as ? 0 : b->locals_mark; k < f->n_locals; ++k) {
+        if (k < b->locals_mark ? f->locals[k].state != as[k] : f->locals[k].state == L_OWNS)
+            return type_error(c, k < b->locals_mark
+                                     ? "an owned value is given on one path and kept on another; every path must do the same"
+                                     : "an owned value made in this block is not given before the block ends");
     }
     return true;
 }
@@ -1496,6 +1613,7 @@ static block *open_block(comp *c, uint8_t kind) {
     b->nloc_mark[0] = f->nloc[0];
     b->nloc_mark[1] = f->nloc[1];
     snapshot(f, &b->in);
+    save_owns(f, b->owns_in);
     return b;
 }
 
@@ -1539,6 +1657,11 @@ static bool do_else(comp *c) {
         if (!settle_all(c))
             return false;
         snapshot(f, &b->out);
+        save_owns(f, b->owns_out);
+        for (uint32_t k = b->locals_mark; k < f->n_locals; ++k) {
+            if (f->locals[k].state == L_OWNS)
+                return type_error(c, "an owned value made in this block is not given before the block ends");
+        }
         b->has_out = true;
         if (!jump_later(c, &b->exits))
             return false;
@@ -1546,6 +1669,7 @@ static bool do_else(comp *c) {
     land(c, &b->else_jump);
     close_scope(f, b);
     restore(f, &b->in);
+    restore_owns(f, b->owns_in, b->locals_mark);
     f->dead = false;
     b->has_else = true;
     return advance(c);
@@ -1560,11 +1684,16 @@ static bool end_if(comp *c, block *b) {
                        : !b->has_else && !same_stack(f, &b->in))
             return type_error(c, b->has_else ? "the two branches of this if leave different stacks"
                                              : "an if without else must leave the stack as it found it");
+        if (b->has_out ? !same_owns(c, b, b->owns_out) : !b->has_else ? !same_owns(c, b, b->owns_in)
+                                                                       : !same_owns(c, b, NULL))
+            return false;
     } else if (b->has_out) {
         restore(f, &b->out);
+        restore_owns(f, b->owns_out, b->locals_mark);
         f->dead = false;
     } else if (!b->has_else) {
         restore(f, &b->in);
+        restore_owns(f, b->owns_in, b->locals_mark);
         f->dead = false;
     }
     land(c, &b->else_jump);
@@ -1657,6 +1786,8 @@ static bool do_leave(comp *c, pnx_word_id which) {
     if (!same_stack(f, &target->in))
         return error_at(c, PINAX_ERR_TYPE, at.line, at.column,
                         "where a loop is left the stack must be as it was when the loop began");
+    if (!same_owns(c, target, target->owns_in))
+        return false;
     target->targeted = true;
     if (which == PNX_KW_break) {
         f->dead = true;
@@ -1674,6 +1805,8 @@ static bool end_loop(comp *c, block *b) {
             return false;
         if (!same_stack(f, &b->in))
             return type_error(c, "one turn of a loop must leave the stack as it found it");
+        if (!same_owns(c, b, b->owns_in))
+            return false;
         uint32_t n = f->code.n - b->head + 2;
         if (n > 0xffffu)
             n = 0xffffu;
@@ -1688,6 +1821,7 @@ static bool end_loop(comp *c, block *b) {
     land(c, &b->exits);
     close_scope(f, b);
     restore(f, &b->in);
+    restore_owns(f, b->owns_in, b->locals_mark);
     f->dead = !b->targeted; // a loop nothing leaves never ends (D0022)
     --f->n_blocks;
     return true;
@@ -1706,11 +1840,16 @@ static bool emit_return(comp *c) {
             return type_error(c, "the stack does not hold exactly the results of the signature here");
         if (f->stack[k].type != s->out[n])
             return type_error(c, "a result has another type than the signature says");
+        if (s->out_owned[n] ? !give(c, k) : f->stack[k].owned)
+            return type_error(c, s->out_owned[n] ? "this result is owned; the value returned is not"
+                                                 : "an owned value is returned through a result marked owned");
         ++count[bank_of(s->out[n])];
         at[n++] = k;
     }
     if (n != s->n_out)
         return type_error(c, "the stack does not hold exactly the results of the signature here");
+    if (!nothing_owned(c))
+        return false;
     // One result of a bank goes straight from where it is. Several are first all put into
     // their stack registers, which lie above the targets, and then moved down in rising order.
     for (uint32_t k = 0; k < n; ++k) {
@@ -1743,8 +1882,11 @@ static bool end_orelse(comp *c, block *b) {
             return false;
         if (!same_stack(f, &b->out))
             return type_error(c, "the body of or_else must leave what the word would have given, or leave");
+        if (!same_owns(c, b, b->owns_in))
+            return false;
     }
     restore(f, &b->out);
+    restore_owns(f, b->owns_in, b->locals_mark);
     f->dead = false;
     land(c, &b->exits);
     close_scope(f, b);
@@ -1867,6 +2009,7 @@ static bool case_item(comp *c) {
             return false; // no branch matched: a fault (RFC-0008 section 5.7)
         if (b->has_out) {
             restore(f, &b->out);
+            restore_owns(f, b->owns_out, b->locals_mark);
             f->dead = false;
         } else {
             f->dead = true;
@@ -1925,8 +2068,13 @@ static bool end_of(comp *c, block *b) {
         if (parent->has_out) {
             if (!same_stack(f, &parent->out))
                 return type_error(c, "the branches of this case leave different stacks");
+            if (!same_owns(c, b, parent->owns_out))
+                return false;
         } else {
+            if (!same_owns(c, b, NULL))
+                return false;
             snapshot(f, &parent->out);
+            save_owns(f, parent->owns_out);
             parent->has_out = true;
         }
         if (!jump_later(c, &parent->exits))
@@ -1935,6 +2083,7 @@ static bool end_of(comp *c, block *b) {
     close_scope(f, b);
     --f->n_blocks;
     restore(f, &parent->in);
+    restore_owns(f, parent->owns_in, parent->locals_mark);
     f->dead = false;
     return true;
 }
@@ -2234,6 +2383,8 @@ static bool end_do(comp *c, block *b) {
             return false;
         if (!same_stack(f, &b->in))
             return type_error(c, "this block must leave the stack as it found it");
+        if (!same_owns(c, b, b->owns_in))
+            return false;
         if (!loop_back(c, b->head, b->cur, b->use == USE_TIMES ? -1 : b->stem == STEM_WORDS ? 0 : 1))
             return false;
     }
@@ -2243,6 +2394,7 @@ static bool end_do(comp *c, block *b) {
     const block done = *b;
     --f->n_blocks;
     restore(f, &done.in);
+    restore_owns(f, done.owns_in, done.locals_mark);
     f->dead = false;
     f->depth -= done.n_hidden;
     if (done.use == USE_FOLD) {
@@ -2350,8 +2502,9 @@ static bool builtin(comp *c, const struct builtin *w) {
         if (on_coll) {
             if (!need_coll(c, &g, &gi))
                 return false;
-            if (g->kind == GK_INDEX)
-                return type_error(c, "an index has no length; ask its table");
+            if (g->kind == GK_INDEX || g->kind == GK_POOL)
+                return type_error(c, g->kind == GK_POOL ? "a pool does not count its rows; this word is not supported for it"
+                                                        : "an index has no length; ask its table");
             if (g->kind == GK_BUFFER) { // the length of its contents
                 const uint32_t view = top_slot(c, BANK_S, 1), dst = top_slot(c, BANK_I, 1);
                 if (emit(c, PNX_ABX(PNX_BVIEW, view, gi)) == NONE || emit_def(c, PNX_ABC(PNX_SLEN, dst, view, 0), BANK_I) == NONE)
@@ -2497,8 +2650,9 @@ static bool builtin(comp *c, const struct builtin *w) {
     case BW_CLEAR:
         if (!need_coll(c, &g, &gi))
             return false;
-        if (g->kind == GK_INDEX)
-            return type_error(c, "an index is not cleared by itself; remove its rows");
+        if (g->kind == GK_INDEX || g->kind == GK_POOL)
+            return type_error(c, g->kind == GK_POOL ? "a pool is emptied by freeing its rows"
+                                                    : "an index is not cleared by itself; remove its rows");
         return emit(c, PNX_ABX(g->kind == GK_BUFFER ? PNX_BCLEAR : PNX_GCLEAR, 0, gi)) != NONE && advance(c);
     case BW_APPEND:
     case BW_APPEND_INT:
@@ -2527,6 +2681,41 @@ static bool builtin(comp *c, const struct builtin *w) {
         if (!push_slot(c, TY_STR))
             return false;
         return emit_def(c, PNX_ABX(PNX_BVIEW, slot_of(c, f->depth - 1), gi), BANK_S) != NONE && advance(c);
+    case BW_ALLOC: { // nodes alloc : a free row of the pool, owned; fails when none is left
+        if (!need_coll(c, &g, &gi))
+            return false;
+        if (g->kind != GK_POOL)
+            return type_error(c, "alloc takes a row from a pool");
+        if (!settle_all(c))
+            return false;
+        if (emit(c, PNX_ABX(PNX_PALLOC, top_slot(c, BANK_I, 1), gi)) == NONE || !advance(c))
+            return false;
+        sig got = {.n_out = 1, .fails = true};
+        got.out[0] = g->type;
+        got.out_owned[0] = true;
+        const uint32_t base[2] = {0, 0}, in[2] = {0, 0};
+        return guard(c, &got, base, in, false);
+    }
+    case BW_FREE:
+    case BW_IS_ALIVE: { // row nodes free : gives the row back; using it afterwards is a fault
+        if (!need_coll(c, &g, &gi))
+            return false;
+        c->sink = w->id == BW_FREE;
+        if (!need(c, 1))
+            return false;
+        if (g->kind != GK_POOL || f->stack[f->depth - 1].type != g->type)
+            return type_error(c, "this word takes a row of a pool and the pool: row nodes free");
+        if (!reg_of(c, f->depth - 1, &ra))
+            return false;
+        if (w->id == BW_FREE) {
+            (void)give(c, f->depth - 1); // an owned row is spent; a row read from a field is simply freed
+            --f->depth;
+            return emit(c, PNX_ABX(PNX_PFREE, ra, gi)) != NONE && advance(c);
+        }
+        --f->depth;
+        const uint32_t dst = top_slot(c, BANK_I, 1);
+        return emit_def(c, PNX_ABC(PNX_PALIVE, dst, ra, gi), BANK_I) != NONE && push_slot(c, TY_BOOL) && advance(c);
+    }
     case BW_PUT: { // v jobs put : fails when the queue is full
         if (!need_coll(c, &g, &gi) || !need(c, 1))
             return false;
@@ -2788,8 +2977,12 @@ static bool body_name(comp *c) {
             return field_access(c, false) && advance(c);
     } else {
         const local *l = find_local(f, n);
-        if (l)
-            return push(c, (entry){.type = l->type, .kind = E_LOCAL, .reg = l->reg}) && advance(c);
+        if (l) {
+            if (l->state == L_MOVED)
+                return type_error(c, "this local gave its owned value away; it holds nothing to read");
+            return push(c, (entry){.type = l->type, .kind = E_LOCAL, .reg = l->reg, .src = (uint8_t)(l - f->locals + 1)}) &&
+                   advance(c);
+        }
         const constant *k = find_const(c, n);
         if (k) {
             if (k->type == TY_STR)
@@ -2918,6 +3111,8 @@ static bool body_token(comp *c) {
         entry *e = &f->stack[f->depth - 1];
         if (e->type != TY_ERR)
             return type_error(c, "fail takes an error number (err.not_found, or the e of or_else)");
+        if (!nothing_owned(c))
+            return false;
         if (e->kind == E_CONST) {
             if (emit(c, PNX_ABX(PNX_FAIL, 0, (uint32_t)e->value)) == NONE)
                 return false;
@@ -3285,6 +3480,8 @@ static bool declare_collection(comp *c, uint8_t kind) {
         return type_error(c, "a table announced by forward holds a record");
     if (kind == GK_QUEUE && (g.record != NONE || g.type == TY_STR))
         return type_error(c, "a queue holds int, bool or err values");
+    if (kind == GK_POOL && g.record == NONE)
+        return type_error(c, "a pool holds records: pool name record size");
     if (!advance(c) || (g.record == NONE && g.type == TY_STR && !str_capacity(c, &g.strcap)) ||
         !declared_size(c, &g.capacity))
         return false;
@@ -3323,10 +3520,10 @@ static bool declare_forward(comp *c) {
         *slot = ahead;
         return true;
     }
-    if (!is_word(c, PNX_KW_list) && !is_word(c, PNX_KW_array))
-        return syntax(c, is_word(c, PNX_KW_pool) ? "pools are not supported by the compiler yet"
-                                                 : "forward is followed by array, list, pool or word");
-    globalsym g = {.kind = is_word(c, PNX_KW_array) ? GK_ARRAY : GK_LIST, .forward = true, .record = NONE};
+    if (!is_word(c, PNX_KW_list) && !is_word(c, PNX_KW_array) && !is_word(c, PNX_KW_pool))
+        return syntax(c, "forward is followed by array, list, pool or word");
+    globalsym g = {.kind = is_word(c, PNX_KW_array) ? GK_ARRAY : is_word(c, PNX_KW_list) ? GK_LIST : GK_POOL,
+                   .forward = true, .record = NONE};
     if (!advance(c))
         return false;
     if (c->tok.kind != PNX_T_NAME)
@@ -3411,8 +3608,9 @@ static bool declare_record(comp *c) {
             bytes = n + 1;
         } else if (is_row(type_of_name(c, tn))) { // a row of that table: its number plus one, 0 for none
             fd.type = type_of_name(c, tn);
-            fd.extra = PNX_W_U32;
-            bytes = 4;
+            const bool pool = ((const globalsym *)c->globals.ptr + (fd.type - TY_FIRST_DECLARED))->kind == GK_POOL;
+            fd.extra = pool ? PNX_W_64 : PNX_W_U32; // a row of a pool carries its generation
+            bytes = pool ? 8 : 4;
         } else {
             return type_error(c, "this field type is not known, or not supported by the compiler yet");
         }
@@ -3496,8 +3694,8 @@ static bool declare_index(comp *c) {
         return false;
     g.table = c->tok.kind == PNX_T_NAME ? find_global(c, tok_name(c)) : NONE;
     const globalsym *table = g.table == NONE ? NULL : (const globalsym *)c->globals.ptr + g.table;
-    if (!table || table->record == NONE || table->forward)
-        return type_error(c, "an index belongs to a declared table of records");
+    if (!table || table->record == NONE || table->forward || table->kind == GK_POOL)
+        return type_error(c, "an index belongs to a declared array or list of records");
     if (!advance(c))
         return false;
     if (c->tok.kind != PNX_T_PATH)
@@ -3862,15 +4060,34 @@ static bool compile(comp *c, image *im, bool *has_top) {
             last->entry = im->code.n;
             if (!append_code(c, im, c->word_fn))
                 return false;
+        } else if (is_word(c, PNX_KW_bound) && !c->top_fn->n_blocks) {
+            // bound global | bound array : the host gives the storage (pinax_bind); until it does,
+            // the declaration has storage of its own, so nothing is ever unbacked
+            if (!advance(c))
+                return false;
+            const bool scalar = is_word(c, PNX_KW_global);
+            if (!scalar && !is_word(c, PNX_KW_array))
+                return syntax(c, is_word(c, PNX_KW_buffer) ? "a bound buffer is not supported yet"
+                                                           : "bound stands before global, array or buffer");
+            if (scalar ? !declare_global(c) : !declare_collection(c, GK_ARRAY))
+                return false;
+            globalsym *g = (globalsym *)c->globals.ptr + (c->globals.n - 1);
+            if (g->record != NONE || g->strcap || bank_of(g->type) != BANK_I)
+                return type_error(c, "bound storage holds int, bool or err values for now");
+            g->bound = true;
         } else if (is_word(c, PNX_KW_const) && !c->top_fn->n_blocks) {
             if (!declare_const(c))
                 return false;
         } else if (is_word(c, PNX_KW_global) && !c->top_fn->n_blocks) {
             if (!declare_global(c))
                 return false;
-        } else if ((is_word(c, PNX_KW_array) || is_word(c, PNX_KW_list) || is_word(c, PNX_KW_queue)) &&
+        } else if ((is_word(c, PNX_KW_array) || is_word(c, PNX_KW_list) || is_word(c, PNX_KW_queue) ||
+                    is_word(c, PNX_KW_pool)) &&
                    !c->top_fn->n_blocks) {
-            if (!declare_collection(c, is_word(c, PNX_KW_array) ? GK_ARRAY : is_word(c, PNX_KW_list) ? GK_LIST : GK_QUEUE))
+            if (!declare_collection(c, is_word(c, PNX_KW_array)   ? GK_ARRAY
+                                       : is_word(c, PNX_KW_list)  ? GK_LIST
+                                       : is_word(c, PNX_KW_queue) ? GK_QUEUE
+                                                                  : GK_POOL))
                 return false;
         } else if (is_word(c, PNX_KW_type) && !c->top_fn->n_blocks) {
             if (!declare_type(c))
@@ -3975,7 +4192,7 @@ static bool serialize(comp *c, const image *im, uint8_t **out, size_t *out_len) 
                              .elem_bytes = 8,
                              .capacity = g->kind == GK_SCALAR ? 1 : g->capacity};
         if (g->record != NONE) {
-            rec.kind = g->kind == GK_ARRAY ? PNX_G_TABLE : PNX_G_ROWS;
+            rec.kind = g->kind == GK_ARRAY ? PNX_G_TABLE : g->kind == GK_POOL ? PNX_G_POOL : PNX_G_ROWS;
             rec.elem_bytes = ((const record *)c->records.ptr + g->record)->size;
         } else if (g->kind == GK_QUEUE) {
             rec.kind = PNX_G_QUEUE;
@@ -4004,6 +4221,8 @@ static bool serialize(comp *c, const image *im, uint8_t **out, size_t *out_len) 
         } else if (g->kind != GK_INDEX) {
             put_text(rec.type, sizeof rec.type, type_name(c, g->type));
         }
+        if (g->bound)
+            rec.reserved = 2; // meant to be bound by the host
         __builtin_memcpy(p, &rec, sizeof rec);
         p += sizeof rec;
     }

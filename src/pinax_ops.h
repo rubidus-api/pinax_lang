@@ -83,6 +83,26 @@ PNX_INLINE uint64_t pnx_buffer_len(const pnx_global *g) {
     return len;
 }
 
+// The row number (from 0) a row value names in table `g`, checked. A row is its number plus
+// one; "no row" (0) wraps and is out of range. A row of a pool also carries the generation of
+// its slot, which must still be the slot's.
+PNX_INLINE int pnx_row_of(const pnx_global *g, int64_t value, uint64_t *row) {
+    const uint64_t v = (uint64_t)value;
+    if (g->kind == PNX_G_POOL) {
+        const uint32_t slot = (uint32_t)v - 1;
+        uint32_t generation;
+        if (slot >= g->capacity)
+            return PINAX_ERR_RANGE;
+        __builtin_memcpy(&generation, g->ptr + (size_t)g->capacity * g->elem_bytes + (size_t)slot * 8, 4);
+        if (generation != (uint32_t)(v >> 32))
+            return PINAX_ERR_STALE;
+        *row = slot;
+        return PNX_R_OK;
+    }
+    *row = v - 1;
+    return *row >= g->length ? PINAX_ERR_RANGE : PNX_R_OK;
+}
+
 // ---- moving -----------------------------------------------------------------------------
 
 PNX_OP(MOVI) { R[OP_A(w)] = R[OP_B(w)]; return PNX_R_OK; }
@@ -180,18 +200,20 @@ PNX_OP(ROW) {
 }
 PNX_OP(FGET) {
     const pnx_global *g = &st->globals[x & 0xfffu];
-    const uint64_t row = (uint64_t)R[OP_B(w)] - 1; // "no row" wraps and is out of range
-    if (row >= g->length)
-        return PINAX_ERR_RANGE;
+    uint64_t row;
+    const int bad = pnx_row_of(g, R[OP_B(w)], &row);
+    if (bad)
+        return bad;
     R[OP_A(w)] = pnx_load_width(g->ptr + row * g->elem_bytes + ((x >> 12) & 0xfffu), x >> 24);
     return PNX_R_OK;
 }
 PNX_OP(FSET) {
     const pnx_global *g = &st->globals[x & 0xfffu];
-    const uint64_t row = (uint64_t)R[OP_B(w)] - 1; // "no row" wraps and is out of range
     const int64_t value = R[OP_A(w)];
-    if (row >= g->length)
-        return PINAX_ERR_RANGE;
+    uint64_t row;
+    const int bad = pnx_row_of(g, R[OP_B(w)], &row);
+    if (bad)
+        return bad;
     if (!pnx_fits_width(value, x >> 24))
         return PINAX_ERR_OVERFLOW;
     __builtin_memcpy(g->ptr + row * g->elem_bytes + ((x >> 12) & 0xfffu), &value, pnx_width_bytes[x >> 24]);
@@ -199,19 +221,21 @@ PNX_OP(FSET) {
 }
 PNX_OP(FGETS) {
     const pnx_global *g = &st->globals[x & 0xfffu];
-    const uint64_t row = (uint64_t)R[OP_B(w)] - 1; // "no row" wraps and is out of range
-    if (row >= g->length)
-        return PINAX_ERR_RANGE;
+    uint64_t row;
+    const int bad = pnx_row_of(g, R[OP_B(w)], &row);
+    if (bad)
+        return bad;
     const uint8_t *field = g->ptr + row * g->elem_bytes + ((x >> 12) & 0xfffu);
     S[OP_A(w)] = (pnx_scell){PNX_SEG_GLOBAL, field[0], (uint64_t)(field + 1 - st->segment[PNX_SEG_GLOBAL])};
     return PNX_R_OK;
 }
 PNX_OP(FSETS) {
     const pnx_global *g = &st->globals[x & 0xfffu];
-    const uint64_t row = (uint64_t)R[OP_B(w)] - 1; // "no row" wraps and is out of range
     const pnx_scell value = S[OP_A(w)];
-    if (row >= g->length)
-        return PINAX_ERR_RANGE;
+    uint64_t row;
+    const int bad = pnx_row_of(g, R[OP_B(w)], &row);
+    if (bad)
+        return bad;
     if (value.length > (x >> 24))
         return PINAX_ERR_RANGE;
     uint8_t *field = g->ptr + row * g->elem_bytes + ((x >> 12) & 0xfffu);
@@ -559,6 +583,44 @@ PNX_OP(QPEEK) {
         return PNX_R_FAILED;
     }
     __builtin_memcpy(&R[OP_A(w)], g->ptr + (size_t)g->head * 8, 8);
+    return PNX_R_OK;
+}
+
+PNX_OP(PALLOC) {
+    pnx_global *g = &st->globals[OP_BX(w)];
+    if (g->head == 0) {
+        st->fail = PINAX_ERR_FULL;
+        return PNX_R_FAILED;
+    }
+    const uint32_t slot = g->head - 1;
+    uint8_t *meta = g->ptr + (size_t)g->capacity * g->elem_bytes + (size_t)slot * 8;
+    uint32_t generation;
+    __builtin_memcpy(&generation, meta, 4);
+    __builtin_memcpy(&g->head, meta + 4, 4);
+    ++generation; // odd: handed out
+    __builtin_memcpy(meta, &generation, 4);
+    __builtin_memset(g->ptr + (size_t)slot * g->elem_bytes, 0, g->elem_bytes);
+    R[OP_A(w)] = (int64_t)((uint64_t)generation << 32 | (slot + 1u));
+    return PNX_R_OK;
+}
+PNX_OP(PFREE) {
+    pnx_global *g = &st->globals[OP_BX(w)];
+    uint64_t row;
+    const int bad = pnx_row_of(g, R[OP_A(w)], &row);
+    if (bad)
+        return bad;
+    uint8_t *meta = g->ptr + (size_t)g->capacity * g->elem_bytes + (size_t)row * 8;
+    uint32_t generation;
+    __builtin_memcpy(&generation, meta, 4);
+    ++generation; // even: free
+    __builtin_memcpy(meta, &generation, 4);
+    __builtin_memcpy(meta + 4, &g->head, 4);
+    g->head = (uint32_t)row + 1;
+    return PNX_R_OK;
+}
+PNX_OP(PALIVE) {
+    uint64_t row;
+    R[OP_A(w)] = pnx_row_of(&st->globals[OP_C(w)], R[OP_B(w)], &row) == PNX_R_OK;
     return PNX_R_OK;
 }
 

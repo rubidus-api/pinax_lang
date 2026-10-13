@@ -327,6 +327,8 @@ static const char *check_word(const pinax_state *st, uint32_t index, span range,
         case PNX_ADDROW: want = PNX_G_ROWS; global = bx; break;
         case PNX_BCAT: case PNX_BCATI: want = PNX_G_BUFFER; global = bx; break;
         case PNX_QPUT: case PNX_QTAKE: case PNX_QPEEK: want = PNX_G_QUEUE; global = bx; break;
+        case PNX_PALLOC: case PNX_PFREE: want = PNX_G_POOL; global = bx; break;
+        case PNX_PALIVE: want = PNX_G_POOL; global = c; break;
         case PNX_IXPUT: case PNX_IXDEL: want = PNX_G_INDEX; global = bx; break;
         case PNX_IXGET: case PNX_IXGETS: want = PNX_G_INDEX; global = c; break;
         case PNX_LPUSH: case PNX_LPOP: want = PNX_G_LIST; global = bx; break;
@@ -341,7 +343,7 @@ static const char *check_word(const pinax_state *st, uint32_t index, span range,
                 return "code: global outside its table";
             const uint32_t kind = st->globals[global].kind;
             const bool ok = kind == want || (want == PNX_G_ARRAY && kind == PNX_G_LIST) ||
-                            (want == PNX_G_TABLE && kind == PNX_G_ROWS) ||
+                            (want == PNX_G_TABLE && (kind == PNX_G_ROWS || (kind == PNX_G_POOL && op != PNX_ROW))) ||
                             (want == PNX_G_COUNT + 1 && kind != PNX_G_INT && kind != PNX_G_BUFFER &&
                              kind != PNX_G_INDEX);
             if (!ok)
@@ -499,6 +501,11 @@ pinax_err pinax_load_bytecode(pinax_state *st, pinax_str bytecode) {
                 goto rollback;
             bytes = (uint64_t)rec->capacity * rec->elem_bytes;
             break;
+        case PNX_G_POOL:
+            if (rec->elem_bytes == 0)
+                goto rollback;
+            bytes = (uint64_t)rec->capacity * ((uint64_t)rec->elem_bytes + 8);
+            break;
         case PNX_G_INDEX: { // slots: a power of two; the key field must lie inside an earlier table
             const uint32_t table = rec->elem_bytes & 0xfffu, offset = (rec->elem_bytes >> 12) & 0xfffu,
                            extra = rec->elem_bytes >> 24;
@@ -520,9 +527,17 @@ pinax_err pinax_load_bytecode(pinax_state *st, pinax_str bytecode) {
         if (!g->ptr)
             goto rollback;
         g->kind = rec->kind;
-        g->elem_bytes = rec->kind == PNX_G_TABLE || rec->kind == PNX_G_ROWS ? rec->elem_bytes : 8;
+        g->elem_bytes = rec->kind == PNX_G_TABLE || rec->kind == PNX_G_ROWS || rec->kind == PNX_G_POOL ? rec->elem_bytes : 8;
         g->capacity = rec->kind == PNX_G_INT ? 1 : rec->capacity;
         g->length = rec->kind == PNX_G_LIST || rec->kind == PNX_G_ROWS || rec->kind == PNX_G_QUEUE ? 0 : g->capacity;
+        if (rec->kind == PNX_G_POOL) { // every slot is free: slot k links to k + 1
+            uint8_t *meta = g->ptr + (size_t)g->capacity * g->elem_bytes;
+            for (uint32_t slot = 0; slot < g->capacity; ++slot) {
+                const uint32_t next = slot + 1 < g->capacity ? slot + 2 : 0;
+                __builtin_memcpy(meta + (size_t)slot * 8 + 4, &next, 4);
+            }
+            g->head = 1;
+        }
         if (rec->kind == PNX_G_INDEX) {
             g->key = rec->elem_bytes;
             g->key_is_str = rec->reserved != 0;

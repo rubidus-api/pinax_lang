@@ -44,7 +44,7 @@ typedef struct pnx_global {
     uint8_t *ptr; // a buffer starts with its 64-bit length
     uint32_t kind, elem_bytes, capacity;
     uint32_t length; // cells in use: the capacity for an array or table, what was pushed for a list
-    uint32_t head;   // a queue: the cell of its oldest value
+    uint32_t head;   // a queue: the cell of its oldest value; a pool: its first free slot plus one
     uint32_t key;    // an index: its key field, PNX_FIELD(table, offset, extra)
     bool     key_is_str;
 } pnx_global;

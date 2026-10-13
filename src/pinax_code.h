@@ -70,6 +70,9 @@ enum {
 // SREPL A, B: the string in S[B] with every S[B+1] replaced by S[B+2], built in the region.
 // QPUT adds at the back of a queue (fails when full); QTAKE and QPEEK take and read the front
 // (fail when empty).
+// PALLOC takes a free row of a pool (fails when none is left), PFREE gives one back, PALIVE
+// says whether a row is still the one that was handed out. A row of a pool carries the
+// generation of its slot in the upper 32 bits; using it after PFREE is the fault STALE.
 #define PNX_OPS(X)                                                                                 \
     X(MOVI, PNX_K_I, PNX_K_I, PNX_K_NONE, PNX_F_ABC, PNX_X_NONE, 0)                                \
     X(MOVS, PNX_K_S, PNX_K_S, PNX_K_NONE, PNX_F_ABC, PNX_X_NONE, 0)                                \
@@ -163,7 +166,10 @@ enum {
     X(SREPL, PNX_K_S, PNX_K_S, PNX_K_NONE, PNX_F_ABC, PNX_X_NONE, 0)                               \
     X(QPUT, PNX_K_I, PNX_K_NONE, PNX_K_NONE, PNX_F_GLOBAL, PNX_X_NONE, 1)                          \
     X(QTAKE, PNX_K_I, PNX_K_NONE, PNX_K_NONE, PNX_F_GLOBAL, PNX_X_NONE, 1)                         \
-    X(QPEEK, PNX_K_I, PNX_K_NONE, PNX_K_NONE, PNX_F_GLOBAL, PNX_X_NONE, 1)
+    X(QPEEK, PNX_K_I, PNX_K_NONE, PNX_K_NONE, PNX_F_GLOBAL, PNX_X_NONE, 1)                         \
+    X(PALLOC, PNX_K_I, PNX_K_NONE, PNX_K_NONE, PNX_F_GLOBAL, PNX_X_NONE, 1)                        \
+    X(PFREE, PNX_K_I, PNX_K_NONE, PNX_K_NONE, PNX_F_GLOBAL, PNX_X_NONE, 0)                         \
+    X(PALIVE, PNX_K_I, PNX_K_I, PNX_K_G, PNX_F_ABC, PNX_X_NONE, 0)
 
 enum {
 #define PNX_ENUM(name, a, b, c, shape, second, fails) PNX_##name,
@@ -195,6 +201,8 @@ enum {
                   // elem_bytes is the key field as PNX_FIELD(table, offset, extra), reserved is 1
                   // for a str(N) key (extra = N) and 0 for an integer key (extra = width code)
     PNX_G_QUEUE,  // a ring of capacity 64-bit integers, first in first out
+    PNX_G_POOL,   // capacity records of elem_bytes bytes, then per slot a 32-bit generation (odd while
+                  // the slot is handed out) and a 32-bit link of the free list
     PNX_G_COUNT
 };
 
