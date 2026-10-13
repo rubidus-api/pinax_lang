@@ -81,7 +81,15 @@ struct pinax_state {
     bool     suspended;
     pinax_err   fail;
     const char *error_text;
+    void (*diag)(void *user, pinax_str file, uint32_t line, uint32_t column, pinax_str message);
+    void *diag_user;
 };
+
+// The instruction table as data: operand kinds, shape, second word (pinax_code.h).
+typedef struct pnx_opinfo {
+    uint8_t a, b, c, shape, second, fails;
+} pnx_opinfo;
+extern const pnx_opinfo pnx_ops_info[PNX_OP_COUNT];
 
 // Counts the int and str parameters and results of "(a int, b str gives r int or fail)".
 bool pnx_signature_counts(const char *signature, pnx_counts *out);

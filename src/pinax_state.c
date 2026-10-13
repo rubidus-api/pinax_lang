@@ -6,13 +6,12 @@
 
 static const uint8_t empty_bytes[1] = {0};
 
-static const struct pnx_opinfo {
-    uint8_t a, b, c, shape, second, fails;
-} opinfo[PNX_OP_COUNT] = {
+const pnx_opinfo pnx_ops_info[PNX_OP_COUNT] = {
 #define PNX_INFO(name, a, b, c, shape, second, fails) [PNX_##name] = {a, b, c, shape, second, fails},
     PNX_OPS(PNX_INFO)
 #undef PNX_INFO
 };
+#define opinfo pnx_ops_info
 
 static const uint8_t width_bytes[PNX_W_COUNT] = {1, 2, 4, 8, 1, 2, 4};
 
@@ -161,6 +160,8 @@ pinax_err pinax_open(pinax_mem block, const pinax_config *config, pinax_state **
     st->region_len = config->region_bytes ? config->region_bytes : 65536;
     st->depth_max = st->int_slots / 4 < 64 ? 64 : st->int_slots / 4;
     st->budget = config->budget;
+    st->diag = config->diag;
+    st->diag_user = config->diag_user;
     st->error_text = "";
 
     st->hosts = take(st, sizeof(pnx_host) * PNX_MAX_HOSTS, 16);
@@ -276,7 +277,7 @@ static const char *check_word(const pinax_state *st, uint32_t index, span range,
 
     for (uint32_t i = range.begin; i < range.end;) {
         const uint32_t w = code[i], op = w & 0xffu;
-        const struct pnx_opinfo info = opinfo[op];
+        const pnx_opinfo info = opinfo[op];
         const uint32_t a = (w >> 8) & 0xffu, b = (w >> 16) & 0xffu, c = w >> 24, bx = w >> 16;
         const uint32_t next = i + (info.second ? 2u : 1u);
         const uint32_t x = info.second ? code[i + 1] : 0;
@@ -664,11 +665,6 @@ pinax_err pinax_handle_release(pinax_state *st, uint32_t type, pinax_handle hand
 
 pinax_err pinax_global_find(pinax_state *st, const char *name, pinax_global *out) {
     (void)st, (void)name, (void)out;
-    return PINAX_ERR_STATE;
-}
-
-pinax_err pinax_load(pinax_state *st, const char *name, pinax_str source, uint32_t mode) {
-    (void)st, (void)name, (void)source, (void)mode;
     return PINAX_ERR_STATE;
 }
 
