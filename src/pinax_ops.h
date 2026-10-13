@@ -173,24 +173,24 @@ PNX_OP(ASET) {
 }
 PNX_OP(ROW) {
     const uint64_t index = (uint64_t)R[OP_B(w)];
-    if (index >= st->globals[OP_C(w)].capacity)
+    if (index >= st->globals[OP_C(w)].length)
         return PINAX_ERR_RANGE;
-    R[OP_A(w)] = (int64_t)index;
+    R[OP_A(w)] = (int64_t)index + 1;
     return PNX_R_OK;
 }
 PNX_OP(FGET) {
     const pnx_global *g = &st->globals[x & 0xfffu];
-    const uint64_t row = (uint64_t)R[OP_B(w)];
-    if (row >= g->capacity)
+    const uint64_t row = (uint64_t)R[OP_B(w)] - 1; // "no row" wraps and is out of range
+    if (row >= g->length)
         return PINAX_ERR_RANGE;
     R[OP_A(w)] = pnx_load_width(g->ptr + row * g->elem_bytes + ((x >> 12) & 0xfffu), x >> 24);
     return PNX_R_OK;
 }
 PNX_OP(FSET) {
     const pnx_global *g = &st->globals[x & 0xfffu];
-    const uint64_t row = (uint64_t)R[OP_B(w)];
+    const uint64_t row = (uint64_t)R[OP_B(w)] - 1; // "no row" wraps and is out of range
     const int64_t value = R[OP_A(w)];
-    if (row >= g->capacity)
+    if (row >= g->length)
         return PINAX_ERR_RANGE;
     if (!pnx_fits_width(value, x >> 24))
         return PINAX_ERR_OVERFLOW;
@@ -199,8 +199,8 @@ PNX_OP(FSET) {
 }
 PNX_OP(FGETS) {
     const pnx_global *g = &st->globals[x & 0xfffu];
-    const uint64_t row = (uint64_t)R[OP_B(w)];
-    if (row >= g->capacity)
+    const uint64_t row = (uint64_t)R[OP_B(w)] - 1; // "no row" wraps and is out of range
+    if (row >= g->length)
         return PINAX_ERR_RANGE;
     const uint8_t *field = g->ptr + row * g->elem_bytes + ((x >> 12) & 0xfffu);
     S[OP_A(w)] = (pnx_scell){PNX_SEG_GLOBAL, field[0], (uint64_t)(field + 1 - st->segment[PNX_SEG_GLOBAL])};
@@ -208,9 +208,9 @@ PNX_OP(FGETS) {
 }
 PNX_OP(FSETS) {
     const pnx_global *g = &st->globals[x & 0xfffu];
-    const uint64_t row = (uint64_t)R[OP_B(w)];
+    const uint64_t row = (uint64_t)R[OP_B(w)] - 1; // "no row" wraps and is out of range
     const pnx_scell value = S[OP_A(w)];
-    if (row >= g->capacity)
+    if (row >= g->length)
         return PINAX_ERR_RANGE;
     if (value.length > (x >> 24))
         return PINAX_ERR_RANGE;
@@ -375,10 +375,20 @@ PNX_OP(RCATB) {
 PNX_OP(GLEN) { R[OP_A(w)] = st->globals[OP_BX(w)].length; return PNX_R_OK; }
 PNX_OP(GCLEAR) { // an array is zeroed; a list becomes empty
     pnx_global *g = &st->globals[OP_BX(w)];
-    if (g->kind == PNX_G_LIST)
+    if (g->kind == PNX_G_LIST || g->kind == PNX_G_ROWS)
         g->length = 0;
     else
-        __builtin_memset(g->ptr, 0, (size_t)g->capacity * 8);
+        __builtin_memset(g->ptr, 0, (size_t)g->capacity * g->elem_bytes);
+    return PNX_R_OK;
+}
+PNX_OP(ADDROW) {
+    pnx_global *g = &st->globals[OP_BX(w)];
+    if (g->length == g->capacity) {
+        st->fail = PINAX_ERR_FULL;
+        return PNX_R_FAILED;
+    }
+    __builtin_memset(g->ptr + (size_t)g->length * g->elem_bytes, 0, g->elem_bytes);
+    R[OP_A(w)] = (int64_t)++g->length;
     return PNX_R_OK;
 }
 PNX_OP(LPUSH) {

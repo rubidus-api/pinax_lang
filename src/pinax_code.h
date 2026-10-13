@@ -56,6 +56,10 @@ enum {
 // at the end of a list and fail when it is full or empty; SFIND finds a string in a string.
 // SWORD takes the next word between white space off a string (like SNEXT, the next word runs
 // when none is left); ERRTEXT gives the name of an error number.
+//
+// Rows. A row of a table is its number plus one, and 0 is "no row"; that is what a register,
+// a global and a field of a record hold alike. ROW makes a row from an index, FGET and the
+// like take a row, and ADDROW appends a zeroed row to a list of records (fails when full).
 #define PNX_OPS(X)                                                                                 \
     X(MOVI, PNX_K_I, PNX_K_I, PNX_K_NONE, PNX_F_ABC, PNX_X_NONE, 0)                                \
     X(MOVS, PNX_K_S, PNX_K_S, PNX_K_NONE, PNX_F_ABC, PNX_X_NONE, 0)                                \
@@ -131,7 +135,8 @@ enum {
     X(LPOP, PNX_K_I, PNX_K_NONE, PNX_K_NONE, PNX_F_GLOBAL, PNX_X_NONE, 1)                          \
     X(SFIND, PNX_K_I, PNX_K_S, PNX_K_S, PNX_F_ABC, PNX_X_NONE, 1)                                  \
     X(SWORD, PNX_K_S, PNX_K_S, PNX_K_NONE, PNX_F_ABC, PNX_X_NONE, 1)                               \
-    X(ERRTEXT, PNX_K_S, PNX_K_I, PNX_K_NONE, PNX_F_ABC, PNX_X_NONE, 0)
+    X(ERRTEXT, PNX_K_S, PNX_K_I, PNX_K_NONE, PNX_F_ABC, PNX_X_NONE, 0)                             \
+    X(ADDROW, PNX_K_I, PNX_K_NONE, PNX_K_NONE, PNX_F_GLOBAL, PNX_X_NONE, 1)
 
 enum {
 #define PNX_ENUM(name, a, b, c, shape, second, fails) PNX_##name,
@@ -158,6 +163,7 @@ enum {
     PNX_G_BUFFER, // byte buffer of capacity bytes
     PNX_G_TABLE,  // capacity records of elem_bytes bytes; a str(N) field is one length byte and N bytes
     PNX_G_LIST,   // up to capacity 64-bit integers; the length starts at 0
+    PNX_G_ROWS,   // up to capacity records of elem_bytes bytes; the length starts at 0
     PNX_G_COUNT
 };
 

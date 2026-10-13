@@ -235,6 +235,7 @@ pinax_err pnx_execute(pinax_state *st) {
         RUNF(SFIND)
         RUNF(SWORD)
         RUN(ERRTEXT)
+        RUNF(ADDROW)
 
         CASE(CALL) {
             const pnx_wordrec *callee = &st->words[*pc++];

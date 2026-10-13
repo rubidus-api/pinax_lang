@@ -29,7 +29,7 @@ enum { TY_NONE, TY_INT, TY_BOOL, TY_ERR, TY_STEM, TY_COLL, TY_STR = TY_SBANK | 6
 enum { BANK_I, BANK_S, BANK_NONE };
 enum { E_SLOT, E_LOCAL, E_CONST, E_COND };
 enum { B_IF, B_LOOP, B_ORELSE, B_CASE, B_OF, B_DO };
-enum { STEM_RANGE, STEM_BYTES, STEM_TIMES, STEM_COLL, STEM_WORDS };
+enum { STEM_RANGE, STEM_BYTES, STEM_TIMES, STEM_COLL, STEM_WORDS, STEM_ROWS };
 enum { GK_SCALAR, GK_ARRAY, GK_LIST };
 enum { USE_EACH, USE_FOLD, USE_TIMES };
 
@@ -141,10 +141,29 @@ typedef struct constant {
 
 typedef struct globalsym {
     name     name;
-    tid      type;     // of the scalar, or of one cell
+    tid      type;     // of the scalar, or of one cell; for a table of records, its row type
     uint8_t  kind;
+    bool     forward;  // announced by `forward`, not declared yet
     uint32_t capacity; // cells of an array or list
+    uint32_t record;   // NONE, or the record a table holds
+    uint32_t rows;     // rows written by `row` items so far
 } globalsym;
+
+// A field of a record: where it lies and how it is read. `extra` is the width code, or the
+// capacity N of a str(N).
+typedef struct field {
+    name     name;
+    tid      type;
+    uint16_t offset;
+    uint8_t  extra;
+    bool     is_str;
+} field;
+
+typedef struct record {
+    name     name;
+    uint32_t first, count; // its fields in comp.fields
+    uint32_t size;
+} record;
 
 typedef struct comp {
     pinax_state *st;
@@ -160,6 +179,8 @@ typedef struct comp {
     vec          strbytes; // uint8_t
     vec          consts;   // constant
     vec          globals;  // globalsym
+    vec          records;  // record
+    vec          fields;   // field
     bool         use_strings;
     name         modules[MAX_MODULES];
     uint32_t     n_modules;
@@ -255,11 +276,24 @@ static int bank_of(tid type) {
     return type == TY_STEM || type == TY_COLL ? BANK_NONE : (type & TY_SBANK) ? BANK_S : BANK_I;
 }
 
-static const char *type_name(tid type) {
-    return type == TY_INT ? "int" : type == TY_BOOL ? "bool" : type == TY_ERR ? "err" : "str";
+// The row type of the table that is global `index`.
+static tid row_type(uint32_t index) {
+    return (tid)(TY_FIRST_DECLARED + index);
 }
 
-static tid type_of_name(name n) {
+static bool is_row(tid type) {
+    return type >= TY_FIRST_DECLARED && !(type & TY_SBANK);
+}
+
+static uint32_t find_global(const comp *c, name n);
+
+static name type_name(const comp *c, tid type) {
+    if (is_row(type))
+        return ((const globalsym *)c->globals.ptr + (type - TY_FIRST_DECLARED))->name;
+    return cname(type == TY_INT ? "int" : type == TY_BOOL ? "bool" : type == TY_ERR ? "err" : "str");
+}
+
+static tid basic_type(name n) {
     if (name_is(n, "int"))
         return TY_INT;
     if (name_is(n, "bool"))
@@ -268,6 +302,21 @@ static tid type_of_name(name n) {
         return TY_STR;
     if (name_is(n, "err"))
         return TY_ERR;
+    return TY_NONE;
+}
+
+// A type as written in a signature or a declaration: a basic type, or the name of a table of
+// records, which is the type of its rows.
+static tid type_of_name(const comp *c, name n) {
+    const tid basic = basic_type(n);
+    if (basic != TY_NONE)
+        return basic;
+    const uint32_t g = find_global(c, n);
+    if (g != NONE) {
+        const globalsym *sym = (const globalsym *)c->globals.ptr + g;
+        if (sym->kind != GK_SCALAR && (sym->forward || sym->record != NONE))
+            return row_type(g);
+    }
     return TY_NONE;
 }
 
@@ -313,7 +362,7 @@ static bool parse_sig(comp *c, sig *s) {
             if (!advance(c))
                 return false;
         }
-        const tid t = type_of_name(type);
+        const tid t = type_of_name(c, type);
         if (t == TY_NONE)
             return type_error(c, name_is(type, "float") ? "float is not available: this build has no F bank"
                                                         : "this type is not known here");
@@ -348,7 +397,7 @@ static bool parse_sig(comp *c, sig *s) {
 }
 
 // The signature as the host writes it: "(last int gives total int)".
-static bool sig_text(const sig *s, char *out, size_t cap) {
+static bool sig_text(const comp *c, const sig *s, char *out, size_t cap) {
     size_t n = 0;
 #define PUT(text, len)                                                                             \
     do {                                                                                           \
@@ -367,14 +416,14 @@ static bool sig_text(const sig *s, char *out, size_t cap) {
         }
         for (uint32_t k = 0; k < count; ++k) {
             const name pn = side ? s->out_name[k] : s->in_name[k];
-            const char *tn = type_name(side ? s->out[k] : s->in[k]);
+            const name tn = type_name(c, side ? s->out[k] : s->in[k]);
             if (k)
                 PUT(", ", 2);
             if (pn.length) {
                 PUT(pn.text, pn.length);
                 PUT(" ", 1);
             }
-            PUT(tn, __builtin_strlen(tn));
+            PUT(tn.text, tn.length);
         }
     }
     if (s->fails) {
@@ -733,11 +782,31 @@ static uint32_t find_global(const comp *c, name n) {
     return NONE;
 }
 
+static uint32_t find_record(const comp *c, name n) {
+    const record *all = c->records.ptr;
+    for (uint32_t k = 0; k < c->records.n; ++k) {
+        if (name_eq(all[k].name, n))
+            return k;
+    }
+    return NONE;
+}
+
+// Field `n` of record `r`, or NULL.
+static const field *find_field(const comp *c, uint32_t r, name n) {
+    const record *rec = (const record *)c->records.ptr + r;
+    const field *all = (const field *)c->fields.ptr + rec->first;
+    for (uint32_t k = 0; k < rec->count; ++k) {
+        if (name_eq(all[k].name, n))
+            return &all[k];
+    }
+    return NULL;
+}
+
 // Words the compiler expands itself: stems, combining words, the basic string words.
 enum {
     BW_RANGE, BW_SUM, BW_EACH, BW_FOLD, BW_TIMES, BW_LEN, BW_IS_EMPTY, BW_BYTE_AT, BW_BYTES,
     BW_IDX, BW_CAPACITY, BW_IS_FULL, BW_CLEAR, BW_PUSH, BW_POP, BW_FIND, BW_TO_INT, BW_TO_STR, BW_ASSERT,
-    BW_WORDS, BW_ERR_TEXT
+    BW_WORDS, BW_ERR_TEXT, BW_ADD_ROW, BW_IS_NONE, BW_NONE, BW_ROW_INDEX, BW_MAX, BW_MIN
 };
 static const struct builtin {
     const char *name;
@@ -751,6 +820,8 @@ static const struct builtin {
     {"clear", BW_CLEAR, false},     {"push", BW_PUSH, false},      {"pop", BW_POP, false},
     {"find", BW_FIND, true},        {"to_int", BW_TO_INT, true},   {"to_str", BW_TO_STR, true},
     {"assert", BW_ASSERT, false},   {"words", BW_WORDS, true},     {"err_text", BW_ERR_TEXT, false},
+    {"add_row", BW_ADD_ROW, false}, {"is_none", BW_IS_NONE, false}, {"none", BW_NONE, false},
+    {"row_index", BW_ROW_INDEX, false}, {"max", BW_MAX, false},    {"min", BW_MIN, false},
 };
 
 // `len` and `is_empty` belong to the core for arrays and lists and to `strings` for a str; the
@@ -766,7 +837,8 @@ static const struct builtin *find_builtin(const comp *c, name n) {
 // A name every part of the source sees: a word, a constant, a global, a type, a core word.
 static bool name_is_global(comp *c, name n) {
     bool ambiguous;
-    return find_word(c, n, NULL) || find_core(n) || type_of_name(n) != TY_NONE || name_is(n, "float") ||
+    return find_word(c, n, NULL) || find_core(n) || basic_type(n) != TY_NONE || name_is(n, "float") ||
+           find_record(c, n) != NONE ||
            name_is(n, "err") || find_const(c, n) || find_global(c, n) != NONE || find_builtin(c, n) ||
            find_host(c, (name){0}, n, &ambiguous) != NONE;
 }
@@ -1181,6 +1253,8 @@ static bool store_local(comp *c, name n) {
         uint32_t rv, ri;
         if (!need(c, 2))
             return false;
+        if (sym->record != NONE)
+            return type_error(c, "a table of records is written field by field: value row to record.field");
         if (f->stack[top].type != TY_INT || f->stack[top - 1].type != sym->type)
             return type_error(c, "a cell is stored as: value index to names, with the value of the cell's type");
         if (g > 255)
@@ -1225,6 +1299,48 @@ static bool store_local(comp *c, name n) {
     return write_reg(c, l->reg);
 }
 
+// record.field : reads the field of the row on top of the stack, or (after `to`) stores the
+// value below the row into it. The current token is the path.
+static bool field_access(comp *c, bool write) {
+    fn *f = c->f;
+    const name path = tok_name(c);
+    uint32_t dot = 0;
+    while (path.text[dot] != '.')
+        ++dot;
+    const uint32_t r = find_record(c, (name){path.text, dot});
+    if (r == NONE)
+        return error(c, PINAX_ERR_NOT_FOUND, "this path names neither a module in use nor a record");
+    const field *fd = find_field(c, r, (name){path.text + dot + 1, path.length - dot - 1});
+    if (!fd)
+        return error(c, PINAX_ERR_NOT_FOUND, "the record has no field of this name");
+    if (!need(c, write ? 2 : 1))
+        return false;
+    const uint32_t top = f->depth - 1;
+    const tid      row = f->stack[top].type;
+    if (!is_row(row) || ((const globalsym *)c->globals.ptr + (row - TY_FIRST_DECLARED))->record != r)
+        return type_error(c, "a field is reached through a row of a table of that record: row record.field");
+    const uint32_t table = row - TY_FIRST_DECLARED;
+    const uint32_t where = PNX_FIELD(table, fd->offset, fd->extra);
+    uint32_t rr, rv;
+    if (write) {
+        if (f->stack[top - 1].type != fd->type)
+            return type_error(c, "the value has another type than the field");
+        if (!reg_of(c, top - 1, &rv) || !reg_of(c, top, &rr) ||
+            emit(c, PNX_ABC(fd->is_str ? PNX_FSETS : PNX_FSET, rv, rr, 0)) == NONE || emit(c, where) == NONE)
+            return false;
+        f->depth -= 2;
+        return true;
+    }
+    if (!reg_of(c, top, &rr))
+        return false;
+    --f->depth;
+    if (!push_slot(c, fd->type))
+        return false;
+    const uint32_t at = emit_def(c, PNX_ABC(fd->is_str ? PNX_FGETS : PNX_FGET, slot_of(c, f->depth - 1), rr, 0),
+                                 bank_of(fd->type));
+    return at != NONE && emit(c, where) != NONE;
+}
+
 // to name | to ( a , b , c )
 static bool store(comp *c) {
     if (!advance(c))
@@ -1258,7 +1374,7 @@ static bool store(comp *c) {
         return advance(c);
     }
     if (c->tok.kind == PNX_T_PATH)
-        return syntax(c, "storing into a field is not supported yet");
+        return field_access(c, true) && advance(c);
     return syntax(c, "to is followed by a name or a list of names");
 }
 
@@ -1847,7 +1963,7 @@ static bool stem_begin(comp *c, uint8_t *kind, uint8_t *cur, uint8_t *lim, uint8
         if (!push_slot(c, TY_INT) || !push_slot(c, TY_INT))
             return false;
         f->stack[f->depth - 2].hidden = f->stack[f->depth - 1].hidden = true;
-        *kind = STEM_COLL;
+        *kind = g->record != NONE ? STEM_ROWS : STEM_COLL;
         *src = (uint8_t)stem.value;
         *cur = (uint8_t)slot_of(c, f->depth - 2);
         *lim = (uint8_t)slot_of(c, f->depth - 1);
@@ -1886,6 +2002,7 @@ static bool stem_begin(comp *c, uint8_t *kind, uint8_t *cur, uint8_t *lim, uint8
 static bool stem_element(comp *c, uint8_t kind, uint32_t reg, uint32_t cur, uint32_t src) {
     return emit(c, kind == STEM_RANGE  ? PNX_ABC(PNX_MOVI, reg, cur, 0)
                    : kind == STEM_COLL ? PNX_ABC(PNX_AGET, reg, cur, src)
+                   : kind == STEM_ROWS ? PNX_ABC(PNX_ADDI, reg, cur, 1) // the row of index cur
                                        : PNX_ABC(PNX_SBYTE, reg, src, cur)) != NONE;
 }
 
@@ -2201,7 +2318,54 @@ static bool builtin(comp *c, const struct builtin *w) {
             return false;
         --f->depth;
         const uint32_t dst = top_slot(c, BANK_I, 1);
-        return emit_def(c, PNX_ABC(PNX_AGET, dst, ra, gi), BANK_I) != NONE && push_slot(c, g->type) && advance(c);
+        return emit_def(c, PNX_ABC(g->record != NONE ? PNX_ROW : PNX_AGET, dst, ra, gi), BANK_I) != NONE &&
+               push_slot(c, g->type) && advance(c);
+    }
+    case BW_ADD_ROW: { // names add_row : a new zeroed row at the end of a list of records
+        if (!need_coll(c, &g, &gi))
+            return false;
+        if (g->kind != GK_LIST || g->record == NONE)
+            return type_error(c, "add_row adds to a list of records");
+        if (!settle_all(c))
+            return false;
+        return emit(c, PNX_ABX(PNX_ADDROW, top_slot(c, BANK_I, 1), gi)) != NONE && guard_op(c, g->type);
+    }
+    case BW_NONE: // names none : the "no row" of that table
+        if (!need_coll(c, &g, &gi))
+            return false;
+        if (g->record == NONE)
+            return type_error(c, "none is the missing row of a table of records");
+        return push(c, (entry){.type = g->type, .kind = E_CONST, .value = 0}) && advance(c);
+    case BW_IS_NONE:
+    case BW_ROW_INDEX: {
+        if (!need(c, 1))
+            return false;
+        if (!is_row(f->stack[f->depth - 1].type))
+            return type_error(c, "this word takes a row of a table");
+        if (!reg_of(c, f->depth - 1, &ra))
+            return false;
+        --f->depth;
+        if (w->id == BW_IS_NONE)
+            return push(c, (entry){.type = TY_BOOL, .kind = E_COND, .op = PNX_JEQI, .a = (uint8_t)ra, .b = 0}) &&
+                   advance(c);
+        const uint32_t dst = top_slot(c, BANK_I, 1);
+        return emit_def(c, PNX_ABC(PNX_ADDI, dst, ra, (uint8_t)(int8_t)-1), BANK_I) != NONE && push_slot(c, TY_INT) &&
+               advance(c);
+    }
+    case BW_MAX:
+    case BW_MIN: { // the larger or the smaller of two int values
+        if (!need(c, 2))
+            return false;
+        if (f->stack[f->depth - 1].type != TY_INT || f->stack[f->depth - 2].type != TY_INT)
+            return type_error(c, "this word takes two int values");
+        if (!settle(c, f->depth - 2) || !reg_of(c, f->depth - 1, &rb))
+            return false;
+        const uint32_t dst = slot_of(c, f->depth - 2);
+        if (emit(c, w->id == BW_MAX ? PNX_ABC(PNX_JLE, rb, dst, 1) : PNX_ABC(PNX_JLE, dst, rb, 1)) == NONE ||
+            emit(c, PNX_ABC(PNX_MOVI, dst, rb, 0)) == NONE)
+            return false;
+        --f->depth;
+        return advance(c);
     }
     case BW_CAPACITY:
         return need_coll(c, &g, &gi) && push(c, (entry){.type = TY_INT, .kind = E_CONST, .value = g->capacity}) &&
@@ -2227,8 +2391,9 @@ static bool builtin(comp *c, const struct builtin *w) {
     case BW_PUSH: { // v names push : fails when the list is full
         if (!need_coll(c, &g, &gi) || !need(c, 1))
             return false;
-        if (g->kind != GK_LIST)
-            return type_error(c, "push adds to a list; an array is always full");
+        if (g->kind != GK_LIST || g->record != NONE)
+            return type_error(c, g->record != NONE ? "a list of records grows with add_row"
+                                                   : "push adds to a list; an array is always full");
         if (f->stack[f->depth - 1].type != g->type)
             return type_error(c, "the value pushed has another type than the cells of the list");
         if (!settle(c, f->depth - 1))
@@ -2240,8 +2405,8 @@ static bool builtin(comp *c, const struct builtin *w) {
     case BW_POP: { // names pop : fails when the list is empty
         if (!need_coll(c, &g, &gi))
             return false;
-        if (g->kind != GK_LIST)
-            return type_error(c, "pop takes from a list");
+        if (g->kind != GK_LIST || g->record != NONE)
+            return type_error(c, "pop takes from a list of values");
         if (!settle_all(c))
             return false;
         return emit(c, PNX_ABX(PNX_LPOP, top_slot(c, BANK_I, 1), gi)) != NONE && guard_op(c, g->type);
@@ -2373,7 +2538,7 @@ static bool body_name(comp *c) {
             return push(c, (entry){.type = TY_ERR, .kind = E_CONST, .value = value}) && advance(c);
         }
         if (!module_used(c, module))
-            return error(c, PINAX_ERR_NOT_FOUND, "this path does not name a word of a module in use");
+            return field_access(c, false) && advance(c);
     } else {
         const local *l = find_local(f, n);
         if (l)
@@ -2598,7 +2763,7 @@ static bool definition(comp *c, bool is_test) {
     if (!is_test && !parse_sig(c, &w->sig))
         return false;
     char text[72];
-    if (!sig_text(&w->sig, text, sizeof text))
+    if (!sig_text(c, &w->sig, text, sizeof text))
         return syntax(c, "the signature is longer than 71 bytes");
 
     fn *f = c->word_fn;
@@ -2739,7 +2904,7 @@ static bool declare_global(comp *c) {
         return false;
     if (c->tok.kind != PNX_T_NAME)
         return syntax(c, "global is followed by a name and a type");
-    globalsym g = {.name = tok_name(c), .kind = GK_SCALAR, .capacity = 1};
+    globalsym g = {.name = tok_name(c), .kind = GK_SCALAR, .capacity = 1, .record = NONE};
     if (name_is_global(c, g.name))
         return type_error(c, "this name is already defined");
     if (g.name.length > 31)
@@ -2748,8 +2913,9 @@ static bool declare_global(comp *c) {
         return false;
     if (c->tok.kind != PNX_T_NAME)
         return syntax(c, "global is followed by a name and a type");
-    g.type = type_of_name(tok_name(c));
-    if (g.type != TY_INT && g.type != TY_BOOL && g.type != TY_ERR)
+    g.record = NONE;
+    g.type = type_of_name(c, tok_name(c));
+    if (g.type != TY_INT && g.type != TY_BOOL && g.type != TY_ERR && !is_row(g.type))
         return type_error(c, g.type == TY_STR ? "a global holds str(N), not a str view; that is not supported yet"
                                               : "this type is not supported for a global yet");
     if (c->globals.n >= 0xfffu)
@@ -2778,32 +2944,311 @@ static bool declared_size(comp *c, uint32_t *out) {
 }
 
 // array NAME type size        list NAME type size
+// The type is a basic type (cells of 64 bits) or the name of a record (a table of rows).
 static bool declare_collection(comp *c, uint8_t kind) {
     if (!advance(c))
         return false;
     if (c->tok.kind != PNX_T_NAME)
         return syntax(c, "the declaration is: array name type size");
-    globalsym g = {.name = tok_name(c), .kind = kind};
-    if (name_is_global(c, g.name))
+    globalsym g = {.name = tok_name(c), .kind = kind, .record = NONE};
+    const uint32_t announced = find_global(c, g.name);
+    globalsym     *slot = NULL;
+    if (announced != NONE && ((globalsym *)c->globals.ptr + announced)->forward) {
+        slot = (globalsym *)c->globals.ptr + announced;
+        if (slot->kind != kind)
+            return type_error(c, "this name was announced by forward as another kind of table");
+    } else if (name_is_global(c, g.name)) {
         return type_error(c, "this name is already defined");
+    }
     if (g.name.length > 31)
         return syntax(c, "a global name is at most 31 bytes long");
     if (!advance(c))
         return false;
     if (c->tok.kind != PNX_T_NAME)
         return syntax(c, "the declaration is: array name type size");
-    g.type = type_of_name(tok_name(c));
-    if (g.type != TY_INT && g.type != TY_BOOL && g.type != TY_ERR)
-        return type_error(c, "cells of this type are not supported yet");
+    g.record = find_record(c, tok_name(c));
+    g.type = basic_type(tok_name(c));
+    if (g.record == NONE && g.type != TY_INT && g.type != TY_BOOL && g.type != TY_ERR)
+        return type_error(c, "the cells are int, bool, err or a record; other types are not supported yet");
+    if (slot && g.record == NONE)
+        return type_error(c, "a table announced by forward holds a record");
     if (!advance(c) || !declared_size(c, &g.capacity))
         return false;
+    if (!slot) {
+        if (c->globals.n >= 0xfffu)
+            return syntax(c, "too many globals");
+        slot = vec_push(c, &c->globals, sizeof(globalsym));
+        if (!slot)
+            return false;
+    }
+    if (g.record != NONE)
+        g.type = row_type((uint32_t)(slot - (globalsym *)c->globals.ptr));
+    *slot = g;
+    return true;
+}
+
+// forward list NAME | forward array NAME : a table a record refers to before it is declared
+static bool declare_forward(comp *c) {
+    if (!advance(c))
+        return false;
+    if (is_word(c, PNX_KW_word))
+        return syntax(c, "forward word is not supported by the compiler yet");
+    if (!is_word(c, PNX_KW_list) && !is_word(c, PNX_KW_array))
+        return syntax(c, is_word(c, PNX_KW_pool) ? "pools are not supported by the compiler yet"
+                                                 : "forward is followed by array, list, pool or word");
+    globalsym g = {.kind = is_word(c, PNX_KW_array) ? GK_ARRAY : GK_LIST, .forward = true, .record = NONE};
+    if (!advance(c))
+        return false;
+    if (c->tok.kind != PNX_T_NAME)
+        return syntax(c, "forward names the table: forward list name");
+    g.name = tok_name(c);
+    if (name_is_global(c, g.name))
+        return type_error(c, "this name is already defined");
+    if (g.name.length > 31)
+        return syntax(c, "a global name is at most 31 bytes long");
     if (c->globals.n >= 0xfffu)
         return syntax(c, "too many globals");
     globalsym *slot = vec_push(c, &c->globals, sizeof(globalsym));
     if (!slot)
         return false;
+    g.type = row_type(c->globals.n - 1);
     *slot = g;
-    return true;
+    return advance(c);
+}
+
+// record NAME  { field type }  end
+static bool declare_record(comp *c) {
+    static const struct { const char *name; uint8_t width, bytes; } widths[] = {
+        {"u8", PNX_W_U8, 1},   {"u16", PNX_W_U16, 2}, {"u32", PNX_W_U32, 4}, {"u64", PNX_W_64, 8},
+        {"i8", PNX_W_I8, 1},   {"i16", PNX_W_I16, 2}, {"i32", PNX_W_I32, 4}, {"i64", PNX_W_64, 8},
+        {"int", PNX_W_64, 8},
+    };
+    if (!advance(c))
+        return false;
+    if (c->tok.kind != PNX_T_NAME)
+        return syntax(c, "record is followed by the name of the record");
+    record r = {.name = tok_name(c), .first = c->fields.n};
+    if (name_is_global(c, r.name))
+        return type_error(c, "this name is already defined");
+    if (!advance(c))
+        return false;
+    while (!is_word(c, PNX_KW_end)) {
+        if (is_word(c, PNX_KW_big_endian) || is_word(c, PNX_KW_columns))
+            return syntax(c, "big_endian and columns are not supported by the compiler yet");
+        if (c->tok.kind != PNX_T_NAME)
+            return syntax(c, "a record is a list of fields: name type, closed by end");
+        field fd = {.name = tok_name(c), .offset = (uint16_t)r.size};
+        for (uint32_t k = r.first; k < c->fields.n; ++k) {
+            if (name_eq(((const field *)c->fields.ptr + k)->name, fd.name))
+                return type_error(c, "the record already has a field of this name");
+        }
+        if (!advance(c))
+            return false;
+        if (c->tok.kind != PNX_T_NAME)
+            return syntax(c, "a field is a name and a type");
+        const name tn = tok_name(c);
+        uint32_t   bytes = 0;
+        for (size_t k = 0; k < sizeof widths / sizeof widths[0]; ++k) {
+            if (name_is(tn, widths[k].name)) {
+                fd.type = TY_INT;
+                fd.extra = widths[k].width;
+                bytes = widths[k].bytes;
+            }
+        }
+        if (!advance(c))
+            return false;
+        if (bytes) {
+            // an integer of that width
+        } else if (name_is(tn, "bool")) {
+            fd.type = TY_BOOL;
+            fd.extra = PNX_W_U8;
+            bytes = 1;
+        } else if (name_is(tn, "str")) { // str(N): one length byte, then N bytes
+            uint32_t n;
+            if (c->tok.kind != PNX_T_LPAREN)
+                return type_error(c, "a field holds str(N); a str view lives only in locals, arguments and results");
+            if (!advance(c) || !declared_size(c, &n))
+                return false;
+            if (c->tok.kind != PNX_T_RPAREN)
+                return syntax(c, "str(N) is closed by )");
+            if (n > 255)
+                return type_error(c, "str(N) fields hold at most 255 bytes for now");
+            if (!advance(c))
+                return false;
+            fd.type = TY_STR;
+            fd.is_str = true;
+            fd.extra = (uint8_t)n;
+            bytes = n + 1;
+        } else if (is_row(type_of_name(c, tn))) { // a row of that table: its number plus one, 0 for none
+            fd.type = type_of_name(c, tn);
+            fd.extra = PNX_W_U32;
+            bytes = 4;
+        } else {
+            return type_error(c, "this field type is not known, or not supported by the compiler yet");
+        }
+        r.size += bytes;
+        if (r.size > 4095)
+            return type_error(c, "a record is at most 4095 bytes for now");
+        field *slot = vec_push(c, &c->fields, sizeof(field));
+        if (!slot)
+            return false;
+        *slot = fd;
+        ++r.count;
+    }
+    if (r.count == 0)
+        return type_error(c, "a record has at least one field");
+    record *slot = vec_push(c, &c->records, sizeof(record));
+    if (!slot)
+        return false;
+    *slot = r;
+    return advance(c);
+}
+
+// A literal or constant in a `row` or `assign` item. The current token is the value.
+static bool item_value(comp *c, tid *type, int64_t *value) {
+    const name n = tok_name(c);
+    uint32_t   index;
+    switch (c->tok.kind) {
+    case PNX_T_INT:
+    case PNX_T_CHAR:
+        *type = TY_INT;
+        *value = c->tok.integer;
+        return true;
+    case PNX_T_STRING:
+    case PNX_T_RAW:
+    case PNX_T_TEXT:
+        if (!add_string(c, &c->tok, &index))
+            return false;
+        *type = TY_STR;
+        *value = index;
+        return true;
+    case PNX_T_NAME:
+        if (name_is(n, "none")) { // fits any row field
+            *type = TY_NONE;
+            *value = 0;
+            return true;
+        }
+        if (find_const(c, n)) {
+            *type = find_const(c, n)->type;
+            *value = find_const(c, n)->value;
+            return true;
+        }
+        return type_error(c, "a value here is a literal, the name of a const or of a row, or none");
+    case PNX_T_RESERVED:
+        if (c->tok.word == PNX_KW_true || c->tok.word == PNX_KW_false) {
+            *type = TY_BOOL;
+            *value = c->tok.word == PNX_KW_true;
+            return true;
+        }
+        return syntax(c, "a value here is a literal or the name of a const");
+    default: return syntax(c, "a value here is a literal or the name of a const");
+    }
+}
+
+// row LIST [ NAME ] ( value , ... ) : adds a row when the source is loaded. With a name, the
+// name becomes a constant for that row.
+static bool row_item(comp *c) {
+    fn *f = c->f;
+    if (f->dead)
+        return syntax(c, "this code cannot be reached: the code before it always leaves");
+    if (!advance(c))
+        return false;
+    const uint32_t gi = c->tok.kind == PNX_T_NAME ? find_global(c, tok_name(c)) : NONE;
+    globalsym *g = gi == NONE ? NULL : (globalsym *)c->globals.ptr + gi;
+    if (!g || g->kind != GK_LIST || g->forward)
+        return type_error(c, "row adds to a declared list: row name (values)");
+    if (gi > 255)
+        return syntax(c, "only the first 256 globals can be arrays or lists for now");
+    if (!advance(c))
+        return false;
+    name row_name = {0};
+    if (c->tok.kind == PNX_T_NAME) {
+        row_name = tok_name(c);
+        if (g->record == NONE)
+            return type_error(c, "only a row of a record has a name");
+        if (name_is_global(c, row_name))
+            return type_error(c, "this name is already defined");
+        if (!advance(c))
+            return false;
+    }
+    if (c->tok.kind != PNX_T_LPAREN)
+        return syntax(c, "the values of a row are in parentheses");
+    if (!advance(c))
+        return false;
+    if (g->rows == g->capacity)
+        return type_error(c, "the list has no room for this row");
+    const uint32_t row = top_slot(c, BANK_I, 2), value = row + 1, text = top_slot(c, BANK_S, 1);
+    uint32_t       full = NONE, ok = NONE;
+    if (g->record == NONE) { // a list of values: one value, pushed
+        tid     type;
+        int64_t v;
+        if (!item_value(c, &type, &v))
+            return false;
+        if (type != g->type)
+            return type_error(c, "the value has another type than the cells of the list");
+        if (!load_int(c, value, v) || emit(c, PNX_ABX(PNX_LPUSH, value, gi)) == NONE)
+            return false;
+    } else if (emit(c, PNX_ABX(PNX_ADDROW, row, gi)) == NONE) {
+        return false;
+    }
+    // a full list is a fault while loading
+    if (!jump_later(c, &full) || !jump_later(c, &ok))
+        return false;
+    land(c, &full);
+    if (emit(c, PNX_ABX(PNX_FAULT, 0, PINAX_ERR_FULL)) == NONE)
+        return false;
+    land(c, &ok);
+    if (g->record == NONE) {
+        if (!advance(c))
+            return false;
+        if (c->tok.kind != PNX_T_RPAREN)
+            return syntax(c, "a row of a list of values has one value");
+        ++g->rows;
+        return advance(c);
+    }
+    const record *rec = (const record *)c->records.ptr + g->record;
+    if (row_name.length) {
+        if (!load_int(c, value, (int64_t)g->rows + 1) || emit(c, PNX_ABC(PNX_JEQ, row, value, 1)) == NONE ||
+            emit(c, PNX_ABX(PNX_FAULT, 0, PINAX_ERR_STATE)) == NONE)
+            return false;
+        constant *k = vec_push(c, &c->consts, sizeof(constant));
+        if (!k)
+            return false;
+        *k = (constant){.name = row_name, .type = g->type, .value = (int64_t)g->rows + 1};
+        g = (globalsym *)c->globals.ptr + gi;
+    }
+    for (uint32_t k = 0;; ++k) {
+        if (c->tok.kind == PNX_T_RPAREN && k == 0)
+            break; // an empty row: all fields zero
+        if (k >= rec->count)
+            return type_error(c, "the row has more values than the record has fields");
+        const field *fd = (const field *)c->fields.ptr + rec->first + k;
+        tid     type;
+        int64_t v;
+        if (!item_value(c, &type, &v))
+            return false;
+        if (type == TY_NONE ? !is_row(fd->type) : type != fd->type)
+            return type_error(c, "a value has another type than its field");
+        const uint32_t where = PNX_FIELD(gi, fd->offset, fd->extra);
+        if (fd->is_str) {
+            if (emit(c, PNX_ABX(PNX_LOADKS, text, (uint32_t)v)) == NONE || emit(c, PNX_ABC(PNX_FSETS, text, row, 0)) == NONE ||
+                emit(c, where) == NONE)
+                return false;
+        } else if (!load_int(c, value, v) || emit(c, PNX_ABC(PNX_FSET, value, row, 0)) == NONE || emit(c, where) == NONE) {
+            return false;
+        }
+        if (!advance(c))
+            return false;
+        if (c->tok.kind == PNX_T_RPAREN)
+            break;
+        if (c->tok.kind != PNX_T_COMMA)
+            return syntax(c, "values are separated by commas");
+        if (!advance(c))
+            return false;
+    }
+    ++((globalsym *)c->globals.ptr + gi)->rows;
+    f->def_at = NONE;
+    return advance(c);
 }
 
 // assign NAME ( value , ... ) : fills an array from cell 0, when the source is loaded
@@ -2926,6 +3371,15 @@ static bool compile(comp *c, image *im, bool *has_top) {
         } else if (is_word(c, PNX_KW_assign) && !c->top_fn->n_blocks) {
             if (!assign_item(c))
                 return false;
+        } else if (is_word(c, PNX_KW_record) && !c->top_fn->n_blocks) {
+            if (!declare_record(c))
+                return false;
+        } else if (is_word(c, PNX_KW_forward) && !c->top_fn->n_blocks) {
+            if (!declare_forward(c))
+                return false;
+        } else if (is_word(c, PNX_KW_row) && !c->top_fn->n_blocks) {
+            if (!row_item(c))
+                return false;
         } else if (is_word(c, PNX_KW_pinax)) {
             return syntax(c, "the version line is the first thing in a source");
         } else if (!body_token(c)) {
@@ -2935,6 +3389,10 @@ static bool compile(comp *c, image *im, bool *has_top) {
     fn *top = c->top_fn;
     if (top->n_blocks)
         return syntax(c, "the source ends inside an open block");
+    for (uint32_t k = 0; k < c->globals.n; ++k) {
+        if (((const globalsym *)c->globals.ptr + k)->forward)
+            return type_error(c, "a table announced by forward is never declared");
+    }
     *has_top = top->code.n != 0 || top->depth != 0;
     if (*has_top) {
         if (top->depth && !top->dead)
@@ -2982,7 +3440,7 @@ static bool serialize(comp *c, const image *im, uint8_t **out, size_t *out_len) 
         const wordsym *w = (const wordsym *)c->words.ptr + k;
         pnx_wordrec rec = {.entry = w->entry, .int_cells = w->cells[0], .str_cells = w->cells[1]};
         put_text(rec.name, sizeof rec.name, w->name);
-        if (!sig_text(&w->sig, rec.signature, sizeof rec.signature))
+        if (!sig_text(c, &w->sig, rec.signature, sizeof rec.signature))
             return syntax(c, "the signature is longer than 71 bytes");
         __builtin_memcpy(p, &rec, sizeof rec);
         p += sizeof rec;
@@ -2992,6 +3450,10 @@ static bool serialize(comp *c, const image *im, uint8_t **out, size_t *out_len) 
         pnx_globalrec rec = {.kind = g->kind == GK_ARRAY ? PNX_G_ARRAY : g->kind == GK_LIST ? PNX_G_LIST : PNX_G_INT,
                              .elem_bytes = 8,
                              .capacity = g->kind == GK_SCALAR ? 1 : g->capacity};
+        if (g->record != NONE) {
+            rec.kind = g->kind == GK_ARRAY ? PNX_G_TABLE : PNX_G_ROWS;
+            rec.elem_bytes = ((const record *)c->records.ptr + g->record)->size;
+        }
         put_text(rec.name, sizeof rec.name, g->name);
         __builtin_memcpy(p, &rec, sizeof rec);
         p += sizeof rec;
