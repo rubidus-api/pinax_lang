@@ -140,6 +140,11 @@ PNX_COND(JEQI) { return R[OP_A(w)] == OP_SB(w); }
 PNX_COND(JNEI) { return R[OP_A(w)] != OP_SB(w); }
 PNX_COND(JLTI) { return R[OP_A(w)] < OP_SB(w); }
 PNX_COND(JGEI) { return R[OP_A(w)] >= OP_SB(w); }
+PNX_COND(JSNE) {
+    const pnx_scell a = S[OP_A(w)], b = S[OP_B(w)];
+    return !(a.length == b.length &&
+             (a.length == 0 || __builtin_memcmp(pnx_view_bytes(st, a), pnx_view_bytes(st, b), a.length) == 0));
+}
 PNX_COND(JSEQ) {
     const pnx_scell a = S[OP_A(w)], b = S[OP_B(w)];
     return a.length == b.length &&
@@ -329,6 +334,40 @@ PNX_OP(SGETS) {
     s->offset += n + 1u;
     s->length -= n + 1u;
     return PNX_R_OK;
+}
+
+// ---- failures and strings built in the region ---------------------------------------------
+
+PNX_OP(GETFAIL) { R[OP_A(w)] = st->fail; return PNX_R_OK; }
+
+PNX_OP(RMARK) {
+    S[OP_A(w)] = (pnx_scell){PNX_SEG_REGION, 0, st->region_used};
+    return PNX_R_OK;
+}
+
+// Appends `n` bytes to the string in `cell`, which must end at the top of the region.
+PNX_INLINE int pnx_region_append(pinax_state *st, pnx_scell *cell, const uint8_t *bytes, uint32_t n) {
+    if (cell->segment != PNX_SEG_REGION || cell->offset + cell->length != st->region_used)
+        return PINAX_ERR_STATE;
+    if (n > st->region_len - st->region_used || n > UINT32_MAX - cell->length)
+        return PINAX_ERR_FULL;
+    __builtin_memmove(st->region + st->region_used, bytes, n);
+    st->region_used += n;
+    cell->length += n;
+    return PNX_R_OK;
+}
+PNX_OP(RCATS) {
+    const pnx_scell s = S[OP_B(w)];
+    return pnx_region_append(st, &S[OP_A(w)], pnx_view_bytes(st, s), s.length);
+}
+PNX_OP(RCATI) {
+    uint8_t digits[24];
+    const uint32_t n = pnx_format_int(R[OP_B(w)], digits);
+    return pnx_region_append(st, &S[OP_A(w)], digits, n);
+}
+PNX_OP(RCATB) {
+    return R[OP_B(w)] ? pnx_region_append(st, &S[OP_A(w)], (const uint8_t *)"true", 4)
+                      : pnx_region_append(st, &S[OP_A(w)], (const uint8_t *)"false", 5);
 }
 
 #endif // PINAX_OPS_H

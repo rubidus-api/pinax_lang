@@ -222,6 +222,12 @@ pinax_err pnx_execute(pinax_state *st) {
         RUN(BVIEW)
         RUNF(SGET)
         RUNF(SGETS)
+        RUNJ(JSNE)
+        RUN(GETFAIL)
+        RUN(RMARK)
+        RUN(RCATS)
+        RUN(RCATI)
+        RUN(RCATB)
 
         CASE(CALL) {
             const pnx_wordrec *callee = &st->words[*pc++];
@@ -270,6 +276,10 @@ pinax_err pnx_execute(pinax_state *st) {
         }
         CASE(FAIL) {
             st->fail = (pinax_err)OP_BX(w);
+            goto fail_return;
+        }
+        CASE(FAILR) {
+            st->fail = (pinax_err)R[OP_A(w)];
             goto fail_return;
         }
         CASE(RETF) {

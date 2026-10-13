@@ -233,7 +233,7 @@ typedef struct span {
 } span;
 
 static bool is_failure_word(uint32_t op) {
-    return op == PNX_JMP || op == PNX_RETF || op == PNX_FAIL;
+    return op == PNX_JMP || op == PNX_RETF || op == PNX_FAIL || op == PNX_FAILR;
 }
 
 static bool reg_ok(uint32_t kind, uint32_t value, const pnx_wordrec *word, uint32_t n_globals) {
@@ -272,7 +272,7 @@ static const char *check_word(const pinax_state *st, uint32_t index, span range,
     }
     const uint32_t last_op = code[last] & 0xffu;
     if (last_op != PNX_JMP && last_op != PNX_RET && last_op != PNX_RETOK && last_op != PNX_RETF &&
-        last_op != PNX_FAIL && last_op != PNX_TCALL && last_op != PNX_FAULT)
+        last_op != PNX_FAIL && last_op != PNX_FAILR && last_op != PNX_TCALL && last_op != PNX_FAULT)
         return "word: code runs off the end";
 
     for (uint32_t i = range.begin; i < range.end;) {
@@ -361,7 +361,7 @@ static const char *check_word(const pinax_state *st, uint32_t index, span range,
         }
         if (fails && (next >= range.end || !is_failure_word(code[next] & 0xffu)))
             return "code: no failure word after an operation that can fail";
-        if ((op == PNX_RETOK || op == PNX_RETF || op == PNX_FAIL) && !counts.fails)
+        if ((op == PNX_RETOK || op == PNX_RETF || op == PNX_FAIL || op == PNX_FAILR) && !counts.fails)
             return "code: failure return in a word without `or fail`";
         if (op == PNX_RET && counts.fails)
             return "code: plain return in a word with `or fail`";

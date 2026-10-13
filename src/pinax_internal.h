@@ -100,6 +100,8 @@ pinax_err pnx_execute(pinax_state *state);
 // Text helpers on the vendored proven (pinax_text.c).
 // Decimal integer with an optional sign; the whole view must be the number.
 bool pnx_parse_int(const uint8_t *bytes, uint32_t length, int64_t *out);
+// Decimal text of `value` into `out`; returns its length (at most 20).
+uint32_t pnx_format_int(int64_t value, uint8_t out[24]);
 // Offset of the first `byte`, or UINT32_MAX.
 uint32_t pnx_find_byte(const uint8_t *bytes, uint32_t length, uint8_t byte);
 

@@ -48,6 +48,10 @@ enum {
 // X(name, A, B, C, shape, second word, fails)
 // "fails": the next word is not skipped when the operation fails (or, for SNEXT, when the
 // sequence is used up); it must be JMP, RETF or FAIL.
+//
+// Added for compiled code (still format 0): JSNE; GETFAIL (the number of the failure just
+// received) and FAILR (fail with the number in a register); RMARK starts a string at the top of
+// the region and RCATS, RCATI, RCATB append a string, a decimal integer, true or false to it.
 #define PNX_OPS(X)                                                                                 \
     X(MOVI, PNX_K_I, PNX_K_I, PNX_K_NONE, PNX_F_ABC, PNX_X_NONE, 0)                                \
     X(MOVS, PNX_K_S, PNX_K_S, PNX_K_NONE, PNX_F_ABC, PNX_X_NONE, 0)                                \
@@ -109,7 +113,14 @@ enum {
     X(HCALL, PNX_K_IMM, PNX_K_IMM, PNX_K_NONE, PNX_F_ABC, PNX_X_IMPORT, 0)                         \
     X(HCALLF, PNX_K_IMM, PNX_K_IMM, PNX_K_NONE, PNX_F_ABC, PNX_X_IMPORT, 1)                        \
     X(CHECK, PNX_K_NONE, PNX_K_NONE, PNX_K_NONE, PNX_F_IMM, PNX_X_NONE, 0)                         \
-    X(FAULT, PNX_K_NONE, PNX_K_NONE, PNX_K_NONE, PNX_F_IMM, PNX_X_NONE, 0)
+    X(FAULT, PNX_K_NONE, PNX_K_NONE, PNX_K_NONE, PNX_F_IMM, PNX_X_NONE, 0)                         \
+    X(JSNE, PNX_K_S, PNX_K_S, PNX_K_J, PNX_F_ABC, PNX_X_NONE, 0)                                   \
+    X(GETFAIL, PNX_K_I, PNX_K_NONE, PNX_K_NONE, PNX_F_IMM, PNX_X_NONE, 0)                          \
+    X(FAILR, PNX_K_I, PNX_K_NONE, PNX_K_NONE, PNX_F_ABC, PNX_X_NONE, 0)                            \
+    X(RMARK, PNX_K_S, PNX_K_NONE, PNX_K_NONE, PNX_F_ABC, PNX_X_NONE, 0)                            \
+    X(RCATS, PNX_K_S, PNX_K_S, PNX_K_NONE, PNX_F_ABC, PNX_X_NONE, 0)                               \
+    X(RCATI, PNX_K_S, PNX_K_I, PNX_K_NONE, PNX_F_ABC, PNX_X_NONE, 0)                               \
+    X(RCATB, PNX_K_S, PNX_K_I, PNX_K_NONE, PNX_F_ABC, PNX_X_NONE, 0)
 
 enum {
 #define PNX_ENUM(name, a, b, c, shape, second, fails) PNX_##name,

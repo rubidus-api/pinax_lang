@@ -1,6 +1,7 @@
 // pinax_text.c - scanning and parsing of text, on the vendored proven (D0017).
 #include "pinax_internal.h"
 
+#include "proven/fmt.h"
 #include "proven/scan.h"
 #include "proven/u8str.h"
 
@@ -22,4 +23,10 @@ uint32_t pnx_find_byte(const uint8_t *bytes, uint32_t length, uint8_t byte) {
     const proven_size_t at =
         proven_u8str_view_find((proven_u8str_view_t){bytes, length}, 0, (proven_u8str_view_t){&byte, 1});
     return at == PROVEN_INDEX_NOT_FOUND ? UINT32_MAX : (uint32_t)at;
+}
+
+uint32_t pnx_format_int(int64_t value, uint8_t out[24]) {
+    proven_u8str_t text = proven_u8str_borrow(out, 24);
+    const proven_fmt_result_t r = proven_u8str_append_fmt(&text, "{}", proven_arg_i64(value));
+    return r.err == PROVEN_OK ? (uint32_t)r.written : 0;
 }
