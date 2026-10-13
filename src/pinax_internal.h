@@ -83,6 +83,8 @@ struct pinax_state {
     uint32_t pc, int_base, str_base, depth, depth_peak;
     uint32_t top_word;
     bool     suspended;
+    bool     loading;   // the suspended run is the code outside definitions of a load
+    size_t   load_mark; // where the block stood before that load
     pinax_err   fail;
     const char *error_text;
     void (*diag)(void *user, pinax_str file, uint32_t line, uint32_t column, pinax_str message);

@@ -583,6 +583,7 @@ void pnx_unload(pinax_state *st, size_t mark) {
     st->used = mark;
     st->head = NULL;
     st->suspended = false;
+    st->loading = false;
     st->segment[PNX_SEG_CONST] = empty_bytes;
     st->segment[PNX_SEG_GLOBAL] = empty_bytes;
 }
@@ -663,7 +664,16 @@ pinax_err pinax_resume(pinax_state *st, const pinax_args *results) {
         return fail(st, PINAX_ERR_STATE, "nothing is suspended");
     st->left = st->budget > st->owed ? st->budget : st->owed;
     st->owed = 0;
-    return deliver(st, pnx_execute(st), results);
+    const pinax_err err = deliver(st, pnx_execute(st), results);
+    if (st->loading && err != PINAX_SUSPENDED) { // the load ends here: done, or failed and undone
+        st->loading = false;
+        if (err != PINAX_OK) {
+            const char *text = st->error_text;
+            pnx_unload(st, st->load_mark);
+            st->error_text = text;
+        }
+    }
+    return err;
 }
 
 void pinax_set_budget(pinax_state *st, uint64_t instructions) {

@@ -4773,6 +4773,10 @@ pinax_err pinax_load(pinax_state *st, const char *file, pinax_str source, uint32
             st->error_text = "the data source did not finish inside its budget";
             err = PINAX_ERR_STATE;
         }
+        if (err == PINAX_SUSPENDED) { // pinax_resume() finishes the load, or undoes it on a fault
+            st->loading = true;
+            st->load_mark = mark;
+        }
         if (err != PINAX_OK && err != PINAX_SUSPENDED) {
             // a fault while loading: nothing stays loaded, as after any other load error
             const char *text = st->error_text;

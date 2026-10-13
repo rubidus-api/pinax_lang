@@ -194,6 +194,14 @@ enum {
     PINAX_LOAD_DATA = 1  /* declarations and data only: no word definitions, nothing runs;
                             uses a small budget proportional to the source size, not config.budget */
 };
+/* Compiles the source and then runs, once, the code written outside definitions.
+ *  - A fault in that code fails the load with the fault's number and nothing stays loaded: no
+ *    word, no global. The same holds for every other load error. What host words did before
+ *    the fault is not undone. The state can be loaded again.
+ *  - PINAX_LOAD_CODE: that code runs on config.budget like any other. When the budget runs out
+ *    pinax_load() returns PINAX_SUSPENDED and pinax_resume() continues it; until it has finished
+ *    pinax_run() is refused, and a fault met while resuming fails the load as above.
+ *  - PINAX_LOAD_DATA: a source that does not finish inside its own small budget fails the load. */
 PINAX_API pinax_err pinax_load(pinax_state *state, const char *name, pinax_str source, uint32_t mode);
 PINAX_API pinax_err pinax_load_bytecode(pinax_state *state, pinax_str bytecode);
 /* One line at the top level, as in an interactive session. */
