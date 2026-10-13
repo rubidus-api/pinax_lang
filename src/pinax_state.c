@@ -4,6 +4,8 @@
 
 #include "pinax_internal.h"
 
+#include <stddef.h>
+
 static const uint8_t empty_bytes[1] = {0};
 
 const pnx_opinfo pnx_ops_info[PNX_OP_COUNT] = {
@@ -144,7 +146,10 @@ pinax_err pinax_open(pinax_mem block, const pinax_config *config, pinax_state **
     if (!out)
         return PINAX_ERR_ARGUMENT;
     *out = NULL;
-    if (!block.ptr || !config || config->struct_size != sizeof *config || config->float_slots != 0)
+    // the configuration may be the shorter one of a host built before hash_key was added
+    const size_t without_key = offsetof(pinax_config, hash_key);
+    if (!block.ptr || !config || (config->struct_size != sizeof *config && config->struct_size != without_key) ||
+        config->float_slots != 0)
         return PINAX_ERR_ARGUMENT;
     uint8_t *base = block.ptr;
     size_t skip = (size_t)(-(uintptr_t)base & 15u);
@@ -162,6 +167,12 @@ pinax_err pinax_open(pinax_mem block, const pinax_config *config, pinax_state **
     st->budget = config->budget;
     st->diag = config->diag;
     st->diag_user = config->diag_user;
+    // no key given: a fixed one, so that an index behaves the same from run to run
+    static const uint8_t fixed_key[16] = {'p', 'i', 'n', 'a', 'x', ' ', 'i', 'n', 'd', 'e', 'x', ' ', 'k', 'e', 'y', '0'};
+    bool given = false;
+    for (unsigned k = 0; config->struct_size == sizeof *config && k < 16; ++k)
+        given = given || config->hash_key[k] != 0;
+    __builtin_memcpy(st->hash_key, given ? config->hash_key : fixed_key, 16);
     st->error_text = "";
 
     st->hosts = take(st, sizeof(pnx_host) * PNX_MAX_HOSTS, 16);

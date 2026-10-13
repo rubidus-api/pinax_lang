@@ -87,6 +87,11 @@ typedef struct pinax_config {
     /* load diagnostics; may be NULL */
     void (*diag)(void *user, pinax_str file, uint32_t line, uint32_t column, pinax_str message);
     void *diag_user;
+    /* Key of the hash that lookup indexes use. Give 16 random bytes when scripts index text
+     * that comes from outside (names, words, request fields): without a secret key, whoever
+     * chooses the keys can make every lookup slow. All zero means a fixed built-in key: fine
+     * for trusted data, no protection otherwise. The key is kept in the state and its images. */
+    unsigned char hash_key[16];
 } pinax_config;
 
 PINAX_API pinax_err pinax_open(pinax_mem block, const pinax_config *config, pinax_state **out);

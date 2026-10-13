@@ -87,6 +87,7 @@ struct pinax_state {
     const char *error_text;
     void (*diag)(void *user, pinax_str file, uint32_t line, uint32_t column, pinax_str message);
     void *diag_user;
+    uint8_t hash_key[16]; // of the lookup indexes; inside the block, so images carry it
 };
 
 // The instruction table as data: operand kinds, shape, second word (pinax_code.h).
@@ -108,8 +109,8 @@ bool pnx_parse_int(const uint8_t *bytes, uint32_t length, int64_t *out);
 uint32_t pnx_format_int(int64_t value, uint8_t out[24]);
 // Offset of the first `part` in `bytes`, or UINT32_MAX. An empty part is found at 0.
 uint32_t pnx_find(const uint8_t *bytes, uint32_t length, const uint8_t *part, uint32_t part_length);
-// Hash of key bytes for an index (the vendored proven's FNV-1a).
-uint64_t pnx_hash(const uint8_t *bytes, uint32_t length);
+// Hash of key bytes for an index: the vendored proven's keyed SipHash-2-4.
+uint64_t pnx_hash(const uint8_t key[16], const uint8_t *bytes, uint32_t length);
 // The name of an error number as a view into the interpreter's static text.
 extern const char pnx_static_text[];
 void pnx_err_name(int64_t err, uint32_t *offset, uint32_t *length);

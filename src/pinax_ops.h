@@ -905,7 +905,7 @@ PNX_INLINE const uint8_t *pnx_index_key(const pinax_state *st, const pnx_global 
 PNX_INLINE uint32_t pnx_index_find(const pinax_state *st, const pnx_global *x, const uint8_t *key, uint32_t length,
                                    bool *found) {
     const uint32_t mask = x->capacity - 1;
-    uint32_t slot = (uint32_t)pnx_hash(key, length) & mask, spare = UINT32_MAX;
+    uint32_t slot = (uint32_t)pnx_hash(st->hash_key, key, length) & mask, spare = UINT32_MAX;
     *found = false;
     for (uint32_t step = 0; step < x->capacity; ++step, slot = (slot + 1) & mask) {
         uint32_t row;

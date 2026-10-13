@@ -73,8 +73,8 @@ void pnx_err_name(int64_t err, uint32_t *offset, uint32_t *length) {
     *length = 5;
 }
 
-uint64_t pnx_hash(const uint8_t *bytes, uint32_t length) {
-    return proven_hash_bytes((proven_mem_view_t){bytes, length});
+uint64_t pnx_hash(const uint8_t key[16], const uint8_t *bytes, uint32_t length) {
+    return proven_hash_keyed((proven_mem_view_t){bytes, length}, key);
 }
 
 uint32_t pnx_find_last(const uint8_t *bytes, uint32_t length, const uint8_t *part, uint32_t part_length) {
