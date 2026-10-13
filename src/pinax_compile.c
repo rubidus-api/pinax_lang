@@ -42,7 +42,7 @@ enum { L_PLAIN, L_OWNS, L_MOVED }; // what a local holds of a value that must be
 #define TY_BLOCK 0x2000u     // word (effect): this plus the number of the effect in comp.btypes
 #define TY_HANDLE 0x1800u    // a handle type of the host: this plus its number
 #define MAX_NESTED 4         // value blocks inside value blocks
-enum { USE_EACH, USE_FOLD, USE_TIMES, USE_COUNT, USE_ANY, USE_ALL, USE_FIRST, USE_EACH_INDEX };
+enum { USE_EACH, USE_FOLD, USE_TIMES, USE_COUNT, USE_ANY, USE_ALL, USE_FIRST, USE_EACH_INDEX, USE_MAP, USE_FILTER };
 
 #define MAX_STACK 64
 #define MAX_BLOCKS 32
@@ -122,6 +122,8 @@ typedef struct block {
     int64_t  values[MAX_CASE]; // integers, or string constant numbers
     // do block of a combining word
     uint8_t  use, stem, cur, lim, acc, n_hidden;
+    uint32_t dst, full;  // map_into, filter_into: the list filled, and the jumps taken when it is full
+    name     dst_name;
     uint8_t  val, idx;   // first: the register of the element found; each_index: the counter
     tid      element;
     tid      acc_type;
@@ -1126,7 +1128,7 @@ enum {
     BW_WORDS, BW_ERR_TEXT, BW_ADD_ROW, BW_IS_NONE, BW_NONE, BW_ROW_INDEX, BW_MAX, BW_MIN,
     BW_APPEND, BW_APPEND_BYTE, BW_APPEND_INT, BW_CONTENTS, BW_TAKE, BW_SKIP, BW_TAKE_LAST, BW_SKIP_LAST,
     BW_STARTS_WITH, BW_ENDS_WITH, BW_CONTAINS, BW_LOOKUP, BW_INSERT, BW_REMOVE, BW_REPLACE, BW_PUT, BW_PEEK,
-    BW_ALLOC, BW_FREE, BW_IS_ALIVE, BW_COUNT, BW_ANY, BW_ALL, BW_FIRST, BW_EACH_INDEX, BW_MINIMUM, BW_MAXIMUM,
+    BW_ALLOC, BW_FREE, BW_IS_ALIVE, BW_COUNT, BW_ANY, BW_ALL, BW_FIRST, BW_EACH_INDEX, BW_MAP_INTO, BW_FILTER_INTO, BW_MINIMUM, BW_MAXIMUM,
     BW_SLICE, BW_CUT, BW_TRY_CUT, BW_TRIM, BW_TRIM_LEFT, BW_TRIM_RIGHT, BW_LINES, BW_SPLIT, BW_FIND_LAST, BW_COMPARE,
     BW_HEX, BW_BIN, BW_HEX_PAD, BW_ZERO_PAD, BW_PAD_LEFT, BW_PAD_RIGHT, BW_CALL, BW_MARK, BW_RELEASE, BW_REGION_FREE
 };
@@ -1153,6 +1155,7 @@ static const struct builtin {
     {"alloc", BW_ALLOC, 0},     {"free", BW_FREE, 0},      {"is_alive", BW_IS_ALIVE, 0},
     {"count", BW_COUNT, 0},     {"any", BW_ANY, 0},        {"all", BW_ALL, 0},
     {"first", BW_FIRST, 0},     {"each_index", BW_EACH_INDEX, 0},
+    {"map_into", BW_MAP_INTO, 0}, {"filter_into", BW_FILTER_INTO, 0},
     {"minimum", BW_MINIMUM, 0}, {"maximum", BW_MAXIMUM, 0},
     {"slice", BW_SLICE, 1},         {"cut", BW_CUT, 1},            {"try_cut", BW_TRY_CUT, 1},
     {"trim", BW_TRIM, 1},           {"trim_left", BW_TRIM_LEFT, 1}, {"trim_right", BW_TRIM_RIGHT, 1},
@@ -2526,7 +2529,8 @@ static bool do_cat(comp *c) {
 // Finds the word after the end that closes the block opened by the current `do`.
 static bool value_block(comp *c, const sig *bs, uint32_t line, uint32_t column);
 
-static bool scan_user(comp *c, name *out) {
+static bool scan_user(comp *c, name *out, name *dst) {
+    *dst = (name){0};
     pnx_lexer lx = *c->lx;
     pnx_token t;
     for (uint32_t depth = 1; depth;) {
@@ -2547,6 +2551,14 @@ static bool scan_user(comp *c, name *out) {
         return error_at(c, PINAX_ERR_SYNTAX, lx.error_line, lx.error_column, lx.error);
     // anything but a combining word after the end makes the block a value
     *out = t.kind == PNX_T_NAME ? (name){lx.source + t.start, t.length} : (name){0};
+    if (t.kind == PNX_T_NAME && pnx_lex_next(&lx, &t) && t.kind == PNX_T_NAME) {
+        // ... end names map_into : the list to fill stands between the block and its word
+        const name next = {lx.source + t.start, t.length};
+        if (name_is(next, "map_into") || name_is(next, "filter_into")) {
+            *dst = *out;
+            *out = next;
+        }
+    }
     return true;
 }
 
@@ -2680,8 +2692,8 @@ static local *new_local(comp *c, name n, tid type) {
 // stem do [ ( params ) ] body end each | fold      count do body end times
 static bool do_block(comp *c) {
     fn *f = c->f;
-    name user;
-    if (!scan_user(c, &user))
+    name user, dst_name;
+    if (!scan_user(c, &user, &dst_name))
         return false;
     const pnx_token at = c->tok;
     sig bs = {0};
@@ -2689,7 +2701,8 @@ static bool do_block(comp *c) {
         return false;
     if (c->tok.kind == PNX_T_LPAREN && !parse_sig(c, &bs))
         return false;
-    static const char *const users[] = {"times", "each", "fold", "count", "any", "all", "first", "each_index"};
+    static const char *const users[] = {"times", "each",       "fold",     "count",      "any",
+                                        "all",   "first",      "each_index", "map_into", "filter_into"};
     bool expanded = false;
     for (size_t k = 0; k < sizeof users / sizeof users[0]; ++k)
         expanded = expanded || name_is(user, users[k]);
@@ -2712,8 +2725,10 @@ static bool do_block(comp *c) {
         cur = (uint8_t)slot_of(c, f->depth - 1);
         hidden = 1;
     } else if (name_is(user, "each") || name_is(user, "fold") || name_is(user, "count") || name_is(user, "any") ||
-               name_is(user, "all") || name_is(user, "first") || name_is(user, "each_index")) {
-        use = name_is(user, "each") ? USE_EACH : name_is(user, "fold") ? USE_FOLD : name_is(user, "count") ? USE_COUNT
+               name_is(user, "all") || name_is(user, "first") || name_is(user, "each_index") ||
+               name_is(user, "map_into") || name_is(user, "filter_into")) {
+        use = name_is(user, "map_into") ? USE_MAP : name_is(user, "filter_into") ? USE_FILTER
+            : name_is(user, "each") ? USE_EACH : name_is(user, "fold") ? USE_FOLD : name_is(user, "count") ? USE_COUNT
             : name_is(user, "any") ? USE_ANY : name_is(user, "all") ? USE_ALL : name_is(user, "first") ? USE_FIRST
                                                                                                     : USE_EACH_INDEX;
         if (!has_stem)
@@ -2725,8 +2740,19 @@ static bool do_block(comp *c) {
         return error_at(c, PINAX_ERR_SYNTAX, at.line, at.column,
                         "this block is used by a word the compiler does not expand yet");
     }
-    uint32_t init = NONE;
-    if (use == USE_EACH) {
+    uint32_t init = NONE, dst = NONE;
+    if (use == USE_MAP || use == USE_FILTER) { // the list the results are pushed into
+        dst = find_global(c, dst_name);
+        const globalsym *g = dst == NONE ? NULL : (const globalsym *)c->globals.ptr + dst;
+        if (!g || g->kind != GK_LIST || g->record != NONE || g->strcap)
+            return error_at(c, PINAX_ERR_TYPE, at.line, at.column,
+                            "map_into and filter_into fill a list of int, bool or err values: ... end names map_into");
+        if (bs.n_out != 1 || bs.n_in > 1 || (bs.n_in == 1 && bs.in[0] != element) ||
+            bs.out[0] != (use == USE_MAP ? g->type : TY_BOOL) || (use == USE_FILTER && element != g->type))
+            return error_at(c, PINAX_ERR_TYPE, at.line, at.column,
+                            use == USE_MAP ? "the block of map_into is (x T gives U): T the element's type, U the list's"
+                                           : "the block of filter_into is (x T gives bool), and the list holds T");
+    } else if (use == USE_EACH) {
         if (bs.n_out || bs.n_in > 1 || (bs.n_in == 1 && bs.in[0] != element))
             return error_at(c, PINAX_ERR_TYPE, at.line, at.column, "the block of each takes one element and gives nothing");
     } else if (use == USE_FOLD) {
@@ -2746,19 +2772,19 @@ static bool do_block(comp *c) {
     }
     // what the word keeps while the block runs, above the operands of the stem
     uint8_t keep = 0, val = 0, idx = cur;
-    if (use == USE_COUNT || use == USE_ANY || use == USE_ALL || use == USE_FIRST ||
-        (use == USE_EACH_INDEX && (kind == STEM_RANGE || stem_takes(kind)))) {
+    if (use == USE_COUNT || use == USE_ANY || use == USE_ALL || use == USE_FIRST || use == USE_MAP ||
+        use == USE_FILTER || (use == USE_EACH_INDEX && (kind == STEM_RANGE || stem_takes(kind)))) {
         if (!push_slot(c, use == USE_COUNT || use == USE_EACH_INDEX ? TY_INT : TY_BOOL))
             return false;
         f->stack[f->depth - 1].hidden = true;
         keep = (uint8_t)slot_of(c, f->depth - 1);
-        if (emit(c, PNX_ABX(PNX_LOADI, keep, use == USE_ALL)) == NONE)
+        if (emit(c, PNX_ABX(PNX_LOADI, keep, use == USE_ALL || use == USE_MAP || use == USE_FILTER)) == NONE)
             return false;
         ++hidden;
         if (use == USE_EACH_INDEX)
             idx = keep;
     }
-    if (use == USE_FIRST) {
+    if (use == USE_FIRST || use == USE_FILTER) {
         if (!push_slot(c, element))
             return false;
         f->stack[f->depth - 1].hidden = true;
@@ -2781,6 +2807,9 @@ static bool do_block(comp *c) {
     b->lim = lim;
     b->n_hidden = hidden;
     b->user = user;
+    b->dst = dst;
+    b->dst_name = dst_name;
+    b->full = NONE;
     b->floor_mark = f->floor;
     f->floor = f->depth;
     if (use == USE_FOLD) {
@@ -2823,7 +2852,7 @@ static bool do_block(comp *c) {
         if (!l || emit(c, PNX_ABC(PNX_MOVI, l->reg, idx, 0)) == NONE)
             return false;
     }
-    if (use == USE_FIRST && !move_slot(c, element, val, reg))
+    if ((use == USE_FIRST || use == USE_FILTER) && !move_slot(c, element, val, reg))
         return false; // kept, in case this is the one
     f->def_at = NONE;
     return true;
@@ -2839,7 +2868,18 @@ static bool end_do(comp *c, block *b) {
                 return false;
         }
         entry verdict = {0};
-        const bool tests = b->use == USE_COUNT || b->use == USE_ANY || b->use == USE_ALL || b->use == USE_FIRST;
+        uint32_t made = 0;
+        if (b->use == USE_MAP) { // the value the block made, out of the way of the stack check
+            if (f->depth != (uint32_t)b->in.depth + 1 ||
+                f->stack[f->depth - 1].type != ((const globalsym *)c->globals.ptr + b->dst)->type)
+                return type_error(c, "the block of map_into leaves one value of the list's type");
+            if (!settle(c, f->depth - 1))
+                return false;
+            made = slot_of(c, f->depth - 1);
+            --f->depth;
+        }
+        const bool tests = b->use == USE_COUNT || b->use == USE_ANY || b->use == USE_ALL || b->use == USE_FIRST ||
+                           b->use == USE_FILTER;
         if (tests) {
             if (f->depth != (uint32_t)b->in.depth + 1)
                 return type_error(c, "this block leaves one bool: its verdict on the element");
@@ -2852,7 +2892,15 @@ static bool end_do(comp *c, block *b) {
             return type_error(c, "this block must leave the stack as it found it");
         if (!same_owns(c, b, b->owns_in))
             return false;
-        if (b->use == USE_COUNT) { // one more when the verdict is true
+        if (b->use == USE_MAP) { // the instruction after the push runs when the list is full
+            if (emit(c, PNX_ABX(PNX_LPUSH, made, b->dst)) == NONE || !jump_later(c, &b->full))
+                return false;
+        } else if (b->use == USE_FILTER) { // pushed when the verdict is true
+            cond_negate(&verdict);
+            if (!cond_jump(c, &verdict, 2) || emit(c, PNX_ABX(PNX_LPUSH, b->val, b->dst)) == NONE ||
+                !jump_later(c, &b->full))
+                return false;
+        } else if (b->use == USE_COUNT) { // one more when the verdict is true
             cond_negate(&verdict);
             if (!cond_jump(c, &verdict, 1) || emit(c, PNX_ABC(PNX_ADDI, b->acc, b->acc, 1)) == NONE)
                 return false;
@@ -2869,6 +2917,15 @@ static bool end_do(comp *c, block *b) {
             return false;
     }
     land(c, &b->exits);
+    if (b->full != NONE) { // the list was full: the word fails
+        uint32_t over = NONE;
+        if (!jump_later(c, &over))
+            return false;
+        land(c, &b->full);
+        if (emit(c, PNX_ABX(PNX_LOADI, b->acc, 0)) == NONE)
+            return false;
+        land(c, &over);
+    }
     close_scope(f, b);
     f->floor = b->floor_mark;
     const block done = *b;
@@ -2889,6 +2946,15 @@ static bool end_do(comp *c, block *b) {
     }
     if (!advance(c)) // past the end
         return false;
+    if (done.use == USE_MAP || done.use == USE_FILTER) { // the list, then the word; fails with full
+        if (c->tok.kind != PNX_T_NAME || !name_eq(tok_name(c), done.dst_name) || !advance(c))
+            return c->err == PINAX_OK ? syntax(c, "the list to fill is expected right after the end") : false;
+        if (!settle_all(c) || emit(c, PNX_ABX(PNX_SETFAIL, 0, PINAX_ERR_FULL)) == NONE ||
+            emit(c, PNX_ABC(PNX_JNEI, done.acc, 0, 1)) == NONE)
+            return false;
+        f->def_at = NONE;
+        return guard_op(c, TY_NONE);
+    }
     if (c->tok.kind != PNX_T_NAME || !name_eq(tok_name(c), done.user))
         return syntax(c, "the word that uses the block is expected right after its end");
     if (done.use == USE_FIRST) // the element found, or the failure not_found
