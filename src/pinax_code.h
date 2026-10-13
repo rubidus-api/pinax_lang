@@ -273,8 +273,8 @@ enum {
 };
 
 // The container pinax_load_bytecode() accepts: head, word records, global records, import
-// records, integer constants, string constant records, code, string bytes; in this order,
-// native byte order.
+// records, integer constants, string constant records, code, string bytes, line records; in
+// this order, native byte order.
 #define PNX_MAGIC "PNXB"
 #define PNX_CONTAINER_VERSION 0
 #define PNX_ORDER_MARK 0x0102
@@ -284,8 +284,14 @@ typedef struct pnx_head {
     uint16_t version;
     uint16_t order;
     uint32_t n_words, n_globals, n_imports, n_iconst, n_sconst, n_code, n_strbytes;
-    uint32_t reserved;
+    uint32_t n_lines; // line records after the string bytes; a loader that wants none may skip them
 } pnx_head;
+
+// Debug information: from code word `pc` on, the code came from source line `line` (of the
+// source the word belongs to). Records are in rising order of pc.
+typedef struct pnx_linerec {
+    uint32_t pc, line;
+} pnx_linerec;
 
 typedef struct pnx_wordrec {
     char     name[32];

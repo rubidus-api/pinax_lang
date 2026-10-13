@@ -165,6 +165,27 @@ static pinax_err load_file(pinax_state *state, const char *path, const char *nam
     return finish(state, pinax_load(state, name, (pinax_str){(const unsigned char *)text, length}, PINAX_LOAD_CODE));
 }
 
+// Prints where a script's fault happened. The state says "module:line: error"; the module
+// becomes the file it was loaded from. False when the state has no line for it.
+static bool report_fault(pinax_state *state, pinax_err err) {
+    const pinax_str text = pinax_error_text(state);
+    const unsigned char *colon = memchr(text.ptr, ':', text.len);
+    if (!colon || colon + 1 >= text.ptr + text.len || colon[1] < '0' || colon[1] > '9')
+        return false;
+    const size_t name = (size_t)(colon - text.ptr);
+    const char  *path = NULL;
+    for (int k = 0; k < n_sources && !path; ++k) {
+        if (strlen(sources[k].name) == name && memcmp(sources[k].name, text.ptr, name) == 0)
+            path = sources[k].path;
+    }
+    const unsigned char *rest = colon + 1; // "12: div_zero"
+    const unsigned char *end = memchr(rest, ':', (size_t)(text.ptr + text.len - rest));
+    if (!path || !end)
+        return false;
+    fprintf(stderr, "%s:%.*s: %s\n", path, (int)(end - rest), (const char *)rest, err_name(err));
+    return true;
+}
+
 // Runs every test of the file given on the command line: the words test.NAME of its module.
 static int run_tests(pinax_state *state, const char *module) {
     int ran = 0, failed = 0;
@@ -236,6 +257,8 @@ int main(int argc, char **argv) {
     }
     int status = 0;
     if (err != PINAX_OK) {
+        if (!said && err >= PINAX_ERR_FAILED && err < PINAX_ERR_ARGUMENT)
+            said = report_fault(state, err); // a fault of the script: with its line when the state knows it
         if (!said && err != PINAX_ERR_SYNTAX && err != PINAX_ERR_TYPE) // those two were reported with their place
             fprintf(stderr, "%s: %s\n", file_name, err_name(err));
         status = 1;

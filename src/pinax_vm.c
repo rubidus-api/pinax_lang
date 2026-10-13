@@ -477,6 +477,8 @@ suspended:
     return PINAX_SUSPENDED;
 
 finished:
+    if (result != PINAX_OK)
+        st->fault_pc = (uint32_t)(pc - code);
     st->left = left;
     st->instructions += count;
     st->suspended = false;

@@ -149,6 +149,7 @@ typedef struct fn {
     bool     dead; // the code here cannot be reached
     sig      own_sig; // a value block keeps its effect here
     vec      code; // of uint32_t
+    vec      lines; // of uint32_t: the source line of each code word
     uint32_t start, last_check;
     // The call just emitted, when what it gives is what this word gives: a return right after
     // it becomes a tail call, which reuses the window (RFC-0001 section 5.1).
@@ -228,7 +229,7 @@ typedef struct dtype {
 // in the container in the order of their numbers.
 typedef struct pending_code {
     uint32_t  word, n;
-    uint32_t *code;
+    uint32_t *code, *lines;
 } pending_code;
 
 typedef struct comp {
@@ -678,9 +679,11 @@ static uint32_t *code_at(fn *f, uint32_t index) {
 static uint32_t emit(comp *c, uint32_t word) {
     fn *f = c->f;
     uint32_t *slot = vec_push(c, &f->code, sizeof(uint32_t));
-    if (!slot)
+    uint32_t *line = slot ? vec_push(c, &f->lines, sizeof(uint32_t)) : NULL;
+    if (!line)
         return NONE;
     *slot = word;
+    *line = c->tok.line;
     f->def_at = NONE;
     return f->code.n - 1;
 }
@@ -2217,6 +2220,7 @@ static bool emit_return(comp *c) {
     for (uint32_t k = 0; tail && k < n; ++k)
         tail = at[k] == f->depth - n + k && f->stack[at[k]].kind == E_SLOT;
     if (tail) {
+        f->lines.n = f->tail_at;
         f->code.n = f->tail_at; // the call is taken back; its arguments move to the front of the window
         for (uint32_t k = 0; k < f->tail_in[0]; ++k) {
             if (emit(c, PNX_ABC(PNX_MOVI, k, f->tail_base[0] + k, 0)) == NONE)
@@ -2790,6 +2794,9 @@ static bool do_block(comp *c) {
         f->stack[f->depth - 1].hidden = true;
         val = (uint8_t)slot_of(c, f->depth - 1);
         ++hidden;
+        // a value from the start, so that the word reads none it did not write when nothing is found
+        if (emit(c, bank_of(element) == BANK_S ? PNX_ABC(PNX_RMARK, val, 0, 0) : PNX_ABX(PNX_LOADI, val, 0)) == NONE)
+            return false;
     }
     if (!settle_all(c))
         return false;
@@ -2988,7 +2995,7 @@ static bool do_extreme(comp *c, bool largest) {
         return false;
     const uint32_t best = slot_of(c, f->depth - 2), flag = slot_of(c, f->depth - 1);
     uint32_t       element = top_slot(c, BANK_I, 1), exits = NONE;
-    if (emit(c, PNX_ABX(PNX_LOADI, flag, 0)) == NONE || !settle_all(c))
+    if (emit(c, PNX_ABX(PNX_LOADI, flag, 0)) == NONE || emit(c, PNX_ABX(PNX_LOADI, best, 0)) == NONE || !settle_all(c))
         return false;
     const uint32_t head = f->code.n;
     if (emit(c, PNX_ABC(PNX_JLT, cur, lim, 1)) == NONE || !jump_later(c, &exits))
@@ -4038,10 +4045,12 @@ static bool finish_registers(comp *c, fn *f, uint16_t cells[2]) {
 }
 
 static void fn_reset(fn *f, bool is_top) {
-    const vec code = f->code;
+    const vec code = f->code, lines = f->lines;
     __builtin_memset(f, 0, sizeof *f);
     f->code = code;
     f->code.n = 0;
+    f->lines = lines;
+    f->lines.n = 0;
     f->def_at = NONE;
     f->tail_at = NONE;
     f->is_top = is_top;
@@ -4133,11 +4142,12 @@ static bool value_block(comp *c, const sig *bs, uint32_t line, uint32_t column) 
         return false;
     // keep the code until the word around it is stored
     pending_code *keep = vec_push(c, &c->pending, sizeof(pending_code));
-    uint32_t *copy = keep ? arena_alloc(c, (size_t)f->code.n * 4 + 4) : NULL;
+    uint32_t *copy = keep ? arena_alloc(c, (size_t)f->code.n * 8 + 8) : NULL;
     if (!copy)
         return false;
     __builtin_memcpy(copy, f->code.ptr, (size_t)f->code.n * 4);
-    *keep = (pending_code){index, f->code.n, copy};
+    __builtin_memcpy(copy + f->code.n, f->lines.ptr, (size_t)f->code.n * 4);
+    *keep = (pending_code){index, f->code.n, copy, copy + f->code.n};
     --c->nested;
     c->f = outer;
     return push(c, (entry){.type = type, .kind = E_CONST, .value = index}) && advance(c); // past the end
@@ -4970,15 +4980,18 @@ static bool assign_item(comp *c) {
 // Words are stored in the order of their code. Each definition was compiled into the word
 // buffer and copied out here; the code outside definitions follows as one last word.
 typedef struct image {
-    vec code; // uint32_t, all words
+    vec code;  // uint32_t, all words
+    vec lines; // uint32_t, the source line of each code word (0 for the code of earlier loads)
 } image;
 
 static bool append_code(comp *c, image *im, const fn *f) {
     for (uint32_t k = 0; k < f->code.n; ++k) {
         uint32_t *slot = vec_push(c, &im->code, sizeof(uint32_t));
-        if (!slot)
+        uint32_t *line = slot ? vec_push(c, &im->lines, sizeof(uint32_t)) : NULL;
+        if (!line)
             return false;
         *slot = ((const uint32_t *)f->code.ptr)[k];
+        *line = ((const uint32_t *)f->lines.ptr)[k];
     }
     return true;
 }
@@ -5008,9 +5021,11 @@ static bool store_pending(comp *c, image *im) {
         ((wordsym *)c->words.ptr + next->word)->entry = im->code.n;
         for (uint32_t k = 0; k < next->n; ++k) {
             uint32_t *slot = vec_push(c, &im->code, sizeof(uint32_t));
-            if (!slot)
+            uint32_t *line = slot ? vec_push(c, &im->lines, sizeof(uint32_t)) : NULL;
+            if (!line)
                 return false;
             *slot = next->code[k];
+            *line = next->lines[k];
         }
         ((pending_code *)next)->code = NULL;
     }
@@ -5186,6 +5201,30 @@ static bool compile(comp *c, image *im, bool *has_top) {
 
 // Writes the container into the arena and reports where it is.
 static bool serialize(comp *c, const image *im, uint8_t **out, size_t *out_len) {
+    // line records: those of the earlier loads, then one wherever the line changes in the new code
+    const pinax_state *st = c->st;
+    const uint32_t old_code = st->head ? st->head->n_code : 0, old_lines = st->head ? st->head->n_lines : 0;
+    vec runs = {0};
+    if (old_lines) {
+        runs.ptr = arena_alloc(c, (size_t)old_lines * sizeof(pnx_linerec));
+        if (!runs.ptr)
+            return false;
+        __builtin_memcpy(runs.ptr, st->lines, (size_t)old_lines * sizeof(pnx_linerec));
+        runs.n = runs.cap = old_lines;
+    }
+    for (uint32_t k = old_code, line = 0; k < im->code.n; ++k) {
+        const uint32_t here = ((const uint32_t *)im->lines.ptr)[k];
+        if (k == old_code || here != line) {
+            pnx_linerec *rec = vec_push(c, &runs, sizeof(pnx_linerec));
+            if (!rec)
+                return false;
+            *rec = (pnx_linerec){k, here};
+            line = here;
+        }
+        const uint32_t op = ((const uint32_t *)im->code.ptr)[k] & 0xffu;
+        if (pnx_ops_info[op].second) // its second word is no instruction
+            ++k;
+    }
     const pnx_head head = {
         .magic = {'P', 'N', 'X', 'B'},
         .version = PNX_CONTAINER_VERSION,
@@ -5197,11 +5236,13 @@ static bool serialize(comp *c, const image *im, uint8_t **out, size_t *out_len) 
         .n_sconst = c->sconst.n,
         .n_code = im->code.n,
         .n_strbytes = c->strbytes.n,
+        .n_lines = runs.n,
     };
     const size_t len = sizeof head + (size_t)head.n_words * sizeof(pnx_wordrec) +
                        (size_t)head.n_globals * sizeof(pnx_globalrec) +
                        (size_t)head.n_imports * sizeof(pnx_importrec) + (size_t)head.n_iconst * 8 +
-                       (size_t)head.n_sconst * sizeof(pnx_sconst) + (size_t)head.n_code * 4 + head.n_strbytes;
+                       (size_t)head.n_sconst * sizeof(pnx_sconst) + (size_t)head.n_code * 4 + head.n_strbytes +
+                       (size_t)head.n_lines * sizeof(pnx_linerec);
     uint8_t *p = arena_alloc(c, len);
     if (!p)
         return false;
@@ -5287,6 +5328,9 @@ static bool serialize(comp *c, const image *im, uint8_t **out, size_t *out_len) 
     p += (size_t)head.n_code * 4;
     if (head.n_strbytes)
         __builtin_memcpy(p, c->strbytes.ptr, head.n_strbytes);
+    p += head.n_strbytes;
+    if (head.n_lines)
+        __builtin_memcpy(p, runs.ptr, (size_t)head.n_lines * sizeof(pnx_linerec));
     return true;
 }
 
@@ -5435,6 +5479,12 @@ static bool take_symbols(comp *c, image *im) {
     COPY(c->sconst, st->sconst, h->n_sconst, pnx_sconst)
     COPY(c->strbytes, st->segment[PNX_SEG_CONST], h->n_strbytes, uint8_t)
     COPY(im->code, st->code, h->n_code, uint32_t)
+    if (h->n_code) { // the lines of that code are kept as records; these are placeholders
+        void *p = arena_alloc(c, (size_t)h->n_code * sizeof(uint32_t));
+        if (!p)
+            return false;
+        im->lines = (vec){p, h->n_code, h->n_code};
+    }
     if (h->n_imports) {
         uint32_t *p = arena_alloc(c, (size_t)h->n_imports * sizeof(uint32_t));
         if (!p)

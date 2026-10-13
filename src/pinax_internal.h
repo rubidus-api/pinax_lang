@@ -93,6 +93,7 @@ typedef struct pnx_program {
     void                *symbols;
     size_t               used;
     uint32_t             n_hosts;
+    const uint8_t       *lines;
 } pnx_program;
 
 struct pinax_state {
@@ -124,6 +125,9 @@ struct pinax_state {
     uint64_t charge; // bytes scanned by string words since the last CHECK; 16 of them count as one instruction
     uint32_t owed; // cost of the CHECK a run was suspended at
     uint32_t pc, int_base, str_base, depth, depth_peak;
+    uint32_t fault_pc;             // where the last run ended with a fault: the code word after the instruction
+    const uint8_t *lines;          // pnx_linerec records, head->n_lines of them (not aligned)
+    char     where[112];           // "module:line: error" of the last fault, for pinax_error_text()
     uint32_t depth_floor;          // the depth at which the running word returns to the host
     uint32_t int_peak, str_peak, region_peak;
     uint32_t in_host;              // host words running now, one inside the other
