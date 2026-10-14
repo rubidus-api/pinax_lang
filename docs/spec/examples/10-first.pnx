@@ -1,0 +1,8 @@
+rem run
+use io
+use str
+array xs int 5
+assign xs (3, 8, 12, 5, 20)
+xs do (x int gives bool) x 10 gt end first or_else (e) -1 end str.to_str io.println
+xs do (x int gives bool) x 100 gt end first or_else (e) -1 end str.to_str io.println
+xs minimum or_else (e) 0 end str.to_str io.println

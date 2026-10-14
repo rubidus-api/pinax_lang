@@ -1,0 +1,9 @@
+rem run
+use io
+use str
+word total_over (limit int gives int)
+  0 to acc
+  1 10 range do (i int) i limit gt if acc i add to acc end end each   rem the block sees acc and limit
+  acc
+end
+5 total_over str.to_str io.println

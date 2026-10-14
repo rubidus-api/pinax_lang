@@ -1,0 +1,11 @@
+rem run
+use io
+use str
+word twice (n int, f word (int gives int) gives int) n f call f call end
+5 do (x int gives int) x 3 mul end twice str.to_str io.println
+word add_one (int gives int) 1 add end
+word demo (gives int)
+  do (x int gives int) x add_one end to step     rem a block value in a local
+  41 step call
+end
+demo str.to_str io.println

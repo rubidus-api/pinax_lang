@@ -1,0 +1,3 @@
+rem refused
+array xs int 3
+word f (gives int) 0 xs do (x int) x end each end

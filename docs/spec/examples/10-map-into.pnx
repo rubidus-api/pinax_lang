@@ -1,0 +1,13 @@
+rem run
+use io
+use str
+array xs int 4
+assign xs (1, 2, 3, 4)
+list squares int 4
+array evens int 4
+word go (or fail)
+  xs do (x int gives int) x x mul end squares map_into or_fail
+  xs do (x int gives bool) x 2 mod 0 eq end evens filter_into or_fail to n
+  cat ("squares ", 3 squares idx, ", evens written ", n) io.println
+end
+go or_else (e) e err_text io.println end

@@ -1,0 +1,3 @@
+rem refused
+word twice (n int, f word (int gives int) gives int) n f call f call end
+word scale (k int gives int) 5 do (x int gives int) x k mul end twice end

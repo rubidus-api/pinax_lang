@@ -1,0 +1,19 @@
+rem run
+use io
+use str
+word find_pair (target int gives str)      rem the first a, b in 1..9 with a*b = target
+  1 to a
+  0 to b
+  loop (rows)
+    1 to b
+    loop
+      a b mul target eq until (rows)       rem leaves both loops at once
+      b 1 add to b
+      b 9 gt until
+    end
+    a 1 add to a
+    a 9 gt if "none" return end
+  end
+  cat (a, " x ", b)
+end
+42 find_pair io.println

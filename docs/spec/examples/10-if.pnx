@@ -1,0 +1,7 @@
+rem run
+use io
+word sign (n int gives str) n 0 lt if "negative" else n 0 eq if "zero" else "positive" end end end
+-5 sign io.println
+0 sign io.println
+word warn (n int) n 100 gt if "big" io.println end end      rem no else: the branch leaves the stack as it was
+500 warn

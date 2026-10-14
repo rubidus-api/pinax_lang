@@ -1,0 +1,4 @@
+rem refused
+use io
+"start" io.println
+return

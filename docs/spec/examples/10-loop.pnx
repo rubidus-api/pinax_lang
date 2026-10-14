@@ -1,0 +1,22 @@
+rem run
+use io
+use str
+word digits (n int gives int)            rem how many decimal digits
+  1 to count_
+  loop
+    n 10 div to n
+    n 0 eq until
+    count_ 1 add to count_
+  end
+  count_
+end
+12345 digits str.to_str io.println
+word first_square_over (limit int gives int)
+  1 to i
+  loop
+    i i mul limit gt if break end
+    i 1 add to i
+  end
+  i
+end
+50 first_square_over str.to_str io.println

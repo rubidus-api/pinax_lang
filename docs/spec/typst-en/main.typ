@@ -14,3 +14,4 @@
 #include "clauses/07-types.typ"
 #include "clauses/08-declarations.typ"
 #include "clauses/09-words.typ"
+#include "clauses/10-control.typ"

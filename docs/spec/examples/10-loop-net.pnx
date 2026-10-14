@@ -1,0 +1,9 @@
+rem refused
+word f (gives int)
+  0
+  loop
+    1 add
+    dup 10 gt until
+    1
+  end
+end

@@ -1,0 +1,21 @@
+rem run
+use io
+const quit_code 9
+word describe (cmd str gives str)
+  cmd case
+    "add" of "adds a line" end
+    ("rm", "del") of "deletes a line" end
+    otherwise "unknown command" end
+  end
+end
+word level (n int gives str)
+  n case
+    0 of "off" end
+    1 of "low" end
+    quit_code of "quit" end
+    otherwise "high" end
+  end
+end
+"del" describe io.println
+"mv" describe io.println
+9 level io.println

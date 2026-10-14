@@ -1,0 +1,10 @@
+rem run
+use io
+use str
+word first_multiple (n int, k int gives int)     rem a loop with no exit counts as leaving
+  loop
+    n k mod 0 eq if n return end
+    n 1 add to n
+  end
+end
+100 7 first_multiple str.to_str io.println

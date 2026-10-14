@@ -1,0 +1,14 @@
+rem run
+use io
+use str
+array scores int 6
+assign scores (72, 95, 88, 61, 90, 79)
+scores sum str.to_str io.println
+scores do (s int gives bool) s 90 ge end count str.to_str io.println
+scores do (s int gives bool) s 60 lt end any if "someone failed" else "all passed" end io.println
+0 scores do (acc int, s int gives int) acc s max end fold str.to_str io.println
+scores do (s int, i int) i 2 lt if cat ("#", i, " ", s) io.println end end each_index
+1 5 range do (i int) i str.to_str io.print end each
+"" io.println
+3 do "x" io.print end times
+"" io.println

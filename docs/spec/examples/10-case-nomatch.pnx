@@ -1,0 +1,5 @@
+rem fault
+use io
+word f (n int gives str) n case 1 of "one" end 2 of "two" end end end
+2 f io.println
+3 f io.println
