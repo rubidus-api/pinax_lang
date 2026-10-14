@@ -1,2 +1,67 @@
 <!DOCTYPE html>
-<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>17 표준 호스트 모듈 - The Pinax Standard</title><link rel="stylesheet" href="style.css"></head><body><nav class="top"><a href="index.html">Start</a> · <a href="16.html">Previous</a> · <a href="18.html">Next</a> · <a href="../html-ko/17.html">한국어</a></nav><main><h2>17 표준 호스트 모듈</h2><p><em>(English edition in preparation.)</em></p></main><nav class="bottom"><a href="index.html">Start</a> · <a href="16.html">Previous</a> · <a href="18.html">Next</a> · <a href="../html-ko/17.html">한국어</a></nav></body></html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>17 Standard host modules - The Pinax Standard</title><link rel="stylesheet" href="style.css"></head><body><nav class="top"><a href="index.html">Start</a> · <a href="16.html">Previous</a> · <a href="18.html">Next</a> · <a href="../html-ko/17.html">한국어</a></nav><main><h2>17 Standard host modules</h2><p class="para"><span class="pn">(1)</span> The modules of this clause are host words that come with the processor. They are not part of the language: they exist only when a host registers them (13.3). <code>pnx</code> registers all five. A host that embeds the library picks them one by one with <code>pinax_host_register(state, "io")</code> and the like (library <code>libpinax_host</code>). Using a module that was not registered is refused (13.1).</p><p class="para"><span class="pn">(2)</span> Host words keep the same rules as other words: their signatures are checked at load, words with <code>or fail</code> shall be guarded, and <code>owned</code> values are handed over exactly once.</p><h3>17.1 <code>io</code> — standard input and output</h3><p class="para"><p><span class="pn">(1)</span></p><table><tr><td><strong>Word</strong></td><td><strong>Signature</strong></td><td><strong>Meaning</strong></td></tr><tr><td><code>print</code> <code>println</code></td><td><code>(s str)</code></td><td>writes to standard output; <code>println</code> adds a line break (LF)</td></tr><tr><td><code>eprint</code></td><td><code>(s str)</code></td><td>writes to standard error</td></tr><tr><td><code>read_line</code></td><td><code>(gives line str or fail)</code></td><td>one line of standard input, without its line break; <code>err.not_found</code> at the end of input</td></tr><tr><td><code>read_line_into</code></td><td><code>(buf buffer or fail)</code></td><td>appends one line to a buffer</td></tr></table><p>Bytes are written unchanged; the same bytes come out on every operating system.</p></p><div class="example run"><p class="ex-file"><code>17-io.pnx</code></p><pre><code data-lang="pinax"><span style="color: #d73948">use</span> io
+<span style="color: #d73948">use</span> <span style="color: #d73948">str</span>
+<span style="color: #d73948">word</span> demo ()
+  <span style="color: #198810">"no new line, "</span> io.print
+  <span style="color: #198810">"then one"</span> io.println
+  <span style="color: #d73948">loop</span>
+    io.read_line <span style="color: #d73948">or_else</span> (e) <span style="color: #d73948">break</span> <span style="color: #d73948">end</span> <span style="color: #d73948">to</span> line         <span style="color: #74747c">rem fails at the end of the input</span>
+    <span style="color: #d73948">cat</span> (<span style="color: #198810">"read: "</span>, line, <span style="color: #198810">" ("</span>, line <span style="color: #d73948">str</span>.len, <span style="color: #198810">" bytes)"</span>) io.println
+  <span style="color: #d73948">end</span>
+<span style="color: #d73948">end</span>
+demo
+</code></pre><p class="ex-label">Output</p><pre><code data-lang="text">$ pnx 17-io.pnx
+no new line, then one
+read: first line (10 bytes)
+read: second line (11 bytes)
+</code></pre></div><h3>17.2 <code>file</code> — files</h3><p class="para"><p><span class="pn">(1)</span> The handle type <code>file</code> is an open file. The opening words give an <code>owned file</code> and <code>close</code> takes it (12.4).</p><table><tr><td><strong>Word</strong></td><td><strong>Signature</strong></td><td><strong>Meaning</strong></td></tr><tr><td><code>open_read</code> <code>open_write</code></td><td><code>(path str gives owned file or fail)</code></td><td>opens for reading; for writing (made new or emptied)</td></tr><tr><td><code>write</code></td><td><code>(s str, f file or fail)</code></td><td>writes bytes</td></tr><tr><td><code>read_line</code></td><td><code>(f file gives line str or fail)</code></td><td>one line; <code>err.not_found</code> at the end</td></tr><tr><td><code>read</code></td><td><code>(f file, buf buffer gives n int or fail)</code></td><td>reads into a buffer and gives the number of bytes read</td></tr><tr><td><code>read_line_into</code></td><td><code>(f file, buf buffer or fail)</code></td><td>appends one line to a buffer</td></tr><tr><td><code>read_all</code></td><td><code>(path str gives body str or fail)</code></td><td>reads a whole file into the region</td></tr><tr><td><code>read_all_into</code></td><td><code>(path str, buf buffer or fail)</code></td><td>appends a whole file to a buffer</td></tr><tr><td><code>close</code></td><td><code>(f owned file)</code></td><td>closes it</td></tr></table><p>A missing file is <code>err.not_found</code>.</p></p><div class="example run"><p class="ex-file"><code>17-file.pnx</code></p><pre><code data-lang="pinax"><span style="color: #d73948">use</span> io
+<span style="color: #d73948">use</span> <span style="color: #d73948">file</span>
+<span style="color: #d73948">buffer</span> buf <span style="color: #b60157">64</span>
+<span style="color: #d73948">word</span> demo (<span style="color: #d73948">or</span> <span style="color: #d73948">fail</span>)
+  <span style="color: #198810">"data.txt"</span> <span style="color: #d73948">file</span>.open_write <span style="color: #d73948">or_fail</span> <span style="color: #d73948">to</span> out
+  <span style="color: #198810">"alpha</span><span style="color: #1d6c76">\n</span><span style="color: #198810">beta</span><span style="color: #1d6c76">\n</span><span style="color: #198810">"</span> out <span style="color: #d73948">file</span>.write <span style="color: #d73948">or_else</span> (e) out <span style="color: #d73948">file</span>.close e <span style="color: #d73948">fail</span> <span style="color: #d73948">end</span>
+  out <span style="color: #d73948">file</span>.close
+  <span style="color: #198810">"data.txt"</span> <span style="color: #d73948">file</span>.open_read <span style="color: #d73948">or_fail</span> <span style="color: #d73948">to</span> in
+  <span style="color: #d73948">loop</span>
+    in <span style="color: #d73948">file</span>.read_line <span style="color: #d73948">or_else</span> (e) <span style="color: #d73948">break</span> <span style="color: #d73948">end</span> <span style="color: #d73948">to</span> line
+    <span style="color: #d73948">cat</span> (<span style="color: #198810">"line: "</span>, line) io.println
+  <span style="color: #d73948">end</span>
+  in <span style="color: #d73948">file</span>.close
+  <span style="color: #198810">"data.txt"</span> buf <span style="color: #d73948">file</span>.read_all_into <span style="color: #d73948">or_fail</span>
+  <span style="color: #d73948">cat</span> (<span style="color: #198810">"all: "</span>, buf contents) io.print
+<span style="color: #d73948">end</span>
+demo <span style="color: #d73948">or_else</span> (e) <span style="color: #d73948">cat</span> (<span style="color: #198810">"file error: "</span>, e err_text) io.println <span style="color: #d73948">end</span>
+<span style="color: #198810">"missing.txt"</span> <span style="color: #d73948">file</span>.read_all <span style="color: #d73948">or_else</span> (e) <span style="color: #d73948">cat</span> (<span style="color: #198810">"missing.txt: "</span>, e err_text) <span style="color: #d73948">end</span> io.println
+</code></pre><p class="ex-label">Output</p><pre><code data-lang="text">$ pnx 17-file.pnx
+line: alpha
+line: beta
+all: alpha
+beta
+missing.txt: not_found
+</code></pre></div><h3>17.3 <code>clock</code> <code>random</code> <code>env</code></h3><p class="para"><p><span class="pn">(1)</span></p><table><tr><td><strong>Word</strong></td><td><strong>Signature</strong></td><td><strong>Meaning</strong></td></tr><tr><td><code>clock.now_ms</code></td><td><code>(gives int)</code></td><td>the time now, in milliseconds since 1970-01-01 UTC</td></tr><tr><td><code>clock.monotonic_ns</code></td><td><code>(gives int)</code></td><td>nanoseconds of a clock that never goes back</td></tr><tr><td><code>clock.sleep</code></td><td><code>(ms int)</code></td><td>waits; the state does nothing else meanwhile</td></tr><tr><td><code>random.seed</code></td><td><code>(n int)</code></td><td>sets the sequence; the same seed gives the same sequence</td></tr><tr><td><code>random.random</code></td><td><code>(gives int)</code></td><td>a 64-bit random number (not for cryptography)</td></tr><tr><td><code>random.random_below</code></td><td><code>(n int gives int)</code></td><td>from 0 to <code>n</code>−1</td></tr><tr><td><code>env.arg_count</code></td><td><code>(gives int)</code></td><td>the number of arguments; 0 is the program file</td></tr><tr><td><code>env.arg</code></td><td><code>(i int gives s str or fail)</code></td><td>argument <code>i</code></td></tr><tr><td><code>env.getenv</code></td><td><code>(name str gives s str or fail)</code></td><td>an environment variable; <code>err.not_found</code> when unset</td></tr></table></p><div class="example run"><p class="ex-file"><code>17-env.pnx</code></p><pre><code data-lang="pinax"><span style="color: #d73948">use</span> io
+<span style="color: #d73948">use</span> env
+<span style="color: #d73948">cat</span> (<span style="color: #198810">"arguments: "</span>, env.arg_count) io.println
+<span style="color: #b60157">0</span> env.arg_count range <span style="color: #d73948">do</span> (i <span style="color: #d73948">int</span>) i env.arg <span style="color: #d73948">or_else</span> (e) <span style="color: #198810">"?"</span> <span style="color: #d73948">end</span> io.println <span style="color: #d73948">end</span> each
+<span style="color: #198810">"PINAX_SURELY_UNSET"</span> env.getenv <span style="color: #d73948">or_else</span> (e) <span style="color: #d73948">cat</span> (<span style="color: #198810">"not set: "</span>, e err_text) <span style="color: #d73948">end</span> io.println
+</code></pre><p class="ex-label">Output</p><pre><code data-lang="text">$ pnx 17-env.pnx alpha beta
+arguments: 3
+17-env.pnx
+alpha
+beta
+not set: not_found
+</code></pre></div><div class="example run"><p class="ex-file"><code>17-random-clock.pnx</code></p><pre><code data-lang="pinax"><span style="color: #d73948">use</span> io
+<span style="color: #d73948">use</span> random
+<span style="color: #d73948">use</span> clock
+<span style="color: #d73948">word</span> demo ()
+  <span style="color: #b60157">42</span> random.seed                                       <span style="color: #74747c">rem the same seed, the same numbers</span>
+  <span style="color: #b60157">6</span> random.random_below <span style="color: #d73948">to</span> a
+  a <span style="color: #b60157">0</span> ge a <span style="color: #b60157">6</span> lt and <span style="color: #d73948">if</span> <span style="color: #198810">"a die in 0..5"</span> io.println <span style="color: #d73948">end</span>
+  clock.monotonic_ns <span style="color: #d73948">to</span> t0
+  clock.monotonic_ns <span style="color: #d73948">to</span> t1
+  t1 t0 ge <span style="color: #d73948">if</span> <span style="color: #198810">"the monotonic clock does not go back"</span> io.println <span style="color: #d73948">end</span>
+<span style="color: #d73948">end</span>
+demo
+</code></pre><p class="ex-label">Output</p><pre><code data-lang="text">$ pnx 17-random-clock.pnx
+a die in 0..5
+the monotonic clock does not go back
+</code></pre></div></main><nav class="bottom"><a href="index.html">Start</a> · <a href="16.html">Previous</a> · <a href="18.html">Next</a> · <a href="../html-ko/17.html">한국어</a></nav></body></html>

@@ -1,2 +1,546 @@
 <!DOCTYPE html>
-<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>16 표준 모듈 - The Pinax Standard</title><link rel="stylesheet" href="style.css"></head><body><nav class="top"><a href="index.html">Start</a> · <a href="15.html">Previous</a> · <a href="17.html">Next</a> · <a href="../html-ko/16.html">한국어</a></nav><main><h2>16 표준 모듈</h2><p><em>(English edition in preparation.)</em></p><h3>16.1 <code>str</code> — 문자열</h3><p><em>(English edition in preparation.)</em></p><h3>16.2 <code>fmt</code> — 수를 글로</h3><p><em>(English edition in preparation.)</em></p><h3>16.3 <code>hash</code> — 해시</h3><p><em>(English edition in preparation.)</em></p><h3>16.4 <code>encode</code> — 바이트를 글로</h3><p><em>(English edition in preparation.)</em></p><h3>16.5 <code>bytes</code> — 이진 자료</h3><p><em>(English edition in preparation.)</em></p><h3>16.6 <code>ptn</code> — 작은 패턴</h3><p><em>(English edition in preparation.)</em></p><h3>16.7 <code>rex</code> — 정규 표현식</h3><p><em>(English edition in preparation.)</em></p><h3>16.8 <code>json</code> — JSON</h3><p><em>(English edition in preparation.)</em></p><h3>16.9 <code>csv</code> — CSV</h3><p><em>(English edition in preparation.)</em></p></main><nav class="bottom"><a href="index.html">Start</a> · <a href="15.html">Previous</a> · <a href="17.html">Next</a> · <a href="../html-ko/16.html">한국어</a></nav></body></html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>16 Standard modules - The Pinax Standard</title><link rel="stylesheet" href="style.css"></head><body><nav class="top"><a href="index.html">Start</a> · <a href="15.html">Previous</a> · <a href="17.html">Next</a> · <a href="../html-ko/16.html">한국어</a></nav><main><h2>16 Standard modules</h2><p class="para"><span class="pn">(1)</span> The standard modules come with the processor. They are opened with <code>use MODULE</code> and written <code>MODULE.WORD</code> (13.1). Words of standard modules cannot reach outside without the host — they use no files, clocks or environment.</p><p class="para"><p><span class="pn">(2)</span> Words of standard modules make no new storage. Their results are one of:</p><ul><li>a view of the bytes they were given; nothing is copied;</li><li>a view of new bytes written in the region (12.2);</li><li>bytes appended to a buffer the caller gave. Such words end in <code>_into</code> or take a buffer, and fail with <code>err.full</code> when there is not enough room.</li></ul></p><h3>16.1 <code>str</code> — strings</h3><p class="para"><span class="pn">(1)</span> The module <code>str</code> works on strings as bytes. Byte positions count from 0. Only the words that work on characters (<code>chars</code> <code>char_count</code> <code>is_utf8</code>) read UTF-8. Changing case (<code>upper</code> <code>lower</code>) changes ASCII only.</p><p class="para"><span class="pn">(2)</span> Where a separator or a part to look for is taken (<code>sep</code>, <code>part</code>), a <code>str</code> or a single character (<code>int</code>, 6.5) may be given.</p><h4>16.1.1 Looking and cutting</h4><p class="para"><p><span class="pn">(3)</span> All results are views of the string given.</p><table><tr><td><strong>Word</strong></td><td><strong>Signature</strong></td><td><strong>Meaning</strong></td></tr><tr><td><code>len</code> <code>is_empty</code></td><td><code>(str gives int)</code> <code>(str gives bool)</code></td><td>the number of bytes; is it empty</td></tr><tr><td><code>take</code> <code>skip</code></td><td><code>(s str, n int gives str)</code></td><td>the first <code>n</code> bytes; what follows them; when short, what there is</td></tr><tr><td><code>take_last</code> <code>skip_last</code></td><td><code>(s str, n int gives str)</code></td><td>the last <code>n</code> bytes; what comes before them</td></tr><tr><td><code>slice</code></td><td><code>(s str, start int, n int gives str)</code></td><td><code>n</code> bytes from <code>start</code>; out of range is the fault <code>range</code></td></tr><tr><td><code>trim</code> <code>trim_left</code> <code>trim_right</code></td><td><code>(str gives str)</code></td><td>the view without white space (space, tab, CR, LF) at the ends</td></tr><tr><td><code>cut</code></td><td><code>(s str, sep gives str, str)</code></td><td>before and after the first <code>sep</code>; without <code>sep</code>, <code>s</code> and the empty text</td></tr><tr><td><code>try_cut</code></td><td><code>(s str, sep gives str, str or fail)</code></td><td>like <code>cut</code>, but <code>err.not_found</code> without <code>sep</code></td></tr><tr><td><code>span</code></td><td><code>(s str, class int gives str, str)</code></td><td>the leading bytes of that class, and the rest</td></tr></table></p><p class="para"><span class="pn">(4)</span> The classes of <code>span</code> are the constants <code>str.digit</code> <code>str.alpha</code> <code>str.alnum</code> <code>str.space</code> <code>str.upper_case</code> <code>str.lower_case</code> <code>str.hex_digit</code> <code>str.punct</code> (ASCII).</p><div class="example run"><p class="ex-file"><code>16-str-views.pnx</code></p><pre><code data-lang="pinax"><span style="color: #d73948">use</span> io
+<span style="color: #d73948">use</span> <span style="color: #d73948">str</span>
+<span style="color: #d73948">word</span> show (label <span style="color: #d73948">str</span>, s <span style="color: #d73948">str</span>) <span style="color: #d73948">cat</span> (label, <span style="color: #198810">" ["</span>, s, <span style="color: #198810">"]"</span>) io.println <span style="color: #d73948">end</span>
+<span style="color: #d73948">word</span> demo ()
+  <span style="color: #198810">"  key = value  "</span> <span style="color: #d73948">to</span> line
+  <span style="color: #198810">"trim"</span> line <span style="color: #d73948">str</span>.trim show
+  <span style="color: #198810">"trim_left"</span> line <span style="color: #d73948">str</span>.trim_left show
+  <span style="color: #198810">"take 5"</span> <span style="color: #198810">"hello, world"</span> <span style="color: #b60157">5</span> <span style="color: #d73948">str</span>.take show
+  <span style="color: #198810">"skip 7"</span> <span style="color: #198810">"hello, world"</span> <span style="color: #b60157">7</span> <span style="color: #d73948">str</span>.skip show
+  <span style="color: #198810">"take_last 5"</span> <span style="color: #198810">"hello, world"</span> <span style="color: #b60157">5</span> <span style="color: #d73948">str</span>.take_last show
+  <span style="color: #198810">"skip_last 7"</span> <span style="color: #198810">"hello, world"</span> <span style="color: #b60157">7</span> <span style="color: #d73948">str</span>.skip_last show
+  <span style="color: #198810">"take 99"</span> <span style="color: #198810">"short"</span> <span style="color: #b60157">99</span> <span style="color: #d73948">str</span>.take show                 <span style="color: #74747c">rem n beyond the end: what is there</span>
+  <span style="color: #198810">"slice 7 3"</span> <span style="color: #198810">"hello, world"</span> <span style="color: #b60157">7</span> <span style="color: #b60157">3</span> <span style="color: #d73948">str</span>.slice show
+  <span style="color: #198810">"key = value"</span> <span style="color: #198810">" = "</span> <span style="color: #d73948">str</span>.cut <span style="color: #d73948">to</span> (k, v)
+  <span style="color: #198810">"cut, before"</span> k show
+  <span style="color: #198810">"cut, after"</span> v show
+  <span style="color: #198810">"a=b=c"</span> <span style="color: #b60157">'='</span> <span style="color: #d73948">str</span>.cut <span style="color: #d73948">to</span> (k2, v2)                    <span style="color: #74747c">rem the separator may be a character</span>
+  <span style="color: #198810">"cut at a char"</span> v2 show
+  <span style="color: #198810">"2026-10-15"</span> <span style="color: #d73948">str</span>.digit <span style="color: #d73948">str</span>.span <span style="color: #d73948">to</span> (year, rest)
+  <span style="color: #198810">"span digits"</span> year show
+  <span style="color: #198810">"span rest"</span> rest show
+<span style="color: #d73948">end</span>
+demo
+</code></pre><p class="ex-label">Output</p><pre><code data-lang="text">$ pnx 16-str-views.pnx
+trim [key = value]
+trim_left [key = value  ]
+take 5 [hello]
+skip 7 [world]
+take_last 5 [world]
+skip_last 7 [hello]
+take 99 [short]
+slice 7 3 [wor]
+cut, before [key]
+cut, after [value]
+cut at a char [b=c]
+span digits [2026]
+span rest [-10-15]
+</code></pre></div><h4>16.1.2 Searching and comparing</h4><p class="para"><p><span class="pn">(5)</span></p><table><tr><td><strong>Word</strong></td><td><strong>Signature</strong></td><td><strong>Meaning</strong></td></tr><tr><td><code>starts_with</code> <code>ends_with</code> <code>contains</code></td><td><code>(s str, part gives bool)</code></td><td></td></tr><tr><td><code>find</code> <code>find_last</code></td><td><code>(s str, part gives int or fail)</code></td><td>the first, last position; <code>err.not_found</code> when absent</td></tr><tr><td><code>compare</code></td><td><code>(str, str gives int)</code></td><td>negative, zero or positive, comparing in byte order</td></tr><tr><td><code>byte_at</code></td><td><code>(s str, i int gives int)</code></td><td>byte <code>i</code>; out of range is the fault <code>range</code></td></tr><tr><td><code>char_count</code></td><td><code>(str gives int)</code></td><td>the number of UTF-8 characters</td></tr><tr><td><code>is_utf8</code></td><td><code>(str gives bool)</code></td><td>is it valid UTF-8</td></tr></table><p>The comparison words <code>eq</code> <code>ne</code> <code>lt</code> and the rest also compare strings in byte order (15.2).</p></p><div class="example run"><p class="ex-file"><code>16-str-search.pnx</code></p><pre><code data-lang="pinax"><span style="color: #d73948">use</span> io
+<span style="color: #d73948">use</span> <span style="color: #d73948">str</span>
+<span style="color: #d73948">word</span> yes (b <span style="color: #d73948">bool</span> <span style="color: #d73948">gives</span> <span style="color: #d73948">str</span>) b <span style="color: #d73948">if</span> <span style="color: #198810">"yes"</span> <span style="color: #d73948">else</span> <span style="color: #198810">"no"</span> <span style="color: #d73948">end</span> <span style="color: #d73948">end</span>
+<span style="color: #198810">"hello.pnx"</span> <span style="color: #198810">".pnx"</span> <span style="color: #d73948">str</span>.ends_with yes io.println
+<span style="color: #198810">"hello.pnx"</span> <span style="color: #198810">"he"</span> <span style="color: #d73948">str</span>.starts_with yes io.println
+<span style="color: #198810">"hello.pnx"</span> <span style="color: #198810">"lo."</span> <span style="color: #d73948">str</span>.contains yes io.println
+<span style="color: #198810">"a,b,c,b"</span> <span style="color: #198810">",b"</span> <span style="color: #d73948">str</span>.find <span style="color: #d73948">or_else</span> (e) <span style="color: #b60157">-1</span> <span style="color: #d73948">end</span> <span style="color: #d73948">str</span>.to_str io.println
+<span style="color: #198810">"a,b,c,b"</span> <span style="color: #198810">",b"</span> <span style="color: #d73948">str</span>.find_last <span style="color: #d73948">or_else</span> (e) <span style="color: #b60157">-1</span> <span style="color: #d73948">end</span> <span style="color: #d73948">str</span>.to_str io.println
+<span style="color: #198810">"a,b,c,b"</span> <span style="color: #198810">"x"</span> <span style="color: #d73948">str</span>.find <span style="color: #d73948">or_else</span> (e) <span style="color: #b60157">-1</span> <span style="color: #d73948">end</span> <span style="color: #d73948">str</span>.to_str io.println
+<span style="color: #198810">"abc"</span> <span style="color: #198810">"abd"</span> <span style="color: #d73948">str</span>.compare <span style="color: #d73948">str</span>.to_str io.println
+<span style="color: #198810">"hello"</span> <span style="color: #b60157">1</span> <span style="color: #d73948">str</span>.byte_at <span style="color: #d73948">str</span>.to_str io.println
+<span style="color: #198810">"hello"</span> <span style="color: #d73948">str</span>.len <span style="color: #d73948">str</span>.to_str io.println
+<span style="color: #198810">""</span> <span style="color: #d73948">str</span>.is_empty yes io.println
+</code></pre><p class="ex-label">Output</p><pre><code data-lang="text">$ pnx 16-str-search.pnx
+yes
+yes
+yes
+1
+5
+-1
+-1
+101
+5
+yes
+</code></pre></div><h4>16.1.3 Making new text</h4><p class="para"><p><span class="pn">(6)</span> The results are new bytes written in the region. The words that read numbers can fail.</p><table><tr><td><strong>Word</strong></td><td><strong>Signature</strong></td><td><strong>Meaning</strong></td></tr><tr><td><code>upper</code> <code>lower</code></td><td><code>(str gives str)</code></td><td>ASCII case changed</td></tr><tr><td><code>repeat</code></td><td><code>(s str, n int gives str)</code></td><td><code>n</code> copies joined</td></tr><tr><td><code>replace</code></td><td><code>(s str, old str, new str gives str)</code></td><td>every <code>old</code> replaced by <code>new</code></td></tr><tr><td><code>pad_left</code> <code>pad_right</code></td><td><code>(s str, width int gives str)</code></td><td>filled with spaces to <code>width</code> bytes; as it is when longer</td></tr><tr><td><code>to_str</code></td><td><code>(int gives str)</code></td><td>decimal text</td></tr><tr><td><code>to_int</code></td><td><code>(str gives int or fail)</code></td><td>read as decimal: one sign and digits only (no spaces); otherwise, or beyond 64 bits, <code>err.format</code></td></tr><tr><td><code>to_int_base</code></td><td><code>(s str, base int gives int or fail)</code></td><td>read in base 2–36; another <code>base</code> is the fault <code>range</code></td></tr></table></p><div class="example run"><p class="ex-file"><code>16-str-make.pnx</code></p><pre><code data-lang="pinax"><span style="color: #d73948">use</span> io
+<span style="color: #d73948">use</span> <span style="color: #d73948">str</span>
+<span style="color: #198810">"Hello, World"</span> <span style="color: #d73948">str</span>.upper io.println
+<span style="color: #198810">"Hello, World"</span> <span style="color: #d73948">str</span>.lower io.println
+<span style="color: #198810">"ab"</span> <span style="color: #b60157">3</span> <span style="color: #d73948">str</span>.repeat io.println
+<span style="color: #198810">"one two one"</span> <span style="color: #198810">"one"</span> <span style="color: #198810">"1"</span> <span style="color: #d73948">str</span>.replace io.println
+<span style="color: #d73948">cat</span> (<span style="color: #198810">"["</span>, <span style="color: #198810">"7"</span> <span style="color: #b60157">4</span> <span style="color: #d73948">str</span>.pad_left, <span style="color: #198810">"]"</span>) io.println
+<span style="color: #d73948">cat</span> (<span style="color: #198810">"["</span>, <span style="color: #198810">"7"</span> <span style="color: #b60157">4</span> <span style="color: #d73948">str</span>.pad_right, <span style="color: #198810">"]"</span>) io.println
+<span style="color: #b60157">-42</span> <span style="color: #d73948">str</span>.to_str io.println
+<span style="color: #198810">"ff"</span> <span style="color: #b60157">16</span> <span style="color: #d73948">str</span>.to_int_base <span style="color: #d73948">or_else</span> (e) <span style="color: #b60157">-1</span> <span style="color: #d73948">end</span> <span style="color: #d73948">str</span>.to_str io.println
+<span style="color: #198810">"  12"</span> <span style="color: #d73948">str</span>.to_int <span style="color: #d73948">or_else</span> (e) <span style="color: #b60157">-1</span> <span style="color: #d73948">end</span> <span style="color: #d73948">str</span>.to_str io.println
+<span style="color: #198810">"12x"</span> <span style="color: #d73948">str</span>.to_int <span style="color: #d73948">or_else</span> (e) <span style="color: #b60157">-1</span> <span style="color: #d73948">end</span> <span style="color: #d73948">str</span>.to_str io.println
+<span style="color: #198810">"한글"</span> <span style="color: #d73948">str</span>.len <span style="color: #d73948">str</span>.to_str io.println
+<span style="color: #198810">"한글"</span> <span style="color: #d73948">str</span>.char_count <span style="color: #d73948">str</span>.to_str io.println
+<span style="color: #198810">"</span><span style="color: #1d6c76">\x</span><span style="color: #198810">ff"</span> <span style="color: #d73948">str</span>.is_utf8 <span style="color: #d73948">if</span> <span style="color: #198810">"utf-8"</span> <span style="color: #d73948">else</span> <span style="color: #198810">"not utf-8"</span> <span style="color: #d73948">end</span> io.println
+</code></pre><p class="ex-label">Output</p><pre><code data-lang="text">$ pnx 16-str-make.pnx
+HELLO, WORLD
+hello, world
+ababab
+1 two 1
+[   7]
+[7   ]
+-42
+255
+-1
+-1
+6
+2
+not utf-8
+</code></pre></div><h4>16.1.4 Stems and writing into buffers</h4><p class="para"><p><span class="pn">(7)</span> Words that make stems (10.6):</p><ul><li><code>s sep str.split</code> — the pieces between <code>sep</code>s, empty ones included;</li><li><code>s str.words</code> — the pieces between white space, no empty ones;</li><li><code>s str.lines</code> — the lines, without their LF or CR LF;</li><li><code>s str.bytes</code> — the bytes (<code>int</code>);</li><li><code>s str.chars</code> — one view (<code>str</code>) for each UTF-8 character.</li></ul></p><p class="para"><p><span class="pn">(8)</span> Words that write into a buffer:</p><ul><li><code>sep buf STEM str.join_into</code> — appends the pieces of the stem joined by <code>sep</code> (<code>or fail</code>). The stem goes last, since the word right after a stem shall take it;</li><li><code>s old new buf str.replace_into</code> — appends the text with replacements and gives their number (<code>gives n int or fail</code>).</li></ul></p><div class="example run"><p class="ex-file"><code>16-str-stems.pnx</code></p><pre><code data-lang="pinax"><span style="color: #d73948">use</span> io
+<span style="color: #d73948">use</span> <span style="color: #d73948">str</span>
+<span style="color: #198810">"one two  three"</span> <span style="color: #d73948">str</span>.words <span style="color: #d73948">do</span> (w <span style="color: #d73948">str</span>) <span style="color: #d73948">cat</span> (<span style="color: #198810">"&lt;"</span>, w, <span style="color: #198810">"&gt;"</span>) io.print <span style="color: #d73948">end</span> each
+<span style="color: #198810">""</span> io.println
+<span style="color: #198810">"a,b,,c"</span> <span style="color: #b60157">','</span> <span style="color: #d73948">str</span>.split <span style="color: #d73948">do</span> (w <span style="color: #d73948">str</span>) <span style="color: #d73948">cat</span> (<span style="color: #198810">"&lt;"</span>, w, <span style="color: #198810">"&gt;"</span>) io.print <span style="color: #d73948">end</span> each
+<span style="color: #198810">""</span> io.println
+<span style="color: #d73948">text</span><span style="color: #198810"> </span><span style="color: #4b69c6">END</span>
+<span style="color: #198810">first line</span>
+<span style="color: #198810">second line</span>
+<span style="color: #4b69c6">END</span>
+<span style="color: #d73948">str</span>.lines <span style="color: #d73948">do</span> (l <span style="color: #d73948">str</span>) <span style="color: #d73948">cat</span> (<span style="color: #198810">"line: "</span>, l) io.println <span style="color: #d73948">end</span> each
+<span style="color: #198810">"hi"</span> <span style="color: #d73948">str</span>.bytes <span style="color: #d73948">do</span> (b <span style="color: #d73948">int</span>) b <span style="color: #d73948">str</span>.to_str io.print <span style="color: #198810">" "</span> io.print <span style="color: #d73948">end</span> each
+<span style="color: #198810">""</span> io.println
+<span style="color: #198810">"가a!"</span> <span style="color: #d73948">str</span>.chars <span style="color: #d73948">do</span> (c <span style="color: #d73948">str</span>) <span style="color: #d73948">cat</span> (<span style="color: #198810">"&lt;"</span>, c, <span style="color: #198810">" "</span>, c <span style="color: #d73948">str</span>.len, <span style="color: #198810">"&gt;"</span>) io.print <span style="color: #d73948">end</span> each
+<span style="color: #198810">""</span> io.println
+<span style="color: #d73948">buffer</span> out <span style="color: #b60157">64</span>
+<span style="color: #198810">", "</span> out <span style="color: #198810">"x y z"</span> <span style="color: #d73948">str</span>.words <span style="color: #d73948">str</span>.join_into <span style="color: #d73948">or_else</span> (e) <span style="color: #d73948">end</span>
+out contents io.println
+out clear
+<span style="color: #d73948">word</span> swap_dashes () <span style="color: #198810">"a-b-c"</span> <span style="color: #198810">"-"</span> <span style="color: #198810">"+"</span> out <span style="color: #d73948">str</span>.replace_into <span style="color: #d73948">or_else</span> (e) <span style="color: #b60157">0</span> <span style="color: #d73948">end</span> <span style="color: #d73948">to</span> n  <span style="color: #d73948">cat</span> (out contents, <span style="color: #198810">" ("</span>, n, <span style="color: #198810">" replaced)"</span>) io.println <span style="color: #d73948">end</span>
+swap_dashes
+</code></pre><p class="ex-label">Output</p><pre><code data-lang="text">$ pnx 16-str-stems.pnx
+&lt;one&gt;&lt;two&gt;&lt;three&gt;
+&lt;a&gt;&lt;b&gt;&lt;&gt;&lt;c&gt;
+line: first line
+line: second line
+104 105 
+&lt;가 3&gt;&lt;a 1&gt;&lt;! 1&gt;
+x, y, z
+a+b+c (2 replaced)
+</code></pre></div><h5>Constraints</h5><p class="para"><span class="pn">(9)</span> A value that is not a <code>str</code> given to a word of <code>str</code> is refused.</p><div class="example refused"><p class="ex-file"><code>16-str-type.pnx</code></p><pre><code data-lang="pinax"><span style="color: #d73948">use</span> <span style="color: #d73948">str</span>
+<span style="color: #b60157">42</span> <span style="color: #d73948">str</span>.upper drop
+</code></pre><p class="ex-label">Refused</p><pre><code data-lang="text">$ pnx 16-str-type.pnx
+16-str-type.pnx:2:4: this word takes a str
+</code></pre></div><h5>Faults</h5><p class="para"><span class="pn">(10)</span> An out-of-range position for <code>slice</code> or <code>byte_at</code> is a fault. For cuts that may run short, use <code>take</code> and <code>skip</code>.</p><div class="example fault"><p class="ex-file"><code>16-str-slice-range.pnx</code></p><pre><code data-lang="pinax"><span style="color: #d73948">use</span> io
+<span style="color: #d73948">use</span> <span style="color: #d73948">str</span>
+<span style="color: #198810">"hello"</span> <span style="color: #b60157">3</span> <span style="color: #b60157">5</span> <span style="color: #d73948">str</span>.slice io.println
+</code></pre><p class="ex-label">Fault</p><pre><code data-lang="text">$ pnx 16-str-slice-range.pnx
+16-str-slice-range.pnx:3: index out of range
+</code></pre></div><div class="example fault"><p class="ex-file"><code>16-str-byte-range.pnx</code></p><pre><code data-lang="pinax"><span style="color: #d73948">use</span> <span style="color: #d73948">str</span>
+<span style="color: #198810">"hello"</span> <span style="color: #b60157">5</span> <span style="color: #d73948">str</span>.byte_at drop
+</code></pre><p class="ex-label">Fault</p><pre><code data-lang="text">$ pnx 16-str-byte-range.pnx
+16-str-byte-range.pnx:2: index out of range
+</code></pre></div><h3>16.2 <code>fmt</code> — numbers as text</h3><p class="para"><p><span class="pn">(1)</span> <code>cat</code> puts an <code>int</code> in decimal (9.8). Other forms are made into a <code>str</code> by the words of the module <code>fmt</code>. There is no small language of formats (such as <code>%08x</code>). Results are written in the region.</p><table><tr><td><strong>Word</strong></td><td><strong>Signature</strong></td><td><strong>Meaning</strong></td></tr><tr><td><code>hex</code> <code>bin</code></td><td><code>(int gives str)</code></td><td>hexadecimal (lower case), binary; a negative number as 64-bit two’s complement</td></tr><tr><td><code>hex_pad</code></td><td><code>(n int, width int gives str)</code></td><td>hexadecimal filled with leading zeros to <code>width</code> digits</td></tr><tr><td><code>zero_pad</code></td><td><code>(n int, width int gives str)</code></td><td>decimal filled with leading zeros to <code>width</code>; the sign takes a place</td></tr><tr><td><code>append_hex</code></td><td><code>(n int, buf or fail)</code></td><td>appends the hexadecimal to a buffer</td></tr></table><p>Decimal is <code>str.to_str</code>; decimal appended to a buffer is <code>append_int</code> (15.3).</p></p><div class="example run"><p class="ex-file"><code>16-fmt.pnx</code></p><pre><code data-lang="pinax"><span style="color: #d73948">use</span> io
+<span style="color: #d73948">use</span> fmt
+<span style="color: #b60157">255</span> fmt.hex io.println
+<span style="color: #b60157">5</span> fmt.bin io.println
+<span style="color: #b60157">255</span> <span style="color: #b60157">8</span> fmt.hex_pad io.println
+<span style="color: #b60157">7</span> <span style="color: #b60157">3</span> fmt.zero_pad io.println
+<span style="color: #b60157">-7</span> <span style="color: #b60157">3</span> fmt.zero_pad io.println
+<span style="color: #d73948">buffer</span> out <span style="color: #b60157">32</span>
+<span style="color: #198810">"0x"</span> out append <span style="color: #d73948">or_else</span> (e) <span style="color: #d73948">end</span>
+<span style="color: #b60157">48879</span> out fmt.append_hex <span style="color: #d73948">or_else</span> (e) <span style="color: #d73948">end</span>
+out contents io.println
+</code></pre><p class="ex-label">Output</p><pre><code data-lang="text">$ pnx 16-fmt.pnx
+ff
+101
+000000ff
+007
+-07
+0xbeef
+</code></pre></div><h3>16.3 <code>hash</code> — hashes</h3><p class="para"><p><span class="pn">(1)</span> The module <code>hash</code> gives hashes of bytes as an <code>int</code>. There are no cryptographic hashes; a host gives those as host words.</p><table><tr><td><strong>Word</strong></td><td><strong>Signature</strong></td><td><strong>Meaning</strong></td></tr><tr><td><code>crc32</code></td><td><code>(str gives int)</code></td><td>CRC-32 (IEEE 802.3, as zlib), from 0 to 2<sup>32</sup>−1</td></tr><tr><td><code>fnv1a</code></td><td><code>(str gives int)</code></td><td>64-bit FNV-1a</td></tr><tr><td><code>hash64</code></td><td><code>(str gives int)</code></td><td>SipHash-2-4 with the key 0</td></tr></table></p><div class="example run"><p class="ex-file"><code>16-hash.pnx</code></p><pre><code data-lang="pinax"><span style="color: #d73948">use</span> io
+<span style="color: #d73948">use</span> hash
+<span style="color: #d73948">use</span> fmt
+<span style="color: #198810">"hello"</span> hash.crc32 fmt.hex io.println
+<span style="color: #198810">"hello"</span> hash.fnv1a fmt.hex io.println
+<span style="color: #198810">"hello"</span> hash.hash64 fmt.hex io.println
+</code></pre><p class="ex-label">Output</p><pre><code data-lang="text">$ pnx 16-hash.pnx
+3610a686
+a430d84680aabd0b
+8cc15d5db2f752b9
+</code></pre></div><h5>Constraints</h5><p class="para"><span class="pn">(2)</span> The hash of a value that is not a <code>str</code> is refused. To hash a number, make bytes of it first (16.5).</p><div class="example refused"><p class="ex-file"><code>16-hash-type.pnx</code></p><pre><code data-lang="pinax"><span style="color: #d73948">use</span> hash
+<span style="color: #b60157">42</span> hash.crc32 drop
+</code></pre><p class="ex-label">Refused</p><pre><code data-lang="text">$ pnx 16-hash-type.pnx
+16-hash-type.pnx:2:4: this word takes a str
+</code></pre></div><h3>16.4 <code>encode</code> — bytes as text</h3><p class="para"><p><span class="pn">(1)</span> The words of the module <code>encode</code> are all <code>(s str, buf or fail)</code>. They append the result to the buffer and fail with <code>err.full</code> when there is not enough room, or <code>err.format</code> when the input has the wrong form.</p><table><tr><td><strong>Word</strong></td><td><strong>Meaning</strong></td></tr><tr><td><code>base64_encode</code> <code>base64_decode</code></td><td>Base64 of RFC 4648; when decoding, the closing <code>=</code> may be left out</td></tr><tr><td><code>hex_encode</code> <code>hex_decode</code></td><td>two hexadecimal digits per byte; lower case when writing, either case when reading</td></tr><tr><td><code>url_encode</code> <code>url_decode</code></td><td>percent-encoding of RFC 3986: bytes other than letters, digits and <code>-</code> <code>.</code> <code>_</code> <code>~</code> as <code>%XX</code></td></tr></table></p><div class="example run"><p class="ex-file"><code>16-encode.pnx</code></p><pre><code data-lang="pinax"><span style="color: #d73948">use</span> io
+<span style="color: #d73948">use</span> encode
+<span style="color: #d73948">buffer</span> out <span style="color: #b60157">64</span>
+<span style="color: #d73948">word</span> show (label <span style="color: #d73948">str</span>) <span style="color: #d73948">cat</span> (label, <span style="color: #198810">" "</span>, out contents) io.println  out clear <span style="color: #d73948">end</span>
+<span style="color: #d73948">word</span> demo (<span style="color: #d73948">or</span> <span style="color: #d73948">fail</span>)
+  <span style="color: #198810">"Pinax!"</span> out encode.base64_encode <span style="color: #d73948">or_fail</span>  <span style="color: #198810">"base64"</span> show
+  <span style="color: #198810">"UGluYXgh"</span> out encode.base64_decode <span style="color: #d73948">or_fail</span>  <span style="color: #198810">"decoded"</span> show
+  <span style="color: #198810">"</span><span style="color: #1d6c76">\x</span><span style="color: #198810">00</span><span style="color: #1d6c76">\x</span><span style="color: #198810">ff"</span> out encode.hex_encode <span style="color: #d73948">or_fail</span>  <span style="color: #198810">"hex"</span> show
+  <span style="color: #198810">"a b&amp;c=d/é"</span> out encode.url_encode <span style="color: #d73948">or_fail</span>  <span style="color: #198810">"url"</span> show
+  <span style="color: #198810">"a%20b"</span> out encode.url_decode <span style="color: #d73948">or_fail</span>  <span style="color: #198810">"url decoded"</span> show
+<span style="color: #d73948">end</span>
+demo <span style="color: #d73948">or_else</span> (e) <span style="color: #d73948">cat</span> (<span style="color: #198810">"failed: "</span>, e err_text) io.println <span style="color: #d73948">end</span>
+</code></pre><p class="ex-label">Output</p><pre><code data-lang="text">$ pnx 16-encode.pnx
+base64 UGluYXgh
+decoded Pinax!
+hex 00ff
+url a%20b%26c%3Dd%2F%C3%A9
+url decoded a b
+</code></pre></div><div class="example run"><p class="ex-file"><code>16-encode-bad.pnx</code></p><pre><code data-lang="pinax"><span style="color: #d73948">use</span> io
+<span style="color: #d73948">use</span> encode
+<span style="color: #d73948">buffer</span> out <span style="color: #b60157">16</span>
+<span style="color: #198810">"zz"</span> out encode.hex_decode <span style="color: #d73948">or_else</span> (e) <span style="color: #d73948">cat</span> (<span style="color: #198810">"hex_decode: "</span>, e err_text) io.println <span style="color: #d73948">end</span>
+<span style="color: #198810">"ab*c"</span> out encode.base64_decode <span style="color: #d73948">or_else</span> (e) <span style="color: #d73948">cat</span> (<span style="color: #198810">"base64_decode: "</span>, e err_text) io.println <span style="color: #d73948">end</span>
+</code></pre><p class="ex-label">Output</p><pre><code data-lang="text">$ pnx 16-encode-bad.pnx
+hex_decode: format
+base64_decode: format
+</code></pre></div><h3>16.5 <code>bytes</code> — binary data</h3><p class="para"><span class="pn">(1)</span> The module <code>bytes</code> writes numbers and text into a buffer as fixed byte forms, and reads them from bytes. The writing words are <code>(value, buf or fail)</code> (<code>err.full</code> when there is not enough room; nothing is written). The reading words are <code>(s str gives value, rest str or fail)</code> (<code>err.format</code> when the bytes run short or have the wrong form).</p><p class="para"><p><span class="pn">(2)</span></p><table><tr><td><strong>Word</strong></td><td><strong>Bytes</strong></td></tr><tr><td><code>put_u8</code> <code>put_u16</code> <code>put_u32</code> <code>put_u64</code><br><code>put_i8</code> <code>put_i16</code> <code>put_i32</code> <code>put_i64</code></td><td>an integer of that width, least significant byte first</td></tr><tr><td>the same names with <code>_be</code></td><td>most significant byte first</td></tr><tr><td><code>get_u8</code> … <code>get_i64</code>, <code>get_u16_be</code> …</td><td>their pairs; <code>u8</code> <code>u16</code> <code>u32</code> read as non-negative; <code>u64</code> puts the 64 bits into the <code>int</code> as they are (negative when the top bit is set)</td></tr><tr><td><code>put_varint</code> <code>get_varint</code></td><td>LEB128: the value as an unsigned 64-bit number, 7 bits at a time (a negative takes 10 bytes)</td></tr><tr><td><code>put_str</code> <code>get_str</code></td><td>a length (varint), then the bytes</td></tr></table></p><div class="example run"><p class="ex-file"><code>16-bytes.pnx</code></p><pre><code data-lang="pinax"><span style="color: #d73948">use</span> io
+<span style="color: #d73948">use</span> bytes
+<span style="color: #d73948">use</span> encode
+<span style="color: #d73948">use</span> <span style="color: #d73948">str</span>
+<span style="color: #d73948">buffer</span> out <span style="color: #b60157">64</span>
+<span style="color: #d73948">buffer</span> hex <span style="color: #b60157">128</span>
+<span style="color: #d73948">word</span> dump () out contents hex encode.hex_encode <span style="color: #d73948">or_else</span> (e) <span style="color: #d73948">end</span>  hex contents io.println  hex clear <span style="color: #d73948">end</span>
+<span style="color: #d73948">word</span> demo (<span style="color: #d73948">or</span> <span style="color: #d73948">fail</span>)
+  <span style="color: #b60157">258</span> out bytes.put_u16 <span style="color: #d73948">or_fail</span>            <span style="color: #74747c">rem little end first: 02 01</span>
+  <span style="color: #b60157">258</span> out bytes.put_u16_be <span style="color: #d73948">or_fail</span>         <span style="color: #74747c">rem big end first: 01 02</span>
+  <span style="color: #b60157">300</span> out bytes.put_varint <span style="color: #d73948">or_fail</span>         <span style="color: #74747c">rem LEB128: ac 02</span>
+  <span style="color: #198810">"hi"</span> out bytes.put_str <span style="color: #d73948">or_fail</span>           <span style="color: #74747c">rem a varint length, then the bytes</span>
+  dump
+  out contents <span style="color: #d73948">to</span> s
+  s bytes.get_u16 <span style="color: #d73948">or_fail</span> <span style="color: #d73948">to</span> (a, s1)       <span style="color: #74747c">rem the value and the rest</span>
+  s1 bytes.get_u16_be <span style="color: #d73948">or_fail</span> <span style="color: #d73948">to</span> (b, s2)
+  s2 bytes.get_varint <span style="color: #d73948">or_fail</span> <span style="color: #d73948">to</span> (c, s3)
+  s3 bytes.get_str <span style="color: #d73948">or_fail</span> <span style="color: #d73948">to</span> (d, s4)
+  <span style="color: #d73948">cat</span> (a, <span style="color: #198810">" "</span>, b, <span style="color: #198810">" "</span>, c, <span style="color: #198810">" "</span>, d, <span style="color: #198810">", left "</span>, s4 <span style="color: #d73948">str</span>.len) io.println
+<span style="color: #d73948">end</span>
+demo <span style="color: #d73948">or_else</span> (e) e err_text io.println <span style="color: #d73948">end</span>
+</code></pre><p class="ex-label">Output</p><pre><code data-lang="text">$ pnx 16-bytes.pnx
+02010102ac02026869
+258 258 300 hi, left 0
+</code></pre></div><h4>16.5.1 Records</h4><p class="para"><span class="pn">(3)</span> <code>row buf bytes.pack</code> appends one row of a record (8.8) to a buffer, field by field in order (<code>or fail</code>). <code>s row bytes.unpack</code> reads the fields from bytes into the row and gives the rest (<code>gives str or fail</code>). <code>row bytes.packed_size</code> is the number of bytes <code>pack</code> would write.</p><p class="para"><span class="pn">(4)</span> The bytes of a field: an integer width as that width (most significant byte first when the record has <code>big_endian</code>, least significant first otherwise), <code>int</code> as 8 bytes, <code>bool</code> as 1 byte, <code>varint</code> as LEB128, <code>str(N)</code> as a length (varint) and the bytes, a field holding a row as the number it holds (varint).</p><p class="para"><span class="pn">(5)</span> When <code>pack</code> fails the buffer goes back to the length it had before the call. <code>unpack</code> writes into the row only when every field can be read; when it fails the row is unchanged.</p><div class="example run"><p class="ex-file"><code>16-bytes-pack.pnx</code></p><pre><code data-lang="pinax"><span style="color: #d73948">use</span> io
+<span style="color: #d73948">use</span> bytes
+<span style="color: #d73948">use</span> encode
+<span style="color: #d73948">use</span> <span style="color: #d73948">str</span>
+<span style="color: #d73948">record</span> item
+  id <span style="color: #d73948">u16</span>
+  name <span style="color: #d73948">str</span>(<span style="color: #b60157">8</span>)
+  delta varint
+<span style="color: #d73948">end</span>
+<span style="color: #d73948">record</span> wire
+  <span style="color: #d73948">big_endian</span>
+  id <span style="color: #d73948">u16</span>
+  count <span style="color: #d73948">u32</span>
+<span style="color: #d73948">end</span>
+<span style="color: #d73948">array</span> items item <span style="color: #b60157">2</span>
+<span style="color: #d73948">array</span> wires wire <span style="color: #b60157">1</span>
+<span style="color: #d73948">buffer</span> out <span style="color: #b60157">64</span>
+<span style="color: #d73948">buffer</span> hex <span style="color: #b60157">128</span>
+<span style="color: #d73948">word</span> dump () out contents hex encode.hex_encode <span style="color: #d73948">or_else</span> (e) <span style="color: #d73948">end</span>  hex contents io.println  hex clear <span style="color: #d73948">end</span>
+<span style="color: #d73948">word</span> demo (<span style="color: #d73948">or</span> <span style="color: #d73948">fail</span>)
+  <span style="color: #b60157">0</span> items idx <span style="color: #d73948">to</span> a
+  <span style="color: #b60157">513</span> a <span style="color: #d73948">to</span> item.id  <span style="color: #198810">"pinax"</span> a <span style="color: #d73948">to</span> item.name  <span style="color: #b60157">-3</span> a <span style="color: #d73948">to</span> item.delta
+  a out bytes.pack <span style="color: #d73948">or_fail</span>
+  dump
+  <span style="color: #d73948">cat</span> (<span style="color: #198810">"packed_size "</span>, a bytes.packed_size, <span style="color: #198810">", written "</span>, out contents <span style="color: #d73948">str</span>.len) io.println
+  <span style="color: #b60157">1</span> items idx <span style="color: #d73948">to</span> b
+  out contents b bytes.unpack <span style="color: #d73948">or_fail</span> <span style="color: #d73948">to</span> rest
+  <span style="color: #d73948">cat</span> (b item.id, <span style="color: #198810">" "</span>, b item.name, <span style="color: #198810">" "</span>, b item.delta, <span style="color: #198810">", rest "</span>, rest <span style="color: #d73948">str</span>.len) io.println
+  <span style="color: #198810">"</span><span style="color: #1d6c76">\x</span><span style="color: #198810">01</span><span style="color: #1d6c76">\x</span><span style="color: #198810">02</span><span style="color: #1d6c76">\x</span><span style="color: #198810">05"</span> b bytes.unpack <span style="color: #d73948">or_else</span> (e) <span style="color: #d73948">cat</span> (<span style="color: #198810">"short input: "</span>, e err_text) io.println <span style="color: #198810">""</span> <span style="color: #d73948">end</span> drop
+  <span style="color: #d73948">cat</span> (<span style="color: #198810">"the row is unchanged: "</span>, b item.name) io.println
+  out clear
+  <span style="color: #b60157">0</span> wires idx <span style="color: #d73948">to</span> w
+  <span style="color: #b60157">258</span> w <span style="color: #d73948">to</span> wire.id  <span style="color: #b60157">7</span> w <span style="color: #d73948">to</span> wire.count
+  w out bytes.pack <span style="color: #d73948">or_fail</span>
+  dump
+<span style="color: #d73948">end</span>
+demo <span style="color: #d73948">or_else</span> (e) e err_text io.println <span style="color: #d73948">end</span>
+</code></pre><p class="ex-label">Output</p><pre><code data-lang="text">$ pnx 16-bytes-pack.pnx
+01020570696e6178fdffffffffffffffff01
+packed_size 18, written 18
+513 pinax -3, rest 0
+short input: format
+the row is unchanged: pinax
+010200000007
+</code></pre></div><h5>Constraints</h5><p class="para"><span class="pn">(6)</span> <code>pack</code>, <code>unpack</code> and <code>packed_size</code> take only rows of records.</p><div class="example refused"><p class="ex-file"><code>16-bytes-pack-int.pnx</code></p><pre><code data-lang="pinax"><span style="color: #d73948">use</span> bytes
+<span style="color: #d73948">buffer</span> b <span style="color: #b60157">8</span>
+<span style="color: #b60157">5</span> b bytes.pack <span style="color: #d73948">or_else</span> (e) <span style="color: #d73948">end</span>
+</code></pre><p class="ex-label">Refused</p><pre><code data-lang="text">$ pnx 16-bytes-pack-int.pnx
+16-bytes-pack-int.pnx:3:5: pack takes a row of a table of records and a buffer: row buf bytes.pack
+</code></pre></div><h5>Faults</h5><p class="para"><span class="pn">(7)</span> A value that does not fit the width written is the fault <code>overflow</code>; it is not cut.</p><div class="example fault"><p class="ex-file"><code>16-bytes-narrow.pnx</code></p><pre><code data-lang="pinax"><span style="color: #d73948">use</span> bytes
+<span style="color: #d73948">buffer</span> b <span style="color: #b60157">8</span>
+<span style="color: #b60157">300</span> b bytes.put_u8 <span style="color: #d73948">or_else</span> (e) <span style="color: #d73948">end</span>
+</code></pre><p class="ex-label">Fault</p><pre><code data-lang="text">$ pnx 16-bytes-narrow.pnx
+16-bytes-narrow.pnx:3: integer overflow
+</code></pre></div><h3>16.6 <code>ptn</code> — small patterns</h3><p class="para"><span class="pn">(1)</span> The module <code>ptn</code> finds and replaces text with <strong>pattern</strong>s of the size of Lua’s. It has no alternation (<code>|</code>), no repetition of groups and no back references; <code>rex</code> (16.7) takes the larger grammar.</p><h4>16.6.1 The text of a pattern</h4><p class="para"><p><span class="pn">(2)</span> A pattern is a sequence of the items below, matched byte by byte.</p><table><tr><td><strong>Item</strong></td><td><strong>Matches</strong></td></tr><tr><td>an ordinary character</td><td>that byte</td></tr><tr><td><code>.</code></td><td>any byte</td></tr><tr><td><code>%a</code> <code>%d</code> <code>%l</code> <code>%u</code> <code>%s</code> <code>%w</code> <code>%x</code> <code>%p</code> <code>%c</code></td><td>letters, digits, lower case, upper case, white space, letters or digits, hexadecimal digits, punctuation, control characters (ASCII); in upper case, everything else</td></tr><tr><td><code>%</code> and a character that is not a letter or digit</td><td>that byte itself (<code>%.</code> <code>%%</code> <code>%(</code>)</td></tr><tr><td><code>[…]</code> <code>[^…]</code></td><td>a set and its complement, with <code>a-z</code> ranges and <code>%</code> classes inside; a <code>]</code> right after <code>[</code> or <code>[^</code> is a member</td></tr><tr><td><code>*</code> <code>+</code> <code>-</code> <code>?</code> after an item</td><td>zero or more (longest), one or more (longest), zero or more (shortest), zero or one</td></tr><tr><td><code>( … )</code></td><td>a capture; up to nine</td></tr><tr><td><code>^</code> first, <code>$</code> last</td><td>anchored at the start, at the end of the text</td></tr></table></p><div class="example run"><p class="ex-file"><code>16-ptn-classes.pnx</code></p><pre><code data-lang="pinax"><span style="color: #d73948">use</span> io
+<span style="color: #d73948">use</span> ptn
+<span style="color: #198810">"a1 B2_c3!"</span> <span style="color: #198810">"%a"</span> <span style="color: #198810">"."</span> ptn.replace io.println     <span style="color: #74747c">rem letters</span>
+<span style="color: #198810">"a1 B2_c3!"</span> <span style="color: #198810">"%d"</span> <span style="color: #198810">"."</span> ptn.replace io.println     <span style="color: #74747c">rem digits</span>
+<span style="color: #198810">"a1 B2_c3!"</span> <span style="color: #198810">"%W"</span> <span style="color: #198810">"."</span> ptn.replace io.println     <span style="color: #74747c">rem not letter or digit</span>
+<span style="color: #198810">"a1 B2_c3!"</span> <span style="color: #198810">"[%u_]"</span> <span style="color: #198810">"."</span> ptn.replace io.println  <span style="color: #74747c">rem a set: upper case or _</span>
+<span style="color: #198810">"aaab"</span> <span style="color: #198810">"a-b"</span> <span style="color: #198810">"&lt;%0&gt;"</span> ptn.replace io.println      <span style="color: #74747c">rem - is the shortest repetition</span>
+<span style="color: #198810">"color colour"</span> <span style="color: #198810">"colou?r"</span> <span style="color: #198810">"#"</span> ptn.replace io.println
+</code></pre><p class="ex-label">Output</p><pre><code data-lang="text">$ pnx 16-ptn-classes.pnx
+.1 .2_.3!
+a. B._c.!
+a1.B2.c3.
+a1 .2.c3!
+&lt;aaab&gt;
+# #
+</code></pre></div><h4>16.6.2 Words</h4><p class="para"><p><span class="pn">(3)</span></p><table><tr><td><strong>Word</strong></td><td><strong>Signature</strong></td><td><strong>Meaning</strong></td></tr><tr><td><code>is_match</code></td><td><code>(s str, pat gives bool)</code></td><td>is there a match anywhere</td></tr><tr><td><code>match</code></td><td><code>(s str, pat gives str or fail)</code></td><td>a view of the first match; <code>err.not_found</code> when none</td></tr><tr><td><code>capture</code></td><td><code>(n int gives str)</code></td><td>capture <code>n</code> (1–9) of the last <code>match</code>; 0 is the whole match</td></tr><tr><td><code>matches</code></td><td>stem</td><td>the matches in order, each search starting where the last ended</td></tr><tr><td><code>replace</code></td><td><code>(s str, pat, rep str gives str)</code></td><td>new text with every match replaced by <code>rep</code>; in <code>rep</code>, <code>%0</code>–<code>%9</code> are captures and <code>%%</code> is <code>%</code></td></tr></table></p><p class="para"><span class="pn">(4)</span> A pattern that begins with <code>^</code> is tried at the start only, so <code>matches</code> and <code>replace</code> match at most once.</p><p class="para"><span class="pn">(5)</span> The last match <code>capture</code> reads belongs to each run (task) separately; another <code>match</code> changes it.</p><div class="example run"><p class="ex-file"><code>16-ptn.pnx</code></p><pre><code data-lang="pinax"><span style="color: #d73948">use</span> io
+<span style="color: #d73948">use</span> ptn
+<span style="color: #d73948">const</span> date <span style="color: #198810">"(%d+)-(%d+)-(%d+)"</span>
+<span style="color: #d73948">word</span> yes (b <span style="color: #d73948">bool</span> <span style="color: #d73948">gives</span> <span style="color: #d73948">str</span>) b <span style="color: #d73948">if</span> <span style="color: #198810">"true"</span> <span style="color: #d73948">else</span> <span style="color: #198810">"false"</span> <span style="color: #d73948">end</span> <span style="color: #d73948">end</span>
+<span style="color: #198810">"abc 123"</span> <span style="color: #198810">"%d+"</span> ptn.is_match yes io.println
+<span style="color: #d73948">word</span> demo ()
+  <span style="color: #198810">"on 2026-10-15 ok"</span> date ptn.match <span style="color: #d73948">or_else</span> (e) <span style="color: #198810">"?"</span> <span style="color: #d73948">end</span> io.println    <span style="color: #74747c">rem the whole match</span>
+  <span style="color: #d73948">cat</span> (<span style="color: #b60157">1</span> ptn.capture, <span style="color: #198810">"/"</span>, <span style="color: #b60157">2</span> ptn.capture, <span style="color: #198810">"/"</span>, <span style="color: #b60157">3</span> ptn.capture) io.println
+  <span style="color: #198810">"key = value"</span> <span style="color: #198810">"^(%w+)%s*=%s*(%w+)$"</span> ptn.match <span style="color: #d73948">or_else</span> (e) <span style="color: #198810">"?"</span> <span style="color: #d73948">end</span> drop
+  <span style="color: #d73948">cat</span> (<span style="color: #b60157">2</span> ptn.capture, <span style="color: #198810">" &lt;- "</span>, <span style="color: #b60157">1</span> ptn.capture) io.println
+<span style="color: #d73948">end</span>
+demo
+<span style="color: #198810">"x=1, y=22, z=333"</span> <span style="color: #198810">"%a=%d+"</span> ptn.matches <span style="color: #d73948">do</span> (m <span style="color: #d73948">str</span>) <span style="color: #d73948">cat</span> (<span style="color: #198810">"["</span>, m, <span style="color: #198810">"]"</span>) io.print <span style="color: #d73948">end</span> each
+<span style="color: #198810">""</span> io.println
+<span style="color: #198810">"2026-10-15"</span> date <span style="color: #198810">"%3.%2.%1 (%0)"</span> ptn.replace io.println
+<span style="color: #198810">"  trim me  "</span> <span style="color: #198810">"^%s*(.-)%s*$"</span> <span style="color: #198810">"%1"</span> ptn.replace io.println
+<span style="color: #198810">"aaa"</span> <span style="color: #198810">"^a"</span> <span style="color: #198810">"-"</span> ptn.replace io.println              <span style="color: #74747c">rem ^ anchors: one match, at the start</span>
+</code></pre><p class="ex-label">Output</p><pre><code data-lang="text">$ pnx 16-ptn.pnx
+true
+2026-10-15
+2026/10/15
+value &lt;- key
+[x=1][y=22][z=333]
+15.10.2026 (2026-10-15)
+trim me
+-aa
+</code></pre></div><h5>Constraints</h5><p class="para"><span class="pn">(6)</span> A pattern shall be a string literal or a <code>const</code> of one, so that it is checked at load. To search with text made while running, use <code>rex.compile</code> (16.7).</p><div class="example refused"><p class="ex-file"><code>16-ptn-variable.pnx</code></p><pre><code data-lang="pinax"><span style="color: #d73948">use</span> ptn
+<span style="color: #d73948">word</span> f (s <span style="color: #d73948">str</span>, p <span style="color: #d73948">str</span> <span style="color: #d73948">gives</span> <span style="color: #d73948">bool</span>) s p ptn.is_match <span style="color: #d73948">end</span>
+</code></pre><p class="ex-label">Refused</p><pre><code data-lang="text">$ pnx 16-ptn-variable.pnx
+16-ptn-variable.pnx:2:38: a pattern is a string literal or a const name, so that it is checked at load
+</code></pre></div><p class="para"><span class="pn">(7)</span> A malformed pattern (an unclosed set or capture, a final <code>%</code>, a <code>)</code> that closes nothing, ten or more captures) is refused; so are <code>%b</code>, <code>%f</code>, the back reference <code>%1</code> and the position capture <code>()</code>.</p><div class="example refused"><p class="ex-file"><code>16-ptn-bad.pnx</code></p><pre><code data-lang="pinax"><span style="color: #d73948">use</span> ptn
+<span style="color: #d73948">word</span> f (s <span style="color: #d73948">str</span> <span style="color: #d73948">gives</span> <span style="color: #d73948">bool</span>) s <span style="color: #198810">"[a-z"</span> ptn.is_match <span style="color: #d73948">end</span>
+</code></pre><p class="ex-label">Refused</p><pre><code data-lang="text">$ pnx 16-ptn-bad.pnx
+16-ptn-bad.pnx:2:36: a set is not closed by ]
+</code></pre></div><div class="example refused"><p class="ex-file"><code>16-ptn-balance.pnx</code></p><pre><code data-lang="pinax"><span style="color: #d73948">use</span> ptn
+<span style="color: #d73948">word</span> f (s <span style="color: #d73948">str</span> <span style="color: #d73948">gives</span> <span style="color: #d73948">bool</span>) s <span style="color: #198810">"%b()"</span> ptn.is_match <span style="color: #d73948">end</span>
+</code></pre><p class="ex-label">Refused</p><pre><code data-lang="text">$ pnx 16-ptn-balance.pnx
+16-ptn-balance.pnx:2:36: %b, %f and back references are not supported
+</code></pre></div><h5>Faults</h5><p class="para"><span class="pn">(8)</span> A <code>capture</code> whose <code>n</code> the last match did not make, or with no match yet, is the fault <code>range</code>.</p><div class="example fault"><p class="ex-file"><code>16-ptn-capture-none.pnx</code></p><pre><code data-lang="pinax"><span style="color: #d73948">use</span> ptn
+<span style="color: #d73948">use</span> io
+<span style="color: #d73948">word</span> f () <span style="color: #198810">"ab"</span> <span style="color: #198810">"(a)b"</span> ptn.match <span style="color: #d73948">or_else</span> (e) <span style="color: #198810">""</span> <span style="color: #d73948">end</span> drop  <span style="color: #b60157">2</span> ptn.capture io.println <span style="color: #d73948">end</span>
+f
+</code></pre><p class="ex-label">Fault</p><pre><code data-lang="text">$ pnx 16-ptn-capture-none.pnx
+16-ptn-capture-none.pnx:3: index out of range
+</code></pre></div><p class="para"><span class="pn">(9)</span> Matching goes back and tries again. A word that takes more than 2<sup>24</sup> steps in one call stops with the fault <code>depth</code>. Rewrite such a pattern with fewer shortest repetitions (<code>-</code>), or use <code>rex</code>, which does not go back.</p><div class="example fault"><p class="ex-file"><code>16-ptn-steps.pnx</code></p><pre><code data-lang="pinax"><span style="color: #d73948">use</span> ptn
+<span style="color: #d73948">use</span> <span style="color: #d73948">str</span>
+<span style="color: #198810">"a"</span> <span style="color: #b60157">300</span> <span style="color: #d73948">str</span>.repeat <span style="color: #198810">".-.-.-.-.-.-.-.-x"</span> ptn.is_match drop
+</code></pre><p class="ex-label">Fault</p><pre><code data-lang="text">$ pnx 16-ptn-steps.pnx
+16-ptn-steps.pnx:3: call depth limit
+</code></pre></div><h5>Diagnostics</h5><table><thead><tr><th><strong>Condition</strong></th><th><strong>Message</strong></th></tr></thead><tbody><tr><td>A pattern that is not a constant</td><td><code>a pattern is a string literal or a const name, so that it is checked at load</code></td></tr><tr><td>An unclosed set</td><td><code>a set is not closed by ]</code></td></tr><tr><td><code>%b</code>, <code>%f</code>, back references</td><td><code>%b, %f and back references are not supported</code></td></tr></tbody></table><h3>16.7 <code>rex</code> — regular expressions</h3><p class="para"><span class="pn">(1)</span> The module <code>rex</code> finds and replaces with <strong>regular expression</strong>s. Its matching never goes back, so the time it takes is bounded by the length of the text times the size of the pattern. Write patterns as raw strings (6.5): in an ordinary string <code>"\d"</code> is refused as an unknown escape, and <code>"\b"</code> becomes a backspace.</p><p class="para"><span class="pn">(2)</span> In a source that has <code>use rex</code> the type name <code>regex</code> is visible. A <code>regex</code> value is a pattern program that cannot be changed once made. It is used only in locals, arguments and results.</p><h4>16.7.1 The text of a pattern</h4><p class="para"><p><span class="pn">(3)</span></p><table><tr><td><strong>Form</strong></td><td><strong>Meaning</strong></td></tr><tr><td>a character</td><td>its bytes; a multi-byte character, its byte sequence</td></tr><tr><td><code>.</code></td><td>one UTF-8 character; without <code>(?s)</code> not a line break</td></tr><tr><td><code>[abc]</code> <code>[a-z]</code> <code>[^…]</code></td><td>a set; ranges are ASCII; a complemented set takes one UTF-8 character</td></tr><tr><td><code>\d</code> <code>\w</code> <code>\s</code> <code>\D</code> <code>\W</code> <code>\S</code></td><td>digits, word characters, white space and their complements (ASCII)</td></tr><tr><td><code>*</code> <code>+</code> <code>?</code> <code>{n}</code> <code>{n,}</code> <code>{n,m}</code></td><td>repetition (longest); with <code>?</code> after it, shortest</td></tr><tr><td><code>a|b</code></td><td>alternation; the left first</td></tr><tr><td><code>( … )</code> <code>(?: … )</code></td><td>a group that captures, one that does not</td></tr><tr><td><code>^</code> <code>$</code></td><td>the start and end of the text; with <code>(?m)</code>, of each line</td></tr><tr><td><code>\b</code> <code>\B</code></td><td>a word boundary and its complement (ASCII)</td></tr><tr><td><code>\n</code> <code>\t</code> <code>\r</code> <code>\f</code> <code>\v</code> <code>\0</code> <code>\xNN</code></td><td>that byte</td></tr><tr><td><code>\</code> and any other character</td><td>that character (<code>\.</code> <code>\*</code> <code>\\</code>)</td></tr><tr><td><code>\zs</code> <code>\ze</code></td><td>the match is narrowed to start, end here; the whole pattern must still match</td></tr><tr><td><code>(?i)</code> <code>(?m)</code> <code>(?s)</code></td><td>at the very start of a pattern only: ignore case (ASCII), anchors per line, <code>.</code> also matches a line break</td></tr></table><p>There are no back references, lookaround, Unicode properties or named groups.</p></p><p class="para"><span class="pn">(4)</span> A pattern that repeats a body able to match the empty text (such as <code>(a*)*</code>) may give other captures than Perl or Python.</p><h4>16.7.2 Words</h4><p class="para"><p><span class="pn">(5)</span> <code>re</code> is a <code>regex</code> value. “The match” is the range narrowed by <code>\zs</code> and <code>\ze</code>.</p><table><tr><td><strong>Word</strong></td><td><strong>Signature</strong></td><td><strong>Meaning</strong></td></tr><tr><td><code>rx</code></td><td><code>(pat gives regex)</code></td><td>makes the program at load; <code>pat</code> is a literal or a <code>const</code></td></tr><tr><td><code>compile</code></td><td><code>(pat str gives regex or fail)</code></td><td>makes it while running; a malformed pattern is <code>err.format</code>; the program lies in the region</td></tr><tr><td><code>is_match</code></td><td><code>(s str, re gives bool)</code></td><td>is there a match</td></tr><tr><td><code>match</code></td><td><code>(s str, re gives str or fail)</code></td><td>the first match; <code>err.not_found</code> when none</td></tr><tr><td><code>cut_match</code></td><td><code>(s str, re gives str, str, str or fail)</code></td><td>what is before the first match, the match, and what is after</td></tr><tr><td><code>matches</code></td><td>stem</td><td>the matches in order; the block takes the whole match and one <code>str</code> parameter per group</td></tr><tr><td><code>split</code></td><td>stem</td><td>the pieces between the matches</td></tr><tr><td><code>with_match</code></td><td><code>(s str, re, block or fail)</code></td><td>runs the block once with the first match; <code>err.not_found</code> when none</td></tr><tr><td><code>replace</code></td><td><code>(s str, re, rep str gives str)</code></td><td>new text with every match replaced; in <code>rep</code>, <code>\0</code>–<code>\9</code> are groups</td></tr><tr><td><code>replace_into</code></td><td><code>(s str, re, rep str, buf gives int or fail)</code></td><td>appends the replaced text to a buffer and gives the number of replacements</td></tr><tr><td><code>replace_by</code></td><td><code>(s str, re, buf, block gives int or fail)</code></td><td>appends to a buffer, each match replaced by the text the block gives</td></tr></table></p><p class="para"><span class="pn">(6)</span> When <code>matches</code>, <code>split</code> and <code>replace</code> search again from the next place, they still see the whole text, so <code>^</code> and <code>\b</code> know the bytes before that place.</p><div class="example run"><p class="ex-file"><code>16-rex.pnx</code></p><pre><code data-lang="pinax"><span style="color: #d73948">use</span> io
+<span style="color: #d73948">use</span> <span style="color: #d73948">str</span>
+<span style="color: #d73948">use</span> rex
+<span style="color: #d73948">const</span> pair <span style="color: #198810">r"(\w+)=(\d+)"</span>
+<span style="color: #d73948">word</span> yes (b <span style="color: #d73948">bool</span> <span style="color: #d73948">gives</span> <span style="color: #d73948">str</span>) b <span style="color: #d73948">if</span> <span style="color: #198810">"true"</span> <span style="color: #d73948">else</span> <span style="color: #198810">"false"</span> <span style="color: #d73948">end</span> <span style="color: #d73948">end</span>
+<span style="color: #d73948">word</span> total (line <span style="color: #d73948">str</span> <span style="color: #d73948">gives</span> n <span style="color: #d73948">int</span>)               <span style="color: #74747c">rem groups arrive as block parameters</span>
+  <span style="color: #b60157">0</span> <span style="color: #d73948">to</span> n
+  line pair rex.rx rex.matches <span style="color: #d73948">do</span> (whole <span style="color: #d73948">str</span>, key <span style="color: #d73948">str</span>, value <span style="color: #d73948">str</span>)
+    n value <span style="color: #d73948">str</span>.to_int <span style="color: #d73948">or_else</span> <span style="color: #b60157">0</span> <span style="color: #d73948">end</span> add <span style="color: #d73948">to</span> n
+  <span style="color: #d73948">end</span> each
+  n
+<span style="color: #d73948">end</span>
+<span style="color: #d73948">word</span> demo ()
+  <span style="color: #d73948">cat</span> (<span style="color: #198810">"sum "</span>, <span style="color: #198810">"id=7, x=20; name=kim, n=3"</span> total) io.println
+  <span style="color: #198810">"abc 123"</span> <span style="color: #198810">r"\d+"</span> rex.rx rex.is_match yes io.println
+  <span style="color: #198810">"on 2026-10-15 ok"</span> <span style="color: #198810">r"(\d+)-(\d+)"</span> rex.rx rex.match <span style="color: #d73948">or_else</span> (e) <span style="color: #198810">"?"</span> <span style="color: #d73948">end</span> io.println
+  <span style="color: #198810">"key: value"</span> <span style="color: #198810">r":\s*"</span> rex.rx rex.cut_match <span style="color: #d73948">or_else</span> (e) <span style="color: #198810">""</span> <span style="color: #198810">""</span> <span style="color: #198810">""</span> <span style="color: #d73948">end</span> <span style="color: #d73948">to</span> (before, m, after)
+  <span style="color: #d73948">cat</span> (<span style="color: #198810">"["</span>, before, <span style="color: #198810">"|"</span>, m, <span style="color: #198810">"|"</span>, after, <span style="color: #198810">"]"</span>) io.println
+  <span style="color: #198810">"from 2026-10-13 to 2026-11-02"</span> <span style="color: #198810">r"(\d{4})-(\d{2})-(\d{2})"</span> rex.rx <span style="color: #198810">r"\3/\2/\1"</span> rex.replace io.println
+  <span style="color: #198810">"a , b;c ,d"</span> <span style="color: #198810">r"\s*[,;]\s*"</span> rex.rx rex.split <span style="color: #d73948">do</span> (part <span style="color: #d73948">str</span>) <span style="color: #d73948">cat</span> (<span style="color: #198810">"&lt;"</span>, part, <span style="color: #198810">"&gt;"</span>) io.print <span style="color: #d73948">end</span> each
+  <span style="color: #198810">""</span> io.println
+  <span style="color: #198810">"가나다"</span> <span style="color: #198810">r"."</span> rex.rx rex.matches <span style="color: #d73948">do</span> (ch <span style="color: #d73948">str</span>) <span style="color: #d73948">cat</span> (<span style="color: #198810">"&lt;"</span>, ch, <span style="color: #198810">"&gt;"</span>) io.print <span style="color: #d73948">end</span> each   <span style="color: #74747c">rem . is one UTF-8 character</span>
+  <span style="color: #198810">""</span> io.println
+  <span style="color: #198810">"foobar"</span> <span style="color: #198810">r"foo\zsbar"</span> rex.rx rex.match <span style="color: #d73948">or_else</span> (e) <span style="color: #198810">"?"</span> <span style="color: #d73948">end</span> io.println              <span style="color: #74747c">rem \zs: the match starts here</span>
+  <span style="color: #198810">"Hello"</span> <span style="color: #198810">r"(?i)HELLO"</span> rex.rx rex.is_match yes io.println
+<span style="color: #d73948">end</span>
+demo
+</code></pre><p class="ex-label">Output</p><pre><code data-lang="text">$ pnx 16-rex.pnx
+sum 30
+true
+2026-10
+[key|: |value]
+from 13/10/2026 to 02/11/2026
+&lt;a&gt;&lt;b&gt;&lt;c&gt;&lt;d&gt;
+&lt;가&gt;&lt;나&gt;&lt;다&gt;
+bar
+true
+</code></pre></div><div class="example run"><p class="ex-file"><code>16-rex-blocks.pnx</code></p><pre><code data-lang="pinax"><span style="color: #d73948">use</span> io
+<span style="color: #d73948">use</span> <span style="color: #d73948">str</span>
+<span style="color: #d73948">use</span> rex
+<span style="color: #d73948">buffer</span> out <span style="color: #b60157">64</span>
+<span style="color: #d73948">word</span> demo ()
+  <span style="color: #198810">"2026-10-15"</span> <span style="color: #198810">r"(\d+)-(\d+)-(\d+)"</span> rex.rx <span style="color: #d73948">do</span> (whole <span style="color: #d73948">str</span>, y <span style="color: #d73948">str</span>, m <span style="color: #d73948">str</span>, d <span style="color: #d73948">str</span>)
+    <span style="color: #d73948">cat</span> (d, <span style="color: #198810">"/"</span>, m, <span style="color: #198810">"/"</span>, y) io.println
+  <span style="color: #d73948">end</span> rex.with_match <span style="color: #d73948">or_else</span> (e) <span style="color: #198810">"no date"</span> io.println <span style="color: #d73948">end</span>
+  <span style="color: #198810">"none here"</span> <span style="color: #198810">r"\d+"</span> rex.rx <span style="color: #d73948">do</span> (whole <span style="color: #d73948">str</span>) whole io.println <span style="color: #d73948">end</span> rex.with_match <span style="color: #d73948">or_else</span> (e) <span style="color: #198810">"no date"</span> io.println <span style="color: #d73948">end</span>
+  <span style="color: #198810">"the quick brown fox"</span> <span style="color: #198810">r"\b[a-z]"</span> rex.rx out <span style="color: #d73948">do</span> (w <span style="color: #d73948">str</span> <span style="color: #d73948">gives</span> <span style="color: #d73948">str</span>) w <span style="color: #d73948">str</span>.upper <span style="color: #d73948">end</span> rex.replace_by <span style="color: #d73948">or_else</span> (e) <span style="color: #b60157">-1</span> <span style="color: #d73948">end</span> <span style="color: #d73948">to</span> n
+  <span style="color: #d73948">cat</span> (n, <span style="color: #198810">" replaced: "</span>, out contents) io.println
+<span style="color: #d73948">end</span>
+demo
+</code></pre><p class="ex-label">Output</p><pre><code data-lang="text">$ pnx 16-rex-blocks.pnx
+15/10/2026
+no date
+4 replaced: The Quick Brown Fox
+</code></pre></div><div class="example run"><p class="ex-file"><code>16-rex-compile.pnx</code></p><pre><code data-lang="pinax"><span style="color: #d73948">use</span> io
+<span style="color: #d73948">use</span> rex
+<span style="color: #d73948">buffer</span> out <span style="color: #b60157">64</span>
+<span style="color: #d73948">word</span> swap_with (p <span style="color: #d73948">str</span>, s <span style="color: #d73948">str</span> <span style="color: #d73948">gives</span> n <span style="color: #d73948">int</span> <span style="color: #d73948">or</span> <span style="color: #d73948">fail</span>)  <span style="color: #74747c">rem a pattern made while running</span>
+  out clear
+  p rex.compile <span style="color: #d73948">or_fail</span> <span style="color: #d73948">to</span> re
+  s re <span style="color: #198810">"-"</span> out rex.replace_into <span style="color: #d73948">or_fail</span>
+<span style="color: #d73948">end</span>
+<span style="color: #d73948">word</span> demo ()
+  <span style="color: #198810">"X"</span> <span style="color: #198810">"aXbXc"</span> swap_with <span style="color: #d73948">or_else</span> (e) <span style="color: #b60157">-1</span> <span style="color: #d73948">end</span> <span style="color: #d73948">to</span> n
+  <span style="color: #d73948">cat</span> (n, <span style="color: #198810">" replaced: "</span>, out contents) io.println
+  <span style="color: #198810">"("</span> <span style="color: #198810">"aXbXc"</span> swap_with <span style="color: #d73948">or_else</span> (e) <span style="color: #d73948">cat</span> (<span style="color: #198810">"bad pattern: "</span>, e err_text) io.println <span style="color: #b60157">-1</span> <span style="color: #d73948">end</span> drop
+<span style="color: #d73948">end</span>
+demo
+</code></pre><p class="ex-label">Output</p><pre><code data-lang="text">$ pnx 16-rex-compile.pnx
+2 replaced: a-b-c
+bad pattern: format
+</code></pre></div><h5>Constraints</h5><p class="para"><span class="pn">(7)</span> The pattern of <code>rx</code> shall be a string literal or a <code>const</code>. A pattern made while running goes through <code>compile</code>.</p><div class="example refused"><p class="ex-file"><code>16-rex-variable.pnx</code></p><pre><code data-lang="pinax"><span style="color: #d73948">use</span> rex
+<span style="color: #d73948">word</span> f (s <span style="color: #d73948">str</span>, p <span style="color: #d73948">str</span> <span style="color: #d73948">gives</span> <span style="color: #d73948">bool</span>) s p rex.rx rex.is_match <span style="color: #d73948">end</span>
+</code></pre><p class="ex-label">Refused</p><pre><code data-lang="text">$ pnx 16-rex-variable.pnx
+16-rex-variable.pnx:2:38: rx takes a string literal or a const name; a pattern made while running is rex.compile
+</code></pre></div><p class="para"><span class="pn">(8)</span> Malformed patterns and missing features (back references and the like) are refused.</p><div class="example refused"><p class="ex-file"><code>16-rex-bad.pnx</code></p><pre><code data-lang="pinax"><span style="color: #d73948">use</span> rex
+<span style="color: #d73948">word</span> f (s <span style="color: #d73948">str</span> <span style="color: #d73948">gives</span> <span style="color: #d73948">bool</span>) s <span style="color: #198810">r"a{3,1}"</span> rex.rx rex.is_match <span style="color: #d73948">end</span>
+</code></pre><p class="ex-label">Refused</p><pre><code data-lang="text">$ pnx 16-rex-bad.pnx
+16-rex-bad.pnx:2:39: a counted repetition goes downwards
+</code></pre></div><div class="example refused"><p class="ex-file"><code>16-rex-backref.pnx</code></p><pre><code data-lang="pinax"><span style="color: #d73948">use</span> rex
+<span style="color: #d73948">word</span> f (s <span style="color: #d73948">str</span> <span style="color: #d73948">gives</span> <span style="color: #d73948">bool</span>) s <span style="color: #198810">r"(a)\1"</span> rex.rx rex.is_match <span style="color: #d73948">end</span>
+</code></pre><p class="ex-label">Refused</p><pre><code data-lang="text">$ pnx 16-rex-backref.pnx
+16-rex-backref.pnx:2:38: back references are not supported
+</code></pre></div><p class="para"><span class="pn">(9)</span> A <code>str</code> where a <code>regex</code> goes is refused. The group parameters of a block shall be <code>str</code>.</p><div class="example refused"><p class="ex-file"><code>16-rex-str.pnx</code></p><pre><code data-lang="pinax"><span style="color: #d73948">use</span> rex
+<span style="color: #d73948">word</span> f (s <span style="color: #d73948">str</span> <span style="color: #d73948">gives</span> <span style="color: #d73948">bool</span>) s <span style="color: #198810">"a"</span> rex.is_match <span style="color: #d73948">end</span>
+</code></pre><p class="ex-label">Refused</p><pre><code data-lang="text">$ pnx 16-rex-str.pnx
+16-rex-str.pnx:2:33: this word takes a str and a regex: s re rex.match
+</code></pre></div><div class="example refused"><p class="ex-file"><code>16-rex-group-type.pnx</code></p><pre><code data-lang="pinax"><span style="color: #d73948">use</span> rex
+<span style="color: #d73948">word</span> f (s <span style="color: #d73948">str</span>) s <span style="color: #198810">r"(a)"</span> rex.rx rex.matches <span style="color: #d73948">do</span> (m <span style="color: #d73948">str</span>, g <span style="color: #d73948">int</span>) <span style="color: #d73948">end</span> each <span style="color: #d73948">end</span>
+</code></pre><p class="ex-label">Refused</p><pre><code data-lang="text">$ pnx 16-rex-group-type.pnx
+16-rex-group-type.pnx:2:44: the groups are named str parameters
+</code></pre></div><h5>Faults</h5><p class="para"><span class="pn">(10)</span> The work space of a search is borrowed from the end of the region on every call. A region too small is the fault <code>full</code>.</p><h5>Diagnostics</h5><table><thead><tr><th><strong>Condition</strong></th><th><strong>Message</strong></th></tr></thead><tbody><tr><td>A pattern for <code>rx</code> that is not a constant</td><td><code>rx takes a string literal or a const name; a pattern made while running is rex.compile</code></td></tr><tr><td>A count that goes downwards</td><td><code>a counted repetition goes downwards</code></td></tr><tr><td>A back reference</td><td><code>back references are not supported</code></td></tr><tr><td>A <code>str</code> where a <code>regex</code> goes</td><td><code>this word takes a str and a regex: s re rex.match</code></td></tr><tr><td>A group parameter that is not a <code>str</code></td><td><code>the groups are named str parameters</code></td></tr></tbody></table><h3>16.8 <code>json</code> — JSON</h3><p class="para"><span class="pn">(1)</span> The module <code>json</code> reads and writes JSON (RFC 8259) text in one direction, without building a tree: it reads one token at a time and writes straight into a buffer.</p><h4>16.8.1 Reading</h4><p class="para"><span class="pn">(2)</span> <code>s json.next</code> reads the first token of <code>s</code> and gives <code>(kind int, value str, rest str)</code> (<code>or fail</code>). At the end it fails with <code>err.not_found</code>; on something that is not a token, with <code>err.format</code>. White space, commas and colons between tokens are passed over. The structure of the grammar — matching brackets, where commas go — is not checked.</p><p class="para"><p><span class="pn">(3)</span> <code>kind</code> is one of the constants below. The <code>value</code> of a string is its text without the quotes; when it has escapes, they are decoded into text written in the region. The <code>value</code> of a number is its text as written.</p><table><tr><td><strong>Constant</strong></td><td><strong>Token</strong></td></tr><tr><td><code>json.object</code> <code>json.object_end</code></td><td><code>{</code> <code>}</code></td></tr><tr><td><code>json.array</code> <code>json.array_end</code></td><td><code>[</code> <code>]</code></td></tr><tr><td><code>json.key</code></td><td>a string followed by a colon</td></tr><tr><td><code>json.string</code></td><td>any other string</td></tr><tr><td><code>json.number</code></td><td>a number</td></tr><tr><td><code>json.boolean</code> <code>json.null</code></td><td><code>true</code> <code>false</code>, <code>null</code></td></tr></table></p><p class="para"><span class="pn">(4)</span> <code>s json.skip</code> passes over one value (with everything inside, for an object or array) and gives the rest (<code>gives str or fail</code>).</p><div class="example run"><p class="ex-file"><code>16-json-read.pnx</code></p><pre><code data-lang="pinax"><span style="color: #d73948">use</span> io
+<span style="color: #d73948">use</span> json
+<span style="color: #d73948">word</span> kind_name (k <span style="color: #d73948">int</span> <span style="color: #d73948">gives</span> <span style="color: #d73948">str</span>)                    <span style="color: #74747c">rem the kinds are constants of json</span>
+  k json.key eq <span style="color: #d73948">if</span> <span style="color: #198810">"key"</span> <span style="color: #d73948">return</span> <span style="color: #d73948">end</span>
+  k json.string eq <span style="color: #d73948">if</span> <span style="color: #198810">"string"</span> <span style="color: #d73948">return</span> <span style="color: #d73948">end</span>
+  k json.number eq <span style="color: #d73948">if</span> <span style="color: #198810">"number"</span> <span style="color: #d73948">return</span> <span style="color: #d73948">end</span>
+  k json.boolean eq <span style="color: #d73948">if</span> <span style="color: #198810">"boolean"</span> <span style="color: #d73948">return</span> <span style="color: #d73948">end</span>
+  k json.null eq <span style="color: #d73948">if</span> <span style="color: #198810">"null"</span> <span style="color: #d73948">return</span> <span style="color: #d73948">end</span>
+  k json.object eq k json.array eq <span style="color: #d73948">or</span> <span style="color: #d73948">if</span> <span style="color: #198810">"open"</span> <span style="color: #d73948">return</span> <span style="color: #d73948">end</span>
+  <span style="color: #198810">"close"</span>
+<span style="color: #d73948">end</span>
+<span style="color: #d73948">word</span> tokens (s <span style="color: #d73948">str</span>)
+  s <span style="color: #d73948">to</span> rest
+  <span style="color: #d73948">loop</span>
+    rest json.next <span style="color: #d73948">or_else</span> (e) <span style="color: #d73948">break</span> <span style="color: #d73948">end</span> <span style="color: #d73948">to</span> (kind, value, rest)
+    <span style="color: #d73948">cat</span> (kind kind_name, <span style="color: #198810">" "</span>, value) io.println
+  <span style="color: #d73948">end</span>
+<span style="color: #d73948">end</span>
+<span style="color: #d73948">text</span><span style="color: #198810"> </span><span style="color: #4b69c6">END</span>
+<span style="color: #198810">{"name": "kim", "tags": [1, -2.5e3, true, null], "note": "café"}</span>
+<span style="color: #4b69c6">END</span>
+tokens
+</code></pre><p class="ex-label">Output</p><pre><code data-lang="text">$ pnx 16-json-read.pnx
+open {
+key name
+string kim
+key tags
+open [
+number 1
+number -2.5e3
+boolean true
+null null
+close ]
+key note
+string café
+close }
+</code></pre></div><h4>16.8.2 Writing</h4><p class="para"><p><span class="pn">(5)</span> The writing words all append to a buffer and fail with <code>err.full</code> when there is not enough room. They put the commas in themselves.</p><table><tr><td><strong>Word</strong></td><td><strong>Signature</strong></td></tr><tr><td><code>begin_object</code> <code>end_object</code> <code>begin_array</code> <code>end_array</code> <code>put_null</code></td><td><code>(buf or fail)</code></td></tr><tr><td><code>put_key</code> <code>put_str</code></td><td><code>(s str, buf or fail)</code>; the word does the escaping</td></tr><tr><td><code>put_int</code></td><td><code>(n int, buf or fail)</code></td></tr><tr><td><code>put_bool</code></td><td><code>(b bool, buf or fail)</code></td></tr></table></p><div class="example run"><p class="ex-file"><code>16-json-write.pnx</code></p><pre><code data-lang="pinax"><span style="color: #d73948">use</span> io
+<span style="color: #d73948">use</span> json
+<span style="color: #d73948">buffer</span> out <span style="color: #b60157">128</span>
+<span style="color: #d73948">word</span> demo (<span style="color: #d73948">or</span> <span style="color: #d73948">fail</span>)
+  out json.begin_object <span style="color: #d73948">or_fail</span>
+  <span style="color: #198810">"name"</span> out json.put_key <span style="color: #d73948">or_fail</span>  <span style="color: #198810">"kim </span><span style="color: #1d6c76">\"</span><span style="color: #198810">k</span><span style="color: #1d6c76">\"</span><span style="color: #198810">"</span> out json.put_str <span style="color: #d73948">or_fail</span>
+  <span style="color: #198810">"tags"</span> out json.put_key <span style="color: #d73948">or_fail</span>
+  out json.begin_array <span style="color: #d73948">or_fail</span>  <span style="color: #b60157">1</span> out json.put_int <span style="color: #d73948">or_fail</span>  <span style="color: #d73948">true</span> out json.put_bool <span style="color: #d73948">or_fail</span>  out json.put_null <span style="color: #d73948">or_fail</span>
+  out json.end_array <span style="color: #d73948">or_fail</span>
+  out json.end_object <span style="color: #d73948">or_fail</span>
+<span style="color: #d73948">end</span>
+demo <span style="color: #d73948">or_else</span> (e) e err_text io.println <span style="color: #d73948">end</span>
+out contents io.println
+</code></pre><p class="ex-label">Output</p><pre><code data-lang="text">$ pnx 16-json-write.pnx
+{"name":"kim \"k\"","tags":[1,true,null]}
+</code></pre></div><h4>16.8.3 Records</h4><p class="para"><span class="pn">(6)</span> <code>row buf json.pack</code> appends a row of a record as an object whose keys are the field names. <code>s row<br>json.unpack</code> reads an object into the fields of the same names and gives the rest after the object. Values of unknown keys are passed over. Numbers shall be integers that fit the field’s width; <code>null</code> is not accepted. The row is written only when everything is right; when it fails (<code>err.format</code>) the row is unchanged.</p><div class="example run"><p class="ex-file"><code>16-json-record.pnx</code></p><pre><code data-lang="pinax"><span style="color: #d73948">use</span> io
+<span style="color: #d73948">use</span> json
+<span style="color: #d73948">record</span> user
+  name <span style="color: #d73948">str</span>(<span style="color: #b60157">8</span>)
+  id <span style="color: #d73948">u16</span>
+  admin <span style="color: #d73948">bool</span>
+<span style="color: #d73948">end</span>
+<span style="color: #d73948">list</span> users user <span style="color: #b60157">4</span>
+<span style="color: #d73948">buffer</span> out <span style="color: #b60157">128</span>
+<span style="color: #d73948">word</span> input (<span style="color: #d73948">gives</span> <span style="color: #d73948">str</span>)
+<span style="color: #198810">  </span><span style="color: #d73948">text</span><span style="color: #198810"> </span><span style="color: #4b69c6">END</span>
+<span style="color: #198810">{"id": 9, "extra": {"x": [1, 2]}, "name": "park", "admin": false} and more</span>
+<span style="color: #4b69c6">END</span>
+<span style="color: #d73948">end</span>
+<span style="color: #d73948">word</span> demo (<span style="color: #d73948">or</span> <span style="color: #d73948">fail</span>)
+  users add_row <span style="color: #d73948">or_fail</span> <span style="color: #d73948">to</span> u
+  <span style="color: #198810">"lee"</span> u <span style="color: #d73948">to</span> user.name  <span style="color: #b60157">7</span> u <span style="color: #d73948">to</span> user.id  <span style="color: #d73948">true</span> u <span style="color: #d73948">to</span> user.admin
+  u out json.pack <span style="color: #d73948">or_fail</span>
+  out contents io.println
+  users add_row <span style="color: #d73948">or_fail</span> <span style="color: #d73948">to</span> v
+  input v json.unpack <span style="color: #d73948">or_fail</span> <span style="color: #d73948">to</span> rest                  <span style="color: #74747c">rem unknown keys are skipped</span>
+  <span style="color: #d73948">cat</span> (v user.name, <span style="color: #198810">" "</span>, v user.id, <span style="color: #198810">" "</span>, v user.admin, <span style="color: #198810">" /"</span>, rest, <span style="color: #198810">"/"</span>) io.println
+  <span style="color: #198810">"{</span><span style="color: #1d6c76">\"</span><span style="color: #198810">id</span><span style="color: #1d6c76">\"</span><span style="color: #198810">: 70000}"</span> v json.unpack <span style="color: #d73948">or_else</span> (e) <span style="color: #d73948">cat</span> (<span style="color: #198810">"70000 in u16: "</span>, e err_text) io.println <span style="color: #198810">""</span> <span style="color: #d73948">end</span> drop
+  <span style="color: #d73948">cat</span> (<span style="color: #198810">"the row is unchanged: "</span>, v user.id) io.println
+<span style="color: #d73948">end</span>
+demo <span style="color: #d73948">or_else</span> (e) e err_text io.println <span style="color: #d73948">end</span>
+</code></pre><p class="ex-label">Output</p><pre><code data-lang="text">$ pnx 16-json-record.pnx
+{"name":"lee","id":7,"admin":true}
+park 9 false / and more/
+70000 in u16: format
+the row is unchanged: 9
+</code></pre></div><h5>Constraints</h5><p class="para"><span class="pn">(7)</span> <code>json.next</code> and <code>json.skip</code> take only a <code>str</code>; <code>pack</code> and <code>unpack</code> only rows of records.</p><div class="example refused"><p class="ex-file"><code>16-json-type.pnx</code></p><pre><code data-lang="pinax"><span style="color: #d73948">use</span> json
+<span style="color: #d73948">word</span> f () <span style="color: #b60157">5</span> json.next drop drop drop <span style="color: #d73948">end</span>
+</code></pre><p class="ex-label">Refused</p><pre><code data-lang="text">$ pnx 16-json-type.pnx
+16-json-type.pnx:2:13: this word takes the JSON text as a str
+</code></pre></div><h5>Diagnostics</h5><table><thead><tr><th><strong>Condition</strong></th><th><strong>Message</strong></th></tr></thead><tbody><tr><td>JSON text that is not a <code>str</code></td><td><code>this word takes the JSON text as a str</code></td></tr></tbody></table><h3>16.9 <code>csv</code> — CSV</h3><p class="para"><span class="pn">(1)</span> The module <code>csv</code> reads and writes CSV in the form of RFC 4180: fields are separated by commas; a field that holds a comma, a quote or a line break is quoted, and quotes inside it are doubled.</p><p class="para"><span class="pn">(2)</span> <code>s csv.fields</code> is a stem (10.6) of the fields of one line. A quoted field is given without its quotes and with doubled quotes made single. An unclosed quote gives the rest of the text as the last field (a stem cannot report a failure).</p><p class="para"><span class="pn">(3)</span> The writing words append to a buffer (<code>or fail</code>, <code>err.full</code> when there is not enough room). <code>s buf csv.put</code>, <code>n buf csv.put_int</code> and <code>b buf csv.put_bool</code> append one field (with the comma it needs); <code>buf csv.end_line</code> ends the line. Booleans are written <code>true</code> and <code>false</code>.</p><p class="para"><span class="pn">(4)</span> <code>row buf csv.pack</code> appends one row of a record as one line. <code>s row csv.unpack</code> reads one line into the fields in order and gives what follows the line. The row is written only when every field is right (<code>err.format</code>).</p><div class="example run"><p class="ex-file"><code>16-csv.pnx</code></p><pre><code data-lang="pinax"><span style="color: #d73948">use</span> io
+<span style="color: #d73948">use</span> csv
+<span style="color: #d73948">record</span> user
+  name <span style="color: #d73948">str</span>(<span style="color: #b60157">8</span>)
+  id <span style="color: #d73948">u16</span>
+  admin <span style="color: #d73948">bool</span>
+<span style="color: #d73948">end</span>
+<span style="color: #d73948">list</span> users user <span style="color: #b60157">4</span>
+<span style="color: #d73948">buffer</span> out <span style="color: #b60157">128</span>
+<span style="color: #198810">"a,</span><span style="color: #1d6c76">\"</span><span style="color: #198810">b,c</span><span style="color: #1d6c76">\"</span><span style="color: #198810">,</span><span style="color: #1d6c76">\"</span><span style="color: #198810">d</span><span style="color: #1d6c76">\"</span><span style="color: #1d6c76">\"</span><span style="color: #198810">e</span><span style="color: #1d6c76">\"</span><span style="color: #198810">,,f"</span> csv.fields <span style="color: #d73948">do</span> (x <span style="color: #d73948">str</span>) <span style="color: #d73948">cat</span> (<span style="color: #198810">"["</span>, x, <span style="color: #198810">"]"</span>) io.print <span style="color: #d73948">end</span> each
+<span style="color: #198810">""</span> io.println
+<span style="color: #d73948">word</span> demo (<span style="color: #d73948">or</span> <span style="color: #d73948">fail</span>)
+  users add_row <span style="color: #d73948">or_fail</span> <span style="color: #d73948">to</span> u
+  <span style="color: #198810">"lee, jr"</span> u <span style="color: #d73948">to</span> user.name  <span style="color: #b60157">7</span> u <span style="color: #d73948">to</span> user.id  <span style="color: #d73948">true</span> u <span style="color: #d73948">to</span> user.admin
+  u out csv.pack <span style="color: #d73948">or_fail</span>                               <span style="color: #74747c">rem a line, quoted where needed</span>
+  <span style="color: #198810">"x"</span> out csv.put <span style="color: #d73948">or_fail</span>  <span style="color: #b60157">5</span> out csv.put_int <span style="color: #d73948">or_fail</span>  <span style="color: #d73948">false</span> out csv.put_bool <span style="color: #d73948">or_fail</span>  out csv.end_line <span style="color: #d73948">or_fail</span>
+  out contents io.print
+  users add_row <span style="color: #d73948">or_fail</span> <span style="color: #d73948">to</span> v
+  <span style="color: #198810">"zed,5,true</span><span style="color: #1d6c76">\n</span><span style="color: #198810">rest"</span> v csv.unpack <span style="color: #d73948">or_fail</span> <span style="color: #d73948">to</span> rest
+  <span style="color: #d73948">cat</span> (v user.name, <span style="color: #198810">" "</span>, v user.id, <span style="color: #198810">" "</span>, v user.admin, <span style="color: #198810">" ["</span>, rest, <span style="color: #198810">"]"</span>) io.println
+  <span style="color: #198810">"zed,5,maybe"</span> v csv.unpack <span style="color: #d73948">or_else</span> (e) <span style="color: #d73948">cat</span> (<span style="color: #198810">"bad bool: "</span>, e err_text) io.println <span style="color: #198810">""</span> <span style="color: #d73948">end</span> drop
+<span style="color: #d73948">end</span>
+demo <span style="color: #d73948">or_else</span> (e) e err_text io.println <span style="color: #d73948">end</span>
+</code></pre><p class="ex-label">Output</p><pre><code data-lang="text">$ pnx 16-csv.pnx
+[a][b,c][d"e][][f]
+"lee, jr",7,true
+x,5,false
+zed 5 true [rest]
+bad bool: format
+</code></pre></div><h5>Constraints</h5><p class="para"><span class="pn">(5)</span> <code>pack</code> and <code>unpack</code> take only rows of records.</p><div class="example refused"><p class="ex-file"><code>16-csv-pack-int.pnx</code></p><pre><code data-lang="pinax"><span style="color: #d73948">use</span> csv
+<span style="color: #d73948">buffer</span> b <span style="color: #b60157">8</span>
+<span style="color: #d73948">word</span> f () <span style="color: #b60157">5</span> b csv.pack <span style="color: #d73948">or_else</span> (e) <span style="color: #d73948">end</span> <span style="color: #d73948">end</span>
+</code></pre><p class="ex-label">Refused</p><pre><code data-lang="text">$ pnx 16-csv-pack-int.pnx
+16-csv-pack-int.pnx:3:15: pack takes a row of a table of records and a buffer: row buf csv.pack
+</code></pre></div><h5>Diagnostics</h5><table><thead><tr><th><strong>Condition</strong></th><th><strong>Message</strong></th></tr></thead><tbody><tr><td>A value that is not a row of a record</td><td><code>pack takes a row of a table of records and a buffer: row buf csv.pack</code></td></tr></tbody></table></main><nav class="bottom"><a href="index.html">Start</a> · <a href="15.html">Previous</a> · <a href="17.html">Next</a> · <a href="../html-ko/16.html">한국어</a></nav></body></html>

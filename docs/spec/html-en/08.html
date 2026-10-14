@@ -1,2 +1,262 @@
 <!DOCTYPE html>
-<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>8 Declarations - The Pinax Standard</title><link rel="stylesheet" href="style.css"></head><body><nav class="top"><a href="index.html">Start</a> · <a href="07.html">Previous</a> · <a href="09.html">Next</a> · <a href="../html-ko/08.html">한국어</a></nav><main><h2>8 Declarations</h2><p><em>(English edition in preparation.)</em></p></main><nav class="bottom"><a href="index.html">Start</a> · <a href="07.html">Previous</a> · <a href="09.html">Next</a> · <a href="../html-ko/08.html">한국어</a></nav></body></html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>8 Declarations - The Pinax Standard</title><link rel="stylesheet" href="style.css"></head><body><nav class="top"><a href="index.html">Start</a> · <a href="07.html">Previous</a> · <a href="09.html">Next</a> · <a href="../html-ko/08.html">한국어</a></nav><main><h2>8 Declarations</h2><h3>8.1 General</h3><h5>Syntax</h5><pre><code data-lang="ebnf">declaration = [ "export" ] ( [ "bound" ] bindable | decl ) ;
+bindable    = "global" NAME type
+            | "array"  NAME type size
+            | "buffer" NAME size ;
+decl        = "const"  NAME literal
+            | "list"   NAME type size
+            | "queue"  NAME type size
+            | "pool"   NAME NAME size
+            | "record" NAME { field | "big_endian" } "end"
+            | "type"   NAME base
+            | "index"  NAME NAME PATH
+            | "tasks"  NAME size [ size [ size ] ]
+            | "extern" c-name "(" effect ")" "from" STRING [ "as" NAME ]
+            | "test"   NAME { body } "end" ;
+size        = INT | NAME ;                         (* NAME: a const *)</code></pre><p class="para"><span class="pn">(1)</span> A <strong>declaration</strong> makes a name and what it stands for (a value, storage, a type). Declarations are written only outside definitions, at the outermost level of a source.</p><p class="para"><span class="pn">(2)</span> A processor reads a source once, from top to bottom. A name shall be declared before the place where it is used. The exceptions are a word that calls itself, and <code>forward</code> (8.11).</p><p class="para"><span class="pn">(3)</span> Within one module a name cannot be made twice, not even for different kinds of things. The names of core words and types cannot be made again either.</p><p class="para"><span class="pn">(4)</span> A capacity (<code>size</code>) is a positive integer literal or a <code>const</code> of one. Capacities are fixed at load and do not change while running. All storage is placed inside the state’s block at load.</p><p class="para"><span class="pn">(5)</span> Globals, cells of arrays, slots of lists, queues and pools, buffers and fields of records start at zero (7 (3)).</p><h5>Constraints</h5><p class="para"><span class="pn">(6)</span> Making a name that exists already is refused.</p><div class="example refused"><p class="ex-file"><code>08-name-twice.pnx</code></p><pre><code data-lang="pinax"><span style="color: #d73948">global</span> total <span style="color: #d73948">int</span>
+<span style="color: #d73948">const</span> total <span style="color: #b60157">5</span>
+</code></pre><p class="ex-label">Refused</p><pre><code data-lang="text">$ pnx 08-name-twice.pnx
+08-name-twice.pnx:2:7: this name is already defined
+</code></pre></div><p class="para"><span class="pn">(7)</span> Using a name before its declaration is refused.</p><div class="example refused"><p class="ex-file"><code>08-use-before.pnx</code></p><pre><code data-lang="pinax"><span style="color: #d73948">use</span> <span style="color: #d73948">str</span>
+<span style="color: #d73948">word</span> show (<span style="color: #d73948">gives</span> s <span style="color: #d73948">str</span>) total <span style="color: #d73948">str</span>.to_str <span style="color: #d73948">end</span>
+<span style="color: #d73948">global</span> total <span style="color: #d73948">int</span>
+</code></pre><p class="ex-label">Refused</p><pre><code data-lang="text">$ pnx 08-use-before.pnx
+08-use-before.pnx:2:25: this name is not declared before this place
+</code></pre></div><h3>8.2 Constants</h3><p class="para"><span class="pn">(1)</span> <code>const NAME literal</code> makes a <strong>constant</strong>. Its type is the literal’s. A constant has no storage: its value goes where it is used. Constants can be capacities, <code>case</code> values and <code>row</code> values.</p><h5>Constraints</h5><p class="para"><span class="pn">(2)</span> Nothing can be stored into a constant. Inside a definition <code>v to CONST</code> would make a new local of the same name and is refused by the rule against hiding names (9.5); outside a definition it is refused as a store into a name that is not a global.</p><div class="example refused"><p class="ex-file"><code>08-const-store.pnx</code></p><pre><code data-lang="pinax"><span style="color: #d73948">const</span> limit <span style="color: #b60157">3</span>
+<span style="color: #d73948">word</span> raise () <span style="color: #b60157">4</span> <span style="color: #d73948">to</span> limit <span style="color: #d73948">end</span>
+</code></pre><p class="ex-label">Refused</p><pre><code data-lang="text">$ pnx 08-const-store.pnx
+08-const-store.pnx:2:20: this name is already visible here; a new name may not hide it
+</code></pre></div><h3>8.3 Globals</h3><p class="para"><span class="pn">(1)</span> <code>global NAME type</code> makes a <strong>global</strong> that holds one value. The type is <code>int</code>, <code>bool</code>, <code>str(N)</code>, a declared type, a row type (the name of a table) or a handle type; not <code>str</code> (7.3).</p><p class="para"><span class="pn">(2)</span> A global is read by writing its name and stored with <code>to NAME</code>. Its value stays as long as the state does — after a word’s run ends, and across later loads.</p><div class="example run"><p class="ex-file"><code>08-const-global.pnx</code></p><pre><code data-lang="pinax"><span style="color: #d73948">use</span> io
+<span style="color: #d73948">use</span> <span style="color: #d73948">str</span>
+<span style="color: #d73948">const</span> limit <span style="color: #b60157">3</span>
+<span style="color: #d73948">const</span> greeting <span style="color: #198810">"hello"</span>
+<span style="color: #d73948">global</span> hits <span style="color: #d73948">int</span>
+<span style="color: #d73948">global</span> last <span style="color: #d73948">str</span>(<span style="color: #b60157">16</span>)
+<span style="color: #d73948">global</span> seen <span style="color: #d73948">bool</span>
+hits <span style="color: #d73948">str</span>.to_str io.println           <span style="color: #74747c">rem a global starts at zero</span>
+limit <span style="color: #d73948">to</span> hits
+greeting <span style="color: #d73948">to</span> last
+<span style="color: #d73948">true</span> <span style="color: #d73948">to</span> seen
+<span style="color: #d73948">cat</span> (last, <span style="color: #198810">" "</span>, hits, <span style="color: #198810">" "</span>, seen) io.println
+</code></pre><p class="ex-label">Output</p><pre><code data-lang="text">$ pnx 08-const-global.pnx
+0
+hello 3 true
+</code></pre></div><h3>8.4 Arrays</h3><h5>Syntax</h5><pre><code data-lang="ebnf">assign-item = "assign" NAME "(" value { "," value } ")" ;</code></pre><p class="para"><span class="pn">(1)</span> <code>array NAME type capacity</code> makes an <strong>array</strong> with that many cells. An array is always full: <code>len</code> is its capacity. The element type is <code>int</code>, <code>bool</code>, <code>str(N)</code>, a declared type or the name of a record.</p><p class="para"><span class="pn">(2)</span> <code>i ARRAY idx</code> reads cell <code>i</code>; <code>v i to ARRAY</code> stores into cell <code>i</code>. Numbers count from 0. For an array of records <code>idx</code> gives a row (8.8), not a value.</p><p class="para"><span class="pn">(3)</span> <code>assign ARRAY (value, …)</code> fills an array from cell 0, outside definitions. With fewer values than cells the rest stay as they are. Assigning the same array again starts from cell 0 again. It may be used in a data load (13.4).</p><p class="para"><span class="pn">(4)</span> The name of an array used as a stem yields its cells from 0 in order (10.6).</p><div class="example run"><p class="ex-file"><code>08-array.pnx</code></p><pre><code data-lang="pinax"><span style="color: #d73948">use</span> io
+<span style="color: #d73948">use</span> <span style="color: #d73948">str</span>
+<span style="color: #d73948">array</span> primes <span style="color: #d73948">int</span> <span style="color: #b60157">6</span>
+<span style="color: #d73948">assign</span> primes (<span style="color: #b60157">2</span>, <span style="color: #b60157">3</span>, <span style="color: #b60157">5</span>, <span style="color: #b60157">7</span>)                <span style="color: #74747c">rem cells 4 and 5 stay 0</span>
+<span style="color: #b60157">11</span> <span style="color: #b60157">4</span> <span style="color: #d73948">to</span> primes                            <span style="color: #74747c">rem v i to array: store into cell i</span>
+primes <span style="color: #d73948">do</span> (p <span style="color: #d73948">int</span>) p <span style="color: #d73948">str</span>.to_str io.print <span style="color: #198810">" "</span> io.print <span style="color: #d73948">end</span> each
+<span style="color: #198810">""</span> io.println
+<span style="color: #d73948">cat</span> (<span style="color: #198810">"len "</span>, primes len, <span style="color: #198810">", cell 2 is "</span>, <span style="color: #b60157">2</span> primes idx) io.println
+</code></pre><p class="ex-label">Output</p><pre><code data-lang="text">$ pnx 08-array.pnx
+2 3 5 7 11 0 
+len 6, cell 2 is 5
+</code></pre></div><h5>Constraints</h5><p class="para"><span class="pn">(5)</span> More values in <code>assign</code> than the array has cells is refused.</p><div class="example refused"><p class="ex-file"><code>08-assign-many.pnx</code></p><pre><code data-lang="pinax"><span style="color: #d73948">array</span> small <span style="color: #d73948">int</span> <span style="color: #b60157">2</span>
+<span style="color: #d73948">assign</span> small (<span style="color: #b60157">1</span>, <span style="color: #b60157">2</span>, <span style="color: #b60157">3</span>)
+</code></pre><p class="ex-label">Refused</p><pre><code data-lang="text">$ pnx 08-assign-many.pnx
+08-assign-many.pnx:2:21: assign has more values than the array has cells
+</code></pre></div><h5>Faults</h5><p class="para"><span class="pn">(6)</span> An index below 0, or equal to or above the capacity, is the fault <code>range</code>.</p><div class="example fault"><p class="ex-file"><code>08-array-range.pnx</code></p><pre><code data-lang="pinax"><span style="color: #d73948">use</span> io
+<span style="color: #d73948">array</span> primes <span style="color: #d73948">int</span> <span style="color: #b60157">4</span>
+<span style="color: #198810">"reading cell 4 of 4"</span> io.println
+<span style="color: #b60157">4</span> primes idx drop
+</code></pre><p class="ex-label">Fault</p><pre><code data-lang="text">$ pnx 08-array-range.pnx
+reading cell 4 of 4
+08-array-range.pnx:4: index out of range
+</code></pre></div><h3>8.5 Lists</h3><p class="para"><span class="pn">(1)</span> <code>list NAME type capacity</code> makes a <strong>list</strong> whose length grows from 0 up to its capacity. Its cells are read and stored like an array’s, but only indexes below the length may be used.</p><p class="para"><span class="pn">(2)</span> <code>v LIST push</code> adds one value at the end; <code>LIST pop</code> takes the last one off and gives it. Both can fail (<code>or fail</code>): a <code>push</code> into a full list fails with <code>err.full</code>, a <code>pop</code> from an empty list with <code>err.range</code>. A list of records gets an empty row at the end with <code>LIST add_row</code>, which gives that row. <code>LIST clear</code> sets the length to 0.</p><div class="example run"><p class="ex-file"><code>08-list.pnx</code></p><pre><code data-lang="pinax"><span style="color: #d73948">use</span> io
+<span style="color: #d73948">use</span> <span style="color: #d73948">str</span>
+<span style="color: #d73948">list</span> stack <span style="color: #d73948">int</span> <span style="color: #b60157">3</span>
+<span style="color: #d73948">word</span> fill (<span style="color: #d73948">or</span> <span style="color: #d73948">fail</span>)
+  <span style="color: #b60157">1</span> stack push <span style="color: #d73948">or_fail</span>
+  <span style="color: #b60157">2</span> stack push <span style="color: #d73948">or_fail</span>
+<span style="color: #d73948">end</span>
+fill <span style="color: #d73948">or_else</span> (e) <span style="color: #198810">"fill failed"</span> io.println <span style="color: #d73948">end</span>
+<span style="color: #d73948">cat</span> (<span style="color: #198810">"len "</span>, stack len, <span style="color: #198810">" of "</span>, stack capacity) io.println
+stack pop <span style="color: #d73948">or_else</span> (e) <span style="color: #b60157">-1</span> <span style="color: #d73948">end</span> <span style="color: #d73948">str</span>.to_str io.println
+<span style="color: #d73948">cat</span> (<span style="color: #198810">"len "</span>, stack len) io.println
+</code></pre><p class="ex-label">Output</p><pre><code data-lang="text">$ pnx 08-list.pnx
+len 2 of 3
+2
+len 1
+</code></pre></div><div class="example run"><p class="ex-file"><code>08-list-full.pnx</code></p><pre><code data-lang="pinax"><span style="color: #d73948">use</span> io
+<span style="color: #d73948">list</span> two <span style="color: #d73948">int</span> <span style="color: #b60157">2</span>
+<span style="color: #b60157">1</span> two push <span style="color: #d73948">or_else</span> (e) <span style="color: #d73948">end</span>
+<span style="color: #b60157">2</span> two push <span style="color: #d73948">or_else</span> (e) <span style="color: #d73948">end</span>
+<span style="color: #b60157">3</span> two push <span style="color: #d73948">or_else</span> (e) <span style="color: #d73948">cat</span> (<span style="color: #198810">"third push failed: "</span>, e err_text) io.println <span style="color: #d73948">end</span>
+</code></pre><p class="ex-label">Output</p><pre><code data-lang="text">$ pnx 08-list-full.pnx
+third push failed: full
+</code></pre></div><h5>Faults</h5><p class="para"><span class="pn">(3)</span> An index past the length is the fault <code>range</code>, even when it is below the capacity.</p><div class="example fault"><p class="ex-file"><code>08-list-past-len.pnx</code></p><pre><code data-lang="pinax"><span style="color: #d73948">list</span> items <span style="color: #d73948">int</span> <span style="color: #b60157">8</span>
+<span style="color: #b60157">1</span> items push <span style="color: #d73948">or_else</span> (e) <span style="color: #d73948">end</span>
+<span style="color: #b60157">1</span> items idx drop                          <span style="color: #74747c">rem the list holds one value: index 1 is past it</span>
+</code></pre><p class="ex-label">Fault</p><pre><code data-lang="text">$ pnx 08-list-past-len.pnx
+08-list-past-len.pnx:3: index out of range
+</code></pre></div><h3>8.6 Queues</h3><p class="para"><span class="pn">(1)</span> <code>queue NAME type capacity</code> makes a <strong>queue</strong>: what goes in first comes out first. The element type is <code>int</code>, <code>bool</code> or <code>err</code>. <code>v QUEUE put</code> puts a value at the back, <code>QUEUE take</code> takes the front one off and gives it, and <code>QUEUE peek</code> gives the front one without taking it. All three can fail: putting into a full queue is <code>err.full</code>, taking from an empty one <code>err.range</code>.</p><div class="example run"><p class="ex-file"><code>08-queue.pnx</code></p><pre><code data-lang="pinax"><span style="color: #d73948">use</span> io
+<span style="color: #d73948">use</span> <span style="color: #d73948">str</span>
+<span style="color: #d73948">queue</span> jobs <span style="color: #d73948">int</span> <span style="color: #b60157">4</span>
+<span style="color: #d73948">word</span> show (<span style="color: #d73948">gives</span> s <span style="color: #d73948">str</span> <span style="color: #d73948">or</span> <span style="color: #d73948">fail</span>) jobs take <span style="color: #d73948">or_fail</span> <span style="color: #d73948">str</span>.to_str <span style="color: #d73948">end</span>
+<span style="color: #b60157">10</span> jobs put <span style="color: #d73948">or_else</span> (e) <span style="color: #d73948">end</span>
+<span style="color: #b60157">20</span> jobs put <span style="color: #d73948">or_else</span> (e) <span style="color: #d73948">end</span>
+jobs peek <span style="color: #d73948">or_else</span> (e) <span style="color: #b60157">0</span> <span style="color: #d73948">end</span> <span style="color: #d73948">str</span>.to_str io.println
+show <span style="color: #d73948">or_else</span> (e) <span style="color: #198810">"?"</span> <span style="color: #d73948">end</span> io.println
+show <span style="color: #d73948">or_else</span> (e) <span style="color: #198810">"?"</span> <span style="color: #d73948">end</span> io.println
+show <span style="color: #d73948">or_else</span> (e) <span style="color: #d73948">cat</span> (<span style="color: #198810">"empty: "</span>, e err_text) <span style="color: #d73948">end</span> io.println
+</code></pre><p class="ex-label">Output</p><pre><code data-lang="text">$ pnx 08-queue.pnx
+10
+10
+20
+empty: range
+</code></pre></div><h3>8.7 Buffers</h3><p class="para"><span class="pn">(1)</span> <code>buffer NAME capacity</code> makes a <strong>buffer</strong> of that many bytes: a sequence of bytes that can be changed, for building text piece by piece.</p><p class="para"><span class="pn">(2)</span> <code>s BUF append</code>, <code>n BUF append_int</code> (decimal) and <code>b BUF append_byte</code> add at the end; when there is not enough room they fail with <code>err.full</code> and add nothing. <code>BUF contents</code> gives a <code>str</code> view of what it holds now. <code>n BUF truncate</code> cuts the length to <code>n</code>. <code>BUF clear</code> sets the length to 0.</p><div class="example run"><p class="ex-file"><code>08-buffer.pnx</code></p><pre><code data-lang="pinax"><span style="color: #d73948">use</span> io
+<span style="color: #d73948">buffer</span> out <span style="color: #b60157">32</span>
+<span style="color: #d73948">word</span> build (<span style="color: #d73948">or</span> <span style="color: #d73948">fail</span>)
+  <span style="color: #198810">"x="</span> out append <span style="color: #d73948">or_fail</span>
+  <span style="color: #b60157">42</span> out append_int <span style="color: #d73948">or_fail</span>
+  <span style="color: #b60157">'!'</span> out append_byte <span style="color: #d73948">or_fail</span>
+<span style="color: #d73948">end</span>
+build <span style="color: #d73948">or_else</span> (e) <span style="color: #198810">"full"</span> io.println <span style="color: #d73948">end</span>
+out contents io.println
+<span style="color: #b60157">2</span> out truncate
+out contents io.println
+</code></pre><p class="ex-label">Output</p><pre><code data-lang="text">$ pnx 08-buffer.pnx
+x=42!
+x=
+</code></pre></div><p class="para"><span class="pn">(3)</span> The view <code>contents</code> gives points at the buffer’s bytes: when the buffer changes, so do the bytes the view sees.</p><h3>8.8 Records and rows</h3><h5>Syntax</h5><pre><code data-lang="ebnf">record   = "record" NAME { field | "big_endian" } "end" ;
+field    = NAME width ;
+width    = "u8" | "u16" | "u32" | "u64" | "i8" | "i16" | "i32" | "i64"
+         | "int" | "bool" | "varint" | "str" "(" size ")" | NAME ;   (* NAME: a table *)
+row-item = [ "export" ] "row" NAME [ NAME ] "(" value { "," value } ")" ;
+value    = literal | NAME ;                         (* NAME: a const, a row name, none *)</code></pre><p class="para"><span class="pn">(1)</span> <code>record NAME … end</code> makes a <strong>record</strong> type, a sequence of fields, each with a width. An integer field reads as <code>int</code>, a <code>bool</code> field as <code>bool</code>, a <code>str(N)</code> field as a <code>str</code> view. A field whose type is the name of a table holds a row of that table.</p><p class="para"><span class="pn">(2)</span> Records are not handled as values. One declares an array, list or pool of records (a <strong>table</strong>) and handles its <strong>row</strong>s. A row’s type is named after its table. A row holds a number within the table, and every use checks its range (and, for a pool, its generation, 8.9).</p><p class="para"><span class="pn">(3)</span> Fields are written as the path <code>RECORD.FIELD</code>: <code>row RECORD.FIELD</code> reads, <code>v row to RECORD.FIELD</code> stores.</p><p class="para"><span class="pn">(4)</span> <code>row TABLE (value, …)</code> adds one row to a list, outside definitions. Values go in field order; trailing fields may be left out (they are zero). <code>row TABLE NAME (…)</code> names the row; the name stands for the row in later <code>row</code> values and in code.</p><div class="example run"><p class="ex-file"><code>08-record.pnx</code></p><pre><code data-lang="pinax"><span style="color: #d73948">use</span> io
+<span style="color: #d73948">record</span> user
+  name <span style="color: #d73948">str</span>(<span style="color: #b60157">16</span>)
+  age <span style="color: #d73948">u8</span>
+  admin <span style="color: #d73948">bool</span>
+<span style="color: #d73948">end</span>
+<span style="color: #d73948">list</span> users user <span style="color: #b60157">8</span>
+<span style="color: #d73948">row</span> users (<span style="color: #198810">"kim"</span>, <span style="color: #b60157">30</span>, <span style="color: #d73948">true</span>)
+<span style="color: #d73948">row</span> users lee (<span style="color: #198810">"lee"</span>, <span style="color: #b60157">25</span>)                  <span style="color: #74747c">rem a named row; the fields left out stay zero</span>
+<span style="color: #d73948">word</span> show (u users) <span style="color: #d73948">cat</span> (u user.name, <span style="color: #198810">" "</span>, u user.age, <span style="color: #198810">" "</span>, u user.admin) io.println <span style="color: #d73948">end</span>
+users <span style="color: #d73948">do</span> (u users) u show <span style="color: #d73948">end</span> each
+<span style="color: #b60157">26</span> lee <span style="color: #d73948">to</span> user.age                         <span style="color: #74747c">rem v row to record.field</span>
+lee show
+</code></pre><p class="ex-label">Output</p><pre><code data-lang="text">$ pnx 08-record.pnx
+kim 30 true
+lee 25 false
+lee 26 false
+</code></pre></div><p class="para"><span class="pn">(5)</span> A field or global that holds a row starts as “none”. <code>row is_none</code> asks whether it is none, <code>TABLE none</code> gives the none row of that table, and <code>row row_index</code> gives the row’s number.</p><p class="para"><span class="pn">(6)</span> <code>big_endian</code> sets only the byte order that <code>bytes.pack</code> and <code>bytes.unpack</code> of 16.5 use. It does not change the layout in memory.</p><h5>Constraints</h5><p class="para"><span class="pn">(7)</span> The values of <code>row</code> shall match the fields in order and type.</p><div class="example refused"><p class="ex-file"><code>08-row-types.pnx</code></p><pre><code data-lang="pinax"><span style="color: #d73948">record</span> user
+  name <span style="color: #d73948">str</span>(<span style="color: #b60157">16</span>)
+  age <span style="color: #d73948">u8</span>
+<span style="color: #d73948">end</span>
+<span style="color: #d73948">list</span> users user <span style="color: #b60157">8</span>
+<span style="color: #d73948">row</span> users (<span style="color: #b60157">30</span>, <span style="color: #198810">"kim"</span>)
+</code></pre><p class="ex-label">Refused</p><pre><code data-lang="text">$ pnx 08-row-types.pnx
+08-row-types.pnx:6:12: a value has another type than its field
+</code></pre></div><h5>Faults</h5><p class="para"><span class="pn">(8)</span> Storing a value that does not fit a narrow integer field is the fault <code>overflow</code>; it is not cut (mask it with <code>bit_and</code> first to store part of it). Reading or storing a field of the none row is the fault <code>range</code>.</p><div class="example fault"><p class="ex-file"><code>08-record-narrow.pnx</code></p><pre><code data-lang="pinax"><span style="color: #d73948">record</span> pixel
+  level <span style="color: #d73948">u8</span>
+<span style="color: #d73948">end</span>
+<span style="color: #d73948">array</span> image pixel <span style="color: #b60157">4</span>
+<span style="color: #b60157">300</span> <span style="color: #b60157">0</span> image idx <span style="color: #d73948">to</span> pixel.level            <span style="color: #74747c">rem 300 does not fit in u8</span>
+</code></pre><p class="ex-label">Fault</p><pre><code data-lang="text">$ pnx 08-record-narrow.pnx
+08-record-narrow.pnx:5: integer overflow
+</code></pre></div><h3>8.9 Pools</h3><p class="para"><span class="pn">(1)</span> <code>pool NAME RECORD capacity</code> makes a <strong>pool</strong> of rows that are taken and given back. <code>POOL alloc</code> takes a free row (<code>or fail</code>, <code>err.full</code> when none is left); <code>row POOL free</code> gives it back; <code>row POOL is_alive</code> asks whether the row is still alive.</p><p class="para"><span class="pn">(2)</span> A row of a pool holds a <strong>generation</strong> besides its number. Giving a row back changes the generation of its slot, so a row used after it was given back is noticed — even when another row has taken the slot since.</p><p class="para"><span class="pn">(3)</span> The row <code>alloc</code> gives is an <code>owned</code> value (12.4). On every path it shall be stored exactly once into a field or global, or given to <code>free</code>. Once stored, the generation check guards it.</p><div class="example run"><p class="ex-file"><code>08-pool.pnx</code></p><pre><code data-lang="pinax"><span style="color: #d73948">use</span> io
+<span style="color: #d73948">record</span> node
+  value <span style="color: #d73948">int</span>
+<span style="color: #d73948">end</span>
+<span style="color: #d73948">pool</span> nodes node <span style="color: #b60157">2</span>
+<span style="color: #d73948">global</span> kept nodes
+<span style="color: #d73948">word</span> demo (<span style="color: #d73948">or</span> <span style="color: #d73948">fail</span>)
+  nodes alloc <span style="color: #d73948">or_fail</span> <span style="color: #d73948">to</span> a                 <span style="color: #74747c">rem an owned row: it must be stored or freed</span>
+  <span style="color: #b60157">7</span> a <span style="color: #d73948">to</span> node.value
+  a <span style="color: #d73948">to</span> kept                                <span style="color: #74747c">rem stored: the global holds the row now</span>
+  <span style="color: #d73948">cat</span> (<span style="color: #198810">"value "</span>, kept node.value, <span style="color: #198810">", alive: "</span>, kept nodes is_alive) io.println
+  kept nodes free
+  <span style="color: #d73948">cat</span> (<span style="color: #198810">"alive after free: "</span>, kept nodes is_alive) io.println
+<span style="color: #d73948">end</span>
+demo <span style="color: #d73948">or_else</span> (e) <span style="color: #198810">"no room"</span> io.println <span style="color: #d73948">end</span>
+</code></pre><p class="ex-label">Output</p><pre><code data-lang="text">$ pnx 08-pool.pnx
+value 7, alive: true
+alive after free: false
+</code></pre></div><h5>Constraints</h5><p class="para"><span class="pn">(4)</span> A path on which a taken row is neither stored nor given back is refused.</p><div class="example refused"><p class="ex-file"><code>08-pool-leak.pnx</code></p><pre><code data-lang="pinax"><span style="color: #d73948">record</span> node
+  value <span style="color: #d73948">int</span>
+<span style="color: #d73948">end</span>
+<span style="color: #d73948">pool</span> nodes node <span style="color: #b60157">2</span>
+<span style="color: #d73948">word</span> leak (<span style="color: #d73948">or</span> <span style="color: #d73948">fail</span>)
+  nodes alloc <span style="color: #d73948">or_fail</span> <span style="color: #d73948">to</span> a
+  <span style="color: #b60157">7</span> a <span style="color: #d73948">to</span> node.value
+<span style="color: #d73948">end</span>
+</code></pre><p class="ex-label">Refused</p><pre><code data-lang="text">$ pnx 08-pool-leak.pnx
+08-pool-leak.pnx:8:1: an owned value in a local is not given on every path (close, free or store it)
+</code></pre></div><h5>Faults</h5><p class="para"><span class="pn">(5)</span> Using a row that was given back is the fault <code>stale</code>. <code>pnx</code> shows the locals of the word below the fault.</p><div class="example fault"><p class="ex-file"><code>08-pool-stale.pnx</code></p><pre><code data-lang="pinax"><span style="color: #d73948">record</span> node
+  value <span style="color: #d73948">int</span>
+<span style="color: #d73948">end</span>
+<span style="color: #d73948">pool</span> nodes node <span style="color: #b60157">2</span>
+<span style="color: #d73948">global</span> keep nodes
+<span style="color: #d73948">word</span> demo (<span style="color: #d73948">or</span> <span style="color: #d73948">fail</span>)
+  nodes alloc <span style="color: #d73948">or_fail</span> <span style="color: #d73948">to</span> a
+  a <span style="color: #d73948">to</span> keep                                 <span style="color: #74747c">rem stored: the row is handed over</span>
+  keep nodes free
+  keep node.value drop                      <span style="color: #74747c">rem the row was given back: stale</span>
+<span style="color: #d73948">end</span>
+demo <span style="color: #d73948">or_else</span> (e) <span style="color: #d73948">end</span>
+</code></pre><p class="ex-label">Fault</p><pre><code data-lang="text">$ pnx 08-pool-stale.pnx
+08-pool-stale.pnx:10: a row or handle was used after it was given back
+  a nodes = 4294967297
+</code></pre></div><h3>8.10 Indexes</h3><p class="para"><span class="pn">(1)</span> <code>index NAME TABLE RECORD.FIELD</code> makes an <strong>index</strong> that finds rows of a table of records by one field. The key field is <code>int</code> or <code>str(N)</code>. An index is a hash table of fixed size, matched to the table’s capacity, that holds only row numbers; the data stay in the table.</p><p class="para"><span class="pn">(2)</span> <code>key INDEX lookup</code> gives the row with that key (<code>or fail</code>, <code>err.not_found</code> when there is none). <code>row INDEX insert</code> puts a row in (<code>or fail</code>; it fails when the key is there already) and <code>row INDEX remove</code> takes it out. To change a key field, remove the row, change it and insert it again.</p><p class="para"><span class="pn">(3)</span> Rows written with <code>row</code> at load are in the index. Rows added while running with <code>add_row</code> are found only after <code>insert</code>.</p><div class="example run"><p class="ex-file"><code>08-index.pnx</code></p><pre><code data-lang="pinax"><span style="color: #d73948">use</span> io
+<span style="color: #d73948">use</span> <span style="color: #d73948">str</span>
+<span style="color: #d73948">record</span> user
+  name <span style="color: #d73948">str</span>(<span style="color: #b60157">16</span>)
+  age <span style="color: #d73948">u8</span>
+<span style="color: #d73948">end</span>
+<span style="color: #d73948">list</span> users user <span style="color: #b60157">8</span>
+<span style="color: #d73948">index</span> by_name users user.name
+<span style="color: #d73948">row</span> users (<span style="color: #198810">"kim"</span>, <span style="color: #b60157">30</span>)
+<span style="color: #d73948">row</span> users (<span style="color: #198810">"lee"</span>, <span style="color: #b60157">25</span>)
+<span style="color: #d73948">word</span> find_age (name <span style="color: #d73948">str</span> <span style="color: #d73948">gives</span> age <span style="color: #d73948">int</span> <span style="color: #d73948">or</span> <span style="color: #d73948">fail</span>) name by_name lookup <span style="color: #d73948">or_fail</span> user.age <span style="color: #d73948">end</span>
+<span style="color: #198810">"lee"</span> find_age <span style="color: #d73948">or_else</span> (e) <span style="color: #b60157">-1</span> <span style="color: #d73948">end</span> <span style="color: #d73948">str</span>.to_str io.println
+<span style="color: #198810">"park"</span> find_age <span style="color: #d73948">or_else</span> (e) <span style="color: #b60157">-1</span> <span style="color: #d73948">end</span> <span style="color: #d73948">str</span>.to_str io.println
+</code></pre><p class="ex-label">Output</p><pre><code data-lang="text">$ pnx 08-index.pnx
+25
+-1
+</code></pre></div><div class="example run"><p class="ex-file"><code>08-index-insert.pnx</code></p><pre><code data-lang="pinax"><span style="color: #d73948">use</span> io
+<span style="color: #d73948">use</span> <span style="color: #d73948">str</span>
+<span style="color: #d73948">record</span> user
+  name <span style="color: #d73948">str</span>(<span style="color: #b60157">16</span>)
+  age <span style="color: #d73948">int</span>
+<span style="color: #d73948">end</span>
+<span style="color: #d73948">list</span> users user <span style="color: #b60157">4</span>
+<span style="color: #d73948">index</span> by_name users user.name
+<span style="color: #d73948">word</span> add_user (name <span style="color: #d73948">str</span>, age <span style="color: #d73948">int</span>, indexed <span style="color: #d73948">bool</span> <span style="color: #d73948">or</span> <span style="color: #d73948">fail</span>)
+  users add_row <span style="color: #d73948">or_fail</span> <span style="color: #d73948">to</span> r
+  name r <span style="color: #d73948">to</span> user.name
+  age r <span style="color: #d73948">to</span> user.age
+  indexed <span style="color: #d73948">if</span> r by_name insert <span style="color: #d73948">or_fail</span> <span style="color: #d73948">end</span>  <span style="color: #74747c">rem a row added while running is indexed by insert</span>
+<span style="color: #d73948">end</span>
+<span style="color: #d73948">word</span> age_of (name <span style="color: #d73948">str</span> <span style="color: #d73948">gives</span> <span style="color: #d73948">int</span> <span style="color: #d73948">or</span> <span style="color: #d73948">fail</span>) name by_name lookup <span style="color: #d73948">or_fail</span> user.age <span style="color: #d73948">end</span>
+<span style="color: #198810">"kim"</span> <span style="color: #b60157">30</span> <span style="color: #d73948">true</span> add_user <span style="color: #d73948">or_else</span> (e) <span style="color: #d73948">end</span>
+<span style="color: #198810">"lee"</span> <span style="color: #b60157">25</span> <span style="color: #d73948">false</span> add_user <span style="color: #d73948">or_else</span> (e) <span style="color: #d73948">end</span>
+<span style="color: #198810">"kim"</span> age_of <span style="color: #d73948">or_else</span> (e) <span style="color: #b60157">-1</span> <span style="color: #d73948">end</span> <span style="color: #d73948">str</span>.to_str io.println
+<span style="color: #198810">"lee"</span> age_of <span style="color: #d73948">or_else</span> (e) <span style="color: #b60157">-1</span> <span style="color: #d73948">end</span> <span style="color: #d73948">str</span>.to_str io.println     <span style="color: #74747c">rem not inserted: not found</span>
+</code></pre><p class="ex-label">Output</p><pre><code data-lang="text">$ pnx 08-index-insert.pnx
+30
+-1
+</code></pre></div><p class="para"><span class="pn">(4)</span> The hash is keyed (SipHash-2-4); the host gives the key (19.2). A host that indexes text from outside should give a random key: whoever knows the key can pile up collisions and make lookups slow.</p><h3>8.11 Forward declarations</h3><h5>Syntax</h5><pre><code data-lang="ebnf">forward = "forward" ( "array" | "list" | "pool" ) NAME
+        | "forward" "word" NAME "(" effect ")" ;</code></pre><p class="para"><span class="pn">(1)</span> <code>forward list NAME</code> announces a table declared further on. It is for a record that holds rows of the table that holds it. The name of an announced table may be used only where a type goes. <code>forward word</code> is in 9.7.</p><div class="example run"><p class="ex-file"><code>08-forward.pnx</code></p><pre><code data-lang="pinax"><span style="color: #d73948">use</span> io
+<span style="color: #d73948">use</span> <span style="color: #d73948">str</span>
+<span style="color: #d73948">forward</span> <span style="color: #d73948">list</span> nodes                         <span style="color: #74747c">rem the record below points into this list</span>
+<span style="color: #d73948">record</span> node
+  value <span style="color: #d73948">int</span>
+  next nodes
+<span style="color: #d73948">end</span>
+<span style="color: #d73948">list</span> nodes node <span style="color: #b60157">4</span>
+<span style="color: #d73948">row</span> nodes b (<span style="color: #b60157">2</span>)
+<span style="color: #d73948">row</span> nodes a (<span style="color: #b60157">1</span>, b)
+a node.next node.value <span style="color: #d73948">str</span>.to_str io.println
+a node.next node.next is_none <span style="color: #d73948">if</span> <span style="color: #198810">"the chain ends at b"</span> io.println <span style="color: #d73948">end</span>
+</code></pre><p class="ex-label">Output</p><pre><code data-lang="text">$ pnx 08-forward.pnx
+2
+the chain ends at b
+</code></pre></div><h5>Constraints</h5><p class="para"><span class="pn">(2)</span> An announced table shall be declared in the same module with the same kind.</p><div class="example refused"><p class="ex-file"><code>08-forward-missing.pnx</code></p><pre><code data-lang="pinax"><span style="color: #d73948">forward</span> <span style="color: #d73948">list</span> nodes
+<span style="color: #d73948">record</span> node
+  value <span style="color: #d73948">int</span>
+<span style="color: #d73948">end</span>
+</code></pre><p class="ex-label">Refused</p><pre><code data-lang="text">$ pnx 08-forward-missing.pnx
+08-forward-missing.pnx:5:1: a table announced by forward is never declared
+</code></pre></div><h3>8.12 Bound storage</h3><p class="para"><span class="pn">(1)</span> <code>global</code>, <code>array</code> and <code>buffer</code> with <code>bound</code> in front get their storage from the host. Scripts use them like other globals. Until the host binds them they use room inside the state. 19.7 says how to bind.</p><h5>Diagnostics</h5><table><thead><tr><th><strong>Condition</strong></th><th><strong>Message</strong></th></tr></thead><tbody><tr><td>A name that exists already</td><td><code>this name is already defined</code></td></tr><tr><td>A name used before its declaration</td><td><code>this name is not declared before this place</code></td></tr><tr><td><code>to</code> outside a definition into a name that is not a global</td><td><code>outside a definition `to` stores into a declared global, not a new local</code></td></tr><tr><td>More <code>assign</code> values than cells</td><td><code>assign has more values than the array has cells</code></td></tr><tr><td>A <code>row</code> value unlike its field</td><td><code>a value has another type than its field</code></td></tr><tr><td>A path that does not hand over an <code>owned</code> row</td><td><code>an owned value in a local is not given on every path (close, free or store it)</code></td></tr><tr><td>An announced table that is never declared</td><td><code>a table announced by forward is never declared</code></td></tr></tbody></table></main><nav class="bottom"><a href="index.html">Start</a> · <a href="07.html">Previous</a> · <a href="09.html">Next</a> · <a href="../html-ko/08.html">한국어</a></nav></body></html>

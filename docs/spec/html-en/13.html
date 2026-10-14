@@ -1,2 +1,95 @@
 <!DOCTYPE html>
-<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>13 Modules - The Pinax Standard</title><link rel="stylesheet" href="style.css"></head><body><nav class="top"><a href="index.html">Start</a> · <a href="12.html">Previous</a> · <a href="14.html">Next</a> · <a href="../html-ko/13.html">한국어</a></nav><main><h2>13 Modules</h2><p><em>(English edition in preparation.)</em></p></main><nav class="bottom"><a href="index.html">Start</a> · <a href="12.html">Previous</a> · <a href="14.html">Next</a> · <a href="../html-ko/13.html">한국어</a></nav></body></html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>13 Modules - The Pinax Standard</title><link rel="stylesheet" href="style.css"></head><body><nav class="top"><a href="index.html">Start</a> · <a href="12.html">Previous</a> · <a href="14.html">Next</a> · <a href="../html-ko/13.html">한국어</a></nav><main><h2>13 Modules</h2><h3>13.1 Using a module</h3><h5>Syntax</h5><pre><code data-lang="ebnf">import = "use" NAME [ "as" NAME ] ;</code></pre><p class="para"><span class="pn">(1)</span> One source is one <strong>module</strong>. The name the host gave when loading the source is the module’s name (<code>pnx</code> uses the file name without <code>.pnx</code>). Standard modules and host modules (13.3) are modules too.</p><p class="para"><span class="pn">(2)</span> <code>use MODULE</code> opens that module in this source; from then on its parts are written as the <strong>path</strong> <code>MODULE.NAME</code>. <code>use MODULE as ALIAS</code> makes the same module be written <code>ALIAS.NAME</code>. Only core words and what this source declares are written as bare names.</p><p class="para"><span class="pn">(3)</span> A module that is used shall exist already: a standard module, a module the host registered, or a source loaded earlier. When <code>pnx</code> meets <code>use NAME</code> it first loads <code>NAME.pnx</code> from beside the program file.</p><div class="example run"><p class="ex-file"><code>13-use.pnx</code></p><pre><code data-lang="pinax"><span style="color: #d73948">use</span> io
+<span style="color: #d73948">use</span> <span style="color: #d73948">str</span>
+<span style="color: #d73948">use</span> geometry
+<span style="color: #b60157">200</span> <span style="color: #b60157">50</span> geometry.area <span style="color: #d73948">str</span>.to_str io.println
+geometry.unit <span style="color: #d73948">str</span>.to_str io.println
+<span style="color: #d73948">array</span> corners point <span style="color: #b60157">2</span>                       <span style="color: #74747c">rem an exported record is used by its name</span>
+<span style="color: #b60157">3</span> <span style="color: #b60157">0</span> corners idx <span style="color: #d73948">to</span> point.x
+<span style="color: #b60157">0</span> corners idx point.x <span style="color: #d73948">str</span>.to_str io.println
+</code></pre><p class="ex-label">Output</p><pre><code data-lang="text">$ pnx 13-use.pnx
+100
+10
+3
+</code></pre></div><div class="example run"><p class="ex-file"><code>13-use-as.pnx</code></p><pre><code data-lang="pinax"><span style="color: #d73948">use</span> io
+<span style="color: #d73948">use</span> <span style="color: #d73948">str</span>
+<span style="color: #d73948">use</span> geometry <span style="color: #d73948">as</span> g
+<span style="color: #b60157">200</span> <span style="color: #b60157">50</span> g.area <span style="color: #d73948">str</span>.to_str io.println
+</code></pre><p class="ex-label">Output</p><pre><code data-lang="text">$ pnx 13-use-as.pnx
+100
+</code></pre></div><h5>Constraints</h5><p class="para"><span class="pn">(4)</span> Using a module that does not exist is refused.</p><div class="example refused"><p class="ex-file"><code>13-unknown-module.pnx</code></p><pre><code data-lang="pinax"><span style="color: #d73948">use</span> geometrie
+</code></pre><p class="ex-label">Refused</p><pre><code data-lang="text">$ pnx 13-unknown-module.pnx
+13-unknown-module.pnx:1:5: no module of this name is registered or loaded
+</code></pre></div><p class="para"><span class="pn">(5)</span> A word of a module written as a bare name is refused; so is a path into a module that was not opened.</p><div class="example refused"><p class="ex-file"><code>13-bare-name.pnx</code></p><pre><code data-lang="pinax"><span style="color: #d73948">use</span> geometry
+<span style="color: #b60157">200</span> <span style="color: #b60157">50</span> area drop
+</code></pre><p class="ex-label">Refused</p><pre><code data-lang="text">$ pnx 13-bare-name.pnx
+13-bare-name.pnx:2:8: this name is not declared before this place
+</code></pre></div><div class="example refused"><p class="ex-file"><code>13-no-use.pnx</code></p><pre><code data-lang="pinax"><span style="color: #d73948">use</span> io
+<span style="color: #b60157">5</span> <span style="color: #d73948">str</span>.to_str io.println
+</code></pre><p class="ex-label">Refused</p><pre><code data-lang="text">$ pnx 13-no-use.pnx
+13-no-use.pnx:2:3: this path names neither a module in use nor a record
+</code></pre></div><h3>13.2 Exports</h3><p class="para"><span class="pn">(1)</span> Another source can use only what was declared or defined with <code>export</code>. Words, constants and globals are written <code>MODULE.NAME</code>; exported <code>record</code>s and <code>type</code>s and the row types of tables are written by their name alone.</p><p class="para"><span class="pn">(2)</span> The module <code>geometry</code> below is the one the examples of 13.1 use. <code>square</code> is not exported.</p><div class="example module"><p class="ex-file"><code>geometry.pnx</code></p><pre><code data-lang="pinax"><span style="color: #74747c">rem A module: only what is marked export is seen by a source that uses it.</span>
+<span style="color: #d73948">export</span> <span style="color: #d73948">const</span> unit <span style="color: #b60157">10</span>
+<span style="color: #d73948">export</span> <span style="color: #d73948">record</span> point
+  x <span style="color: #d73948">int</span>
+  y <span style="color: #d73948">int</span>
+<span style="color: #d73948">end</span>
+<span style="color: #d73948">word</span> square (n <span style="color: #d73948">int</span> <span style="color: #d73948">gives</span> <span style="color: #d73948">int</span>) n n mul <span style="color: #d73948">end</span>
+<span style="color: #d73948">export</span> <span style="color: #d73948">word</span> area (w <span style="color: #d73948">int</span>, h <span style="color: #d73948">int</span> <span style="color: #d73948">gives</span> <span style="color: #d73948">int</span>) w h mul unit square div <span style="color: #d73948">end</span>
+</code></pre></div><h5>Constraints</h5><p class="para"><span class="pn">(3)</span> Using what is not exported is refused.</p><div class="example refused"><p class="ex-file"><code>13-not-exported.pnx</code></p><pre><code data-lang="pinax"><span style="color: #d73948">use</span> geometry
+<span style="color: #b60157">4</span> geometry.square drop
+</code></pre><p class="ex-label">Refused</p><pre><code data-lang="text">$ pnx 13-not-exported.pnx
+13-not-exported.pnx:2:3: the module exports nothing of this name
+</code></pre></div><h3>13.3 Standard modules and host modules</h3><p class="para"><span class="pn">(1)</span> The <strong>standard module</strong>s come with the processor and are part of the language: <code>str</code> <code>fmt</code> <code>hash</code> <code>encode</code> <code>bytes</code> <code>ptn</code> <code>rex</code> <code>json</code> <code>csv</code> (clause 16). They are seen only after <code>use</code>.</p><p class="para"><span class="pn">(2)</span> A <strong>host module</strong> is a set of words the host registered. A module the host did not register does not exist. Everything a script can do outside itself (files, clocks, the environment) is a word the host registered. <code>pnx</code> registers the standard host modules <code>io</code> <code>file</code> <code>clock</code> <code>random</code> <code>env</code> (clause 17).</p><p class="para"><span class="pn">(3)</span> <code>err</code> is a set of constants written as paths without <code>use</code> (11.1).</p><h3>13.4 Data load</h3><h5>Syntax</h5><pre><code data-lang="ebnf">data-source = { data-item } ;
+data-item   = [ "export" ] ( [ "bound" ] bindable | "const" NAME literal
+              | "list" NAME type size | "queue" NAME type size | "pool" NAME NAME size
+              | "record" NAME { field | "big_endian" } "end" | "type" NAME base
+              | "index" NAME NAME PATH )
+            | "forward" ( "array" | "list" | "pool" ) NAME
+            | row-item | assign-item
+            | data-value [ data-value ] "to" ( NAME | PATH ) ;
+data-value  = literal | NAME ;                      (* NAME: a const or a row name *)</code></pre><p class="para"><span class="pn">(1)</span> A source the host reads by data load accepts declarations and values only. Word definitions, calls, <code>use</code>, <code>extern</code>, <code>test</code>, control, blocks and <code>cat</code> are refused. Such a source therefore cannot run any code. It is for reading settings, data and other text that is not trusted.</p><p class="para"><span class="pn">(2)</span> The second value of <code>value [value] to PLACE</code> is the index of a cell or a row (<code>"10.0.0.1" 0 to allow</code>). Everything a data source declares counts as exported.</p><div class="example embed"><p class="ex-file"><code>13-data-load.c</code></p><pre><code data-lang="c"><span style="color: #d73948">#include</span> <span style="color: #198810">"</span><span style="color: #198810">pinax.h</span><span style="color: #198810">"</span>
+<span style="color: #d73948">#include</span> <span style="color: #198810">&lt;</span><span style="color: #198810">stdio.h</span><span style="color: #198810">&gt;</span>
+<span style="color: #d73948">#include</span> <span style="color: #198810">&lt;</span><span style="color: #198810">string.h</span><span style="color: #198810">&gt;</span>
+
+<span style="color: #d73948">static</span> pinax_err <span style="color: #4b69c6">load</span>(pinax_state <span style="color: #d73948">*</span>st, <span style="color: #d73948">const</span> <span style="color: #d73948">char</span> <span style="color: #d73948">*</span>name, <span style="color: #d73948">const</span> <span style="color: #d73948">char</span> <span style="color: #d73948">*</span>text) {
+    pinax_err err <span style="color: #d73948">=</span> <span style="color: #4b69c6">pinax_load</span>(st, name, (pinax_str){(<span style="color: #d73948">const</span> <span style="color: #d73948">unsigned</span> <span style="color: #d73948">char</span> <span style="color: #d73948">*</span>)text, <span style="color: #4b69c6">strlen</span>(text)}, PINAX_LOAD_DATA);
+    <span style="color: #d73948">if</span> (err <span style="color: #d73948">!=</span> PINAX_OK) {
+        pinax_str why <span style="color: #d73948">=</span> <span style="color: #4b69c6">pinax_error_text</span>(st);
+        <span style="color: #4b69c6">printf</span>(<span style="color: #198810">"</span><span style="color: #b60157">%s</span><span style="color: #198810"> refused: </span><span style="color: #b60157">%.*s</span><span style="color: #1d6c76">\n</span><span style="color: #198810">"</span>, name, (<span style="color: #d73948">int</span>)why.len, (<span style="color: #d73948">const</span> <span style="color: #d73948">char</span> <span style="color: #d73948">*</span>)why.ptr);
+    }
+    <span style="color: #d73948">return</span> err;
+}
+
+<span style="color: #d73948">int</span> <span style="color: #4b69c6">main</span>(<span style="color: #d73948">void</span>) {
+    <span style="color: #d73948">static</span> <span style="color: #d73948">unsigned</span> <span style="color: #d73948">char</span> block[<span style="color: #b60157">1</span> <span style="color: #d73948">&lt;&lt;</span> <span style="color: #b60157">20</span>];
+    pinax_config config <span style="color: #d73948">=</span> {.struct_size <span style="color: #d73948">=</span> <span style="color: #d73948">sizeof</span> config};
+    pinax_state <span style="color: #d73948">*</span>st;
+    <span style="color: #d73948">if</span> (<span style="color: #4b69c6">pinax_open</span>((pinax_mem){block, <span style="color: #d73948">sizeof</span> block}, <span style="color: #d73948">&amp;</span>config, <span style="color: #d73948">&amp;</span>st) <span style="color: #d73948">!=</span> PINAX_OK)
+        <span style="color: #d73948">return</span> <span style="color: #b60157">1</span>;
+
+    <span style="color: #74747c">/*</span><span style="color: #74747c"> A settings file: declarations and values only. </span><span style="color: #74747c">*/</span>
+    <span style="color: #d73948">if</span> (<span style="color: #4b69c6">load</span>(st, <span style="color: #198810">"</span><span style="color: #198810">settings</span><span style="color: #198810">"</span>,
+             <span style="color: #198810">"</span><span style="color: #198810">global port int</span><span style="color: #1d6c76">\n</span><span style="color: #198810">"</span>
+             <span style="color: #198810">"</span><span style="color: #198810">global name str(16)</span><span style="color: #1d6c76">\n</span><span style="color: #198810">"</span>
+             <span style="color: #198810">"</span><span style="color: #198810">array allow str(16) 4</span><span style="color: #1d6c76">\n</span><span style="color: #198810">"</span>
+             <span style="color: #198810">"</span><span style="color: #198810">8080 to port</span><span style="color: #1d6c76">\n</span><span style="color: #198810">"</span>
+             <span style="color: #198810">"</span><span style="color: #1d6c76">\"</span><span style="color: #198810">edge</span><span style="color: #1d6c76">\"</span><span style="color: #198810"> to name</span><span style="color: #1d6c76">\n</span><span style="color: #198810">"</span>
+             <span style="color: #198810">"</span><span style="color: #198810">assign allow (</span><span style="color: #1d6c76">\"</span><span style="color: #198810">10.0.0.1</span><span style="color: #1d6c76">\"</span><span style="color: #198810">, </span><span style="color: #1d6c76">\"</span><span style="color: #198810">10.0.0.2</span><span style="color: #1d6c76">\"</span><span style="color: #198810">)</span><span style="color: #1d6c76">\n</span><span style="color: #198810">"</span>) <span style="color: #d73948">!=</span> PINAX_OK)
+        <span style="color: #d73948">return</span> <span style="color: #b60157">1</span>;
+    pinax_global g;
+    <span style="color: #d73948">if</span> (<span style="color: #4b69c6">pinax_global_find</span>(st, <span style="color: #198810">"</span><span style="color: #198810">port</span><span style="color: #198810">"</span>, <span style="color: #d73948">&amp;</span>g) <span style="color: #d73948">!=</span> PINAX_OK)
+        <span style="color: #d73948">return</span> <span style="color: #b60157">1</span>;
+    <span style="color: #4b69c6">printf</span>(<span style="color: #198810">"</span><span style="color: #198810">port = </span><span style="color: #b60157">%lld</span><span style="color: #1d6c76">\n</span><span style="color: #198810">"</span>, (<span style="color: #d73948">long</span> <span style="color: #d73948">long</span>)<span style="color: #d73948">*</span>(<span style="color: #d73948">const</span> <span style="color: #4b69c6">int64_t</span> <span style="color: #d73948">*</span>)g.ptr);
+
+    <span style="color: #74747c">/*</span><span style="color: #74747c"> The same mode refuses code: nothing in such a file can run. </span><span style="color: #74747c">*/</span>
+    <span style="color: #4b69c6">load</span>(st, <span style="color: #198810">"</span><span style="color: #198810">evil</span><span style="color: #198810">"</span>, <span style="color: #198810">"</span><span style="color: #198810">word boom () 1 0 div drop end</span><span style="color: #1d6c76">\n</span><span style="color: #198810">"</span>);
+    <span style="color: #4b69c6">load</span>(st, <span style="color: #198810">"</span><span style="color: #198810">evil2</span><span style="color: #198810">"</span>, <span style="color: #198810">"</span><span style="color: #198810">global n int</span><span style="color: #1d6c76">\n</span><span style="color: #198810">1 2 add to n</span><span style="color: #1d6c76">\n</span><span style="color: #198810">"</span>);
+    <span style="color: #4b69c6">pinax_close</span>(st);
+    <span style="color: #d73948">return</span> <span style="color: #b60157">0</span>;
+}
+</code></pre><p class="ex-label">Output</p><pre><code data-lang="text">$ ./13-data-load
+port = 8080
+evil refused: a data source defines no words and uses no modules
+evil2 refused: a data source calls no words; only literals, const names and stores
+</code></pre></div><h5>Diagnostics</h5><table><thead><tr><th><strong>Condition</strong></th><th><strong>Message</strong></th></tr></thead><tbody><tr><td>A module that does not exist</td><td><code>no module of this name is registered or loaded</code></td></tr><tr><td>A path into a module not opened, or no record</td><td><code>this path names neither a module in use nor a record</code></td></tr><tr><td>A name not exported</td><td><code>the module exports nothing of this name</code></td></tr><tr><td>A definition or <code>use</code> in a data load</td><td><code>a data source defines no words and uses no modules</code></td></tr><tr><td>A call in a data load</td><td><code>a data source calls no words; only literals, const names and stores</code></td></tr></tbody></table></main><nav class="bottom"><a href="index.html">Start</a> · <a href="12.html">Previous</a> · <a href="14.html">Next</a> · <a href="../html-ko/13.html">한국어</a></nav></body></html>
