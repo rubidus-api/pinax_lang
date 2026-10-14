@@ -1941,6 +1941,7 @@ pinax_err pinax_image_open(pinax_mem block, pinax_str image, const pinax_config 
     st->error_text = "";
     st->eval_n = 0;
     st->fault_n = 0;
+    st->ptn = (pnx_ptn_found){0}; // the last match (ptn.capture, the groups of rex) does not survive an image
     scrub_cells(st, st->sbank, st->str_slots);
     scrub_cells(st, st->main.sbank, st->main.str_slots);
     for (uint32_t k = 0; st->head && k < st->head->n_globals; ++k) {
@@ -1948,6 +1949,7 @@ pinax_err pinax_image_open(pinax_mem block, pinax_str image, const pinax_config 
         for (uint32_t slot = 0; g->kind == PNX_G_TASKS && slot < g->capacity; ++slot) {
             pnx_task *t = (pnx_task *)(void *)g->ptr + slot;
             scrub_cells(st, t->sbank, t->str_slots);
+            t->ptn = (pnx_ptn_found){0};
         }
     }
     st->from_image = true;

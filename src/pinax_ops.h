@@ -974,7 +974,9 @@ PNX_OP(PNEXT) {
     }
     S[OP_B(w)] = pnx_ptn_now(st)->cap[0];
     uint32_t past = caps.at + caps.len;
-    if (caps.len == 0 && past == rest->length) { // nothing after an empty match at the end
+    const pnx_scell pat = S[OP_C(w)];
+    if ((caps.len == 0 && past == rest->length) || (pat.length && pnx_view_bytes(st, pat)[0] == '^')) {
+        // nothing after an empty match at the end; an anchored pattern matches once, at the start
         *rest = (pnx_scell){PNX_SEG_EMPTY, 0, PNX_SNEXT_DONE};
         return PNX_R_OK;
     }
@@ -1017,6 +1019,8 @@ PNX_OP(PREPL) {
         if (e != PNX_R_OK)
             return e;
         at = caps.at + caps.len;
+        if (pat.length && pnx_view_bytes(st, pat)[0] == '^') // anchored: only at the start, as in Lua's gsub
+            break;
         if (caps.len == 0) { // an empty match: the byte after it is kept and the search moves on
             if (at < s.length && (e = pnx_region_append(st, &out, bytes + at, 1)) != PNX_R_OK)
                 return e;
