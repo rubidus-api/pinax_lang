@@ -68,7 +68,7 @@ for p in sorted(ko):
         if ("#part(\"제약\")" in text or "#part(tr(\"제약\"" in text) and not any(k == "refused" for k in ks):
             problems.append(f"shape: {p} states constraints but shows no refused example")
     else:
-        if "#opening(" not in text:
+        if "#opening(" not in text and "#opening[" not in text:
             problems.append(f"shape: {p} has no #opening")
         if not good:
             problems.append(f"shape: {p} shows no running example")

@@ -1,0 +1,9 @@
+rem run
+rem args: Pinax
+use io
+use env
+word main ()
+  1 env.arg or_else (e) "stranger" end to name      rem argument 1, or a word for nobody
+  cat ("Hello, ", name, "!") io.println
+end
+main

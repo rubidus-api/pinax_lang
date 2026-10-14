@@ -1,0 +1,3 @@
+rem refused
+use io
+"3" 4 add drop

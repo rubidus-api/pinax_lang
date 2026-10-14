@@ -1,0 +1,6 @@
+rem fault
+use io
+use str
+word double (n int gives int) n 2 mul end
+4611686018427387903 double str.to_str io.println
+4611686018427387904 double str.to_str io.println

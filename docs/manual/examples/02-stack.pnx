@@ -1,0 +1,7 @@
+rem run
+use io
+use str
+2 3 add 4 mul str.to_str io.println          rem (2 + 3) * 4
+2 3 4 mul add str.to_str io.println          rem 2 + 3 * 4
+10 3 sub str.to_str io.println               rem the first value is on the left: 10 - 3
+10 3 swap sub str.to_str io.println          rem swap turns it round: 3 - 10

@@ -1,0 +1,4 @@
+rem refused
+use io
+use str
+5 add str.to_str io.println

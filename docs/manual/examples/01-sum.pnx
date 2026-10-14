@@ -1,0 +1,19 @@
+rem run
+use io
+use str
+rem The sum of 1 to 100, three ways.
+word sum_loop (n int gives int)
+  0 to total
+  1 to i
+  loop
+    i n gt until
+    total i add to total
+    i 1 add to i
+  end
+  total
+end
+word sum_range (n int gives int) 1 n 1 add range sum end
+word sum_formula (n int gives int) n n 1 add mul 2 div end
+100 sum_loop str.to_str io.println
+100 sum_range str.to_str io.println
+100 sum_formula str.to_str io.println
