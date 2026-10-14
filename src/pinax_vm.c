@@ -393,6 +393,8 @@ pinax_err pnx_execute(pinax_state *st) {
         RUN(GCLEAR)
         RUNF(LPUSH)
         RUNF(LPOP)
+        RUNF(LPUSHS)
+        RUNF(LPOPS)
         RUNF(SFIND)
         RUNF(SWORD)
         RUN(ERRTEXT)

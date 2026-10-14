@@ -463,6 +463,42 @@ PNX_OP(LPOP) {
     __builtin_memcpy(&R[OP_A(w)], g->ptr + (size_t)g->length * 8, 8);
     return PNX_R_OK;
 }
+// A list of str(N) is a table of text cells: push copies the text into a new last cell (too
+// long is a fault, as a store is), pop copies the last cell's text into the region and drops it.
+PNX_OP(LPUSHS) {
+    pnx_global *g = &st->globals[OP_BX(w)];
+    const pnx_scell value = S[OP_A(w)];
+    if (g->length == g->capacity) {
+        st->fail = PINAX_ERR_FULL;
+        return PNX_R_FAILED;
+    }
+    if (value.length > g->elem_bytes - 1)
+        return PINAX_ERR_RANGE;
+    uint8_t *cell = g->ptr + (size_t)g->length * g->elem_bytes;
+    cell[0] = (uint8_t)value.length;
+    __builtin_memmove(cell + 1, pnx_view_bytes(st, value), value.length);
+    ++g->length;
+    return PNX_R_OK;
+}
+PNX_OP(LPOPS) {
+    pnx_global *g = &st->globals[OP_BX(w)];
+    if (g->length == 0) {
+        st->fail = PINAX_ERR_RANGE;
+        return PNX_R_FAILED;
+    }
+    const uint8_t *cell = g->ptr + (size_t)(g->length - 1) * g->elem_bytes;
+    uint8_t *copy = cell[0] ? pnx_region_alloc(st, cell[0]) : NULL;
+    if (cell[0] && !copy)
+        return PINAX_ERR_FULL;
+    --g->length;
+    if (!cell[0]) {
+        S[OP_A(w)] = (pnx_scell){PNX_SEG_EMPTY, 0, 0};
+        return PNX_R_OK;
+    }
+    __builtin_memcpy(copy, cell + 1, cell[0]);
+    S[OP_A(w)] = (pnx_scell){PNX_SEG_REGION, cell[0], (uint64_t)(copy - st->region)};
+    return PNX_R_OK;
+}
 PNX_OP(SFIND) {
     const pnx_scell hay = S[OP_B(w)], part = S[OP_C(w)];
     const uint32_t at = pnx_find(pnx_view_bytes(st, hay), hay.length, pnx_view_bytes(st, part), part.length);

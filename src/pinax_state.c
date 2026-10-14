@@ -424,6 +424,7 @@ static const char *check_word(const pinax_state *st, uint32_t index, span range,
         case PNX_IXPUT: case PNX_IXDEL: want = PNX_G_INDEX; global = bx; break;
         case PNX_IXGET: case PNX_IXGETS: want = PNX_G_INDEX; global = c; break;
         case PNX_LPUSH: case PNX_LPOP: want = PNX_G_LIST; global = bx; break;
+        case PNX_LPUSHS: case PNX_LPOPS: want = PNX_G_ROWS; global = bx; break;
         case PNX_TSPAWN: case PNX_TRESUME: case PNX_TDONE: want = PNX_G_TASKS; global = c; break;
         case PNX_TCANCEL: case PNX_TRUNALL: want = PNX_G_TASKS; global = bx; break;
         case PNX_ROW: want = PNX_G_TABLE; global = c; break;

@@ -2837,9 +2837,9 @@ static bool do_block(comp *c) {
     if (use == USE_MAP || use == USE_FILTER) { // the list the results are pushed into
         dst = find_global(c, dst_name);
         const globalsym *g = dst == NONE ? NULL : (const globalsym *)c->globals.ptr + dst;
-        if (!g || g->kind != GK_LIST || g->record != NONE || g->strcap)
+        if (!g || g->kind != GK_LIST || g->record != NONE)
             return error_at(c, PINAX_ERR_TYPE, at.line, at.column,
-                            "map_into and filter_into fill a list of int, bool or err values: ... end names map_into");
+                            "map_into and filter_into fill a list of values: ... end names map_into");
         if (bs.n_out != 1 || bs.n_in > 1 || (bs.n_in == 1 && bs.in[0] != element) ||
             bs.out[0] != (use == USE_MAP ? g->type : TY_BOOL) || (use == USE_FILTER && element != g->type))
             return error_at(c, PINAX_ERR_TYPE, at.line, at.column,
@@ -2991,12 +2991,16 @@ static bool end_do(comp *c, block *b) {
             return type_error(c, "this block must leave the stack as it found it");
         if (!same_owns(c, b, b->owns_in))
             return false;
+        const uint32_t push = (b->use == USE_MAP || b->use == USE_FILTER) &&
+                                      ((const globalsym *)c->globals.ptr + b->dst)->strcap
+                                  ? PNX_LPUSHS
+                                  : PNX_LPUSH;
         if (b->use == USE_MAP) { // the instruction after the push runs when the list is full
-            if (emit(c, PNX_ABX(PNX_LPUSH, made, b->dst)) == NONE || !jump_later(c, &b->full))
+            if (emit(c, PNX_ABX(push, made, b->dst)) == NONE || !jump_later(c, &b->full))
                 return false;
         } else if (b->use == USE_FILTER) { // pushed when the verdict is true
             cond_negate(&verdict);
-            if (!cond_jump(c, &verdict, 2) || emit(c, PNX_ABX(PNX_LPUSH, b->val, b->dst)) == NONE ||
+            if (!cond_jump(c, &verdict, 2) || emit(c, PNX_ABX(push, b->val, b->dst)) == NONE ||
                 !jump_later(c, &b->full))
                 return false;
         } else if (b->use == USE_COUNT) { // one more when the verdict is true
@@ -3726,9 +3730,8 @@ static bool builtin(comp *c, const struct builtin *w) {
     case BW_PUSH: { // v names push : fails when the list is full
         if (!need_coll(c, &g, &gi) || !need(c, 1))
             return false;
-        if (g->kind != GK_LIST || g->record != NONE || g->strcap)
+        if (g->kind != GK_LIST || g->record != NONE)
             return type_error(c, g->record != NONE ? "a list of records grows with add_row"
-                                 : g->strcap       ? "push and pop of a list of str(N) are not supported yet"
                                                    : "push adds to a list; an array is always full");
         if (f->stack[f->depth - 1].type != g->type)
             return type_error(c, "the value pushed has another type than the cells of the list");
@@ -3736,7 +3739,8 @@ static bool builtin(comp *c, const struct builtin *w) {
             return false;
         ra = slot_of(c, f->depth - 1);
         --f->depth;
-        return settle_all(c) && emit(c, PNX_ABX(PNX_LPUSH, ra, gi)) != NONE && guard_op(c, TY_NONE);
+        return settle_all(c) && emit(c, PNX_ABX(g->strcap ? PNX_LPUSHS : PNX_LPUSH, ra, gi)) != NONE &&
+               guard_op(c, TY_NONE);
     }
     // ---- tasks (RFC-0005): a task is a value of the type its set names ----
     case BW_SPAWN: { // block workers spawn : a task that will run the block; fails when the set is full
@@ -3785,10 +3789,12 @@ static bool builtin(comp *c, const struct builtin *w) {
     case BW_POP: { // names pop : fails when the list is empty
         if (!need_coll(c, &g, &gi))
             return false;
-        if (g->kind != GK_LIST || g->record != NONE || g->strcap)
-            return type_error(c, "pop takes from a list of int, bool or err values");
+        if (g->kind != GK_LIST || g->record != NONE)
+            return type_error(c, "pop takes from a list of values; a list of records has no pop");
         if (!settle_all(c))
             return false;
+        if (g->strcap) // the text is copied into the region: the cell is free for the next push
+            return emit(c, PNX_ABX(PNX_LPOPS, top_slot(c, BANK_S, 1), gi)) != NONE && guard_op(c, g->type);
         return emit(c, PNX_ABX(PNX_LPOP, top_slot(c, BANK_I, 1), gi)) != NONE && guard_op(c, g->type);
     }
     case BW_FIND:

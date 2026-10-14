@@ -221,6 +221,9 @@ enum {
     X(PALIVEW, 0x8b, PNX_K_I, PNX_K_I, PNX_K_NONE, PNX_F_ABC, PNX_X_GLOBAL, 0, "wr-") \
     X(IXGETW, 0x8c, PNX_K_I, PNX_K_I, PNX_K_NONE, PNX_F_ABC, PNX_X_GLOBAL, 1, "wr-") \
     X(IXGETSW, 0x8d, PNX_K_I, PNX_K_S, PNX_K_NONE, PNX_F_ABC, PNX_X_GLOBAL, 1, "wr-") \
+    /* lists of str(N): a cell is a length byte and N bytes */ \
+    X(LPUSHS, 0x8e, PNX_K_S, PNX_K_NONE, PNX_K_NONE, PNX_F_GLOBAL, PNX_X_NONE, 1, "r--") \
+    X(LPOPS, 0x8f, PNX_K_S, PNX_K_NONE, PNX_K_NONE, PNX_F_GLOBAL, PNX_X_NONE, 1, "w--") \
     /* strings */ \
     X(SLEN, 0x90, PNX_K_I, PNX_K_S, PNX_K_NONE, PNX_F_ABC, PNX_X_NONE, 0, "wr-") \
     X(SBYTE, 0x91, PNX_K_I, PNX_K_S, PNX_K_I, PNX_F_ABC, PNX_X_NONE, 0, "wrr") \
