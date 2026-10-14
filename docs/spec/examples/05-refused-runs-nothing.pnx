@@ -1,0 +1,4 @@
+rem refused
+use io
+"this line is never printed" io.println
+word broken (n int gives r int) n "one" add end

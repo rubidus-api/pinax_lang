@@ -1,0 +1,4 @@
+rem refused
+pinax 2
+use io
+"never read" io.println

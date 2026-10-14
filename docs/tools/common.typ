@@ -122,6 +122,15 @@
   show heading: set text(font: ("Noto Sans CJK KR", "Noto Sans"))
   show heading.where(level: 4): set text(size: 0.95em, fill: luma(60))
   show raw: set text(font: "D2Coding", ligatures: false)
+  // D2Coding at typst's raw size looks a size smaller than the text beside it.
+  show raw.where(block: false): set text(size: 1.18em)
+  show raw.where(block: true): set text(size: 1.1em)
+  show raw.where(block: true, lang: "ebnf"): it => context {
+    if is-html() { it } else {
+      block(width: 100%, inset: (x: 8pt, y: 6pt), fill: rgb("#f4f6fa"), stroke: (left: 2pt + rgb("#8a9bb8")),
+            breakable: true, it)
+    }
+  }
   set raw(syntaxes: "/tools/pinax.sublime-syntax")
   show link: it => if type(it.dest) == str { text(fill: rgb("#1A4F8A"), it) } else { it }
 

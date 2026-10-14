@@ -1,0 +1,8 @@
+rem run
+use io
+"tab:\t| quote:\" | hex:\x41 | code point:\u00e9" io.println
+r"C:\new\table" io.println          rem raw: backslashes stay
+text END
+  A text literal keeps its lines as written, "quotes" and \n too.
+END
+io.println

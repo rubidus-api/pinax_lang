@@ -1,0 +1,5 @@
+rem run
+use io
+"first: code outside definitions runs once, at load" io.println
+word greet (gives s str) "second: a word runs when it is called" end
+greet io.println

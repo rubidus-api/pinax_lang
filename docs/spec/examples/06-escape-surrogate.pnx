@@ -1,0 +1,3 @@
+rem refused
+use io
+"\uD800" io.println

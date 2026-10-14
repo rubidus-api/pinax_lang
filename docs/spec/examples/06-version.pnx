@@ -1,0 +1,4 @@
+rem run
+pinax 1
+use io
+"written for format version 1" io.println

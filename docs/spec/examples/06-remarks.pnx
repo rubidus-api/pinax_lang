@@ -1,0 +1,12 @@
+rem run
+use io
+rem A line remark runs to the end of its line.
+"one" io.println rem a remark may follow code
+note DOC
+A block remark runs to a line that starts with its tag.
+  DOC indented does not close it, nor does DOCUMENT.
+DOC
+global remark int        rem "remark" is a name: rem must stand alone
+global notes int
+3 to remark
+"two" io.println

@@ -95,7 +95,7 @@ for f in "$src_dir"/*.pnx; do
             [ $status = 1 ] || { fail "$n" "exit $status, wanted 1 (refused)" "$o"; continue; }
             [ -s "$o" ] && { fail "$n" "printed output, so it was not refused at load" "$o"; continue; }
             grep -q "^$n:[0-9]*:[0-9]*: " "$e" || { fail "$n" "no load diagnostic" "$e"; continue; }
-            { echo "\$ $cmd"; grep -v ': not found$' "$e"; } >"$out" ;;
+            { echo "\$ $cmd"; grep -v "^$n: [a-z][a-z ]*\$" "$e"; } >"$out" ;;
     esac
     echo "$kind" >"$out_dir/$n.kind"
 done
