@@ -45,7 +45,8 @@ enum { L_PLAIN, L_OWNS, L_MOVED }; // what a local holds of a value that must be
 #define TY_BLOCK 0x2000u     // word (effect): this plus the number of the effect in comp.btypes
 #define TY_HANDLE 0x1800u    // a handle type of the host: this plus its number
 #define MAX_NESTED 4         // value blocks inside value blocks
-enum { USE_EACH, USE_FOLD, USE_TIMES, USE_COUNT, USE_ANY, USE_ALL, USE_FIRST, USE_EACH_INDEX, USE_MAP, USE_FILTER };
+enum { USE_EACH, USE_FOLD, USE_TIMES, USE_COUNT, USE_ANY, USE_ALL, USE_FIRST, USE_EACH_INDEX, USE_MAP, USE_FILTER,
+       USE_WITH, USE_BY }; // the last two: rex.with_match and rex.replace_by
 
 #define MAX_STACK 64
 #define PNX_REX_BUF (16u + 4096u * 8u + 1024u * 32u) // the largest program
@@ -406,6 +407,12 @@ static bool is_word(const comp *c, pnx_word_id word) {
 
 static name tok_name(const comp *c) {
     return (name){c->lx->source + c->tok.start, c->tok.length};
+}
+
+// A path that names `word` of some module: "str.join_into", or the same under another name.
+static bool ends_with_word(name n, const char *word) {
+    const size_t len = __builtin_strlen(word);
+    return n.length > len && n.text[n.length - len - 1] == '.' && __builtin_memcmp(n.text + n.length - len, word, len) == 0;
 }
 
 static bool name_eq(name a, name b) {
@@ -2803,6 +2810,12 @@ static bool scan_user(comp *c, name *out, name *dst) {
         return error_at(c, PINAX_ERR_SYNTAX, lx.error_line, lx.error_column, lx.error);
     // anything but a combining word after the end makes the block a value
     *out = t.kind == PNX_T_NAME ? (name){lx.source + t.start, t.length} : (name){0};
+    if (t.kind == PNX_T_PATH) { // rex.with_match and rex.replace_by take a block too
+        const name path = {lx.source + t.start, t.length};
+        if (ends_with_word(path, "with_match") || ends_with_word(path, "replace_by"))
+            *out = path;
+        return true;
+    }
     if (t.kind == PNX_T_NAME && pnx_lex_next(&lx, &t) && t.kind == PNX_T_NAME) {
         // ... end names map_into : the list to fill stands between the block and its word
         const name next = {lx.source + t.start, t.length};
@@ -2851,7 +2864,19 @@ static bool stem_begin(comp *c, uint8_t *kind, uint8_t *cur, uint8_t *lim, uint1
         *element = TY_STR;
         return true;
     }
-    if (stem.op == STEM_SPLIT || stem.op == STEM_PTN || stem.op == STEM_REX || stem.op == STEM_RSPLIT) { // the string and, above it, the separator
+    if (stem.op == STEM_REX || stem.op == STEM_RSPLIT) { // the whole string, its program, and the place reached
+        f->stack[f->depth - 2].hidden = f->stack[f->depth - 1].hidden = true;
+        *src = (uint8_t)slot_of(c, f->depth - 2);
+        *lim = (uint8_t)slot_of(c, f->depth - 1);
+        if (!push_slot(c, TY_INT))
+            return false;
+        f->stack[f->depth - 1].hidden = true;
+        *cur = (uint8_t)slot_of(c, f->depth - 1);
+        *count = 3;
+        *element = TY_STR;
+        return emit(c, PNX_ABX(PNX_LOADI, *cur, 0)) != NONE;
+    }
+    if (stem.op == STEM_SPLIT || stem.op == STEM_PTN) { // the string and, above it, the separator
         f->stack[f->depth - 2].hidden = f->stack[f->depth - 1].hidden = true;
         *src = (uint8_t)slot_of(c, f->depth - 2);
         *lim = (uint8_t)slot_of(c, f->depth - 1);
@@ -2887,11 +2912,16 @@ static bool stem_takes(uint8_t kind) {
 
 // Takes the next piece into `reg`; the instruction after it runs when there is none.
 static bool stem_take(comp *c, uint8_t kind, uint32_t reg, uint32_t src, uint32_t cur, uint32_t lim) {
+    if ((kind == STEM_REX || kind == STEM_RSPLIT) &&
+        emit(c, PNX_ABC(kind == STEM_REX ? PNX_XNEXT : PNX_XSPLIT, cur, reg, src)) == NONE)
+        return false;
+    if (kind == STEM_REX || kind == STEM_RSPLIT)
+        return emit(c, lim) != NONE;
     return emit(c, kind == STEM_WORDS   ? PNX_ABC(PNX_SWORD, src, reg, 0)
                    : kind == STEM_CHARS ? PNX_ABC(PNX_SCHAR, src, reg, 0)
                    : kind == STEM_PTN   ? PNX_ABC(PNX_PNEXT, src, reg, lim)
-                   : kind == STEM_REX   ? PNX_ABC(PNX_XNEXT, src, reg, lim)
-                   : kind == STEM_RSPLIT ? PNX_ABC(PNX_XSPLIT, src, reg, lim)
+                   : kind == STEM_REX || kind == STEM_RSPLIT
+                       ? PNX_ABC(kind == STEM_REX ? PNX_XNEXT : PNX_XSPLIT, cur, reg, src) // the program: next word
                    : kind == STEM_LINES ? PNX_ABC(PNX_SLINE, src, reg, 0)
                    : kind == STEM_SPLIT ? PNX_ABC(PNX_SNEXTS, src, reg, lim)
                                         : PNX_ABC(PNX_SNEXT, src, reg, cur)) != NONE;
@@ -2954,6 +2984,169 @@ static local *new_local(comp *c, name n, tid type) {
     return debug_local(c, l, f->code.n) ? l : NULL;
 }
 
+// s re do ( whole str, group str ... ) body end rex.with_match (or fail): the leftmost match,
+// once; s re buf do ( whole str, ... gives str ) body end rex.replace_by (gives n int or fail):
+// every match replaced in the buffer by what the block gives (RFC-0011 sections 4.2 and 4.3).
+static bool rex_block(comp *c, name user, sig *bs, uint32_t line, uint32_t column) {
+    fn *f = c->f;
+    const bool by = ends_with_word(user, "replace_by");
+    name real;
+    const name module = {user.text, (uint32_t)(user.length - sizeof "with_match")}; // both words are 10 bytes
+    if (!module_of(c, module, &real) || !name_is(real, "rex"))
+        return error_at(c, PINAX_ERR_NOT_FOUND, line, column, "with_match and replace_by are words of rex");
+    const globalsym *g = NULL;
+    uint32_t         gi = 0;
+    if (by && !need_coll(c, &g, &gi))
+        return false;
+    if (!need(c, 2) || f->stack[f->depth - 2].type != TY_STR || f->stack[f->depth - 1].type != TY_REGEX ||
+        (g && g->kind != GK_BUFFER))
+        return error_at(c, PINAX_ERR_TYPE, line, column,
+                        by ? "replace_by takes a str, a regex and a buffer before its block: s re buf do ... end rex.replace_by"
+                           : "with_match takes a str and a regex before its block: s re do ... end rex.with_match");
+    if (bs->fails || bs->n_in < 1 || bs->n_in > 1 + PNX_PTN_CAPS || bs->n_out != (by ? 1 : 0) ||
+        (by && bs->out[0] != TY_STR))
+        return error_at(c, PINAX_ERR_TYPE, line, column,
+                        by ? "the block of replace_by is (whole str, group str ... gives str)"
+                           : "the block of with_match is (whole str, group str ...) and gives nothing");
+    for (uint32_t k = 0; k < bs->n_in; ++k) {
+        if (bs->in[k] != TY_STR || (k > 0 && !sig_in_name(bs, k).length))
+            return error_at(c, PINAX_ERR_TYPE, line, column, "the whole match and the groups are str parameters, the groups named");
+    }
+    if (!settle(c, f->depth - 2) || !settle(c, f->depth - 1))
+        return false;
+    const uint32_t rs = slot_of(c, f->depth - 2), rre = slot_of(c, f->depth - 1);
+    f->stack[f->depth - 2].hidden = f->stack[f->depth - 1].hidden = true;
+    uint8_t hidden = 2;
+    // the flag that says the word did its work; for replace_by the count, the place reached and
+    // the text between
+    if (!push_slot(c, TY_INT) || (by && (!push_slot(c, TY_INT) || !push_slot(c, TY_INT) || !push_slot(c, TY_STR))))
+        return false;
+    hidden += by ? 4 : 1;
+    for (uint32_t k = 1; k <= (by ? 4u : 1u); ++k)
+        f->stack[f->depth - k].hidden = true;
+    // the count lowest: it moves down to where the result goes, under the flag
+    const uint32_t count = by ? slot_of(c, f->depth - 4) : 0, place = by ? slot_of(c, f->depth - 3) : 0,
+                   ok = slot_of(c, f->depth - (by ? 2 : 1)), between = by ? slot_of(c, f->depth - 1) : 0;
+    if (emit(c, PNX_ABX(PNX_LOADI, ok, by ? 1 : 0)) == NONE ||
+        (by && (emit(c, PNX_ABX(PNX_LOADI, count, 0)) == NONE || emit(c, PNX_ABX(PNX_LOADI, place, 0)) == NONE)) ||
+        !settle_all(c))
+        return false;
+    block *b = open_block(c, B_DO);
+    if (!b)
+        return false;
+    b->use = by ? USE_BY : USE_WITH;
+    b->n_hidden = hidden;
+    b->user = user;
+    b->acc = (uint8_t)ok;
+    b->cur = (uint8_t)count;
+    b->val = (uint8_t)between;
+    b->lim = (uint8_t)rre;
+    b->stem = (uint8_t)place; // replace_by: the place reached
+    b->idx = (uint8_t)rs;
+    b->dst = gi;
+    b->full = NONE;
+    b->floor_mark = f->floor;
+    b->elem_local = NONE;
+    f->floor = f->depth;
+    b->head = f->code.n;
+    f->def_at = NONE;
+    uint32_t reg;
+    if (sig_in_name(bs, 0).length) {
+        const local *l = new_local(c, sig_in_name(bs, 0), TY_STR);
+        if (!l)
+            return false;
+        reg = l->reg;
+    } else {
+        if (!push_slot(c, TY_STR))
+            return false;
+        reg = slot_of(c, f->depth - 1);
+    }
+    if (by) { // the text before the match into the buffer; none left: to the end
+        if (emit(c, PNX_ABC(PNX_XSTEP, place, between, rs)) == NONE || emit(c, rre) == NONE || !jump_later(c, &b->exits) ||
+            emit(c, PNX_ABX(PNX_BCAT, between, gi)) == NONE || !jump_later(c, &b->full) ||
+            emit(c, PNX_ABC(PNX_XCAPI, reg, 0, 0)) == NONE)
+            return false;
+    } else if (emit(c, PNX_ABC(PNX_XMATCH, reg, rs, rre)) == NONE || !jump_later(c, &b->exits) ||
+               emit(c, PNX_ABX(PNX_LOADI, ok, 1)) == NONE) {
+        return false;
+    }
+    for (uint32_t k = 1; k < bs->n_in; ++k) {
+        const local *l = new_local(c, sig_in_name(bs, k), TY_STR);
+        if (!l || emit(c, PNX_ABC(PNX_XCAPI, l->reg, 0, k)) == NONE)
+            return false;
+    }
+    for (uint32_t k = b->locals_mark; k < f->n_locals; ++k) { // they hold their values from here
+        if (f->locals[k].drec != NONE)
+            ((dlocal *)f->dlocals.ptr)[f->locals[k].drec].from = f->code.n;
+    }
+    f->def_at = NONE;
+    return true; // the current token is the first of the body
+}
+
+static bool end_rex_block(comp *c, block *b) {
+    fn *f = c->f;
+    const bool by = b->use == USE_BY;
+    if (!f->dead) {
+        uint32_t made = 0;
+        if (by) { // the text the block made
+            if (f->depth != (uint32_t)b->in.depth + 1 || f->stack[f->depth - 1].type != TY_STR)
+                return type_error(c, "the block of replace_by leaves one str: what the match becomes");
+            if (!settle(c, f->depth - 1))
+                return false;
+            made = slot_of(c, f->depth - 1);
+            --f->depth;
+        }
+        if (!settle_all(c))
+            return false;
+        if (f->depth == b->out.depth && !same_turn(c, b))
+            return false;
+        if (!same_stack(f, &b->in))
+            return type_error(c, "this block must leave the stack as it found it");
+        if (!same_owns(c, b, b->owns_in))
+            return false;
+        if (by) { // the new text, the code point kept after an empty match, once more
+            const uint32_t kept = top_slot(c, BANK_S, 1);
+            if (emit(c, PNX_ABX(PNX_BCAT, made, b->dst)) == NONE || !jump_later(c, &b->full) ||
+                emit(c, PNX_ABC(PNX_XCAPI, kept, 0, 10)) == NONE || emit(c, PNX_ABX(PNX_BCAT, kept, b->dst)) == NONE ||
+                !jump_later(c, &b->full) || emit(c, PNX_ABC(PNX_ADDI, b->cur, b->cur, 1)) == NONE ||
+                !loop_back(c, b->head, b->cur, 0))
+                return false;
+        }
+    }
+    land(c, &b->exits);
+    if (by) { // what follows the last match, then the end
+        uint32_t over = NONE;
+        const uint32_t tail = top_slot(c, BANK_S, 1);
+        if (emit(c, PNX_ABC(PNX_SSKIP, tail, b->idx, b->stem)) == NONE || emit(c, PNX_ABX(PNX_BCAT, tail, b->dst)) == NONE || !jump_later(c, &b->full) || !jump_later(c, &over))
+            return false;
+        land(c, &b->full);
+        if (emit(c, PNX_ABX(PNX_LOADI, b->acc, 0)) == NONE)
+            return false;
+        land(c, &over);
+    }
+    close_scope(f, b);
+    f->floor = b->floor_mark;
+    const block done = *b;
+    --f->n_blocks;
+    restore(f, &done.in);
+    restore_owns(f, done.owns_in, done.locals_mark);
+    f->dead = false;
+    f->depth -= done.n_hidden;
+    if (!advance(c)) // past the end
+        return false;
+    if (c->tok.kind != PNX_T_PATH || !name_eq(tok_name(c), done.user))
+        return syntax(c, "the word that uses the block is expected right after its end");
+    if (!settle_all(c))
+        return false;
+    f->def_at = NONE;
+    if (!by)
+        return emit(c, PNX_ABX(PNX_SETFAIL, 0, PINAX_ERR_NOT_FOUND)) != NONE &&
+               emit(c, PNX_ABC(PNX_JNEI, done.acc, 0, 1)) != NONE && guard_op(c, TY_NONE);
+    const uint32_t to = top_slot(c, BANK_I, 1);
+    return move_slot(c, TY_INT, to, done.cur) && emit(c, PNX_ABX(PNX_SETFAIL, 0, PINAX_ERR_FULL)) != NONE &&
+           emit(c, PNX_ABC(PNX_JNEI, done.acc, 0, 1)) != NONE && guard_op(c, TY_INT);
+}
+
 // stem do [ ( params ) ] body end each | fold      count do body end times
 static bool do_block(comp *c) {
     fn *f = c->f;
@@ -2966,6 +3159,8 @@ static bool do_block(comp *c) {
         return false;
     if (c->tok.kind == PNX_T_LPAREN && !parse_sig(c, &bs))
         return false;
+    if (user.length && (ends_with_word(user, "with_match") || ends_with_word(user, "replace_by")))
+        return rex_block(c, user, &bs, at.line, at.column);
     static const char *const users[] = {"times", "each",       "fold",     "count",      "any",
                                         "all",   "first",      "each_index", "map_into", "filter_into"};
     bool expanded = false;
@@ -3199,8 +3394,12 @@ static bool array_put(comp *c, block *b, uint32_t value) {
     return emit(c, PNX_ABC(PNX_ADDI, b->fill, b->fill, 1)) != NONE;
 }
 
+static bool end_rex_block(comp *c, block *b);
+
 static bool end_do(comp *c, block *b) {
     fn *f = c->f;
+    if (b->use == USE_WITH || b->use == USE_BY)
+        return end_rex_block(c, b);
     if (!f->dead) {
         if (b->use == USE_FOLD) {
             if (f->depth != (uint32_t)b->in.depth + 1 || f->stack[f->depth - 1].type != b->acc_type)
@@ -3387,12 +3586,6 @@ static bool do_extreme(comp *c, bool largest) {
     land(c, &exits);
     f->depth -= (uint32_t)hidden + 2;
     return found_or_fail(c, TY_INT, best, flag);
-}
-
-// A path that names `word` of some module: "str.join_into", or the same under another name.
-static bool ends_with_word(name n, const char *word) {
-    const size_t len = __builtin_strlen(word);
-    return n.length > len && n.text[n.length - len - 1] == '.' && __builtin_memcmp(n.text + n.length - len, word, len) == 0;
 }
 
 // sep buf stem join_into : the str values of the stem appended to the buffer, sep between two;

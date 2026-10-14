@@ -262,9 +262,10 @@ enum {
     X(PREPL, 0xb1, PNX_K_S, PNX_K_S, PNX_K_S, PNX_F_ABC, PNX_X_SREG, 0, "wrr") \
     X(XMATCH, 0xb2, PNX_K_S, PNX_K_S, PNX_K_S, PNX_F_ABC, PNX_X_NONE, 1, "wrr") \
     X(XCUT, 0xb3, PNX_K_S, PNX_K_S, PNX_K_S, PNX_F_ABC, PNX_X_NONE, 1, "mmw") \
-    X(XNEXT, 0xb4, PNX_K_S, PNX_K_S, PNX_K_S, PNX_F_ABC, PNX_X_NONE, 1, "mwr") \
-    X(XSPLIT, 0xb5, PNX_K_S, PNX_K_S, PNX_K_S, PNX_F_ABC, PNX_X_NONE, 1, "mwr") \
+    X(XNEXT, 0xb4, PNX_K_I, PNX_K_S, PNX_K_S, PNX_F_ABC, PNX_X_SREG, 1, "mwr") \
+    X(XSPLIT, 0xb5, PNX_K_I, PNX_K_S, PNX_K_S, PNX_F_ABC, PNX_X_SREG, 1, "mwr") \
     X(XCAPI, 0xb6, PNX_K_S, PNX_K_NONE, PNX_K_IMM, PNX_F_ABC, PNX_X_NONE, 0, "w--") \
+    X(XSTEP, 0xb7, PNX_K_I, PNX_K_S, PNX_K_S, PNX_F_ABC, PNX_X_SREG, 1, "mwr") \
     /* strings built in the region */ \
     X(RMARK, 0xb8, PNX_K_S, PNX_K_NONE, PNX_K_NONE, PNX_F_ABC, PNX_X_NONE, 0, "w--") \
     X(RCATS, 0xb9, PNX_K_S, PNX_K_S, PNX_K_NONE, PNX_F_ABC, PNX_X_NONE, 0, "mr-") \

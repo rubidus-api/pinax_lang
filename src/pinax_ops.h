@@ -1096,58 +1096,83 @@ PNX_OP(XCUT) {
     S[OP_C(w)] = (pnx_scell){s.segment, s.length - found[1], s.offset + found[1]};
     return PNX_R_OK;
 }
-// A: what is left; B: the next match (its groups kept for XCAPI). After an empty match the
-// search moves on by a code point.
+// The stems of rex go over the whole string C, from the place R[A] (past the end: done), so
+// that ^, $ and \b see the bytes around; the program is in register x.
+// After a match at m0..m1 the next search starts at m1, or a code point on after an empty one.
+PNX_INLINE uint32_t pnx_rex_past(const pinax_state *st, pnx_scell s, uint32_t m0, uint32_t m1) {
+    if (m1 > m0)
+        return m1;
+    return m1 >= s.length ? s.length + 1 : m1 + pnx_cp_len(pnx_view_bytes(st, s) + m1, s.length - m1);
+}
+// B: the next match (its groups kept for XCAPI). PNX_R_FAILED: none is left.
 PNX_OP(XNEXT) {
-    pnx_scell *rest = &S[OP_A(w)];
-    if (rest->offset == PNX_SNEXT_DONE)
+    const pnx_scell s = S[OP_C(w)];
+    const int64_t   at = R[OP_A(w)];
+    if (at < 0 || at > (int64_t)s.length)
         return PNX_R_FAILED;
     uint32_t  found[2 + 2 * PNX_PTN_CAPS];
-    const int r = pnx_rex_run(st, *rest, 0, S[OP_C(w)], found);
+    const int r = pnx_rex_run(st, s, (uint32_t)at, S[x], found);
     if (r != PNX_R_OK) {
         if (r == PNX_R_FAILED)
-            *rest = (pnx_scell){PNX_SEG_EMPTY, 0, PNX_SNEXT_DONE};
+            R[OP_A(w)] = (int64_t)s.length + 1;
         return r;
     }
     S[OP_B(w)] = pnx_ptn_now(st)->cap[0];
-    uint32_t past = found[1] > found[0] ? found[1] : found[0];
-    if (found[1] <= found[0]) { // empty: past it by a code point, or done at the end
-        if (past >= rest->length) {
-            *rest = (pnx_scell){PNX_SEG_EMPTY, 0, PNX_SNEXT_DONE};
-            return PNX_R_OK;
-        }
-        past += pnx_cp_len(pnx_view_bytes(st, *rest) + past, rest->length - past);
-    }
-    rest->offset += past;
-    rest->length -= past;
+    R[OP_A(w)] = pnx_rex_past(st, s, found[0], found[1]);
     return PNX_R_OK;
 }
-// A: what is left; B: the next piece, up to the next match of C (an empty match at the very
-// start of what is left does not count). The last piece is what follows the last match.
+// B: the next piece, from R[A] up to the next match (an empty match right at R[A] does not
+// count); the last piece runs to the end.
 PNX_OP(XSPLIT) {
-    pnx_scell *rest = &S[OP_A(w)];
-    if (rest->offset == PNX_SNEXT_DONE)
+    const pnx_scell s = S[OP_C(w)];
+    const int64_t   at = R[OP_A(w)];
+    if (at < 0 || at > (int64_t)s.length)
         return PNX_R_FAILED;
     uint32_t found[2 + 2 * PNX_PTN_CAPS];
-    int      r = pnx_rex_run(st, *rest, 0, S[OP_C(w)], found);
-    if (r == PNX_R_OK && found[1] == 0 && rest->length) // empty at the start: look one code point on
-        r = pnx_rex_run(st, *rest, pnx_cp_len(pnx_view_bytes(st, *rest), rest->length), S[OP_C(w)], found);
-    if (r == PNX_R_FAILED || (r == PNX_R_OK && found[1] == 0 && !rest->length)) {
-        S[OP_B(w)] = *rest;
-        *rest = (pnx_scell){PNX_SEG_EMPTY, 0, PNX_SNEXT_DONE};
+    int      r = pnx_rex_run(st, s, (uint32_t)at, S[x], found);
+    if (r == PNX_R_OK && found[1] <= found[0] && found[0] == at) { // empty right here: a code point on
+        r = at < (int64_t)s.length
+                ? pnx_rex_run(st, s, (uint32_t)at + pnx_cp_len(pnx_view_bytes(st, s) + at, s.length - (uint32_t)at), S[x], found)
+                : PNX_R_FAILED;
+    }
+    if (r == PNX_R_FAILED) {
+        S[OP_B(w)] = (pnx_scell){s.segment, s.length - (uint32_t)at, s.offset + (uint32_t)at};
+        R[OP_A(w)] = (int64_t)s.length + 1;
         return PNX_R_OK;
     }
     if (r != PNX_R_OK)
         return r;
-    S[OP_B(w)] = (pnx_scell){rest->segment, found[0], rest->offset};
-    rest->offset += found[1];
-    rest->length -= found[1];
+    S[OP_B(w)] = (pnx_scell){s.segment, found[0] - (uint32_t)at, s.offset + (uint32_t)at};
+    R[OP_A(w)] = found[1] > found[0] ? found[1] : found[0];
     return PNX_R_OK;
 }
-// Group C of the last match (empty when it has no such group or the group took no part).
+// Group C of the last match (empty when it has no such group or the group took no part); C 10:
+// the code point XSTEP kept after an empty match.
 PNX_OP(XCAPI) {
     const pnx_ptn_found *f = pnx_ptn_now(st);
-    S[OP_A(w)] = OP_C(w) < f->n ? f->cap[OP_C(w)] : (pnx_scell){PNX_SEG_EMPTY, 0, 0};
+    S[OP_A(w)] = OP_C(w) == 10 ? f->skipped : OP_C(w) < f->n ? f->cap[OP_C(w)] : (pnx_scell){PNX_SEG_EMPTY, 0, 0};
+    return PNX_R_OK;
+}
+// rex.replace_by, one match at a time. B: the text from R[A] to the next match of the program
+// in register x in the whole string C (its groups kept). After an empty match the next code
+// point is kept aside (XCAPI 10) and the search moves past it. PNX_R_FAILED: no match is left;
+// what remains is C from R[A] on.
+PNX_OP(XSTEP) {
+    const pnx_scell s = S[OP_C(w)];
+    const int64_t   at = R[OP_A(w)];
+    pnx_ptn_found  *f = pnx_ptn_now(st);
+    if (at < 0 || at > (int64_t)s.length)
+        return PNX_R_FAILED;
+    uint32_t  found[2 + 2 * PNX_PTN_CAPS];
+    const int r = pnx_rex_run(st, s, (uint32_t)at, S[x], found);
+    if (r != PNX_R_OK)
+        return r;
+    S[OP_B(w)] = (pnx_scell){s.segment, found[0] - (uint32_t)at, s.offset + (uint32_t)at};
+    f->skipped = (pnx_scell){PNX_SEG_EMPTY, 0, 0};
+    const uint32_t past = pnx_rex_past(st, s, found[0], found[1]);
+    if (found[1] <= found[0] && found[1] < s.length)
+        f->skipped = (pnx_scell){s.segment, past - found[1], s.offset + found[1]};
+    R[OP_A(w)] = past;
     return PNX_R_OK;
 }
 // B, with every match of C replaced by the str in register x (\0 the match, \1 to \9 the groups,

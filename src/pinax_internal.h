@@ -51,7 +51,8 @@ int      pnx_rex_search(const uint8_t *prog, uint32_t plen, const uint8_t *s, ui
 // What the last ptn.match of a run found, for ptn.capture: the whole match and the captures.
 typedef struct pnx_ptn_found {
     pnx_scell cap[1 + PNX_PTN_CAPS];
-    uint32_t  n; // 0: no match yet; else 1 + the captures
+    uint32_t  n;       // 0: no match yet; else 1 + the captures
+    pnx_scell skipped; // rex.replace_by: the code point kept after an empty match (XCAPI 10)
 } pnx_ptn_found;
 
 typedef struct pnx_frame {
