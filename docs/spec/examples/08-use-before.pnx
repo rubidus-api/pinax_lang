@@ -1,0 +1,4 @@
+rem refused
+use str
+word show (gives s str) total str.to_str end
+global total int

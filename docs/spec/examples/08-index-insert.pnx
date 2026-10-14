@@ -1,0 +1,20 @@
+rem run
+use io
+use str
+record user
+  name str(16)
+  age int
+end
+list users user 4
+index by_name users user.name
+word add_user (name str, age int, indexed bool or fail)
+  users add_row or_fail to r
+  name r to user.name
+  age r to user.age
+  indexed if r by_name insert or_fail end  rem a row added while running is indexed by insert
+end
+word age_of (name str gives int or fail) name by_name lookup or_fail user.age end
+"kim" 30 true add_user or_else (e) end
+"lee" 25 false add_user or_else (e) end
+"kim" age_of or_else (e) -1 end str.to_str io.println
+"lee" age_of or_else (e) -1 end str.to_str io.println     rem not inserted: not found

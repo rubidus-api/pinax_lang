@@ -1,0 +1,3 @@
+rem refused
+global total int
+const total 5

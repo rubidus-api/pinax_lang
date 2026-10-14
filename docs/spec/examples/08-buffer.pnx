@@ -1,0 +1,12 @@
+rem run
+use io
+buffer out 32
+word build (or fail)
+  "x=" out append or_fail
+  42 out append_int or_fail
+  '!' out append_byte or_fail
+end
+build or_else (e) "full" io.println end
+out contents io.println
+2 out truncate
+out contents io.println

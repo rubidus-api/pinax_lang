@@ -1,0 +1,9 @@
+rem refused
+record node
+  value int
+end
+pool nodes node 2
+word leak (or fail)
+  nodes alloc or_fail to a
+  7 a to node.value
+end

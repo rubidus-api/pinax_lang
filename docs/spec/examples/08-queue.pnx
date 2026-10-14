@@ -1,0 +1,11 @@
+rem run
+use io
+use str
+queue jobs int 4
+word show (gives s str or fail) jobs take or_fail str.to_str end
+10 jobs put or_else (e) end
+20 jobs put or_else (e) end
+jobs peek or_else (e) 0 end str.to_str io.println
+show or_else (e) "?" end io.println
+show or_else (e) "?" end io.println
+show or_else (e) cat ("empty: ", e err_text) end io.println

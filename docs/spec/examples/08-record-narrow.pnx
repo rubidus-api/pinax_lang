@@ -1,0 +1,6 @@
+rem fault
+record pixel
+  level u8
+end
+array image pixel 4
+300 0 image idx to pixel.level            rem 300 does not fit in u8

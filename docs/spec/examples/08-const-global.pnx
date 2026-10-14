@@ -1,0 +1,13 @@
+rem run
+use io
+use str
+const limit 3
+const greeting "hello"
+global hits int
+global last str(16)
+global seen bool
+hits str.to_str io.println           rem a global starts at zero
+limit to hits
+greeting to last
+true to seen
+cat (last, " ", hits, " ", seen) io.println

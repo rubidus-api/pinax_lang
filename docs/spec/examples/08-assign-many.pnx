@@ -1,0 +1,3 @@
+rem refused
+array small int 2
+assign small (1, 2, 3)

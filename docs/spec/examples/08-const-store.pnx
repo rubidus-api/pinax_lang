@@ -1,0 +1,3 @@
+rem refused
+const limit 3
+word raise () 4 to limit end

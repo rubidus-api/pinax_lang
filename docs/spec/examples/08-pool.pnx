@@ -1,0 +1,16 @@
+rem run
+use io
+record node
+  value int
+end
+pool nodes node 2
+global kept nodes
+word demo (or fail)
+  nodes alloc or_fail to a                 rem an owned row: it must be stored or freed
+  7 a to node.value
+  a to kept                                rem stored: the global holds the row now
+  cat ("value ", kept node.value, ", alive: ", kept nodes is_alive) io.println
+  kept nodes free
+  cat ("alive after free: ", kept nodes is_alive) io.println
+end
+demo or_else (e) "no room" io.println end

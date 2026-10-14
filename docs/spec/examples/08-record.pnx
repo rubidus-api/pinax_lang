@@ -1,0 +1,14 @@
+rem run
+use io
+record user
+  name str(16)
+  age u8
+  admin bool
+end
+list users user 8
+row users ("kim", 30, true)
+row users lee ("lee", 25)                  rem a named row; the fields left out stay zero
+word show (u users) cat (u user.name, " ", u user.age, " ", u user.admin) io.println end
+users do (u users) u show end each
+26 lee to user.age                         rem v row to record.field
+lee show

@@ -1,0 +1,9 @@
+rem run
+use io
+use str
+array primes int 6
+assign primes (2, 3, 5, 7)                rem cells 4 and 5 stay 0
+11 4 to primes                            rem v i to array: store into cell i
+primes do (p int) p str.to_str io.print " " io.print end each
+"" io.println
+cat ("len ", primes len, ", cell 2 is ", 2 primes idx) io.println

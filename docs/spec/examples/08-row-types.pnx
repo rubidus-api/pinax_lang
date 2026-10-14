@@ -1,0 +1,7 @@
+rem refused
+record user
+  name str(16)
+  age u8
+end
+list users user 8
+row users (30, "kim")

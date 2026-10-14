@@ -1,0 +1,6 @@
+rem run
+use io
+list two int 2
+1 two push or_else (e) end
+2 two push or_else (e) end
+3 two push or_else (e) cat ("third push failed: ", e err_text) io.println end

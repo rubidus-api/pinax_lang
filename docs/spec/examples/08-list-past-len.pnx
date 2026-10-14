@@ -1,0 +1,4 @@
+rem fault
+list items int 8
+1 items push or_else (e) end
+1 items idx drop                          rem the list holds one value: index 1 is past it

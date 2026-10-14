@@ -1,0 +1,5 @@
+rem refused
+forward list nodes
+record node
+  value int
+end

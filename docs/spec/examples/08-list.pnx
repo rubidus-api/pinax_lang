@@ -1,0 +1,12 @@
+rem run
+use io
+use str
+list stack int 3
+word fill (or fail)
+  1 stack push or_fail
+  2 stack push or_fail
+end
+fill or_else (e) "fill failed" io.println end
+cat ("len ", stack len, " of ", stack capacity) io.println
+stack pop or_else (e) -1 end str.to_str io.println
+cat ("len ", stack len) io.println

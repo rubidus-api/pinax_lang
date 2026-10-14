@@ -1,0 +1,14 @@
+rem run
+use io
+use str
+record user
+  name str(16)
+  age u8
+end
+list users user 8
+index by_name users user.name
+row users ("kim", 30)
+row users ("lee", 25)
+word find_age (name str gives age int or fail) name by_name lookup or_fail user.age end
+"lee" find_age or_else (e) -1 end str.to_str io.println
+"park" find_age or_else (e) -1 end str.to_str io.println

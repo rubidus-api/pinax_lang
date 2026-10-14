@@ -1,0 +1,13 @@
+rem fault
+record node
+  value int
+end
+pool nodes node 2
+global keep nodes
+word demo (or fail)
+  nodes alloc or_fail to a
+  a to keep                                 rem stored: the row is handed over
+  keep nodes free
+  keep node.value drop                      rem the row was given back: stale
+end
+demo or_else (e) end

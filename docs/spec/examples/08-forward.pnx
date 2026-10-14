@@ -1,0 +1,13 @@
+rem run
+use io
+use str
+forward list nodes                         rem the record below points into this list
+record node
+  value int
+  next nodes
+end
+list nodes node 4
+row nodes b (2)
+row nodes a (1, b)
+a node.next node.value str.to_str io.println
+a node.next node.next is_none if "the chain ends at b" io.println end
