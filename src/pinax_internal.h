@@ -238,6 +238,7 @@ uint64_t pnx_hash(const uint8_t key[16], const uint8_t *bytes, uint32_t length);
 // The name of an error number as a view into the interpreter's static text.
 extern const char pnx_static_text[];
 void pnx_err_name(int64_t err, uint32_t *offset, uint32_t *length);
+bool pnx_tasks_alive(const pinax_state *state); // a task was spawned and has not ended
 // Offset of the last `part` in `bytes`, or UINT32_MAX. An empty part is found at the end.
 uint32_t pnx_find_last(const uint8_t *bytes, uint32_t length, const uint8_t *part, uint32_t part_length);
 // Offset of the first `byte`, or UINT32_MAX.

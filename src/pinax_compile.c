@@ -4405,6 +4405,8 @@ static bool definition(comp *c, bool is_test) {
         if (find_word(c, n, NULL))
             return type_error(c, "a test of this name is already defined");
     } else if (c->redefining) {
+        if (pnx_tasks_alive(c->st)) // the code of the words moves; a task's places in it would not
+            return error(c, PINAX_ERR_STATE, "redefine waits until no task is alive (run_all, or cancel them)");
         uint32_t old;
         if (!find_word(c, n, &old) || old >= c->base.words)
             return type_error(c, "redefine replaces a word that an earlier line of the session defined");
@@ -6205,8 +6207,14 @@ static pinax_err load_source(pinax_state *st, const char *file, pinax_str source
             st->error_text = text;
         }
     }
-    if (err == PINAX_OK && !declared) // a line that only ran code leaves the program as it was
+    // a line that only ran code leaves the program as it was, unless a task it spawned still
+    // lives in that code. What the line did to the globals stays: their storage is shared, and
+    // their state (a list's length, a queue's head) is copied back into the older table.
+    if (err == PINAX_OK && !declared && !pnx_tasks_alive(st)) {
+        if (before.head && before.head->n_globals)
+            __builtin_memcpy(before.globals, st->globals, (size_t)before.head->n_globals * sizeof(pnx_global));
         pnx_program_restore(st, &before);
+    }
     return err;
 }
 

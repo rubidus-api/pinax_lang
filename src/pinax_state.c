@@ -904,6 +904,19 @@ rollback:
 
 // ---- finding and running -----------------------------------------------------------------
 
+// A task holds places in the code (where it goes on, where its calls return): while one lives,
+// the code must not move under it.
+bool pnx_tasks_alive(const pinax_state *st) {
+    for (uint32_t k = 0; st->head && k < st->head->n_globals; ++k) {
+        const pnx_global *g = &st->globals[k];
+        for (uint32_t slot = 0; g->kind == PNX_G_TASKS && slot < g->capacity; ++slot) {
+            if (((const pnx_task *)(const void *)g->ptr)[slot].state != PNX_TASK_FREE)
+                return true;
+        }
+    }
+    return false;
+}
+
 // Which words may yield (RFC-0005 section 3.5): a word that yields, runs the tasks of a set,
 // calls a host word that may finish later, or calls a word that may yield. Such a word cannot
 // run inside a host word: the C stack is in the way. A call through a register (a value
