@@ -168,8 +168,10 @@ PINAX_API pinax_err pinax_complete(pinax_state *state, pinax_token token,
 /* ---- C libraries named by scripts --------------------------------------------------- */
 
 /*
- * A script's `extern name (...) from "lib"` asks the host for the function. Pinax does
- * not load libraries itself: with no resolver, or when it returns NULL, the load fails.
+ * A script's `extern name (...) from "lib"` asks the host for the function ("lib", "name").
+ * With `as other` at the end the script calls it `other`; the symbol asked for is still
+ * "name". Pinax does not load libraries itself: with no resolver, or when it returns NULL,
+ * the load fails.
  * Only integer, handle and string arguments and one integer or handle result are callable
  * this way; anything else needs a host word.
  *

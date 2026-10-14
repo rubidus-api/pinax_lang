@@ -4390,18 +4390,22 @@ static bool use_module(comp *c) {
     return true;
 }
 
-// extern NAME ( effect ) from "lib" : a C function, called as RFC-0015 section 4.3 says
+// extern NAME ( effect ) from "lib" [as LOCAL] : a C function, called as RFC-0015 section 4.3
+// says. With `as`, the script calls it LOCAL; then NAME may be any C name, a reserved or core
+// word among them (`extern drop (...) from "c" as c_drop`), or a quoted name for one the lexer
+// would not read as a name (`extern "note" (...) from "c" as c_note`).
 static bool declare_extern(comp *c) {
     if (!advance(c))
         return false;
-    if (c->tok.kind != PNX_T_NAME)
-        return syntax(c, "extern names the function: extern name (effect) from \"library\"");
-    const name n = tok_name(c);
-    const pnx_token at = c->tok;
-    if (name_is_global(c, n))
-        return type_error(c, "this name is already defined");
-    if (n.length > 31)
-        return syntax(c, "a word name is at most 31 bytes long");
+    const bool quoted = c->tok.kind == PNX_T_STRING;
+    if (c->tok.kind != PNX_T_NAME && c->tok.kind != PNX_T_RESERVED && !quoted)
+        return syntax(c, "extern names the function: extern name (effect) from \"library\" [as name]");
+    if (quoted && (c->tok.body_length == 0 || c->tok.escapes))
+        return syntax(c, "a quoted C function name is plain bytes");
+    const name symbol = quoted ? (name){c->lx->source + c->tok.body, c->tok.body_length} : tok_name(c);
+    const pnx_token at    = c->tok;
+    if (symbol.length > 31)
+        return syntax(c, "a C function name is at most 31 bytes long");
     sig s;
     c->cstr_mask = 0;
     c->in_extern = true;
@@ -4417,7 +4421,28 @@ static bool declare_extern(comp *c) {
         return syntax(c, "the library name is 1 to 14 plain bytes");
     char module[16] = "@", word[32] = {0};
     __builtin_memcpy(module + 1, c->lx->source + c->tok.body, c->tok.body_length);
-    __builtin_memcpy(word, n.text, n.length);
+    __builtin_memcpy(word, symbol.text, symbol.length);
+    if (!advance(c))
+        return false;
+    name n = symbol;
+    pnx_token named = at;
+    if (is_word(c, PNX_KW_as)) {
+        if (!advance(c) || c->tok.kind != PNX_T_NAME)
+            return c->err == PINAX_OK ? syntax(c, "`as` is followed by the name the script calls the function") : false;
+        n = tok_name(c);
+        named = c->tok;
+        if (!advance(c))
+            return false;
+    } else if (at.kind != PNX_T_NAME) {
+        return error_at(c, PINAX_ERR_SYNTAX, at.line, at.column,
+                        "this C function has the name of a reserved word: give it another with `as`");
+    }
+    if (name_is_global(c, n))
+        return error_at(c, PINAX_ERR_TYPE, named.line, named.column,
+                        n.text == symbol.text ? "this name is already defined: give the function another with `as`"
+                                              : "this name is already defined");
+    if (n.length > 31)
+        return error_at(c, PINAX_ERR_SYNTAX, named.line, named.column, "a word name is at most 31 bytes long");
     uint32_t host;
     const pinax_err err = pnx_extern_link(c->st, module, word, text, &host);
     if (err != PINAX_OK)
@@ -4426,7 +4451,7 @@ static bool declare_extern(comp *c) {
     if (!slot)
         return false;
     *slot = (externsym){.name = n, .host = host};
-    return advance(c);
+    return true;
 }
 
 static bool declared_size(comp *c, uint32_t *out);
