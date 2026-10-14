@@ -21,3 +21,5 @@
 #include "clauses/14-tasks.typ"
 #include "clauses/15-core.typ"
 #include "clauses/16-modules.typ"
+#include "clauses/17-host-modules.typ"
+#include "clauses/18-extern.typ"

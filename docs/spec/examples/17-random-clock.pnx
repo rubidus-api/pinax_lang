@@ -1,0 +1,13 @@
+rem run
+use io
+use random
+use clock
+word demo ()
+  42 random.seed                                       rem the same seed, the same numbers
+  6 random.random_below to a
+  a 0 ge a 6 lt and if "a die in 0..5" io.println end
+  clock.monotonic_ns to t0
+  clock.monotonic_ns to t1
+  t1 t0 ge if "the monotonic clock does not go back" io.println end
+end
+demo

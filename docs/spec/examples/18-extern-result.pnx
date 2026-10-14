@@ -1,0 +1,2 @@
+rem refused
+extern strlen (s cstr gives n int, m int) from "libc"

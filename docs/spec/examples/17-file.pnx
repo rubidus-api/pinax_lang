@@ -1,0 +1,19 @@
+rem run
+use io
+use file
+buffer buf 64
+word demo (or fail)
+  "data.txt" file.open_write or_fail to out
+  "alpha\nbeta\n" out file.write or_else (e) out file.close e fail end
+  out file.close
+  "data.txt" file.open_read or_fail to in
+  loop
+    in file.read_line or_else (e) break end to line
+    cat ("line: ", line) io.println
+  end
+  in file.close
+  "data.txt" buf file.read_all_into or_fail
+  cat ("all: ", buf contents) io.print
+end
+demo or_else (e) cat ("file error: ", e err_text) io.println end
+"missing.txt" file.read_all or_else (e) cat ("missing.txt: ", e err_text) end io.println

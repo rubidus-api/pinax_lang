@@ -1,0 +1,2 @@
+rem refused
+extern abs (n int gives int) from "libc"
