@@ -190,11 +190,20 @@ def block(node, depth=0):
     t, c = node.tag, node.cls()
     if t in ("h2", "h3", "h4", "h5", "h6"):
         return ["#" * (int(t[1]) - 1) + " " + node.text().strip(), ""]
-    if t == "p" and "para" in c:
-        return [inline(node).strip(), ""]
     if t == "p":
-        s = inline(node).strip()
-        return [s, ""] if s else []
+        # a paragraph may hold block-level children (a list, a table, code): those become blocks
+        lines, pending = [], ""
+        for k in node.kids:
+            if not isinstance(k, str) and k.tag in ("ul", "ol", "pre", "table", "div"):
+                if pending.strip():
+                    lines += [re.sub(r"[ \t]+", " ", pending).strip(), ""]
+                pending = ""
+                lines += block(k, depth)
+            else:
+                pending += inline(k)
+        if pending.strip():
+            lines += [re.sub(r"[ \t]+", " ", pending).strip(), ""]
+        return lines
     if t == "pre":
         code = find(node, "code")
         lang = (code.attrs.get("data-lang") if code else "") or ""
