@@ -75,6 +75,7 @@ static const char *const test_sources[] = {"tests/test_main.c"};
 // Public files and directories; `git ls-files` must stay inside.
 static const char *const public_paths[] = {
     ".gitignore", "README.md", "README.ko.md", "LICENSE", "nob.c", "include/", "src/", "vendor/",
+    "docs/spec/", "docs/manual/", "docs/tools/", // the standard and the manual (Korean and English)
 };
 
 typedef struct {
