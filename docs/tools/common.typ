@@ -91,7 +91,21 @@
   let kind = read(base + ".kind").trim()
   let lang-of = if name.ends-with(".c") { "c" } else { "pinax" }
   context {
-    if is-html() {
+    if kind == "module" {
+      if is-html() {
+        html.elem("div", attrs: (class: "example module"))[
+          #html.elem("p", attrs: (class: "ex-file"))[#raw(name)#if caption != none [ --- #caption]]
+          #raw(src, block: true, lang: lang-of)
+        ]
+      } else {
+        block(width: 100%, breakable: true, above: 1em, below: 1em)[
+          #set par(first-line-indent: 0pt)
+          #text(font: ("Noto Sans CJK KR", "Noto Sans"), size: 0.85em, fill: luma(90))[#raw(name)#if caption != none [ --- #caption]]
+          #block(width: 100%, inset: 7pt, fill: luma(248), stroke: 0.5pt + luma(190), radius: 2pt,
+                 breakable: true)[#raw(src, block: true, lang: lang-of)]
+        ]
+      }
+    } else if is-html() {
       html.elem("div", attrs: (class: "example " + kind))[
         #html.elem("p", attrs: (class: "ex-file"))[#raw(name)#if caption != none [ --- #caption]]
         #raw(src, block: true, lang: lang-of)

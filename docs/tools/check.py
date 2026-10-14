@@ -62,7 +62,7 @@ for p in sorted(ko):
         continue
     ks = [kinds.get(x, "") for x in exs]
     bad = any(k in ("refused", "fault") for k in ks)
-    good = any(k in ("run", "test", "repl", "embed", "fmt", "see") for k in ks)
+    good = any(k in ("run", "test", "repl", "embed", "fmt", "see") for k in ks)  # "module": source only
     if tree == "spec":
         if ("#part(\"제약\")" in text or "#part(tr(\"제약\"" in text) and not any(k == "refused" for k in ks):
             problems.append(f"shape: {p} states constraints but shows no refused example")

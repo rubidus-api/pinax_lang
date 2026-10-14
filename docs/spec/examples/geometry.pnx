@@ -1,0 +1,9 @@
+rem hide
+rem A module: only what is marked export is seen by a source that uses it.
+export const unit 10
+export record point
+  x int
+  y int
+end
+word square (n int gives int) n n mul end
+export word area (w int, h int gives int) w h mul unit square div end

@@ -1,0 +1,5 @@
+rem run
+use io
+use str
+use geometry as g
+200 50 g.area str.to_str io.println

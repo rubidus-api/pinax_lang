@@ -1,0 +1,3 @@
+rem refused
+use geometry
+4 geometry.square drop

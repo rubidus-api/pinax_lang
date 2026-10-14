@@ -53,7 +53,11 @@ fail() { echo "  FAIL $1: $2"; [ -s "$3" ] && head -5 "$3" | sed 's/^/    /'; fa
 for f in "$src_dir"/*.pnx; do
     [ -e "$f" ] || continue
     n=$(basename "$f")
-    [ "$(contract "$f" hide)" = yes ] && continue
+    if [ "$(contract "$f" hide)" = yes ]; then # shown as source only (a module the others use)
+        : >"$out_dir/$n.out"
+        echo module >"$out_dir/$n.kind"
+        continue
+    fi
     total=$((total + 1))
     kind=run
     for k in fault refused test test-fail repl fmt see; do

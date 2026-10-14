@@ -1,0 +1,9 @@
+rem run
+use io
+use str
+use geometry
+200 50 geometry.area str.to_str io.println
+geometry.unit str.to_str io.println
+array corners point 2                       rem an exported record is used by its name
+3 0 corners idx to point.x
+0 corners idx point.x str.to_str io.println
