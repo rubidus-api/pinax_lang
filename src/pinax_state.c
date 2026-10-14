@@ -15,6 +15,8 @@ const pnx_opinfo pnx_ops_info[PNX_OP_COUNT] = {
 };
 #define opinfo pnx_ops_info
 
+static void mark_yields(pinax_state *st);
+
 static const uint8_t width_bytes[PNX_W_COUNT] = {1, 2, 4, 8, 1, 2, 4};
 
 // ---- small helpers -------------------------------------------------------------------
@@ -579,7 +581,7 @@ static const char *check_flow(const pinax_state *st, uint32_t index, span range,
                 callee = st->word_counts[x];
             } else if (op == PNX_CALLR) {
                 callee = (pnx_counts){(uint8_t)x, (uint8_t)(x >> 8), (uint8_t)(x >> 16), (uint8_t)((x >> 24) & 0x7fu),
-                                      x >> 31 != 0};
+                                      x >> 31 != 0, false};
             } else if (hosts) {
                 callee = st->imports[x]->counts;
             }
@@ -695,7 +697,7 @@ pinax_err pnx_load_container(pinax_state *st, pinax_str bytecode, uint32_t keep)
         const pnx_wordrec *word = &st->words[k];
         if (word->counted)
             st->word_counts[k] = (pnx_counts){word->int_args, word->str_args, word->int_results, word->str_results,
-                                              word->fails != 0};
+                                              word->fails != 0, false};
         if (!terminated(word->name, sizeof word->name) || !terminated(word->signature, sizeof word->signature) ||
             (!word->counted && !pnx_signature_counts(word->signature, &st->word_counts[k])) ||
             st->word_counts[k].str_args > PNX_MAX_STR_ARGS || st->word_counts[k].str_results > PNX_MAX_STR_RESULTS ||
@@ -884,6 +886,7 @@ pinax_err pnx_load_container(pinax_state *st, pinax_str bytecode, uint32_t keep)
         why = "bytecode: code without words";
         goto rollback;
     }
+    mark_yields(st);
     st->region_used = 0;
     return PINAX_OK;
 
@@ -895,8 +898,39 @@ rollback:
 
 // ---- finding and running -----------------------------------------------------------------
 
+// Which words may yield (RFC-0005 section 3.5): a word that yields, runs the tasks of a set,
+// calls a host word that may finish later, or calls a word that may yield. Such a word cannot
+// run inside a host word: the C stack is in the way. A call through a register (a value
+// block) is not followed; a yield there inside a host word stays a fault at run time.
+static void mark_yields(pinax_state *st) {
+    const pnx_head *h = st->head;
+    for (uint32_t k = 0; k < h->n_words; ++k)
+        st->word_counts[k].yields = false;
+    for (bool changed = true; changed;) {
+        changed = false;
+        for (uint32_t k = 0; k < h->n_words; ++k) {
+            if (st->word_counts[k].yields)
+                continue;
+            const uint32_t end = k + 1 < h->n_words ? st->words[k + 1].entry : h->n_code;
+            bool yields = false;
+            for (uint32_t i = st->words[k].entry; i < end && !yields;) {
+                const uint32_t op = st->code[i] & 0xffu;
+                const pnx_opinfo info = opinfo[op];
+                const uint32_t x = info.second ? st->code[i + 1] : 0;
+                yields = op == PNX_TYIELD || op == PNX_TRUNALL ||
+                         ((op == PNX_HCALL || op == PNX_HCALLF) && (st->imports[x]->flags & PINAX_WORD_AWAITABLE)) ||
+                         (info.second == PNX_X_WORD && st->word_counts[x].yields);
+                i += info.second ? 2u : 1u;
+            }
+            if (yields) {
+                st->word_counts[k].yields = true;
+                changed = true;
+            }
+        }
+    }
+}
+
 pinax_err pinax_find(pinax_state *st, const char *name, const char *signature, uint32_t flags, pinax_word *out) {
-    (void)flags; // nothing yields in P0, so every word may be run from a host word
     if (!st || !name || !signature || !out)
         return PINAX_ERR_ARGUMENT;
     if (!st->head)
@@ -909,6 +943,8 @@ pinax_err pinax_find(pinax_state *st, const char *name, const char *signature, u
             if (st->words[k].module == module && text_equal(st->words[k].name, word)) {
                 if (!text_equal(st->words[k].signature, signature)) // the text as written
                     return fail(st, PINAX_ERR_SIGNATURE, "the word has another signature");
+                if ((flags & PINAX_FIND_NESTED) && st->word_counts[k].yields)
+                    return fail(st, PINAX_ERR_SIGNATURE, "the word may yield, so it cannot run inside a host word");
                 *out = k;
                 return PINAX_OK;
             }
@@ -1014,6 +1050,8 @@ static pinax_err deliver(pinax_state *st, pinax_err err, const pinax_args *resul
 static pinax_err run_nested(pinax_state *st, pinax_word word, const pinax_args *args) {
     const pnx_wordrec *rec = &st->words[word];
     const pnx_counts n = st->word_counts[word];
+    if (n.yields)
+        return fail(st, PINAX_ERR_SIGNATURE, "the word may yield, so it cannot run inside a host word");
     const pnx_host *const host = st->host_cur;
     int64_t *const   host_ia = st->host_ia;
     pnx_scell *const host_sa = st->host_sa;

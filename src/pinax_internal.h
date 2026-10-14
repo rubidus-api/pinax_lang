@@ -32,6 +32,7 @@ typedef struct pnx_frame {
 typedef struct pnx_counts {
     uint8_t int_args, str_args, int_results, str_results;
     bool    fails;
+    bool    yields; // may yield (RFC-0005 section 3.5), worked out when the code is loaded
 } pnx_counts;
 
 typedef struct pnx_host {
