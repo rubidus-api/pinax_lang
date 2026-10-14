@@ -6667,6 +6667,22 @@ static void move_symbols(symtab *t, const uint8_t *from, ptrdiff_t by) {
     each_name(t, name_shift, &s);
 }
 
+void pnx_symbols_move(void *symbols, const void *from, ptrdiff_t by) {
+    move_symbols(symbols, from, by);
+}
+
+// FNV-1a over the sizes and a few places of what the kept tables hold: an image made by a
+// build that lays them out otherwise is refused.
+uint64_t pnx_symbols_layout(uint64_t hash) {
+    const uint64_t parts[] = {sizeof(symtab), sizeof(wordsym), sizeof(constant), sizeof(globalsym), sizeof(record),
+                              sizeof(field), sizeof(sig), sizeof(dtype), sizeof(name), sizeof(externsym),
+                              offsetof(wordsym, sig), offsetof(globalsym, record), offsetof(field, offset),
+                              offsetof(symtab, bytes), MAX_PARAMS};
+    for (size_t k = 0; k < sizeof parts / sizeof parts[0]; ++k)
+        hash = (hash ^ parts[k]) * 0x100000001b3u;
+    return hash;
+}
+
 // The tables of the loads before this one, copied into the working memory to grow there.
 static bool take_symbols(comp *c, image *im) {
     const pinax_state *st = c->st;

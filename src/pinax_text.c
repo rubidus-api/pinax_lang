@@ -59,6 +59,7 @@ const char pnx_static_text[] =
     PNX_ERR_NAMES(PNX_ERR_TEXT)
 #undef PNX_ERR_TEXT
     "error";
+const uint32_t pnx_static_len = sizeof pnx_static_text;
 
 void pnx_err_name(int64_t err, uint32_t *offset, uint32_t *length) {
     uint32_t at = 0;

@@ -1,9 +1,6 @@
 /*
  * pinax.h - host interface of the Pinax embeddable scripting language.
  *
- * Not implemented yet, and answering PINAX_ERR_STATE: the images and pinax_clone.
- * Everything else works.
- *
  * The whole interface is this one header. It needs only <stddef.h> and <stdint.h>.
  *
  * Threads: a state has no global or thread-local data. Any thread may use a state,
@@ -134,7 +131,10 @@ typedef struct pinax_word_def {
     uint32_t      flags;
 } pinax_word_def;
 
-/* Makes the words visible to scripts as module `module`. Before the scripts that use them load. */
+/* Makes the words visible to scripts as module `module`. Before the scripts that use them load.
+ * On a state opened from an image (or cloned), it gives the image's host words again: each
+ * must be one of them, with the same signature and flags (else PINAX_ERR_NOT_FOUND or
+ * PINAX_ERR_SIGNATURE). Until all of them are given, runs answer PINAX_ERR_NOT_FOUND. */
 PINAX_API pinax_err pinax_register(pinax_state *state, const char *module,
                                    const pinax_word_def *defs, size_t count);
 
@@ -187,11 +187,15 @@ PINAX_API pinax_err pinax_complete(pinax_state *state, pinax_token token,
  */
 typedef void (*pinax_extern_fn)(void);
 typedef pinax_extern_fn (*pinax_resolve_fn)(void *user, pinax_str library, pinax_str symbol);
+/* On a state opened from an image, setting the resolver asks it at once for every extern
+ * function of the image. */
 PINAX_API void pinax_set_resolver(pinax_state *state, pinax_resolve_fn resolve, void *user);
 
 /* ---- host objects ----------------------------------------------------------------- */
 
-/* A kind of host pointer scripts can hold as a use-once value of type `name`. close may be NULL. */
+/* A kind of host pointer scripts can hold as a use-once value of type `name`. close may be NULL.
+ * On a state opened from an image, a type of the image is given again by its name and gets its
+ * number back; another name is refused. */
 PINAX_API pinax_err pinax_handle_type(pinax_state *state, const char *name,
                                       void (*close)(void *object, void *user), void *user,
                                       uint32_t *out_type);
@@ -320,14 +324,28 @@ PINAX_API void      pinax_set_budget(pinax_state *state, uint64_t instructions);
 
 /* ---- images and copies -------------------------------------------------------------- */
 
+/* An image is the whole state: its code and declarations, globals, registers, region and
+ * suspended runs and tasks; a head of 64 bytes and the used part of the block, as they are.
+ * pinax_image_size() is its length. Saving is refused (PINAX_ERR_STATE) while a host word runs
+ * or a load has not finished. */
 PINAX_API size_t    pinax_image_size(const pinax_state *state);
 PINAX_API pinax_err pinax_image_save(const pinax_state *state, pinax_mem out, size_t *written);
-/* A state restored from an image: handles are closed, pending operations come back interrupted.
- * Host words, handle types and bound globals must be given again before running. */
+/* A state restored from an image. When `image` begins where `block` does (an image read or
+ * mapped there, private and writable), it is opened in place without copying; the state then
+ * lives in that memory and writes to it. A block that is not 16-byte aligned costs one move.
+ * Otherwise the image is copied into the block. The block holds the image and what the state
+ * will add (further loads); `config` gives the budget and diag, the rest is the image's.
+ * Handles are closed (without their close functions: the objects were the other process's),
+ * bound globals are back on their own storage, operations a run waited for come back
+ * interrupted. Host words, handle types and extern functions are given again by name
+ * (pinax_register, pinax_handle_type, pinax_set_resolver); bound globals are bound again.
+ * An image of another format or another build's memory layout is PINAX_ERR_FORMAT. An image
+ * is trusted like bound memory: it is not checked as bytecode is. */
 PINAX_API pinax_err pinax_image_open(pinax_mem block, pinax_str image, const pinax_config *config,
                                      pinax_state **out);
-/* A second state with the same code and data, in its own block. As after pinax_image_open():
- * its handles are closed, and host words, handle types and bound globals must be given again. */
+/* A second state with the same code and data, in its own block: an image of the source saved
+ * into the block and opened there. As after pinax_image_open(), host words, handle types,
+ * extern functions and bound globals are given again; the source is not changed. */
 PINAX_API pinax_err pinax_clone(const pinax_state *source, pinax_mem block, pinax_state **out);
 
 /* ---- measuring --------------------------------------------------------------------- */

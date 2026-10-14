@@ -272,6 +272,24 @@ pinax_str pinax_error_text(const pinax_state *state) {
 pinax_err pinax_register(pinax_state *st, const char *module, const pinax_word_def *defs, size_t count) {
     if (!st || !module || (!defs && count))
         return PINAX_ERR_ARGUMENT;
+    if (st->from_image) { // the host words of the image, given again: same name, signature and flags
+        for (size_t k = 0; k < count; ++k) {
+            pnx_host *h = NULL;
+            for (uint32_t j = 0; !h && j < st->n_hosts; ++j) {
+                if (st->hosts[j].module[0] != '@' && text_equal(st->hosts[j].module, module) && defs[k].name &&
+                    text_equal(st->hosts[j].name, defs[k].name))
+                    h = &st->hosts[j];
+            }
+            if (!h)
+                return fail(st, PINAX_ERR_NOT_FOUND, "not a host word of the image");
+            if (!defs[k].fn || !defs[k].signature || !text_equal(h->signature, defs[k].signature) ||
+                h->flags != defs[k].flags)
+                return fail(st, PINAX_ERR_SIGNATURE, "the host word of the image has another signature or flags");
+            h->fn = defs[k].fn;
+            h->user = defs[k].user;
+        }
+        return PINAX_OK;
+    }
     if (st->head)
         return fail(st, PINAX_ERR_STATE, "host words must be registered before code is loaded");
     if (count > PNX_MAX_HOSTS - st->n_hosts)
@@ -841,7 +859,7 @@ pinax_err pnx_load_container(pinax_state *st, pinax_str bytecode, uint32_t keep)
         why = "block too small for the code and its globals";
         if (bytes > SIZE_MAX / 2)
             goto rollback;
-        g->ptr = take(st, (size_t)bytes, 8);
+        g->ptr = g->own = take(st, (size_t)bytes, 8);
         if (!g->ptr)
             goto rollback;
         g->kind = rec->kind;
@@ -1208,11 +1226,15 @@ static pinax_err run_nested(pinax_state *st, pinax_word word, const pinax_args *
     return PINAX_OK;
 }
 
+static pinax_err hosts_given(pinax_state *st);
+
 pinax_err pinax_run(pinax_state *st, pinax_word word, const pinax_args *args) {
     if (!st)
         return PINAX_ERR_ARGUMENT;
     if (!st->head || st->suspended)
         return fail(st, PINAX_ERR_STATE, "no code loaded, or a suspended run must be resumed first");
+    if (hosts_given(st) != PINAX_OK)
+        return PINAX_ERR_NOT_FOUND;
     if (word >= st->head->n_words)
         return fail(st, PINAX_ERR_ARGUMENT, "not a word of this state");
     const pnx_wordrec *rec = &st->words[word];
@@ -1258,6 +1280,8 @@ pinax_err pinax_resume(pinax_state *st, const pinax_args *results) {
         return PINAX_ERR_ARGUMENT;
     if (!st->suspended || st->host_cur)
         return fail(st, PINAX_ERR_STATE, "nothing is suspended");
+    if (hosts_given(st) != PINAX_OK)
+        return PINAX_ERR_NOT_FOUND;
     if (st->main_wait.token)
         return PINAX_WAITING; // the operation the main run waits for has not been completed
     st->left = st->budget > st->owed ? st->budget : st->owed;
@@ -1421,6 +1445,12 @@ void pinax_set_resolver(pinax_state *st, pinax_resolve_fn resolve, void *user) {
     if (st) {
         st->resolve = resolve;
         st->resolve_user = user;
+        for (uint32_t k = 0; st->from_image && resolve && k < st->n_hosts; ++k) { // the externs of an image
+            pnx_host *h = &st->hosts[k];
+            if (h->module[0] == '@' && !h->ext)
+                h->ext = resolve(user, (pinax_str){(const unsigned char *)h->module + 1, __builtin_strlen(h->module) - 1},
+                                 (pinax_str){(const unsigned char *)h->name, __builtin_strlen(h->name)});
+        }
     }
 }
 
@@ -1624,6 +1654,14 @@ pinax_err pinax_handle_type(pinax_state *st, const char *name, void (*close)(voi
                             void *user, uint32_t *out_type) {
     if (!st || !name || !out_type)
         return PINAX_ERR_ARGUMENT;
+    for (uint32_t k = 0; st->from_image && k < st->n_handle_types; ++k) { // given again: its number back
+        if (text_equal(st->handle_types[k].name, name)) {
+            st->handle_types[k].close = close;
+            st->handle_types[k].user = user;
+            *out_type = k + 1;
+            return PINAX_OK;
+        }
+    }
     if (st->head)
         return fail(st, PINAX_ERR_STATE, "handle types must be given before code is loaded");
     if (st->n_handle_types == PNX_MAX_HANDLE_TYPES)
@@ -1706,24 +1744,247 @@ pinax_err pinax_global_find(pinax_state *st, const char *name, pinax_global *out
 }
 
 
+// ---- images and clones (D0036) ------------------------------------------------------------
+//
+// An image is a head and the used part of the block, byte for byte. Everything in the block
+// that names a place in it is an address; opening moves those addresses to where the block is
+// now. What belongs to the process that saved it (host functions and their data, handle
+// objects, bound memory, the static texts) is let go, and the host gives it again by name.
+
+typedef struct pnx_image_head {
+    uint8_t  magic[4]; // "PNXI"
+    uint16_t format;   // PINAX_FORMAT
+    uint16_t order;    // PNX_ORDER_MARK as the saving machine wrote it
+    uint32_t head_bytes, reserved;
+    uint64_t layout;    // image_layout() of the build that saved it
+    uint64_t used;      // the bytes of the block that follow
+    uint64_t base;      // where the block began when it was saved
+    uint64_t block_len; // how long that block was
+    uint8_t  spare[16];
+} pnx_image_head;
+static_assert(sizeof(pnx_image_head) == 64, "the head of an image keeps the state 16-byte aligned");
+
+// FNV-1a over the sizes and a few places of what the block holds, and the numbers its code
+// and texts depend on: a build that differs in any of them refuses the image.
+static uint64_t image_layout(void) {
+    const uint64_t parts[] = {sizeof(pinax_state), sizeof(pnx_task), sizeof(pnx_global), sizeof(pnx_host),
+                              sizeof(pnx_handle_slot), sizeof(pnx_handle_type), sizeof(pnx_context),
+                              sizeof(pnx_scell), sizeof(pnx_frame), sizeof(pnx_counts), sizeof(void *),
+                              offsetof(pinax_state, symbols), offsetof(pinax_state, handles),
+                              offsetof(pinax_state, globals), offsetof(pinax_state, main), offsetof(pnx_task, ctx),
+                              offsetof(pnx_global, own), offsetof(pnx_host, fn), PNX_OP_COUNT, PNX_CONTAINER_VERSION,
+                              PINAX_FORMAT, pnx_static_len, PNX_SEG_COUNT, PNX_MAX_HOSTS, PNX_MAX_HANDLE_TYPES};
+    uint64_t hash = 0xcbf29ce484222325u;
+    for (size_t k = 0; k < sizeof parts / sizeof parts[0]; ++k)
+        hash = (hash ^ parts[k]) * 0x100000001b3u;
+    return pnx_symbols_layout(hash);
+}
+
 size_t pinax_image_size(const pinax_state *st) {
-    (void)st;
-    return 0;
+    return st ? sizeof(pnx_image_head) + st->used : 0;
 }
 
 pinax_err pinax_image_save(const pinax_state *st, pinax_mem out, size_t *written) {
-    (void)st, (void)out, (void)written;
-    return PINAX_ERR_STATE;
+    if (!st || !out.ptr || !written)
+        return PINAX_ERR_ARGUMENT;
+    *written = 0;
+    if (st->host_cur || st->nest || st->loading) // a host word runs, or a load is not finished
+        return PINAX_ERR_STATE;
+    const size_t size = pinax_image_size(st);
+    if (out.len < size)
+        return PINAX_ERR_NO_ROOM;
+    const pnx_image_head head = {.magic = {'P', 'N', 'X', 'I'}, .format = PINAX_FORMAT, .order = PNX_ORDER_MARK,
+                                 .head_bytes = sizeof head, .layout = image_layout(), .used = st->used,
+                                 .base = (uint64_t)(uintptr_t)st->block, .block_len = st->block_len};
+    __builtin_memcpy(out.ptr, &head, sizeof head);
+    __builtin_memmove((uint8_t *)out.ptr + sizeof head, st->block, st->used);
+    *written = size;
+    return PINAX_OK;
+}
+
+// Addresses of the block as it was saved, from `lo` to `hi` (its end included), move by `by`.
+// An address outside it is no address an image may hold: `bad` is set.
+typedef struct moving {
+    uintptr_t lo, hi;
+    ptrdiff_t by;
+    bool      bad;
+} moving;
+
+static void *moved(moving *m, const void *p) {
+    const uintptr_t a = (uintptr_t)p;
+    if (!p)
+        return NULL;
+    if (a < m->lo || a > m->hi) {
+        m->bad = true;
+        return NULL;
+    }
+    return (void *)(a + (uintptr_t)m->by);
+}
+#define MOVE(field) ((field) = (typeof(field))moved(&m, (const void *)(field)))
+
+// A string value whose bytes are not in the block as it is now (a host's text, bound memory,
+// anything an image cannot carry) becomes empty.
+static void scrub_cells(pinax_state *st, pnx_scell *cells, uint32_t count) {
+    const uintptr_t lo = (uintptr_t)st->block, hi = lo + st->used;
+    for (uint32_t k = 0; cells && k < count; ++k) {
+        pnx_scell *c = &cells[k];
+        bool keep = c->segment == PNX_SEG_EMPTY ? c->length == 0
+                  : c->segment == PNX_SEG_STATIC ? c->offset <= pnx_static_len && c->length <= pnx_static_len - c->offset
+                                                 : false;
+        if (c->segment == PNX_SEG_CONST || c->segment == PNX_SEG_GLOBAL || c->segment == PNX_SEG_REGION) {
+            const uintptr_t at = (uintptr_t)st->segment[c->segment] + (uintptr_t)c->offset;
+            keep = c->offset < UINTPTR_MAX / 2 && at >= lo && at <= hi && c->length <= hi - at;
+        }
+        if (!keep)
+            *c = (pnx_scell){PNX_SEG_EMPTY, 0, 0};
+    }
 }
 
 pinax_err pinax_image_open(pinax_mem block, pinax_str image, const pinax_config *config, pinax_state **out) {
-    (void)block, (void)image, (void)config, (void)out;
-    return PINAX_ERR_STATE;
+    if (!out)
+        return PINAX_ERR_ARGUMENT;
+    *out = NULL;
+    const size_t without_key = offsetof(pinax_config, hash_key);
+    if (!block.ptr || !image.ptr || !config ||
+        (config->struct_size != sizeof *config && config->struct_size != without_key))
+        return PINAX_ERR_ARGUMENT;
+    pnx_image_head head;
+    if (image.len < sizeof head)
+        return PINAX_ERR_FORMAT;
+    __builtin_memcpy(&head, image.ptr, sizeof head);
+    if (__builtin_memcmp(head.magic, "PNXI", 4) != 0 || head.format != PINAX_FORMAT || head.order != PNX_ORDER_MARK ||
+        head.head_bytes != sizeof head || head.layout != image_layout() || head.used < sizeof(pinax_state) ||
+        head.used > image.len - sizeof head || image.len - sizeof head != head.used)
+        return PINAX_ERR_FORMAT;
+    const size_t used = (size_t)head.used;
+    uint8_t     *body = (uint8_t *)block.ptr + sizeof head;
+    const size_t skip = (size_t)(-(uintptr_t)body & 15u);
+    if (block.len < sizeof head + skip + used)
+        return PINAX_ERR_NO_ROOM;
+    if ((const void *)image.ptr == block.ptr) { // in place: only when the block is not 16-byte aligned are bytes moved
+        if (skip)
+            __builtin_memmove(body + skip, body, used);
+    } else {
+        __builtin_memcpy(block.ptr, &head, sizeof head);
+        __builtin_memmove(body + skip, image.ptr + sizeof head, used);
+    }
+    body += skip;
+    pinax_state *st = (pinax_state *)(void *)body;
+    moving       m = {(uintptr_t)head.base, (uintptr_t)head.base + used, (ptrdiff_t)((uintptr_t)body - (uintptr_t)head.base),
+                      false};
+    if (st->host_cur || st->nest || st->loading)
+        return PINAX_ERR_FORMAT;
+    st->block = body;
+    st->block_len = block.len - sizeof head - skip;
+    st->needed = 0;
+    MOVE(st->ibank), MOVE(st->sbank), MOVE(st->ctrl), MOVE(st->region), MOVE(st->hosts), MOVE(st->handles);
+    MOVE(st->head), MOVE(st->words), MOVE(st->importrecs), MOVE(st->iconst), MOVE(st->sconst), MOVE(st->code);
+    MOVE(st->word_counts), MOVE(st->imports), MOVE(st->globals), MOVE(st->lines), MOVE(st->localrecs);
+    MOVE(st->task), MOVE(st->main.ibank), MOVE(st->main.sbank), MOVE(st->main.ctrl), MOVE(st->main_wait.host);
+    if (st->symbols) {
+        const void *from = st->symbols;
+        MOVE(st->symbols);
+        if (!m.bad)
+            pnx_symbols_move(st->symbols, from, m.by);
+    }
+    if (m.bad)
+        return PINAX_ERR_FORMAT;
+    for (uint32_t k = 0; k < PNX_SEG_COUNT; ++k) { // the segments in the block move; the rest are let go
+        const uintptr_t at = (uintptr_t)st->segment[k];
+        st->segment[k] = (k == PNX_SEG_CONST || k == PNX_SEG_GLOBAL || k == PNX_SEG_REGION) && at >= m.lo && at <= m.hi
+                             ? (const uint8_t *)(at + (uintptr_t)m.by)
+                             : empty_bytes;
+    }
+    st->segment[PNX_SEG_STATIC] = (const uint8_t *)pnx_static_text;
+    st->segment[PNX_SEG_REGION] = st->region;
+    st->host_segments = 0;
+    for (uint32_t k = 0; st->head && k < st->head->n_imports; ++k)
+        MOVE(st->imports[k]);
+    for (uint32_t k = 0; st->head && k < st->head->n_globals; ++k) {
+        pnx_global *g = &st->globals[k];
+        MOVE(g->own);
+        const uintptr_t at = (uintptr_t)g->ptr;
+        g->ptr = at >= m.lo && at <= m.hi ? (uint8_t *)(at + (uintptr_t)m.by) : g->own; // bound: back on its own
+        for (uint32_t slot = 0; g->kind == PNX_G_TASKS && slot < g->capacity; ++slot) {
+            pnx_task *t = (pnx_task *)(void *)g->ptr + slot;
+            MOVE(t->ctx.ibank), MOVE(t->ctx.sbank), MOVE(t->ctx.ctrl), MOVE(t->parent);
+            MOVE(t->ibank), MOVE(t->sbank), MOVE(t->ctrl), MOVE(t->wait.host);
+        }
+    }
+    if (m.bad)
+        return PINAX_ERR_FORMAT;
+    // what was the saving process's is let go: host words wait to be given again
+    for (uint32_t k = 0; k < st->n_hosts; ++k) {
+        pnx_host *h = &st->hosts[k];
+        h->ext = NULL;
+        h->fn = h->module[0] == '@' ? extern_call : NULL;
+        h->user = h->module[0] == '@' ? h : NULL;
+    }
+    for (uint32_t k = 0; k < st->n_handle_types; ++k)
+        st->handle_types[k].close = NULL, st->handle_types[k].user = NULL;
+    for (uint32_t k = 0; k < st->handle_slots; ++k) { // closed without telling anyone: the objects were not ours
+        if (st->handles[k].type)
+            handle_drop(st, k, false);
+    }
+    st->host_cur = NULL, st->host_ia = NULL, st->host_sa = NULL;
+    __builtin_memset(&st->before_load, 0, sizeof st->before_load);
+    st->resolve = NULL, st->resolve_user = NULL;
+    st->diag = config->diag, st->diag_user = config->diag_user;
+    st->budget = config->budget;
+    st->error_text = "";
+    st->eval_n = 0;
+    st->fault_n = 0;
+    scrub_cells(st, st->sbank, st->str_slots);
+    scrub_cells(st, st->main.sbank, st->main.str_slots);
+    for (uint32_t k = 0; st->head && k < st->head->n_globals; ++k) {
+        const pnx_global *g = &st->globals[k];
+        for (uint32_t slot = 0; g->kind == PNX_G_TASKS && slot < g->capacity; ++slot) {
+            pnx_task *t = (pnx_task *)(void *)g->ptr + slot;
+            scrub_cells(st, t->sbank, t->str_slots);
+        }
+    }
+    st->from_image = true;
+    // operations a run waited for will not be completed by this process: they come back interrupted
+    if (st->main_wait.token)
+        (void)pinax_complete(st, st->main_wait.token, PINAX_ERR_INTERRUPTED, NULL);
+    for (uint32_t k = 0; st->head && k < st->head->n_globals; ++k) {
+        const pnx_global *g = &st->globals[k];
+        for (uint32_t slot = 0; g->kind == PNX_G_TASKS && slot < g->capacity; ++slot) {
+            const pnx_task *t = (pnx_task *)(void *)g->ptr + slot;
+            if (t->state == PNX_TASK_WAITING && t->wait.token)
+                (void)pinax_complete(st, t->wait.token, PINAX_ERR_INTERRUPTED, NULL);
+        }
+    }
+    st->error_text = "";
+    *out = st;
+    return PINAX_OK;
 }
+#undef MOVE
 
 pinax_err pinax_clone(const pinax_state *source, pinax_mem block, pinax_state **out) {
-    (void)source, (void)block, (void)out;
-    return PINAX_ERR_STATE;
+    if (!source || !out)
+        return PINAX_ERR_ARGUMENT;
+    *out = NULL;
+    size_t          written = 0;
+    const pinax_err err = pinax_image_save(source, block, &written);
+    if (err != PINAX_OK)
+        return err;
+    const pinax_config config = {.struct_size = sizeof config, .budget = source->budget, .diag = source->diag,
+                                 .diag_user = source->diag_user};
+    return pinax_image_open(block, (pinax_str){(const unsigned char *)block.ptr, written}, &config, out);
+}
+
+// A state opened from an image runs only when every host word and extern function of the
+// image is given again.
+static pinax_err hosts_given(pinax_state *st) {
+    for (uint32_t k = 0; st->from_image && k < st->n_hosts; ++k) {
+        const pnx_host *h = &st->hosts[k];
+        if (h->module[0] == '@' ? !h->ext : !h->fn)
+            return fail(st, PINAX_ERR_NOT_FOUND, h->module[0] == '@'
+                                                     ? "an extern function of the image is not given again: set a resolver"
+                                                     : "a host word of the image is not given again: register it");
+    }
+    return PINAX_OK;
 }
 
 pinax_err pinax_fault_local(const pinax_state *st, uint32_t index, pinax_str *name, pinax_value *out) {

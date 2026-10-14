@@ -71,6 +71,7 @@ typedef struct pnx_handle_slot {
 
 typedef struct pnx_global {
     uint8_t *ptr; // a buffer starts with its 64-bit length
+    uint8_t *own; // its storage in the block; ptr differs while the host has bound it
     uint32_t kind, elem_bytes, capacity;
     uint32_t length; // cells in use: the capacity for an array or table, what was pushed for a list
     uint32_t head;   // a queue: the cell of its oldest value; a pool: its first free slot plus one
@@ -202,6 +203,7 @@ struct pinax_state {
     uint32_t top_word;
     bool     suspended;
     bool     loading;   // the suspended run is the code outside definitions of a load
+    bool     from_image; // opened from an image: host words are given again by name (D0036)
     pnx_program before_load; // what that load would be undone to
     void    *symbols;   // the compiler's declaration tables, kept for the next load (pinax_compile.c)
     pinax_err   fail;
@@ -252,6 +254,13 @@ uint64_t pnx_hash_kind(uint32_t kind, const uint8_t *bytes, uint32_t length);
 int      pnx_encode(uint32_t kind, const uint8_t *in, uint32_t length, uint8_t *out, uint64_t cap, uint64_t *written);
 // The name of an error number as a view into the interpreter's static text.
 extern const char pnx_static_text[];
+extern const uint32_t pnx_static_len; // bytes of pnx_static_text
+
+// Images (D0036), from pinax_compile.c: the kept declaration tables at `symbols` were made at
+// `from` and now lie `by` bytes further on; and the sizes of the compiler's kept structs,
+// mixed into the layout hash of an image.
+void     pnx_symbols_move(void *symbols, const void *from, ptrdiff_t by);
+uint64_t pnx_symbols_layout(uint64_t hash);
 void pnx_err_name(int64_t err, uint32_t *offset, uint32_t *length);
 bool pnx_tasks_alive(const pinax_state *state); // a task was spawned and has not ended
 // Offset of the last `part` in `bytes`, or UINT32_MAX. An empty part is found at the end.
