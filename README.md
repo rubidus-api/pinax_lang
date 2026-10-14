@@ -128,7 +128,8 @@ host modules (`io`, `file`, `clock`, `random`, `env`) are ordinary host words in
   semantics, faults and every diagnostic ([Korean original](docs/spec/md-ko/README.md)).
 
 Both are written in Typst and built to PDF, HTML and Markdown by `docs/tools/build.sh`; every program they show is run
-and its output captured. The English editions are being translated from the Korean originals.
+and its output captured. The Korean editions are the originals; the English editions have the same
+chapters, clauses and examples.
 
 ## License
 
