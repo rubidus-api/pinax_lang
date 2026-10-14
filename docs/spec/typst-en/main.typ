@@ -11,3 +11,4 @@
 #include "clauses/04-conformance.typ"
 #include "clauses/05-environment.typ"
 #include "clauses/06-lexical.typ"
+#include "clauses/07-types.typ"

@@ -1,0 +1,10 @@
+rem run
+use io
+use str
+9223372036854775807 str.to_str io.println          rem the largest int
+7 2 div str.to_str io.println                       rem division rounds toward zero
+-7 2 div str.to_str io.println
+-7 2 mod str.to_str io.println                      rem the remainder has the sign of the dividend
+-7 2 floor_div str.to_str io.println                rem floor_div rounds down
+9223372036854775807 1 wrap_add str.to_str io.println    rem wrap_add wraps around
+9223372036854775807 1 sat_add str.to_str io.println     rem sat_add stops at the edge

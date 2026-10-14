@@ -442,8 +442,17 @@ static int repl(pinax_state *state) {
 
 // Prints where a script's fault happened. The state says "module:line: error"; the module
 // becomes the file it was loaded from. False when the state has no line for it.
-static bool report_fault(pinax_state *state, pinax_err err) {
+// `unnamed` is the file loaded under no module name: the state says "line 12: ..." for it.
+static bool report_fault(pinax_state *state, pinax_err err, const char *unnamed) {
     const pinax_str text = pinax_error_text(state);
+    if (unnamed && text.len > 5 && memcmp(text.ptr, "line ", 5) == 0 && text.ptr[5] >= '0' && text.ptr[5] <= '9') {
+        const unsigned char *rest = text.ptr + 5;
+        const unsigned char *end = memchr(rest, ':', (size_t)(text.ptr + text.len - rest));
+        if (!end)
+            return false;
+        fprintf(stderr, "%s:%.*s: %s\n", unnamed, (int)(end - rest), (const char *)rest, err_name(err));
+        return true;
+    }
     const unsigned char *colon = memchr(text.ptr, ':', text.len);
     if (!colon || colon + 1 >= text.ptr + text.len || colon[1] < '0' || colon[1] > '9')
         return false;
@@ -584,7 +593,7 @@ static int run(int argc, char **argv) {
     int status = 0;
     if (err != PINAX_OK) {
         if (!said && err >= PINAX_ERR_FAILED && err < PINAX_ERR_ARGUMENT)
-            said = report_fault(state, err); // a fault of the script: with its line when the state knows it
+            said = report_fault(state, err, plain ? NULL : file_name); // a fault of the script: with its line when the state knows it
         if (!said && err != PINAX_ERR_SYNTAX && err != PINAX_ERR_TYPE) // those two were reported with their place
             fprintf(stderr, "%s: %s\n", file_name, err_name(err));
         show_fault_locals(state, stderr); // and the locals of the word it happened in

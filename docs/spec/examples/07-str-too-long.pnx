@@ -1,0 +1,5 @@
+rem fault
+use io
+global name str(4)
+"four" to name
+"more than four" to name

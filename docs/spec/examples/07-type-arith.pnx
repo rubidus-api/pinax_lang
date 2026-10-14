@@ -1,0 +1,3 @@
+rem refused
+type meters int
+2 meters 3 meters mul drop

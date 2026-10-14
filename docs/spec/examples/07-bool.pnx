@@ -1,0 +1,5 @@
+rem run
+use io
+use str
+3 4 lt if "3 is less than 4" else "no" end io.println
+true false or not if "never" else "true false or not is false" end io.println

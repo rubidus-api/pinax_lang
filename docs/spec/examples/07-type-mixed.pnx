@@ -1,0 +1,5 @@
+rem refused
+type meters int
+type seconds int
+word pace (d meters, t seconds gives int) d raw t raw div end
+300 seconds 1500 meters pace drop          rem the two arguments are swapped

@@ -1,0 +1,7 @@
+rem run
+use io
+use str
+type meters int
+type seconds int
+word pace (d meters, t seconds gives int) d raw t raw div end     rem raw: the plain int
+1500 meters 300 meters add 300 seconds pace str.to_str io.println

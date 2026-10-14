@@ -1,0 +1,7 @@
+rem fault
+use io
+global big int
+9223372036854775807 to big
+"before" io.println
+big 1 add to big
+"never printed" io.println
