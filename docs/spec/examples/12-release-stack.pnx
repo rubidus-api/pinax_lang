@@ -1,0 +1,6 @@
+rem refused
+word f (gives str)
+  mark to m
+  cat ("a", "b")
+  m release
+end

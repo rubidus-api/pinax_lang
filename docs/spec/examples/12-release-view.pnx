@@ -1,0 +1,8 @@
+rem refused
+use io
+word f ()
+  mark to m
+  cat ("made after ", "the mark") to s
+  m release
+  s io.println
+end

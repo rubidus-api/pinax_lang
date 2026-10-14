@@ -1,0 +1,7 @@
+rem refused
+use file
+word f (path str, quick bool or fail)
+  path file.open_read or_fail to h
+  quick if return end
+  h file.close
+end

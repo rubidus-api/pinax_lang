@@ -1,0 +1,19 @@
+rem run
+use io
+use str
+global kept str(32)
+word line (i int gives str) cat ("line number ", i) end
+word demo ()
+  region_free to start
+  1 line to a                                 rem a view of 13 new bytes in the region
+  a to kept                                   rem stored text: the bytes are copied out
+  start region_free sub to one
+  mark to m
+  2 1000 range do (i int) i line drop end each
+  start region_free sub to many
+  m release                                   rem back to the place of the mark
+  start region_free sub to after
+  cat ("one line: ", one, ", 999 lines: ", many, ", after release: ", after) io.println
+  kept io.println
+end
+demo

@@ -1,0 +1,5 @@
+rem refused
+use file
+word f (path str or fail)
+  path file.open_read or_fail dup file.close file.close
+end

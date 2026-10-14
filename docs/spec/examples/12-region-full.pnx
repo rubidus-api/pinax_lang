@@ -1,0 +1,5 @@
+rem fault
+word fill ()
+  loop cat ("this line takes some bytes of the region ", 0) drop end
+end
+fill

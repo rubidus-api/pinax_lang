@@ -1,0 +1,11 @@
+rem run
+use io
+use file
+word write_note (path str or fail)
+  path file.open_write or_fail to f            rem an owned file: it must be closed on every path
+  "a note" f file.write or_else (e) f file.close e fail end
+  f file.close
+end
+word read_note (path str gives s str or fail) path file.read_all or_fail end
+"note.txt" write_note or_else (e) "cannot write" io.println end
+"note.txt" read_note or_else (e) "cannot read" end io.println
