@@ -260,6 +260,11 @@ enum {
     X(PCAP, 0xaf, PNX_K_S, PNX_K_I, PNX_K_NONE, PNX_F_ABC, PNX_X_NONE, 0, "wr-") \
     X(PNEXT, 0xb0, PNX_K_S, PNX_K_S, PNX_K_S, PNX_F_ABC, PNX_X_NONE, 1, "mwr") \
     X(PREPL, 0xb1, PNX_K_S, PNX_K_S, PNX_K_S, PNX_F_ABC, PNX_X_SREG, 0, "wrr") \
+    X(XMATCH, 0xb2, PNX_K_S, PNX_K_S, PNX_K_S, PNX_F_ABC, PNX_X_NONE, 1, "wrr") \
+    X(XCUT, 0xb3, PNX_K_S, PNX_K_S, PNX_K_S, PNX_F_ABC, PNX_X_NONE, 1, "mmw") \
+    X(XNEXT, 0xb4, PNX_K_S, PNX_K_S, PNX_K_S, PNX_F_ABC, PNX_X_NONE, 1, "mwr") \
+    X(XSPLIT, 0xb5, PNX_K_S, PNX_K_S, PNX_K_S, PNX_F_ABC, PNX_X_NONE, 1, "mwr") \
+    X(XCAPI, 0xb6, PNX_K_S, PNX_K_NONE, PNX_K_IMM, PNX_F_ABC, PNX_X_NONE, 0, "w--") \
     /* strings built in the region */ \
     X(RMARK, 0xb8, PNX_K_S, PNX_K_NONE, PNX_K_NONE, PNX_F_ABC, PNX_X_NONE, 0, "w--") \
     X(RCATS, 0xb9, PNX_K_S, PNX_K_S, PNX_K_NONE, PNX_F_ABC, PNX_X_NONE, 0, "mr-") \
@@ -275,6 +280,8 @@ enum {
     X(RFREE, 0xc3, PNX_K_I, PNX_K_NONE, PNX_K_NONE, PNX_F_IMM, PNX_X_NONE, 0, "w--") \
     X(RCASE, 0xc4, PNX_K_S, PNX_K_S, PNX_K_IMM, PNX_F_ABC, PNX_X_NONE, 0, "wr-") \
     X(RREP, 0xc5, PNX_K_S, PNX_K_S, PNX_K_I, PNX_F_ABC, PNX_X_NONE, 0, "wrr") \
+    X(XREPL, 0xc6, PNX_K_I, PNX_K_S, PNX_K_S, PNX_F_ABC, PNX_X_SREG, 0, "wmr") \
+    X(XCOMP, 0xc7, PNX_K_S, PNX_K_S, PNX_K_NONE, PNX_F_ABC, PNX_X_NONE, 1, "wr-") \
     /* buffers */ \
     X(BCLEAR, 0xc8, PNX_K_NONE, PNX_K_NONE, PNX_K_NONE, PNX_F_GLOBAL, PNX_X_NONE, 0, "---") \
     X(BPUT, 0xc9, PNX_K_I, PNX_K_IMM, PNX_K_G, PNX_F_ABC, PNX_X_NONE, 1, "r--") \

@@ -37,6 +37,17 @@ int  pnx_ptn_find(const uint8_t *s, uint32_t length, uint32_t from, const uint8_
                   uint64_t *steps);
 bool pnx_ptn_check(const uint8_t *pat, uint32_t plen, const char **why);
 
+// The regular expressions of the module rex (pinax_rex.c). A program is bytes without
+// addresses. pnx_rex_compile writes it into `out` and needs nothing else; pnx_rex_search needs
+// pnx_rex_work() bytes of work (0: not a program). A search gives 2 places per group, group 0
+// the whole match; PNX_REX_NONE for a group that took no part.
+#define PNX_REX_NONE UINT32_MAX
+uint32_t pnx_rex_compile(const uint8_t *pat, uint32_t plen, uint8_t *out, uint32_t cap, const char **why, uint32_t *at);
+uint32_t pnx_rex_groups(const uint8_t *prog, uint32_t len);
+size_t   pnx_rex_work(const uint8_t *prog, uint32_t len);
+int      pnx_rex_search(const uint8_t *prog, uint32_t plen, const uint8_t *s, uint32_t len, uint32_t from, uint32_t *found,
+                        void *work, uint64_t *steps);
+
 // What the last ptn.match of a run found, for ptn.capture: the whole match and the captures.
 typedef struct pnx_ptn_found {
     pnx_scell cap[1 + PNX_PTN_CAPS];

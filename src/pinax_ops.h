@@ -1032,6 +1032,200 @@ PNX_OP(PREPL) {
     return PNX_R_OK;
 }
 
+// ---- the module rex (RFC-0011, RFC-0016 S4) ----------------------------------------------
+
+// A search with the program in view `re`: its work lies at the end of the region, out of reach
+// of what is built there meanwhile, and is given back after. PNX_R_OK (the groups in `found`
+// and kept for the block parameters), PNX_R_FAILED none, or a fault: not a program (format),
+// no room for the work (full).
+PNX_INLINE int pnx_rex_run(pinax_state *st, pnx_scell s, uint32_t from, pnx_scell re, uint32_t found[2 + 2 * PNX_PTN_CAPS]) {
+    const uint8_t *prog = pnx_view_bytes(st, re);
+    const size_t   need = pnx_rex_work(prog, re.length);
+    if (!need)
+        return PINAX_ERR_FORMAT;
+    const uint32_t end = st->region_len & ~7u, saved = st->region_len;
+    if (need > end - st->region_used)
+        return PINAX_ERR_FULL;
+    st->region_len = (uint32_t)((end - need) & ~(size_t)7u);
+    uint64_t  steps = 0;
+    const int r = pnx_rex_search(prog, re.length, pnx_view_bytes(st, s), s.length, from, found, st->region + st->region_len,
+                                 &steps);
+    st->region_len = saved;
+    st->charge += steps;
+    if (r < 0)
+        return PINAX_ERR_FORMAT;
+    if (!r)
+        return PNX_R_FAILED;
+    pnx_ptn_found *f = pnx_ptn_now(st);
+    const uint32_t groups = pnx_rex_groups(prog, re.length);
+    for (uint32_t k = 0; k <= groups; ++k) {
+        const uint32_t a = found[2 * k], b = found[2 * k + 1];
+        f->cap[k] = a == PNX_REX_NONE || b == PNX_REX_NONE || b < a ? (pnx_scell){PNX_SEG_EMPTY, 0, 0}
+                                                                     : (pnx_scell){s.segment, b - a, s.offset + a};
+    }
+    f->n = groups + 1;
+    return PNX_R_OK;
+}
+PNX_INLINE uint32_t pnx_utf8_len(const uint8_t *b, uint32_t n);
+
+// The bytes of one code point at the front of `p` (one when it is not a valid sequence).
+PNX_INLINE uint32_t pnx_cp_len(const uint8_t *p, uint32_t n) {
+    const uint32_t k = n ? pnx_utf8_len(p, n) : 0;
+    return k ? k : 1;
+}
+PNX_OP(XMATCH) {
+    uint32_t  found[2 + 2 * PNX_PTN_CAPS];
+    const int r = pnx_rex_run(st, S[OP_B(w)], 0, S[OP_C(w)], found);
+    if (r == PNX_R_OK)
+        S[OP_A(w)] = pnx_ptn_now(st)->cap[0];
+    else if (r == PNX_R_FAILED)
+        st->fail = PINAX_ERR_NOT_FOUND;
+    return r;
+}
+// A: the str in, what lies before the match out; B: the program in, the match out; C: after.
+PNX_OP(XCUT) {
+    uint32_t        found[2 + 2 * PNX_PTN_CAPS];
+    const pnx_scell s = S[OP_A(w)];
+    const int       r = pnx_rex_run(st, s, 0, S[OP_B(w)], found);
+    if (r == PNX_R_FAILED)
+        st->fail = PINAX_ERR_NOT_FOUND;
+    if (r != PNX_R_OK)
+        return r;
+    S[OP_B(w)] = pnx_ptn_now(st)->cap[0];
+    S[OP_A(w)] = (pnx_scell){s.segment, found[0], s.offset};
+    S[OP_C(w)] = (pnx_scell){s.segment, s.length - found[1], s.offset + found[1]};
+    return PNX_R_OK;
+}
+// A: what is left; B: the next match (its groups kept for XCAPI). After an empty match the
+// search moves on by a code point.
+PNX_OP(XNEXT) {
+    pnx_scell *rest = &S[OP_A(w)];
+    if (rest->offset == PNX_SNEXT_DONE)
+        return PNX_R_FAILED;
+    uint32_t  found[2 + 2 * PNX_PTN_CAPS];
+    const int r = pnx_rex_run(st, *rest, 0, S[OP_C(w)], found);
+    if (r != PNX_R_OK) {
+        if (r == PNX_R_FAILED)
+            *rest = (pnx_scell){PNX_SEG_EMPTY, 0, PNX_SNEXT_DONE};
+        return r;
+    }
+    S[OP_B(w)] = pnx_ptn_now(st)->cap[0];
+    uint32_t past = found[1] > found[0] ? found[1] : found[0];
+    if (found[1] <= found[0]) { // empty: past it by a code point, or done at the end
+        if (past >= rest->length) {
+            *rest = (pnx_scell){PNX_SEG_EMPTY, 0, PNX_SNEXT_DONE};
+            return PNX_R_OK;
+        }
+        past += pnx_cp_len(pnx_view_bytes(st, *rest) + past, rest->length - past);
+    }
+    rest->offset += past;
+    rest->length -= past;
+    return PNX_R_OK;
+}
+// A: what is left; B: the next piece, up to the next match of C (an empty match at the very
+// start of what is left does not count). The last piece is what follows the last match.
+PNX_OP(XSPLIT) {
+    pnx_scell *rest = &S[OP_A(w)];
+    if (rest->offset == PNX_SNEXT_DONE)
+        return PNX_R_FAILED;
+    uint32_t found[2 + 2 * PNX_PTN_CAPS];
+    int      r = pnx_rex_run(st, *rest, 0, S[OP_C(w)], found);
+    if (r == PNX_R_OK && found[1] == 0 && rest->length) // empty at the start: look one code point on
+        r = pnx_rex_run(st, *rest, pnx_cp_len(pnx_view_bytes(st, *rest), rest->length), S[OP_C(w)], found);
+    if (r == PNX_R_FAILED || (r == PNX_R_OK && found[1] == 0 && !rest->length)) {
+        S[OP_B(w)] = *rest;
+        *rest = (pnx_scell){PNX_SEG_EMPTY, 0, PNX_SNEXT_DONE};
+        return PNX_R_OK;
+    }
+    if (r != PNX_R_OK)
+        return r;
+    S[OP_B(w)] = (pnx_scell){rest->segment, found[0], rest->offset};
+    rest->offset += found[1];
+    rest->length -= found[1];
+    return PNX_R_OK;
+}
+// Group C of the last match (empty when it has no such group or the group took no part).
+PNX_OP(XCAPI) {
+    const pnx_ptn_found *f = pnx_ptn_now(st);
+    S[OP_A(w)] = OP_C(w) < f->n ? f->cap[OP_C(w)] : (pnx_scell){PNX_SEG_EMPTY, 0, 0};
+    return PNX_R_OK;
+}
+// B, with every match of C replaced by the str in register x (\0 the match, \1 to \9 the groups,
+// \\ a backslash), made in the region; B gets it and A the number of matches replaced.
+PNX_OP(XREPL) {
+    const pnx_scell s = S[OP_B(w)], re = S[OP_C(w)], with = S[x];
+    const uint8_t  *bytes = pnx_view_bytes(st, s), *to = pnx_view_bytes(st, with);
+    pnx_scell       out = {PNX_SEG_REGION, 0, st->region_used};
+    uint32_t        at = 0;
+    int64_t         count = 0;
+    while (at <= s.length) {
+        uint32_t  found[2 + 2 * PNX_PTN_CAPS];
+        const int r = pnx_rex_run(st, s, at, re, found);
+        if (r == PNX_R_FAILED)
+            break;
+        if (r != PNX_R_OK)
+            return r;
+        ++count;
+        int e = pnx_region_append(st, &out, bytes + at, found[0] - at);
+        for (uint32_t k = 0; e == PNX_R_OK && k < with.length; ++k) {
+            if (to[k] != '\\' || k + 1 == with.length) {
+                e = pnx_region_append(st, &out, to + k, 1);
+                continue;
+            }
+            const uint8_t d = to[++k];
+            const pnx_ptn_found *f = pnx_ptn_now(st);
+            if (d >= '0' && d <= '9') {
+                const pnx_scell g = (uint32_t)(d - '0') < f->n ? f->cap[d - '0'] : (pnx_scell){PNX_SEG_EMPTY, 0, 0};
+                e = pnx_region_append(st, &out, pnx_view_bytes(st, g), g.length);
+            } else if (d == '\\') {
+                e = pnx_region_append(st, &out, to + k, 1);
+            } else {
+                e = pnx_region_append(st, &out, to + k - 1, 2);
+            }
+        }
+        if (e != PNX_R_OK)
+            return e;
+        at = found[1] > found[0] ? found[1] : found[0];
+        if (found[1] <= found[0]) { // an empty match: the code point after it is kept, the search moves on
+            if (at >= s.length)
+                break;
+            const uint32_t n = pnx_cp_len(bytes + at, s.length - at);
+            if ((e = pnx_region_append(st, &out, bytes + at, n)) != PNX_R_OK)
+                return e;
+            at += n;
+        }
+    }
+    if (at < s.length) {
+        const int e = pnx_region_append(st, &out, bytes + at, s.length - at);
+        if (e != PNX_R_OK)
+            return e;
+    }
+    S[OP_B(w)] = out;
+    R[OP_A(w)] = count;
+    return PNX_R_OK;
+}
+// A program made from the str B, in the region (8-byte aligned). PNX_R_FAILED: B is no pattern
+// (format), or the region has no room (full).
+PNX_OP(XCOMP) {
+    const pnx_scell pat = S[OP_B(w)];
+    const uint32_t  start = (st->region_used + 7u) & ~7u;
+    if (start > st->region_len) {
+        st->fail = PINAX_ERR_FULL;
+        return PNX_R_FAILED;
+    }
+    const char    *why = NULL;
+    uint32_t       at = 0;
+    const uint32_t n = pnx_rex_compile(pnx_view_bytes(st, pat), pat.length, st->region + start, st->region_len - start, &why, &at);
+    st->charge += pat.length;
+    if (!n) {
+        st->fail = why ? PINAX_ERR_FORMAT : PINAX_ERR_FULL;
+        return PNX_R_FAILED;
+    }
+    st->region_used = start + n;
+    S[OP_A(w)] = (pnx_scell){PNX_SEG_REGION, n, start};
+    return PNX_R_OK;
+}
+
 // ---- the modules hash and encode (RFC-0016 S1) ---------------------------------------------
 
 PNX_OP(SHASH) {
