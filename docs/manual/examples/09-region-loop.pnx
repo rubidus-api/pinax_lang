@@ -1,0 +1,14 @@
+rem run
+use io
+use str
+rem Make a long report in a small region: each turn gives its bytes back.
+buffer report 4096
+word build (or fail)
+  1 200 range do (i int)
+    mark to m
+    cat ("row ", i, ": ", i i mul, "\n") report append or_else (e) m release e fail end
+    m release
+  end each
+end
+build or_else (e) cat ("full: ", e err_text) io.println end
+cat ("report: ", report len, " bytes") io.println

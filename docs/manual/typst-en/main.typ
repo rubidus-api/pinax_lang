@@ -14,3 +14,5 @@
 #include "chapters/06-collections.typ"
 #include "chapters/07-records.typ"
 #include "chapters/08-errors.typ"
+#include "chapters/09-owned.typ"
+#include "chapters/10-modules.typ"

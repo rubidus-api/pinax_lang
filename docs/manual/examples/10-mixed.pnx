@@ -1,0 +1,3 @@
+rem refused
+use money
+12 money.of_won 3 add drop

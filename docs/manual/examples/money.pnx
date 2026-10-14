@@ -1,0 +1,6 @@
+rem hide
+rem A small module: amounts are cents, kept apart from plain numbers.
+export type cents int
+word pad2 (n int gives str) n 10 lt if cat ("0", n) else cat (n) end end
+export word of_won (won int gives cents) won 100 mul cents end
+export word show (c cents gives str) cat (c raw 100 div, ".", c raw 100 mod pad2) end

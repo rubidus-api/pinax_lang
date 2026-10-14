@@ -1,0 +1,4 @@
+rem run
+use io
+use money as m
+cat ("price ", 7 m.of_won m.show) io.println

@@ -1,0 +1,5 @@
+rem run
+use io
+use money
+word total (a cents, b cents gives cents) a b add end
+cat ("total ", 12 money.of_won 3 money.of_won total money.show) io.println
