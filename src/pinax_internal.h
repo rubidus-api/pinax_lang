@@ -48,6 +48,18 @@ size_t   pnx_rex_work(const uint8_t *prog, uint32_t len);
 int      pnx_rex_search(const uint8_t *prog, uint32_t plen, const uint8_t *s, uint32_t len, uint32_t from, uint32_t *found,
                         void *work, uint64_t *steps);
 
+// The text formats of json and csv (pinax_json.c), read a token or a field at a time.
+enum {
+    PNX_JSON_OBJECT = 1, PNX_JSON_OBJECT_END, PNX_JSON_ARRAY, PNX_JSON_ARRAY_END, PNX_JSON_KEY, PNX_JSON_STRING,
+    PNX_JSON_NUMBER, PNX_JSON_BOOLEAN, PNX_JSON_NULL, PNX_JSON_KINDS
+};
+int      pnx_json_next(const uint8_t *s, uint32_t n, uint32_t *start, uint32_t *len, bool *escaped, uint32_t *past);
+int      pnx_json_skip(const uint8_t *s, uint32_t n, uint32_t *past);
+uint32_t pnx_json_unescape(const uint8_t *in, uint32_t n, uint8_t *out);
+uint32_t pnx_json_quote(const uint8_t *in, uint32_t n, uint8_t *out, uint64_t cap);
+int      pnx_csv_field(const uint8_t *s, uint32_t n, uint32_t *start, uint32_t *len, bool *doubled, uint32_t *past, bool *last);
+uint32_t pnx_csv_quote(const uint8_t *in, uint32_t n, uint8_t *out, uint64_t cap);
+
 // What the last ptn.match of a run found, for ptn.capture: the whole match and the captures.
 typedef struct pnx_ptn_found {
     pnx_scell cap[1 + PNX_PTN_CAPS];

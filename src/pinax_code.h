@@ -163,6 +163,7 @@ enum {
     X(USHRI, 0x37, PNX_K_I, PNX_K_I, PNX_K_IMM, PNX_F_ABC, PNX_X_NONE, 0, "wr-") \
     X(WMULI, 0x38, PNX_K_I, PNX_K_I, PNX_K_IMM, PNX_F_ABC, PNX_X_NONE, 0, "wr-") \
     X(VLEN, 0x39, PNX_K_I, PNX_K_I, PNX_K_NONE, PNX_F_ABC, PNX_X_NONE, 0, "wr-") \
+    X(FITW, 0x3a, PNX_K_I, PNX_K_NONE, PNX_K_IMM, PNX_F_ABC, PNX_X_NONE, 1, "r--") \
     /* jumps */ \
     X(JEQ, 0x48, PNX_K_I, PNX_K_I, PNX_K_J, PNX_F_ABC, PNX_X_NONE, 0, "rr-") \
     X(JNE, 0x49, PNX_K_I, PNX_K_I, PNX_K_J, PNX_F_ABC, PNX_X_NONE, 0, "rr-") \
@@ -306,7 +307,18 @@ enum {
     X(LCOPYR, 0xe0, PNX_K_I, PNX_K_NONE, PNX_K_NONE, PNX_F_GLOBAL, PNX_X_GLOBAL, 1, "r--") \
     X(BENC, 0xe1, PNX_K_S, PNX_K_IMM, PNX_K_G, PNX_F_ABC, PNX_X_NONE, 1, "r--") \
     X(BENCW, 0xe2, PNX_K_S, PNX_K_IMM, PNX_K_NONE, PNX_F_ABC, PNX_X_GLOBAL, 1, "r--") \
-    X(BTRUNC, 0xe3, PNX_K_I, PNX_K_NONE, PNX_K_NONE, PNX_F_GLOBAL, PNX_X_NONE, 0, "r--")
+    X(BTRUNC, 0xe3, PNX_K_I, PNX_K_NONE, PNX_K_NONE, PNX_F_GLOBAL, PNX_X_NONE, 0, "r--") \
+    X(JNEXT, 0xe4, PNX_K_I, PNX_K_S, PNX_K_S, PNX_F_ABC, PNX_X_NONE, 1, "wwm") \
+    X(JSKIP, 0xe5, PNX_K_S, PNX_K_NONE, PNX_K_NONE, PNX_F_ABC, PNX_X_NONE, 1, "m--") \
+    X(JPUTI, 0xe6, PNX_K_I, PNX_K_IMM, PNX_K_G, PNX_F_ABC, PNX_X_NONE, 1, "r--") \
+    X(JPUTIW, 0xe7, PNX_K_I, PNX_K_IMM, PNX_K_NONE, PNX_F_ABC, PNX_X_GLOBAL, 1, "r--") \
+    X(JPUTS, 0xe8, PNX_K_S, PNX_K_IMM, PNX_K_G, PNX_F_ABC, PNX_X_NONE, 1, "r--") \
+    X(JPUTSW, 0xe9, PNX_K_S, PNX_K_IMM, PNX_K_NONE, PNX_F_ABC, PNX_X_GLOBAL, 1, "r--") \
+    X(CNEXT, 0xea, PNX_K_S, PNX_K_S, PNX_K_IMM, PNX_F_ABC, PNX_X_NONE, 1, "mw-") \
+    X(CPUTS, 0xeb, PNX_K_S, PNX_K_IMM, PNX_K_G, PNX_F_ABC, PNX_X_NONE, 1, "r--") \
+    X(CPUTSW, 0xec, PNX_K_S, PNX_K_IMM, PNX_K_NONE, PNX_F_ABC, PNX_X_GLOBAL, 1, "r--") \
+    X(CPUTI, 0xed, PNX_K_I, PNX_K_IMM, PNX_K_G, PNX_F_ABC, PNX_X_NONE, 1, "r--") \
+    X(CPUTIW, 0xee, PNX_K_I, PNX_K_IMM, PNX_K_NONE, PNX_F_ABC, PNX_X_GLOBAL, 1, "r--")
 
 enum {
 #define PNX_ENUM(name, number, a, b, c, shape, second, fails, roles) PNX_##name = number,

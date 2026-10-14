@@ -36,7 +36,8 @@ enum {
     STEM_RANGE, STEM_BYTES, STEM_TIMES, STEM_COLL, STEM_WORDS, STEM_ROWS, STEM_STRS,
     STEM_LINES, STEM_SPLIT, STEM_SPLIT_BYTE, // like STEM_WORDS, these take their next piece off the string
     STEM_CHARS, STEM_PTN, // ptn.matches: the string and its pattern, like STEM_SPLIT
-    STEM_REX, STEM_RSPLIT // rex.matches and rex.split: the string and its program
+    STEM_REX, STEM_RSPLIT, // rex.matches and rex.split: the string and its program
+    STEM_CSV // csv.fields: like STEM_WORDS
 };
 enum { GK_SCALAR, GK_ARRAY, GK_LIST, GK_BUFFER, GK_INDEX, GK_QUEUE, GK_POOL, GK_TASKS };
 enum { L_PLAIN, L_OWNS, L_MOVED }; // what a local holds of a value that must be given exactly once
@@ -793,6 +794,10 @@ static uint32_t wide_of(uint32_t op) {
     case PNX_IXGETS: return PNX_IXGETSW;
     case PNX_BPUT: return PNX_BPUTW;
     case PNX_BENC: return PNX_BENCW;
+    case PNX_JPUTI: return PNX_JPUTIW;
+    case PNX_JPUTS: return PNX_JPUTSW;
+    case PNX_CPUTS: return PNX_CPUTSW;
+    case PNX_CPUTI: return PNX_CPUTIW;
     case PNX_BPUTS: return PNX_BPUTSW;
     case PNX_TSPAWN: return PNX_TSPAWNW;
     case PNX_TRESUME: return PNX_TRESUMEW;
@@ -1323,7 +1328,8 @@ static const struct builtin {
 // The standard modules, part of the language: their number in the builtin table, or 0.
 static uint8_t standard_module(name n) {
     return name_is(n, "str") ? 1 : name_is(n, "fmt") ? 2 : name_is(n, "hash") ? 3 : name_is(n, "encode") ? 4
-         : name_is(n, "bytes") ? 5 : name_is(n, "ptn") ? 6 : name_is(n, "rex") ? 7 : 0;
+         : name_is(n, "bytes") ? 5 : name_is(n, "ptn") ? 6 : name_is(n, "rex") ? 7 : name_is(n, "json") ? 8
+         : name_is(n, "csv") ? 9 : 0;
 }
 
 static const struct builtin *find_builtin(name n, uint8_t module) {
@@ -2854,7 +2860,8 @@ static bool stem_begin(comp *c, uint8_t *kind, uint8_t *cur, uint8_t *lim, uint1
         *element = g->type;
         return emit(c, PNX_ABX(PNX_LOADI, *cur, 0)) != NONE && emit(c, PNX_ABX(PNX_GLEN, *lim, (uint32_t)stem.value)) != NONE;
     }
-    if (stem.op == STEM_WORDS || stem.op == STEM_LINES || stem.op == STEM_SPLIT_BYTE || stem.op == STEM_CHARS) {
+    if (stem.op == STEM_WORDS || stem.op == STEM_LINES || stem.op == STEM_SPLIT_BYTE || stem.op == STEM_CHARS ||
+        stem.op == STEM_CSV) {
         // the string itself is the rest still to read; for a byte separator, `cur` is the byte
         f->stack[f->depth - 1].hidden = true;
         *src = (uint16_t)slot_of(c, f->depth - 1);
@@ -2907,7 +2914,7 @@ static bool stem_begin(comp *c, uint8_t *kind, uint8_t *cur, uint8_t *lim, uint1
 // Stems that hand out pieces of a string until none is left.
 static bool stem_takes(uint8_t kind) {
     return kind == STEM_WORDS || kind == STEM_LINES || kind == STEM_SPLIT || kind == STEM_SPLIT_BYTE ||
-           kind == STEM_CHARS || kind == STEM_PTN || kind == STEM_REX || kind == STEM_RSPLIT;
+           kind == STEM_CHARS || kind == STEM_PTN || kind == STEM_REX || kind == STEM_RSPLIT || kind == STEM_CSV;
 }
 
 // Takes the next piece into `reg`; the instruction after it runs when there is none.
@@ -2919,6 +2926,7 @@ static bool stem_take(comp *c, uint8_t kind, uint32_t reg, uint32_t src, uint32_
         return emit(c, lim) != NONE;
     return emit(c, kind == STEM_WORDS   ? PNX_ABC(PNX_SWORD, src, reg, 0)
                    : kind == STEM_CHARS ? PNX_ABC(PNX_SCHAR, src, reg, 0)
+                   : kind == STEM_CSV   ? PNX_ABC(PNX_CNEXT, src, reg, 0)
                    : kind == STEM_PTN   ? PNX_ABC(PNX_PNEXT, src, reg, lim)
                    : kind == STEM_REX || kind == STEM_RSPLIT
                        ? PNX_ABC(kind == STEM_REX ? PNX_XNEXT : PNX_XSPLIT, cur, reg, src) // the program: next word
@@ -3838,6 +3846,269 @@ static bool pack_word(comp *c, name n) {
     f->def_at = NONE;
     return emit(c, PNX_ABX(PNX_SETFAIL, 0, PINAX_ERR_FORMAT)) != NONE && emit(c, PNX_ABC(PNX_JNEI, ok, 0, 1)) != NONE &&
            guard_op(c, TY_STR);
+}
+
+// ---- json and csv (RFC-0009 section 4.5, RFC-0016 S5) -------------------------------------
+
+static bool add_bytes(comp *c, const uint8_t *bytes, uint32_t length, uint32_t *index);
+
+// A text constant into register `reg`.
+static bool load_text(comp *c, uint32_t reg, const char *text) {
+    uint32_t index;
+    return add_bytes(c, (const uint8_t *)text, (uint32_t)__builtin_strlen(text), &index) &&
+           emit(c, PNX_ABX(PNX_LOADKS, reg, index)) != NONE;
+}
+static bool load_name(comp *c, uint32_t reg, name n) {
+    uint32_t index;
+    return add_bytes(c, n.text, n.length, &index) && emit(c, PNX_ABX(PNX_LOADKS, reg, index)) != NONE;
+}
+
+// The registers of a record's text pack and unpack, above the row and the string.
+typedef struct textregs {
+    uint32_t rr, rs;           // the row; the string read (unpack)
+    uint32_t t, aux, ok, size; // I
+    uint32_t v, val, key;      // S
+} textregs;
+
+// The value text `val` (a JSON token of kind t, or a CSV field) checked against field fd and,
+// in the second pass, stored into the row. Every failure joins `bad`.
+static bool text_value(comp *c, const textregs *x, const field *fd, uint32_t where, bool json, bool store, uint32_t *bad) {
+    if (fd->is_str) {
+        if ((json && (emit(c, PNX_ABC(PNX_JEQI, x->t, PNX_JSON_STRING, 1)) == NONE || !jump_later(c, bad))) ||
+            emit(c, PNX_ABC(PNX_SLEN, x->aux, x->val, 0)) == NONE || !load_int(c, x->size, fd->extra) ||
+            emit(c, PNX_ABC(PNX_JLE, x->aux, x->size, 1)) == NONE || !jump_later(c, bad))
+            return false;
+        return !store || (emit(c, PNX_ABC(PNX_FSETS, x->val, x->rr, 0)) != NONE && emit(c, where) != NONE);
+    }
+    if (fd->type == TY_BOOL) { // true, or false; nothing else
+        if (json && (emit(c, PNX_ABC(PNX_JEQI, x->t, PNX_JSON_BOOLEAN, 1)) == NONE || !jump_later(c, bad)))
+            return false;
+        uint32_t done = NONE;
+        if (emit(c, PNX_ABX(PNX_LOADI, x->aux, 1)) == NONE || !load_text(c, x->key, "true") ||
+            emit(c, PNX_ABC(PNX_JSNE, x->val, x->key, 1)) == NONE || !jump_later(c, &done) ||
+            emit(c, PNX_ABX(PNX_LOADI, x->aux, 0)) == NONE || !load_text(c, x->key, "false") ||
+            emit(c, PNX_ABC(PNX_JSEQ, x->val, x->key, 1)) == NONE || !jump_later(c, bad))
+            return false;
+        land(c, &done);
+    } else { // a number: an int that fits the field
+        if ((json && (emit(c, PNX_ABC(PNX_JEQI, x->t, PNX_JSON_NUMBER, 1)) == NONE || !jump_later(c, bad))) ||
+            emit(c, PNX_ABC(PNX_TOINT, x->aux, x->val, 0)) == NONE || !jump_later(c, bad) ||
+            emit(c, PNX_ABC(PNX_FITW, x->aux, 0, fd->extra)) == NONE || !jump_later(c, bad))
+            return false;
+    }
+    return !store || (emit(c, PNX_ABC(PNX_FSET, x->aux, x->rr, 0)) != NONE && emit(c, where) != NONE);
+}
+
+// row buf json.pack | csv.pack (or fail): the fields as an object (names as keys) or as one
+// line, appended; when the buffer is full it is cut back to what it held. s row json.unpack |
+// csv.unpack (gives rest str or fail): the fields read into the row (JSON: by name, other keys
+// passed over; CSV: in order, the record ending with the last), nothing written unless all are
+// right (format otherwise); gives what follows.
+static bool text_record(comp *c, bool json, bool unpack) {
+    fn *f = c->f;
+    const globalsym *g = NULL;
+    uint32_t         gi = 0;
+    if (!unpack && !need_coll(c, &g, &gi))
+        return false;
+    if (!need(c, unpack ? 2 : 1))
+        return false;
+    const tid row = f->stack[f->depth - 1].type;
+    const globalsym *table = is_row(row) ? (const globalsym *)c->globals.ptr + (row - TY_FIRST_DECLARED) : NULL;
+    if (!table || table->record == NONE || (g && g->kind != GK_BUFFER) || (unpack && f->stack[f->depth - 2].type != TY_STR))
+        return type_error(c, unpack ? "unpack takes a str and a row of a table of records: s row json.unpack"
+                                    : "pack takes a row of a table of records and a buffer: row buf json.pack");
+    if (f->stack[f->depth - 1].owned)
+        return type_error(c, "an owned row is kept in a local before its fields are used");
+    const record *r = (const record *)c->records.ptr + table->record;
+    const uint32_t tab = row - TY_FIRST_DECLARED;
+    textregs x = {0};
+    if (unpack && !settle(c, f->depth - 2))
+        return false;
+    if (unpack)
+        x.rs = slot_of(c, f->depth - 2);
+    if (!settle(c, f->depth - 1))
+        return false;
+    x.rr = slot_of(c, f->depth - 1);
+    f->depth -= unpack ? 2 : 1;
+    if (!settle_all(c))
+        return false;
+    const uint32_t ib = top_slot(c, BANK_I, 6) + 1, sb = top_slot(c, BANK_S, 4);
+    x.t = ib, x.aux = ib + 1, x.ok = ib + 2, x.size = ib + 3;
+    x.v = sb + 1, x.val = sb + 2, x.key = sb + 3;
+    uint32_t bad = NONE, over = NONE;
+    if (emit(c, PNX_ABX(PNX_LOADI, x.ok, 1)) == NONE || emit(c, PNX_ABX(PNX_LOADI, x.t, 0)) == NONE)
+        return false;
+    if (!unpack) {
+        const uint32_t start = x.size; // the length before, to cut back to
+        if (emit(c, PNX_ABX(PNX_BVIEW, x.v, gi)) == NONE || emit(c, PNX_ABC(PNX_SLEN, start, x.v, 0)) == NONE ||
+            (json && (emit_g(c, PNX_JPUTI, x.t, PNX_JSON_OBJECT, gi) == NONE || !jump_later(c, &bad))))
+            return false;
+        for (uint32_t k = 0; k < r->count; ++k) {
+            const field *fd = (const field *)c->fields.ptr + r->first + k;
+            const uint32_t where = PNX_FIELD(tab, fd->offset, fd->extra);
+            if (json && (!load_name(c, x.key, fd->name) || emit_g(c, PNX_JPUTS, x.key, PNX_JSON_KEY, gi) == NONE ||
+                         !jump_later(c, &bad)))
+                return false;
+            if (fd->is_str ? emit(c, PNX_ABC(PNX_FGETS, x.v, x.rr, 0)) == NONE || emit(c, where) == NONE ||
+                                 emit_g(c, json ? PNX_JPUTS : PNX_CPUTS, x.v, json ? PNX_JSON_STRING : 0, gi) == NONE
+                           : emit(c, PNX_ABC(PNX_FGET, x.t, x.rr, 0)) == NONE || emit(c, where) == NONE ||
+                                 emit_g(c, json ? PNX_JPUTI : PNX_CPUTI, x.t,
+                                        fd->type == TY_BOOL ? (json ? PNX_JSON_BOOLEAN : 1) : (json ? PNX_JSON_NUMBER : 0), gi) == NONE)
+                return false;
+            if (!jump_later(c, &bad))
+                return false;
+        }
+        if (emit_g(c, json ? PNX_JPUTI : PNX_CPUTI, x.t, json ? PNX_JSON_OBJECT_END : 2, gi) == NONE ||
+            !jump_later(c, &bad) || !jump_later(c, &over))
+            return false;
+        land(c, &bad);
+        if (emit(c, PNX_ABX(PNX_BTRUNC, start, gi)) == NONE || emit(c, PNX_ABX(PNX_LOADI, x.ok, 0)) == NONE)
+            return false;
+        land(c, &over);
+        f->def_at = NONE;
+        return emit(c, PNX_ABX(PNX_SETFAIL, 0, PINAX_ERR_FULL)) != NONE && emit(c, PNX_ABC(PNX_JNEI, x.ok, 0, 1)) != NONE &&
+               guard_op(c, TY_NONE);
+    }
+    for (int pass = 0; pass < 2; ++pass) { // first everything is checked, then read again and stored
+        if (emit(c, PNX_ABC(PNX_MOVS, x.v, x.rs, 0)) == NONE)
+            return false;
+        if (!json) {
+            for (uint32_t k = 0; k < r->count; ++k) {
+                const field *fd = (const field *)c->fields.ptr + r->first + k;
+                if (emit(c, PNX_ABC(PNX_CNEXT, x.v, x.val, k + 1 == r->count ? 2 : 1)) == NONE || !jump_later(c, &bad) ||
+                    !text_value(c, &x, fd, PNX_FIELD(tab, fd->offset, fd->extra), false, pass == 1, &bad))
+                    return false;
+            }
+            continue;
+        }
+        uint32_t done = NONE;
+        if (emit(c, PNX_ABC(PNX_JNEXT, x.t, x.val, x.v)) == NONE || !jump_later(c, &bad) ||
+            emit(c, PNX_ABC(PNX_JEQI, x.t, PNX_JSON_OBJECT, 1)) == NONE || !jump_later(c, &bad))
+            return false;
+        const uint32_t head = f->code.n;
+        if (emit(c, PNX_ABC(PNX_JNEXT, x.t, x.val, x.v)) == NONE || !jump_later(c, &bad) ||
+            emit(c, PNX_ABC(PNX_JNEI, x.t, PNX_JSON_OBJECT_END, 1)) == NONE || !jump_later(c, &done) ||
+            emit(c, PNX_ABC(PNX_JEQI, x.t, PNX_JSON_KEY, 1)) == NONE || !jump_later(c, &bad))
+            return false;
+        for (uint32_t k = 0; k < r->count; ++k) { // the field of that name
+            const field *fd = (const field *)c->fields.ptr + r->first + k;
+            uint32_t     other = NONE;
+            if (!load_name(c, x.key, fd->name) || emit(c, PNX_ABC(PNX_JSEQ, x.val, x.key, 1)) == NONE ||
+                !jump_later(c, &other) || emit(c, PNX_ABC(PNX_JNEXT, x.t, x.val, x.v)) == NONE || !jump_later(c, &bad) ||
+                !text_value(c, &x, fd, PNX_FIELD(tab, fd->offset, fd->extra), true, pass == 1, &bad) ||
+                !loop_back(c, head, x.t, 0))
+                return false;
+            land(c, &other);
+        }
+        if (emit(c, PNX_ABC(PNX_JSKIP, x.v, 0, 0)) == NONE || !jump_later(c, &bad) || !loop_back(c, head, x.t, 0))
+            return false; // a key of no field: its value passed over
+        land(c, &done);
+    }
+    if (emit(c, PNX_ABC(PNX_MOVS, x.rs, x.v, 0)) == NONE || !jump_later(c, &over))
+        return false;
+    land(c, &bad);
+    if (emit(c, PNX_ABX(PNX_LOADI, x.ok, 0)) == NONE)
+        return false;
+    land(c, &over);
+    f->def_at = NONE;
+    return emit(c, PNX_ABX(PNX_SETFAIL, 0, PINAX_ERR_FORMAT)) != NONE && emit(c, PNX_ABC(PNX_JNEI, x.ok, 0, 1)) != NONE &&
+           guard_op(c, TY_STR);
+}
+
+// A word of json or csv that writes into a buffer: `kind` for JPUTI/JPUTS/CPUTI/CPUTS; `value`
+// the type it takes (TY_NONE: none).
+static bool text_put(comp *c, uint32_t op, uint32_t kind, tid value) {
+    fn *f = c->f;
+    const globalsym *g;
+    uint32_t         gi, ra = 0;
+    if (!need_coll(c, &g, &gi) || (value != TY_NONE && !need(c, 1)))
+        return false;
+    if (g->kind != GK_BUFFER || (value != TY_NONE && f->stack[f->depth - 1].type != value))
+        return type_error(c, value == TY_NONE ? "this word takes a buffer" : "this word takes a value and a buffer: v buf json.put_int");
+    if (value != TY_NONE) {
+        if (!settle(c, f->depth - 1))
+            return false;
+        ra = slot_of(c, f->depth - 1);
+        --f->depth;
+    }
+    if (!settle_all(c))
+        return false;
+    if (value == TY_NONE) { // the instruction reads A: something written
+        ra = top_slot(c, BANK_I, 1);
+        if (emit(c, PNX_ABX(PNX_LOADI, ra, 0)) == NONE)
+            return false;
+    }
+    return emit_g(c, op, ra, kind, gi) != NONE && guard_op(c, TY_NONE);
+}
+
+static bool json_word(comp *c, name n) {
+    fn *f = c->f;
+    static const struct {
+        const char *name;
+        int64_t     value;
+    } kinds[] = {{"object", PNX_JSON_OBJECT}, {"object_end", PNX_JSON_OBJECT_END}, {"array", PNX_JSON_ARRAY},
+                 {"array_end", PNX_JSON_ARRAY_END}, {"key", PNX_JSON_KEY}, {"string", PNX_JSON_STRING},
+                 {"number", PNX_JSON_NUMBER}, {"boolean", PNX_JSON_BOOLEAN}, {"null", PNX_JSON_NULL}};
+    for (size_t k = 0; k < sizeof kinds / sizeof kinds[0]; ++k) { // the kinds json.next gives
+        if (name_is(n, kinds[k].name))
+            return push(c, (entry){.type = TY_INT, .kind = E_CONST, .value = kinds[k].value}) && advance(c);
+    }
+    if (name_is(n, "begin_object") || name_is(n, "end_object") || name_is(n, "begin_array") || name_is(n, "end_array") ||
+        name_is(n, "put_null"))
+        return text_put(c, PNX_JPUTI, name_is(n, "begin_object") ? PNX_JSON_OBJECT : name_is(n, "end_object") ? PNX_JSON_OBJECT_END
+                                     : name_is(n, "begin_array") ? PNX_JSON_ARRAY : name_is(n, "end_array") ? PNX_JSON_ARRAY_END
+                                                                 : PNX_JSON_NULL, TY_NONE);
+    if (name_is(n, "put_int") || name_is(n, "put_bool"))
+        return text_put(c, PNX_JPUTI, name_is(n, "put_int") ? PNX_JSON_NUMBER : PNX_JSON_BOOLEAN,
+                        name_is(n, "put_int") ? TY_INT : TY_BOOL);
+    if (name_is(n, "put_key") || name_is(n, "put_str"))
+        return text_put(c, PNX_JPUTS, name_is(n, "put_key") ? PNX_JSON_KEY : PNX_JSON_STRING, TY_STR);
+    if (name_is(n, "pack") || name_is(n, "unpack"))
+        return text_record(c, true, name_is(n, "unpack"));
+    if (!name_is(n, "next") && !name_is(n, "skip"))
+        return error(c, PINAX_ERR_NOT_FOUND, "the module has no word of this name");
+    if (!need(c, 1))
+        return false;
+    if (f->stack[f->depth - 1].type != TY_STR)
+        return type_error(c, "this word takes the JSON text as a str");
+    if (!settle(c, f->depth - 1))
+        return false;
+    const uint32_t rs = slot_of(c, f->depth - 1);
+    --f->depth;
+    if (!settle_all(c))
+        return false;
+    f->def_at = NONE;
+    if (name_is(n, "skip")) // (s gives rest str or fail)
+        return emit(c, PNX_ABC(PNX_JSKIP, rs, 0, 0)) != NONE && guard_op(c, TY_STR);
+    // (s gives kind int, value str, rest str or fail): the value where s was, the rest above
+    const uint32_t value = top_slot(c, BANK_S, 2);
+    if (emit(c, PNX_ABC(PNX_MOVS, value + 1, rs, 0)) == NONE ||
+        emit(c, PNX_ABC(PNX_JNEXT, top_slot(c, BANK_I, 1), value, value + 1)) == NONE || !advance(c))
+        return false;
+    sig three = {.n_out = 3, .fails = true};
+    three.out[0] = TY_INT;
+    three.out[1] = three.out[2] = TY_STR;
+    const uint32_t zero[2] = {0, 0};
+    return guard(c, &three, zero, zero, false);
+}
+
+static bool csv_word(comp *c, name n) {
+    fn *f = c->f;
+    if (name_is(n, "put"))
+        return text_put(c, PNX_CPUTS, 0, TY_STR);
+    if (name_is(n, "put_int") || name_is(n, "put_bool"))
+        return text_put(c, PNX_CPUTI, name_is(n, "put_int") ? 0 : 1, name_is(n, "put_int") ? TY_INT : TY_BOOL);
+    if (name_is(n, "end_line"))
+        return text_put(c, PNX_CPUTI, 2, TY_NONE);
+    if (name_is(n, "pack") || name_is(n, "unpack"))
+        return text_record(c, false, name_is(n, "unpack"));
+    if (!name_is(n, "fields"))
+        return error(c, PINAX_ERR_NOT_FOUND, "the module has no word of this name");
+    if (!need(c, 1))
+        return false;
+    if (f->stack[f->depth - 1].type != TY_STR)
+        return type_error(c, "fields takes a line of CSV as a str");
+    return settle(c, f->depth - 1) && push(c, (entry){.type = TY_STEM, .kind = E_SLOT, .op = STEM_CSV}) && advance(c);
 }
 
 // The words of the module bytes (RFC-0009 section 4.4): put_T and get_T for T in u8 u16 u32 u64
@@ -5091,6 +5362,11 @@ static bool body_name(comp *c) {
                 if (name_is(n, classes[k]))
                     return push(c, (entry){.type = TY_INT, .kind = E_CONST, .value = k + 1}) && advance(c);
             }
+        }
+        if (standard == 8 || standard == 9) { // json, csv
+            if (c->data_only)
+                return syntax(c, "a data source calls no words; only literals, const names and stores");
+            return standard == 8 ? json_word(c, n) : csv_word(c, n);
         }
         if (standard == 5) { // bytes: the name says the width
             if (c->data_only)

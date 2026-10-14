@@ -1251,6 +1251,211 @@ PNX_OP(XCOMP) {
     return PNX_R_OK;
 }
 
+// ---- the modules json and csv (RFC-0016 S5) ------------------------------------------------
+
+// The value R[A] fits width C. PNX_R_FAILED (format) otherwise: a number read from text.
+PNX_OP(FITW) {
+    if (pnx_fits_width(R[OP_A(w)], OP_C(w)))
+        return PNX_R_OK;
+    st->fail = PINAX_ERR_FORMAT;
+    return PNX_R_FAILED;
+}
+// A: the kind of the next token of C; B: its value, a view (a string with escapes is decoded
+// into the region); C: what follows it. PNX_R_FAILED: no token is left (not_found), or what
+// follows is none (format).
+PNX_OP(JNEXT) {
+    pnx_scell     *rest = &S[OP_C(w)];
+    const uint8_t *bytes = pnx_view_bytes(st, *rest);
+    uint32_t       start = 0, len = 0, past = 0;
+    bool           escaped = false;
+    const int      kind = pnx_json_next(bytes, rest->length, &start, &len, &escaped, &past);
+    st->charge += past;
+    if (kind <= 0) {
+        st->fail = kind == 0 ? PINAX_ERR_NOT_FOUND : PINAX_ERR_FORMAT;
+        return PNX_R_FAILED;
+    }
+    pnx_scell value = {rest->segment, len, rest->offset + start};
+    if (escaped) {
+        const uint32_t before = st->region_used;
+        uint8_t       *copy = len ? pnx_region_alloc(st, len) : NULL;
+        if (len && !copy)
+            return PINAX_ERR_FULL;
+        const uint32_t n = pnx_json_unescape(bytes + start, len, copy);
+        if (n == UINT32_MAX) {
+            st->region_used = before;
+            st->fail = PINAX_ERR_FORMAT;
+            return PNX_R_FAILED;
+        }
+        st->region_used = (uint32_t)(copy - st->region) + n;
+        value = (pnx_scell){PNX_SEG_REGION, n, (uint64_t)(copy - st->region)};
+    }
+    R[OP_A(w)] = kind;
+    S[OP_B(w)] = value;
+    rest->offset += past;
+    rest->length -= past;
+    return PNX_R_OK;
+}
+// A: past one whole value. PNX_R_FAILED: none is left (not_found), or it is malformed (format).
+PNX_OP(JSKIP) {
+    pnx_scell *rest = &S[OP_A(w)];
+    uint32_t   past = 0;
+    const int  r = pnx_json_skip(pnx_view_bytes(st, *rest), rest->length, &past);
+    st->charge += past;
+    if (r <= 0) {
+        st->fail = r == 0 ? PINAX_ERR_NOT_FOUND : PINAX_ERR_FORMAT;
+        return PNX_R_FAILED;
+    }
+    rest->offset += past;
+    rest->length -= past;
+    return PNX_R_OK;
+}
+// Whether a value written into a JSON buffer now needs a comma before it.
+PNX_INLINE uint32_t pnx_json_comma(const pnx_global *g) {
+    const uint64_t len = pnx_buffer_len(g);
+    if (!len)
+        return 0;
+    const uint8_t last = g->ptr[8 + len - 1];
+    return last != '{' && last != '[' && last != ':' && last != ',';
+}
+// B: what to write into buffer x: 1 { 2 } 3 [ 4 ] 7 the number R[A] 8 the bool R[A] 9 null.
+PNX_OP(JPUTI) {
+    const pnx_global *g = &st->globals[x];
+    const uint32_t    kind = OP_B(w);
+    uint8_t           out[32];
+    uint32_t          n = 0;
+    if (kind != PNX_JSON_OBJECT_END && kind != PNX_JSON_ARRAY_END && pnx_json_comma(g))
+        out[n++] = ',';
+    switch (kind) {
+    case PNX_JSON_OBJECT: out[n++] = '{'; break;
+    case PNX_JSON_OBJECT_END: out[n++] = '}'; break;
+    case PNX_JSON_ARRAY: out[n++] = '['; break;
+    case PNX_JSON_ARRAY_END: out[n++] = ']'; break;
+    case PNX_JSON_NUMBER: n += pnx_format_int(R[OP_A(w)], out + n); break;
+    case PNX_JSON_BOOLEAN:
+        __builtin_memcpy(out + n, R[OP_A(w)] ? "true" : "false", R[OP_A(w)] ? 4 : 5);
+        n += R[OP_A(w)] ? 4 : 5;
+        break;
+    default: __builtin_memcpy(out + n, "null", 4); n += 4; break;
+    }
+    return pnx_buffer_append(st, g, out, n);
+}
+// B: 5 the key A (and a colon), 6 the string A, quoted, into buffer x.
+PNX_OP(JPUTS) {
+    const pnx_global *g = &st->globals[x];
+    const pnx_scell   s = S[OP_A(w)];
+    uint64_t          len = pnx_buffer_len(g);
+    const uint32_t    comma = pnx_json_comma(g), colon = OP_B(w) == PNX_JSON_KEY;
+    uint8_t          *at = g->ptr + 8 + len;
+    const uint64_t    room = g->capacity - len;
+    st->charge += s.length;
+    if (room < comma + colon) {
+        st->fail = PINAX_ERR_FULL;
+        return PNX_R_FAILED;
+    }
+    if (comma)
+        at[0] = ',';
+    const uint32_t n = pnx_json_quote(pnx_view_bytes(st, s), s.length, at + comma, room - comma - colon);
+    if (n == UINT32_MAX) {
+        st->fail = PINAX_ERR_FULL;
+        return PNX_R_FAILED;
+    }
+    if (colon)
+        at[comma + n] = ':';
+    len += comma + n + colon;
+    __builtin_memcpy(g->ptr, &len, 8);
+    return PNX_R_OK;
+}
+// A: the rest of a CSV record or text; B: its next field (a quoted one with doubled quotes is
+// decoded into the region). C 0: a stem over one record, done after its last field (a
+// malformed quoted field is given as it stands, and ends it); C 1: a field that is not the last
+// of its record; C 2: the last field of its record. PNX_R_FAILED: none is left, or (C 1, 2) the
+// field is malformed or the record ends otherwise (format).
+PNX_OP(CNEXT) {
+    pnx_scell     *rest = &S[OP_A(w)];
+    const uint32_t mode = OP_C(w);
+    if (rest->offset == PNX_SNEXT_DONE)
+        return PNX_R_FAILED;
+    const uint8_t *bytes = pnx_view_bytes(st, *rest);
+    uint32_t       start = 0, len = 0, past = 0;
+    bool           doubled = false, last = false;
+    const int      r = pnx_csv_field(bytes, rest->length, &start, &len, &doubled, &past, &last);
+    st->charge += past;
+    if (r < 0 || (mode == 1 && last) || (mode == 2 && !last)) {
+        if (mode) {
+            st->fail = PINAX_ERR_FORMAT;
+            return PNX_R_FAILED;
+        }
+        S[OP_B(w)] = *rest; // as it stands
+        *rest = (pnx_scell){PNX_SEG_EMPTY, 0, PNX_SNEXT_DONE};
+        return PNX_R_OK;
+    }
+    pnx_scell field = {rest->segment, len, rest->offset + start};
+    if (doubled) { // "" becomes "
+        uint8_t *copy = pnx_region_alloc(st, len);
+        if (!copy)
+            return PINAX_ERR_FULL;
+        uint32_t n = 0;
+        for (uint32_t k = 0; k < len; ++k) {
+            copy[n++] = bytes[start + k];
+            if (bytes[start + k] == '"')
+                ++k;
+        }
+        st->region_used = (uint32_t)(copy - st->region) + n;
+        field = (pnx_scell){PNX_SEG_REGION, n, (uint64_t)(copy - st->region)};
+    }
+    S[OP_B(w)] = field;
+    if (mode == 0 && last) {
+        *rest = (pnx_scell){PNX_SEG_EMPTY, 0, PNX_SNEXT_DONE};
+    } else {
+        rest->offset += past;
+        rest->length -= past;
+    }
+    return PNX_R_OK;
+}
+// A CSV field A into buffer x: a comma first unless it begins a line; quoted when it must be.
+PNX_OP(CPUTS) {
+    const pnx_global *g = &st->globals[x];
+    const pnx_scell   s = S[OP_A(w)];
+    uint64_t          len = pnx_buffer_len(g);
+    const uint32_t    comma = len && g->ptr[8 + len - 1] != '\n';
+    const uint64_t    room = g->capacity - len;
+    st->charge += s.length;
+    if (room < comma) {
+        st->fail = PINAX_ERR_FULL;
+        return PNX_R_FAILED;
+    }
+    if (comma)
+        g->ptr[8 + len] = ',';
+    const uint32_t n = pnx_csv_quote(pnx_view_bytes(st, s), s.length, g->ptr + 8 + len + comma, room - comma);
+    if (n == UINT32_MAX) {
+        st->fail = PINAX_ERR_FULL;
+        return PNX_R_FAILED;
+    }
+    len += comma + n;
+    __builtin_memcpy(g->ptr, &len, 8);
+    return PNX_R_OK;
+}
+// B 0: the number R[A] as a CSV field; 1: the bool R[A]; 2: the end of the line.
+PNX_OP(CPUTI) {
+    const pnx_global *g = &st->globals[x];
+    const uint64_t    len = pnx_buffer_len(g);
+    uint8_t           out[32];
+    uint32_t          n = 0;
+    if (OP_B(w) == 2) {
+        out[n++] = '\n';
+    } else {
+        if (len && g->ptr[8 + len - 1] != '\n')
+            out[n++] = ',';
+        if (OP_B(w) == 0) {
+            n += pnx_format_int(R[OP_A(w)], out + n);
+        } else {
+            __builtin_memcpy(out + n, R[OP_A(w)] ? "true" : "false", R[OP_A(w)] ? 4 : 5);
+            n += R[OP_A(w)] ? 4 : 5;
+        }
+    }
+    return pnx_buffer_append(st, g, out, n);
+}
+
 // ---- the modules hash and encode (RFC-0016 S1) ---------------------------------------------
 
 PNX_OP(SHASH) {

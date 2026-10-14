@@ -111,22 +111,22 @@ static bool rx_set(rx_comp *c, const uint8_t set[32]) {
     return rx_emit(c, (rx_inst){.op = RX_SET, .x = (int16_t)c->n_sets++});
 }
 
-static void bit(uint8_t set[32], uint32_t b) { set[b >> 3] |= (uint8_t)(1u << (b & 7)); }
-static bool has(const uint8_t set[32], uint32_t b) { return (set[b >> 3] >> (b & 7)) & 1u; }
+static void rx_bit(uint8_t set[32], uint32_t b) { set[b >> 3] |= (uint8_t)(1u << (b & 7)); }
+static bool rx_has(const uint8_t set[32], uint32_t b) { return (set[b >> 3] >> (b & 7)) & 1u; }
 
 static void rx_class(uint8_t set[32], uint8_t which) { // d w s
     for (uint32_t b = 0; b < 128; ++b) {
         const bool d = b >= '0' && b <= '9', a = (b | 0x20) >= 'a' && (b | 0x20) <= 'z';
         if ((which == 'd' && d) || (which == 'w' && (d || a || b == '_')) ||
             (which == 's' && (b == ' ' || (b >= '\t' && b <= '\r'))))
-            bit(set, b);
+            rx_bit(set, b);
     }
 }
 
 static void rx_fold(uint8_t set[32]) { // ASCII letters in both cases
     for (uint32_t b = 'a'; b <= 'z'; ++b) {
-        if (has(set, b) || has(set, b - 32))
-            bit(set, b), bit(set, b - 32);
+        if (rx_has(set, b) || rx_has(set, b - 32))
+            rx_bit(set, b), rx_bit(set, b - 32);
     }
 }
 
@@ -224,8 +224,8 @@ static bool rx_bracket(rx_comp *c) { // after '['
                 uint8_t cls[32] = {0};
                 rx_class(cls, (uint8_t)(what | 0x20));
                 for (uint32_t b = 0; b < 256; ++b) {
-                    if (what >= 'a' ? has(cls, b) : !has(cls, b))
-                        bit(set, b);
+                    if (what >= 'a' ? rx_has(cls, b) : !rx_has(cls, b))
+                        rx_bit(set, b);
                 }
                 continue;
             }
@@ -248,7 +248,7 @@ static bool rx_bracket(rx_comp *c) { // after '['
                 return rx_fail(c, "a range goes downwards");
         }
         for (int b = lo; b <= hi; ++b)
-            bit(set, (uint32_t)b);
+            rx_bit(set, (uint32_t)b);
     }
     if (c->i >= c->n)
         return rx_fail(c, "a set is not closed by ]");
@@ -259,8 +259,8 @@ static bool rx_bracket(rx_comp *c) { // after '['
         return rx_set(c, set);
     uint8_t ascii[32] = {0}; // a negated set takes one code point that is not in it
     for (uint32_t b = 0; b < 128; ++b) {
-        if (!has(set, b))
-            bit(ascii, b);
+        if (!rx_has(set, b))
+            rx_bit(ascii, b);
     }
     return rx_codepoint(c, ascii);
 }
@@ -293,7 +293,7 @@ static bool rx_atom(rx_comp *c, uint32_t depth) {
         uint8_t ascii[32] = {0};
         for (uint32_t k = 0; k < 128; ++k) {
             if (k != '\n' || c->dotall)
-                bit(ascii, k);
+                rx_bit(ascii, k);
         }
         return rx_codepoint(c, ascii);
     }
@@ -309,7 +309,7 @@ static bool rx_atom(rx_comp *c, uint32_t depth) {
         if (v >= 0) {
             if (c->icase && ((v | 0x20) >= 'a' && (v | 0x20) <= 'z')) {
                 uint8_t set[32] = {0};
-                bit(set, (uint32_t)v);
+                rx_bit(set, (uint32_t)v);
                 rx_fold(set);
                 return rx_set(c, set);
             }
@@ -325,15 +325,15 @@ static bool rx_atom(rx_comp *c, uint32_t depth) {
             return rx_set(c, set);
         uint8_t ascii[32] = {0}; // \D \W \S: one code point outside the class
         for (uint32_t k = 0; k < 128; ++k) {
-            if (!has(set, k))
-                bit(ascii, k);
+            if (!rx_has(set, k))
+                rx_bit(ascii, k);
         }
         return rx_codepoint(c, ascii);
     }
     default:
         if (c->icase && ((b | 0x20) >= 'a' && (b | 0x20) <= 'z')) {
             uint8_t set[32] = {0};
-            bit(set, b);
+            rx_bit(set, b);
             rx_fold(set);
             return rx_set(c, set);
         }
