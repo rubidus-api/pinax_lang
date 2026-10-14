@@ -1,0 +1,73 @@
+#import "/tools/common.typ": *
+// shape: the grammar collected; each rule has its examples in its clause
+
+#set heading(numbering: (..n) => if n.pos().len() == 1 { "부속서 A" } else { "A." + n.pos().slice(1).map(str).join(".") })
+= 문법 전체 (규범) <annex-grammar>
+
+#para("1")[이 부속서는 본문의 구문 규칙을 한 자리에 모은다. 표기는 ISO/IEC 14977 의 모양이다: `a b` 는 차례, `a | b`
+는 고르기, `[ a ]` 는 있거나 없음, `{ a }` 는 0 번 이상, `(* … *)` 는 설명, `? … ?` 는 말로 적은 규칙이다. 대문자
+이름은 6절이 정하는 토큰이다. 토큰 사이에는 공백과 주석이 몇 개든 올 수 있다.]
+
+#para("2")[문법은 토큰 하나를 미리 보고 읽힌다. 예외는 서명의 매개변수로, 이름인지 타입인지 가르려고 다음 토큰까지
+본다. 이름이 무엇을 가리키는지(지역 변수, 전역, 낱말)와 스택의 타입은 문법이 아니라 선언과 검사가 정한다.]
+
+```ebnf
+(* 6: tokens *)
+NAME        = letter { letter | digit } ;                (* not a reserved word *)
+PATH        = NAME "." member { "." member } ;           (* member: a run of letters and digits *)
+INT         = [ "+" | "-" ] ( digits | "0x" hex-digits | "0b" bit-digits ) ;
+CHAR        = [ "U" ] "'" ( char-byte | escape ) "'" ;
+STRING      = '"' { string-byte | escape } '"' ;
+RAWSTRING   = "r" '"' { raw-byte } '"' ;
+TEXT        = "text" TAG newline { text-line newline } TAG ;
+BOOL        = "true" | "false" ;
+literal     = INT | CHAR | STRING | RAWSTRING | TEXT | BOOL ;
+
+(* 6.7, 13: a source *)
+source      = [ "pinax" INT ] { item } ;
+item        = import | forward | declaration | definition | row-item | assign-item | body ;
+import      = "use" NAME [ "as" NAME ] ;
+forward     = "forward" ( "array" | "list" | "pool" ) NAME
+            | "forward" "word" NAME "(" effect ")" ;
+
+(* 8: declarations *)
+declaration = [ "export" ] ( [ "bound" ] bindable | decl ) ;
+bindable    = "global" NAME type | "array" NAME type size | "buffer" NAME size ;
+decl        = "const" NAME literal
+            | "list" NAME type size | "queue" NAME type size | "pool" NAME NAME size
+            | "record" NAME { field | "big_endian" } "end"
+            | "type" NAME ( "int" | "bool" | "str" )
+            | "index" NAME NAME PATH
+            | "tasks" NAME size [ size [ size ] ]
+            | "extern" c-name "(" effect ")" "from" STRING [ "as" NAME ]
+            | "test" NAME { body } "end" ;
+size        = INT | NAME ;
+field       = NAME NAME [ "(" size ")" ] ;
+c-name      = NAME | reserved-word | STRING ;
+row-item    = [ "export" ] "row" NAME [ NAME ] "(" value { "," value } ")" ;
+assign-item = "assign" NAME "(" value { "," value } ")" ;
+value       = literal | NAME ;
+
+(* 9: words *)
+definition  = [ "export" ] "word" NAME "(" effect ")" { body } "end" ;
+effect      = [ params ] [ "gives" params ] [ "or" "fail" ] ;
+params      = param { "," param } ;
+param       = [ NAME ] type ;
+type        = [ "owned" ] ( NAME [ "(" size ")" ] | "word" "(" effect ")" ) ;
+
+(* 9 to 11: the body *)
+body        = literal | NAME | PATH | store | block | cat | guard | control
+            | "return" | "fail" | ( "while" | "until" | "break" ) [ "(" NAME ")" ] ;
+store       = "to" ( NAME | PATH | "(" NAME { "," NAME } ")" ) ;
+block       = "do" [ "(" effect ")" ] { body } "end" ;
+cat         = "cat" "(" phrase { "," phrase } ")" ;
+phrase      = body { body } ;
+guard       = "or_fail" | "or_return" | "or_else" [ "(" NAME ")" ] { body } "end" ;
+control     = "if" { body } [ "else" { body } ] "end"
+            | "loop" [ "(" NAME ")" ] { body } "end"
+            | "case" { branch } [ "otherwise" { body } "end" ] "end" ;
+branch      = ( case-value | "(" case-value { "," case-value } ")" ) "of" { body } "end" ;
+case-value  = literal | NAME ;
+```
+
+#para("3")[자료 적재(13.4)의 소스는 13.4 의 `data-source` 를 따른다.]

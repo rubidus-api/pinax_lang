@@ -1,0 +1,67 @@
+<!DOCTYPE html>
+<html lang="ko"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>17 표준 호스트 모듈 - Pinax 표준</title><link rel="stylesheet" href="style.css"></head><body><nav class="top"><a href="index.html">처음</a> · <a href="16.html">앞</a> · <a href="18.html">다음</a> · <a href="../html-en/17.html">English</a></nav><main><h2>17 표준 호스트 모듈</h2><p class="para"><span class="pn">(1)</span> 이 절의 모듈은 처리기가 함께 내는 호스트 낱말이다. 언어의 일부가 아니다 — 호스트가 등록할 때만 있다(13.3). <code>pnx</code> 는 다섯 모두를 등록한다. 라이브러리를 끼워 쓰는 호스트는 <code>pinax_host_register(state,<br>"io")</code> 처럼 모듈 하나씩 고른다(라이브러리 <code>libpinax_host</code>). 등록하지 않은 모듈을 <code>use</code> 하면 거절된다(13.1).</p><p class="para"><span class="pn">(2)</span> 호스트 낱말도 다른 낱말과 같은 규칙을 따른다: 서명은 적재 때 검사되고, <code>or fail</code> 이 있는 낱말은 지켜야 하며, <code>owned</code> 값은 정확히 한 번 넘긴다.</p><h3>17.1 <code>io</code> — 표준 입출력</h3><p class="para"><p><span class="pn">(1)</span></p><table><tr><td><strong>낱말</strong></td><td><strong>서명</strong></td><td><strong>뜻</strong></td></tr><tr><td><code>print</code> <code>println</code></td><td><code>(s str)</code></td><td>표준 출력에 쓴다. <code>println</code> 은 줄바꿈(LF)을 붙인다</td></tr><tr><td><code>eprint</code></td><td><code>(s str)</code></td><td>표준 오류에 쓴다</td></tr><tr><td><code>read_line</code></td><td><code>(gives line str or fail)</code></td><td>표준 입력의 한 줄. 줄 끝은 뗀다. 입력이 끝나면 <code>err.not_found</code></td></tr><tr><td><code>read_line_into</code></td><td><code>(buf buffer or fail)</code></td><td>한 줄을 버퍼에 붙인다</td></tr></table><p>바이트는 고치지 않고 쓴다. 모든 운영체제에서 같은 바이트가 나간다.</p></p><div class="example run"><p class="ex-file"><code>17-io.pnx</code></p><pre><code data-lang="pinax"><span style="color: #d73948">use</span> io
+<span style="color: #d73948">use</span> <span style="color: #d73948">str</span>
+<span style="color: #d73948">word</span> demo ()
+  <span style="color: #198810">"no new line, "</span> io.print
+  <span style="color: #198810">"then one"</span> io.println
+  <span style="color: #d73948">loop</span>
+    io.read_line <span style="color: #d73948">or_else</span> (e) <span style="color: #d73948">break</span> <span style="color: #d73948">end</span> <span style="color: #d73948">to</span> line         <span style="color: #74747c">rem fails at the end of the input</span>
+    <span style="color: #d73948">cat</span> (<span style="color: #198810">"read: "</span>, line, <span style="color: #198810">" ("</span>, line <span style="color: #d73948">str</span>.len, <span style="color: #198810">" bytes)"</span>) io.println
+  <span style="color: #d73948">end</span>
+<span style="color: #d73948">end</span>
+demo
+</code></pre><p class="ex-label">출력</p><pre><code data-lang="text">$ pnx 17-io.pnx
+no new line, then one
+read: first line (10 bytes)
+read: second line (11 bytes)
+</code></pre></div><h3>17.2 <code>file</code> — 파일</h3><p class="para"><p><span class="pn">(1)</span> 핸들 타입 <code>file</code> 은 열린 파일이다. 여는 낱말이 <code>owned file</code> 을 주고, <code>close</code> 가 받는다(12.4).</p><table><tr><td><strong>낱말</strong></td><td><strong>서명</strong></td><td><strong>뜻</strong></td></tr><tr><td><code>open_read</code> <code>open_write</code></td><td><code>(path str gives owned file or fail)</code></td><td>읽기로, 쓰기로(새로 만들거나 비우고) 연다</td></tr><tr><td><code>write</code></td><td><code>(s str, f file or fail)</code></td><td>바이트를 쓴다</td></tr><tr><td><code>read_line</code></td><td><code>(f file gives line str or fail)</code></td><td>한 줄. 끝이면 <code>err.not_found</code></td></tr><tr><td><code>read</code></td><td><code>(f file, buf buffer gives n int or fail)</code></td><td>버퍼에 읽어 붙이고 읽은 바이트 수를 준다</td></tr><tr><td><code>read_line_into</code></td><td><code>(f file, buf buffer or fail)</code></td><td>한 줄을 버퍼에 붙인다</td></tr><tr><td><code>read_all</code></td><td><code>(path str gives body str or fail)</code></td><td>파일 전체를 구역에 읽는다</td></tr><tr><td><code>read_all_into</code></td><td><code>(path str, buf buffer or fail)</code></td><td>파일 전체를 버퍼에 붙인다</td></tr><tr><td><code>close</code></td><td><code>(f owned file)</code></td><td>닫는다</td></tr></table><p>없는 파일은 <code>err.not_found</code> 다.</p></p><div class="example run"><p class="ex-file"><code>17-file.pnx</code></p><pre><code data-lang="pinax"><span style="color: #d73948">use</span> io
+<span style="color: #d73948">use</span> <span style="color: #d73948">file</span>
+<span style="color: #d73948">buffer</span> buf <span style="color: #b60157">64</span>
+<span style="color: #d73948">word</span> demo (<span style="color: #d73948">or</span> <span style="color: #d73948">fail</span>)
+  <span style="color: #198810">"data.txt"</span> <span style="color: #d73948">file</span>.open_write <span style="color: #d73948">or_fail</span> <span style="color: #d73948">to</span> out
+  <span style="color: #198810">"alpha</span><span style="color: #1d6c76">\n</span><span style="color: #198810">beta</span><span style="color: #1d6c76">\n</span><span style="color: #198810">"</span> out <span style="color: #d73948">file</span>.write <span style="color: #d73948">or_else</span> (e) out <span style="color: #d73948">file</span>.close e <span style="color: #d73948">fail</span> <span style="color: #d73948">end</span>
+  out <span style="color: #d73948">file</span>.close
+  <span style="color: #198810">"data.txt"</span> <span style="color: #d73948">file</span>.open_read <span style="color: #d73948">or_fail</span> <span style="color: #d73948">to</span> in
+  <span style="color: #d73948">loop</span>
+    in <span style="color: #d73948">file</span>.read_line <span style="color: #d73948">or_else</span> (e) <span style="color: #d73948">break</span> <span style="color: #d73948">end</span> <span style="color: #d73948">to</span> line
+    <span style="color: #d73948">cat</span> (<span style="color: #198810">"line: "</span>, line) io.println
+  <span style="color: #d73948">end</span>
+  in <span style="color: #d73948">file</span>.close
+  <span style="color: #198810">"data.txt"</span> buf <span style="color: #d73948">file</span>.read_all_into <span style="color: #d73948">or_fail</span>
+  <span style="color: #d73948">cat</span> (<span style="color: #198810">"all: "</span>, buf contents) io.print
+<span style="color: #d73948">end</span>
+demo <span style="color: #d73948">or_else</span> (e) <span style="color: #d73948">cat</span> (<span style="color: #198810">"file error: "</span>, e err_text) io.println <span style="color: #d73948">end</span>
+<span style="color: #198810">"missing.txt"</span> <span style="color: #d73948">file</span>.read_all <span style="color: #d73948">or_else</span> (e) <span style="color: #d73948">cat</span> (<span style="color: #198810">"missing.txt: "</span>, e err_text) <span style="color: #d73948">end</span> io.println
+</code></pre><p class="ex-label">출력</p><pre><code data-lang="text">$ pnx 17-file.pnx
+line: alpha
+line: beta
+all: alpha
+beta
+missing.txt: not_found
+</code></pre></div><h3>17.3 <code>clock</code> <code>random</code> <code>env</code></h3><p class="para"><p><span class="pn">(1)</span></p><table><tr><td><strong>낱말</strong></td><td><strong>서명</strong></td><td><strong>뜻</strong></td></tr><tr><td><code>clock.now_ms</code></td><td><code>(gives int)</code></td><td>지금 시각, 1970-01-01 UTC 부터의 밀리초</td></tr><tr><td><code>clock.monotonic_ns</code></td><td><code>(gives int)</code></td><td>거꾸로 가지 않는 시계의 나노초</td></tr><tr><td><code>clock.sleep</code></td><td><code>(ms int)</code></td><td>멈춰 기다린다. 그동안 상태는 다른 일을 하지 않는다</td></tr><tr><td><code>random.seed</code></td><td><code>(n int)</code></td><td>수열을 정한다. 같은 씨앗은 같은 수열을 낸다</td></tr><tr><td><code>random.random</code></td><td><code>(gives int)</code></td><td>64 비트 난수(암호용이 아님)</td></tr><tr><td><code>random.random_below</code></td><td><code>(n int gives int)</code></td><td>0 부터 <code>n</code>−1 까지</td></tr><tr><td><code>env.arg_count</code></td><td><code>(gives int)</code></td><td>인자의 수. 0 번은 프로그램 파일</td></tr><tr><td><code>env.arg</code></td><td><code>(i int gives s str or fail)</code></td><td>인자 <code>i</code></td></tr><tr><td><code>env.getenv</code></td><td><code>(name str gives s str or fail)</code></td><td>환경 변수. 없으면 <code>err.not_found</code></td></tr></table></p><div class="example run"><p class="ex-file"><code>17-env.pnx</code></p><pre><code data-lang="pinax"><span style="color: #d73948">use</span> io
+<span style="color: #d73948">use</span> env
+<span style="color: #d73948">cat</span> (<span style="color: #198810">"arguments: "</span>, env.arg_count) io.println
+<span style="color: #b60157">0</span> env.arg_count range <span style="color: #d73948">do</span> (i <span style="color: #d73948">int</span>) i env.arg <span style="color: #d73948">or_else</span> (e) <span style="color: #198810">"?"</span> <span style="color: #d73948">end</span> io.println <span style="color: #d73948">end</span> each
+<span style="color: #198810">"PINAX_SURELY_UNSET"</span> env.getenv <span style="color: #d73948">or_else</span> (e) <span style="color: #d73948">cat</span> (<span style="color: #198810">"not set: "</span>, e err_text) <span style="color: #d73948">end</span> io.println
+</code></pre><p class="ex-label">출력</p><pre><code data-lang="text">$ pnx 17-env.pnx alpha beta
+arguments: 3
+17-env.pnx
+alpha
+beta
+not set: not_found
+</code></pre></div><div class="example run"><p class="ex-file"><code>17-random-clock.pnx</code></p><pre><code data-lang="pinax"><span style="color: #d73948">use</span> io
+<span style="color: #d73948">use</span> random
+<span style="color: #d73948">use</span> clock
+<span style="color: #d73948">word</span> demo ()
+  <span style="color: #b60157">42</span> random.seed                                       <span style="color: #74747c">rem the same seed, the same numbers</span>
+  <span style="color: #b60157">6</span> random.random_below <span style="color: #d73948">to</span> a
+  a <span style="color: #b60157">0</span> ge a <span style="color: #b60157">6</span> lt and <span style="color: #d73948">if</span> <span style="color: #198810">"a die in 0..5"</span> io.println <span style="color: #d73948">end</span>
+  clock.monotonic_ns <span style="color: #d73948">to</span> t0
+  clock.monotonic_ns <span style="color: #d73948">to</span> t1
+  t1 t0 ge <span style="color: #d73948">if</span> <span style="color: #198810">"the monotonic clock does not go back"</span> io.println <span style="color: #d73948">end</span>
+<span style="color: #d73948">end</span>
+demo
+</code></pre><p class="ex-label">출력</p><pre><code data-lang="text">$ pnx 17-random-clock.pnx
+a die in 0..5
+the monotonic clock does not go back
+</code></pre></div></main><nav class="bottom"><a href="index.html">처음</a> · <a href="16.html">앞</a> · <a href="18.html">다음</a> · <a href="../html-en/17.html">English</a></nav></body></html>

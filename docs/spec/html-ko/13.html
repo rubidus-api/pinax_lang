@@ -1,0 +1,95 @@
+<!DOCTYPE html>
+<html lang="ko"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>13 모듈 - Pinax 표준</title><link rel="stylesheet" href="style.css"></head><body><nav class="top"><a href="index.html">처음</a> · <a href="12.html">앞</a> · <a href="14.html">다음</a> · <a href="../html-en/13.html">English</a></nav><main><h2>13 모듈</h2><h3>13.1 쓰기</h3><h5>구문</h5><pre><code data-lang="ebnf">import = "use" NAME [ "as" NAME ] ;</code></pre><p class="para"><span class="pn">(1)</span> 소스 하나는 <strong>모듈</strong>하나다. 호스트가 소스를 적재할 때 준 이름이 모듈의 이름이다(<code>pnx</code> 는 파일 이름에서 <code>.pnx</code> 를 뗀 것을 쓴다). 표준 모듈과 호스트 모듈(13.3)도 모듈이다.</p><p class="para"><span class="pn">(2)</span> <code>use 모듈</code> 은 그 모듈을 이 소스에서 연다. 그 뒤로 모듈의 것은 <strong>경로</strong><code>모듈.이름</code> 으로 쓴다. <code>use 모듈 as 별명</code> 은 같은 모듈을 <code>별명.이름</code> 으로 쓰게 한다. 맨 이름으로 쓰는 것은 핵 낱말과 이 소스가 선언한 것뿐이다.</p><p class="para"><span class="pn">(3)</span> <code>use</code> 하는 모듈은 이미 있어야 한다: 표준 모듈, 호스트가 등록한 모듈, 또는 먼저 적재된 소스. <code>pnx</code> 는 <code>use 이름</code> 을 만나면 프로그램 파일 옆의 <code>이름.pnx</code> 를 먼저 적재한다.</p><div class="example run"><p class="ex-file"><code>13-use.pnx</code></p><pre><code data-lang="pinax"><span style="color: #d73948">use</span> io
+<span style="color: #d73948">use</span> <span style="color: #d73948">str</span>
+<span style="color: #d73948">use</span> geometry
+<span style="color: #b60157">200</span> <span style="color: #b60157">50</span> geometry.area <span style="color: #d73948">str</span>.to_str io.println
+geometry.unit <span style="color: #d73948">str</span>.to_str io.println
+<span style="color: #d73948">array</span> corners point <span style="color: #b60157">2</span>                       <span style="color: #74747c">rem an exported record is used by its name</span>
+<span style="color: #b60157">3</span> <span style="color: #b60157">0</span> corners idx <span style="color: #d73948">to</span> point.x
+<span style="color: #b60157">0</span> corners idx point.x <span style="color: #d73948">str</span>.to_str io.println
+</code></pre><p class="ex-label">출력</p><pre><code data-lang="text">$ pnx 13-use.pnx
+100
+10
+3
+</code></pre></div><div class="example run"><p class="ex-file"><code>13-use-as.pnx</code></p><pre><code data-lang="pinax"><span style="color: #d73948">use</span> io
+<span style="color: #d73948">use</span> <span style="color: #d73948">str</span>
+<span style="color: #d73948">use</span> geometry <span style="color: #d73948">as</span> g
+<span style="color: #b60157">200</span> <span style="color: #b60157">50</span> g.area <span style="color: #d73948">str</span>.to_str io.println
+</code></pre><p class="ex-label">출력</p><pre><code data-lang="text">$ pnx 13-use-as.pnx
+100
+</code></pre></div><h5>제약</h5><p class="para"><span class="pn">(4)</span> 없는 모듈을 <code>use</code> 하면 거절된다.</p><div class="example refused"><p class="ex-file"><code>13-unknown-module.pnx</code></p><pre><code data-lang="pinax"><span style="color: #d73948">use</span> geometrie
+</code></pre><p class="ex-label">거절</p><pre><code data-lang="text">$ pnx 13-unknown-module.pnx
+13-unknown-module.pnx:1:5: no module of this name is registered or loaded
+</code></pre></div><p class="para"><span class="pn">(5)</span> 모듈의 낱말을 맨 이름으로 쓰면 거절된다. 열지 않은 모듈의 경로도 거절된다.</p><div class="example refused"><p class="ex-file"><code>13-bare-name.pnx</code></p><pre><code data-lang="pinax"><span style="color: #d73948">use</span> geometry
+<span style="color: #b60157">200</span> <span style="color: #b60157">50</span> area drop
+</code></pre><p class="ex-label">거절</p><pre><code data-lang="text">$ pnx 13-bare-name.pnx
+13-bare-name.pnx:2:8: this name is not declared before this place
+</code></pre></div><div class="example refused"><p class="ex-file"><code>13-no-use.pnx</code></p><pre><code data-lang="pinax"><span style="color: #d73948">use</span> io
+<span style="color: #b60157">5</span> <span style="color: #d73948">str</span>.to_str io.println
+</code></pre><p class="ex-label">거절</p><pre><code data-lang="text">$ pnx 13-no-use.pnx
+13-no-use.pnx:2:3: this path names neither a module in use nor a record
+</code></pre></div><h3>13.2 내보내기</h3><p class="para"><span class="pn">(1)</span> 다른 소스가 쓸 수 있는 것은 <code>export</code> 를 붙여 선언하거나 정의한 것뿐이다. 낱말, 상수, 전역은 <code>모듈.이름</code> 으로 쓰고, 내보낸 <code>record</code> 와 <code>type</code> 과 표의 줄 타입은 이름만으로 쓴다.</p><p class="para"><span class="pn">(2)</span> 아래 모듈 <code>geometry</code> 는 13.1 의 예가 쓴 것이다. <code>square</code> 는 내보내지 않았다.</p><div class="example module"><p class="ex-file"><code>geometry.pnx</code></p><pre><code data-lang="pinax"><span style="color: #74747c">rem A module: only what is marked export is seen by a source that uses it.</span>
+<span style="color: #d73948">export</span> <span style="color: #d73948">const</span> unit <span style="color: #b60157">10</span>
+<span style="color: #d73948">export</span> <span style="color: #d73948">record</span> point
+  x <span style="color: #d73948">int</span>
+  y <span style="color: #d73948">int</span>
+<span style="color: #d73948">end</span>
+<span style="color: #d73948">word</span> square (n <span style="color: #d73948">int</span> <span style="color: #d73948">gives</span> <span style="color: #d73948">int</span>) n n mul <span style="color: #d73948">end</span>
+<span style="color: #d73948">export</span> <span style="color: #d73948">word</span> area (w <span style="color: #d73948">int</span>, h <span style="color: #d73948">int</span> <span style="color: #d73948">gives</span> <span style="color: #d73948">int</span>) w h mul unit square div <span style="color: #d73948">end</span>
+</code></pre></div><h5>제약</h5><p class="para"><span class="pn">(3)</span> 내보내지 않은 것을 쓰면 거절된다.</p><div class="example refused"><p class="ex-file"><code>13-not-exported.pnx</code></p><pre><code data-lang="pinax"><span style="color: #d73948">use</span> geometry
+<span style="color: #b60157">4</span> geometry.square drop
+</code></pre><p class="ex-label">거절</p><pre><code data-lang="text">$ pnx 13-not-exported.pnx
+13-not-exported.pnx:2:3: the module exports nothing of this name
+</code></pre></div><h3>13.3 표준 모듈과 호스트 모듈</h3><p class="para"><span class="pn">(1)</span> <strong>표준 모듈</strong>(standard module)은 처리기에 들어 있는 언어의 일부다: <code>str</code> <code>fmt</code> <code>hash</code> <code>encode</code> <code>bytes</code> <code>ptn</code> <code>rex</code> <code>json</code> <code>csv</code>(16절). <code>use</code> 해야 보인다.</p><p class="para"><span class="pn">(2)</span> <strong>호스트 모듈</strong>(host module)은 호스트가 등록한 낱말의 묶음이다. 호스트가 등록하지 않은 모듈은 없다. 스크립트가 할 수 있는 바깥일(파일, 시계, 환경)은 호스트가 등록한 낱말이 전부다. <code>pnx</code> 는 표준 호스트 모듈 <code>io</code> <code>file</code> <code>clock</code> <code>random</code> <code>env</code> 를 등록한다(17절).</p><p class="para"><span class="pn">(3)</span> <code>err</code> 는 <code>use</code> 없이 경로로 쓰는 상수의 묶음이다(11.1).</p><h3>13.4 자료 적재</h3><h5>구문</h5><pre><code data-lang="ebnf">data-source = { data-item } ;
+data-item   = [ "export" ] ( [ "bound" ] bindable | "const" NAME literal
+              | "list" NAME type size | "queue" NAME type size | "pool" NAME NAME size
+              | "record" NAME { field | "big_endian" } "end" | "type" NAME base
+              | "index" NAME NAME PATH )
+            | "forward" ( "array" | "list" | "pool" ) NAME
+            | row-item | assign-item
+            | data-value [ data-value ] "to" ( NAME | PATH ) ;
+data-value  = literal | NAME ;                      (* NAME: a const or a row name *)</code></pre><p class="para"><span class="pn">(1)</span> 호스트가 자료 적재로 읽는 소스는 선언과 값만 받는다. 낱말 정의, 낱말 부르기, <code>use</code>, <code>extern</code>, <code>test</code>, 제어, 블록, <code>cat</code> 은 거절된다. 그래서 그런 소스는 아무 코드도 돌리지 못한다. 설정과 자료처럼 믿지 못하는 글을 읽을 때 쓴다.</p><p class="para"><span class="pn">(2)</span> <code>값 [값] to 자리</code> 의 둘째 값은 칸의 번호이거나 줄이다(<code>"10.0.0.1" 0 to allow</code>). 자료 적재의 소스가 선언한 것은 모두 내보낸 것으로 본다.</p><div class="example embed"><p class="ex-file"><code>13-data-load.c</code></p><pre><code data-lang="c"><span style="color: #d73948">#include</span> <span style="color: #198810">"</span><span style="color: #198810">pinax.h</span><span style="color: #198810">"</span>
+<span style="color: #d73948">#include</span> <span style="color: #198810">&lt;</span><span style="color: #198810">stdio.h</span><span style="color: #198810">&gt;</span>
+<span style="color: #d73948">#include</span> <span style="color: #198810">&lt;</span><span style="color: #198810">string.h</span><span style="color: #198810">&gt;</span>
+
+<span style="color: #d73948">static</span> pinax_err <span style="color: #4b69c6">load</span>(pinax_state <span style="color: #d73948">*</span>st, <span style="color: #d73948">const</span> <span style="color: #d73948">char</span> <span style="color: #d73948">*</span>name, <span style="color: #d73948">const</span> <span style="color: #d73948">char</span> <span style="color: #d73948">*</span>text) {
+    pinax_err err <span style="color: #d73948">=</span> <span style="color: #4b69c6">pinax_load</span>(st, name, (pinax_str){(<span style="color: #d73948">const</span> <span style="color: #d73948">unsigned</span> <span style="color: #d73948">char</span> <span style="color: #d73948">*</span>)text, <span style="color: #4b69c6">strlen</span>(text)}, PINAX_LOAD_DATA);
+    <span style="color: #d73948">if</span> (err <span style="color: #d73948">!=</span> PINAX_OK) {
+        pinax_str why <span style="color: #d73948">=</span> <span style="color: #4b69c6">pinax_error_text</span>(st);
+        <span style="color: #4b69c6">printf</span>(<span style="color: #198810">"</span><span style="color: #b60157">%s</span><span style="color: #198810"> refused: </span><span style="color: #b60157">%.*s</span><span style="color: #1d6c76">\n</span><span style="color: #198810">"</span>, name, (<span style="color: #d73948">int</span>)why.len, (<span style="color: #d73948">const</span> <span style="color: #d73948">char</span> <span style="color: #d73948">*</span>)why.ptr);
+    }
+    <span style="color: #d73948">return</span> err;
+}
+
+<span style="color: #d73948">int</span> <span style="color: #4b69c6">main</span>(<span style="color: #d73948">void</span>) {
+    <span style="color: #d73948">static</span> <span style="color: #d73948">unsigned</span> <span style="color: #d73948">char</span> block[<span style="color: #b60157">1</span> <span style="color: #d73948">&lt;&lt;</span> <span style="color: #b60157">20</span>];
+    pinax_config config <span style="color: #d73948">=</span> {.struct_size <span style="color: #d73948">=</span> <span style="color: #d73948">sizeof</span> config};
+    pinax_state <span style="color: #d73948">*</span>st;
+    <span style="color: #d73948">if</span> (<span style="color: #4b69c6">pinax_open</span>((pinax_mem){block, <span style="color: #d73948">sizeof</span> block}, <span style="color: #d73948">&amp;</span>config, <span style="color: #d73948">&amp;</span>st) <span style="color: #d73948">!=</span> PINAX_OK)
+        <span style="color: #d73948">return</span> <span style="color: #b60157">1</span>;
+
+    <span style="color: #74747c">/*</span><span style="color: #74747c"> A settings file: declarations and values only. </span><span style="color: #74747c">*/</span>
+    <span style="color: #d73948">if</span> (<span style="color: #4b69c6">load</span>(st, <span style="color: #198810">"</span><span style="color: #198810">settings</span><span style="color: #198810">"</span>,
+             <span style="color: #198810">"</span><span style="color: #198810">global port int</span><span style="color: #1d6c76">\n</span><span style="color: #198810">"</span>
+             <span style="color: #198810">"</span><span style="color: #198810">global name str(16)</span><span style="color: #1d6c76">\n</span><span style="color: #198810">"</span>
+             <span style="color: #198810">"</span><span style="color: #198810">array allow str(16) 4</span><span style="color: #1d6c76">\n</span><span style="color: #198810">"</span>
+             <span style="color: #198810">"</span><span style="color: #198810">8080 to port</span><span style="color: #1d6c76">\n</span><span style="color: #198810">"</span>
+             <span style="color: #198810">"</span><span style="color: #1d6c76">\"</span><span style="color: #198810">edge</span><span style="color: #1d6c76">\"</span><span style="color: #198810"> to name</span><span style="color: #1d6c76">\n</span><span style="color: #198810">"</span>
+             <span style="color: #198810">"</span><span style="color: #198810">assign allow (</span><span style="color: #1d6c76">\"</span><span style="color: #198810">10.0.0.1</span><span style="color: #1d6c76">\"</span><span style="color: #198810">, </span><span style="color: #1d6c76">\"</span><span style="color: #198810">10.0.0.2</span><span style="color: #1d6c76">\"</span><span style="color: #198810">)</span><span style="color: #1d6c76">\n</span><span style="color: #198810">"</span>) <span style="color: #d73948">!=</span> PINAX_OK)
+        <span style="color: #d73948">return</span> <span style="color: #b60157">1</span>;
+    pinax_global g;
+    <span style="color: #d73948">if</span> (<span style="color: #4b69c6">pinax_global_find</span>(st, <span style="color: #198810">"</span><span style="color: #198810">port</span><span style="color: #198810">"</span>, <span style="color: #d73948">&amp;</span>g) <span style="color: #d73948">!=</span> PINAX_OK)
+        <span style="color: #d73948">return</span> <span style="color: #b60157">1</span>;
+    <span style="color: #4b69c6">printf</span>(<span style="color: #198810">"</span><span style="color: #198810">port = </span><span style="color: #b60157">%lld</span><span style="color: #1d6c76">\n</span><span style="color: #198810">"</span>, (<span style="color: #d73948">long</span> <span style="color: #d73948">long</span>)<span style="color: #d73948">*</span>(<span style="color: #d73948">const</span> <span style="color: #4b69c6">int64_t</span> <span style="color: #d73948">*</span>)g.ptr);
+
+    <span style="color: #74747c">/*</span><span style="color: #74747c"> The same mode refuses code: nothing in such a file can run. </span><span style="color: #74747c">*/</span>
+    <span style="color: #4b69c6">load</span>(st, <span style="color: #198810">"</span><span style="color: #198810">evil</span><span style="color: #198810">"</span>, <span style="color: #198810">"</span><span style="color: #198810">word boom () 1 0 div drop end</span><span style="color: #1d6c76">\n</span><span style="color: #198810">"</span>);
+    <span style="color: #4b69c6">load</span>(st, <span style="color: #198810">"</span><span style="color: #198810">evil2</span><span style="color: #198810">"</span>, <span style="color: #198810">"</span><span style="color: #198810">global n int</span><span style="color: #1d6c76">\n</span><span style="color: #198810">1 2 add to n</span><span style="color: #1d6c76">\n</span><span style="color: #198810">"</span>);
+    <span style="color: #4b69c6">pinax_close</span>(st);
+    <span style="color: #d73948">return</span> <span style="color: #b60157">0</span>;
+}
+</code></pre><p class="ex-label">출력</p><pre><code data-lang="text">$ ./13-data-load
+port = 8080
+evil refused: a data source defines no words and uses no modules
+evil2 refused: a data source calls no words; only literals, const names and stores
+</code></pre></div><h5>진단</h5><table><thead><tr><th><strong>조건</strong></th><th><strong>메시지</strong></th></tr></thead><tbody><tr><td>없는 모듈</td><td><code>no module of this name is registered or loaded</code></td></tr><tr><td>열지 않은 모듈이나 없는 레코드의 경로</td><td><code>this path names neither a module in use nor a record</code></td></tr><tr><td>내보내지 않은 이름</td><td><code>the module exports nothing of this name</code></td></tr><tr><td>자료 적재의 정의나 <code>use</code></td><td><code>a data source defines no words and uses no modules</code></td></tr><tr><td>자료 적재의 낱말 부르기</td><td><code>a data source calls no words; only literals, const names and stores</code></td></tr></tbody></table></main><nav class="bottom"><a href="index.html">처음</a> · <a href="12.html">앞</a> · <a href="14.html">다음</a> · <a href="../html-en/13.html">English</a></nav></body></html>

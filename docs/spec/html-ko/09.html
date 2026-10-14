@@ -1,0 +1,120 @@
+<!DOCTYPE html>
+<html lang="ko"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>9 낱말 - Pinax 표준</title><link rel="stylesheet" href="style.css"></head><body><nav class="top"><a href="index.html">처음</a> · <a href="08.html">앞</a> · <a href="10.html">다음</a> · <a href="../html-en/09.html">English</a></nav><main><h2>9 낱말</h2><h3>9.1 정의</h3><h5>구문</h5><pre><code data-lang="ebnf">definition = [ "export" ] "word" NAME "(" effect ")" { body } "end" ;
+effect     = [ params ] [ "gives" params ] [ "or" "fail" ] ;
+params     = param { "," param } ;
+param      = [ NAME ] type ;
+type       = [ "owned" ] ( NAME [ "(" size ")" ] | "word" "(" effect ")" ) ;</code></pre><p class="para"><span class="pn">(1)</span> <code>word 이름 (서명) 몸 end</code> 는 <strong>낱말</strong>(word)을 정의한다. 낱말은 정의 밖, 소스의 맨 바깥에서만 정의한다. 낱말 안에 낱말을 정의하지 못한다.</p><p class="para"><span class="pn">(2)</span> 낱말을 <strong>부른다</strong>(call)는 것은 몸에서 그 이름을 쓰는 것이다. 부르는 자리에서 스택의 맨 위 값들이 낱말의 입력이 되고, 낱말이 끝나면 결과가 그 자리에 놓인다. 핵 낱말, 표준 모듈의 낱말, 호스트 낱말도 같은 모양으로 부른다.</p><h3>9.2 서명</h3><p class="para"><span class="pn">(1)</span> 모든 낱말에는 <strong>서명</strong>이 있다. 입력, <code>gives</code> 와 결과, 그리고 실패할 수 있으면 <code>or fail</code> 을 이 차례로 적는다. 입력도 결과도 없으면 <code>()</code> 다. 서명은 적재 때 검사된다: 부르는 자리의 스택은 입력과 맞아야 하고, 몸이 끝나는 자리의 스택은 결과와 맞아야 한다.</p><p class="para"><span class="pn">(2)</span> 입력에 이름을 쓰면(<code>w int</code>) 그 값은 그 이름의 지역 변수가 되고 몸은 빈 스택으로 시작한다. 타입만 쓰면(<code>int</code>) 값은 스택에 놓인 채 몸이 시작한다. 결과 쪽의 이름은 읽는 사람을 위한 표시일 뿐 지역 변수를 만들지 않는다.</p><div class="example run"><p class="ex-file"><code>09-signatures.pnx</code></p><pre><code data-lang="pinax"><span style="color: #d73948">use</span> io
+<span style="color: #d73948">use</span> <span style="color: #d73948">str</span>
+<span style="color: #d73948">word</span> area (w <span style="color: #d73948">int</span>, h <span style="color: #d73948">int</span> <span style="color: #d73948">gives</span> a <span style="color: #d73948">int</span>) w h mul <span style="color: #d73948">end</span>      <span style="color: #74747c">rem named inputs become locals</span>
+<span style="color: #d73948">word</span> square (<span style="color: #d73948">int</span> <span style="color: #d73948">gives</span> <span style="color: #d73948">int</span>) dup mul <span style="color: #d73948">end</span>               <span style="color: #74747c">rem a bare type: the value stays on the stack</span>
+<span style="color: #d73948">global</span> total <span style="color: #d73948">int</span>
+<span style="color: #d73948">word</span> reset () <span style="color: #b60157">0</span> <span style="color: #d73948">to</span> total <span style="color: #d73948">end</span>                          <span style="color: #74747c">rem neither inputs nor results</span>
+<span style="color: #b60157">3</span> <span style="color: #b60157">4</span> area <span style="color: #d73948">str</span>.to_str io.println
+<span style="color: #b60157">5</span> square <span style="color: #d73948">str</span>.to_str io.println
+reset
+</code></pre><p class="ex-label">출력</p><pre><code data-lang="text">$ pnx 09-signatures.pnx
+12
+25
+</code></pre></div><h5>제약</h5><p class="para"><span class="pn">(3)</span> 한 서명의 입력은 모두 이름이 있거나 모두 타입만 있어야 한다.</p><div class="example refused"><p class="ex-file"><code>09-signature-mixed.pnx</code></p><pre><code data-lang="pinax"><span style="color: #d73948">word</span> area (w <span style="color: #d73948">int</span>, <span style="color: #d73948">int</span> <span style="color: #d73948">gives</span> <span style="color: #d73948">int</span>) w mul <span style="color: #d73948">end</span>
+</code></pre><p class="ex-label">거절</p><pre><code data-lang="text">$ pnx 09-signature-mixed.pnx
+09-signature-mixed.pnx:1:32: inputs are all named or all bare types, not a mix
+</code></pre></div><p class="para"><span class="pn">(4)</span> 몸이 끝나는 자리(그리고 <code>return</code> 하는 자리)에서 스택에는 결과가 정확히 그 차례와 타입으로 있어야 한다. 더 있어도 모자라도 거절된다.</p><div class="example refused"><p class="ex-file"><code>09-result-missing.pnx</code></p><pre><code data-lang="pinax"><span style="color: #d73948">word</span> half (n <span style="color: #d73948">int</span> <span style="color: #d73948">gives</span> r <span style="color: #d73948">int</span>) n <span style="color: #b60157">2</span> div drop <span style="color: #d73948">end</span>
+</code></pre><p class="ex-label">거절</p><pre><code data-lang="text">$ pnx 09-result-missing.pnx
+09-result-missing.pnx:1:44: the stack does not hold exactly the results of the signature here
+</code></pre></div><h3>9.3 스택</h3><p class="para"><span class="pn">(1)</span> 낱말과 낱말 사이의 값은 <strong>스택</strong>에 놓인다. 리터럴과 이름 읽기는 값 하나를 올리고, 낱말은 입력을 내리고 결과를 올린다. 처리기는 적재 때 몸의 모든 자리에서 스택의 깊이와 칸마다의 타입을 안다.</p><p class="para"><p><span class="pn">(2)</span> 스택을 고치는 핵 낱말은 다섯뿐이다.</p><table><tr><td><strong>낱말</strong></td><td><strong>전</strong> → <strong>후</strong></td><td><strong>뜻</strong></td></tr><tr><td><code>dup</code></td><td><code>a</code> → <code>a a</code></td><td>맨 위를 하나 더</td></tr><tr><td><code>drop</code></td><td><code>a</code> →</td><td>맨 위를 버림</td></tr><tr><td><code>swap</code></td><td><code>a b</code> → <code>b a</code></td><td>위의 둘을 바꿈</td></tr><tr><td><code>over</code></td><td><code>a b</code> → <code>a b a</code></td><td>둘째를 위로 하나 더</td></tr><tr><td><code>nip</code></td><td><code>a b</code> → <code>b</code></td><td>둘째를 버림</td></tr></table><p>이보다 깊은 조작(<code>rot</code> <code>pick</code> <code>roll</code> <code>depth</code>)은 없다. 값이 셋 이상 얽히면 지역 변수를 쓴다.</p></p><div class="example run"><p class="ex-file"><code>09-stack-words.pnx</code></p><pre><code data-lang="pinax"><span style="color: #d73948">use</span> io
+<span style="color: #d73948">use</span> <span style="color: #d73948">str</span>
+<span style="color: #d73948">word</span> show (a <span style="color: #d73948">int</span>, b <span style="color: #d73948">int</span>) <span style="color: #d73948">cat</span> (a, <span style="color: #198810">" "</span>, b) io.println <span style="color: #d73948">end</span>
+<span style="color: #b60157">1</span> <span style="color: #b60157">2</span> swap show            <span style="color: #74747c">rem 2 1</span>
+<span style="color: #b60157">1</span> <span style="color: #b60157">2</span> over drop show       <span style="color: #74747c">rem over copies the second: 1 2 1, drop gives 1 2</span>
+<span style="color: #b60157">1</span> <span style="color: #b60157">2</span> <span style="color: #b60157">3</span> nip show           <span style="color: #74747c">rem nip drops the second: 1 3</span>
+<span style="color: #b60157">4</span> dup show               <span style="color: #74747c">rem 4 4</span>
+</code></pre><p class="ex-label">출력</p><pre><code data-lang="text">$ pnx 09-stack-words.pnx
+2 1
+1 2
+1 3
+4 4
+</code></pre></div><h5>제약</h5><p class="para"><span class="pn">(3)</span> 낱말이 받을 값이 스택에 모자라면 거절된다. 스택의 깊이는 돌 때 달라지지 않는다.</p><div class="example refused"><p class="ex-file"><code>09-stack-short.pnx</code></p><pre><code data-lang="pinax"><span style="color: #d73948">word</span> f (<span style="color: #d73948">int</span> <span style="color: #d73948">gives</span> <span style="color: #d73948">int</span>) add <span style="color: #d73948">end</span>
+</code></pre><p class="ex-label">거절</p><pre><code data-lang="text">$ pnx 09-stack-short.pnx
+09-stack-short.pnx:1:24: the stack does not hold enough values for this word
+</code></pre></div><p class="para"><span class="pn">(4)</span> 정의되지 않은 이름을 쓰면 거절된다.</p><div class="example refused"><p class="ex-file"><code>09-unknown-word.pnx</code></p><pre><code data-lang="pinax"><span style="color: #b60157">3</span> <span style="color: #b60157">4</span> plus drop
+</code></pre><p class="ex-label">거절</p><pre><code data-lang="text">$ pnx 09-unknown-word.pnx
+09-unknown-word.pnx:1:5: this name is not declared before this place
+</code></pre></div><h3>9.4 지역 변수</h3><h5>구문</h5><pre><code data-lang="ebnf">store = "to" ( NAME | PATH | "(" NAME { "," NAME } ")" ) ;</code></pre><p class="para"><span class="pn">(1)</span> 몸 안에서 <code>to 이름</code> 은 맨 위 값을 내려 그 이름에 넣는다. 그 이름이 처음이면 그 값의 타입으로 <strong>지역 변수</strong>(local variable)가 생긴다. 그 뒤의 <code>to</code> 는 같은 타입이어야 한다. 이름이 전역이면 그 전역에 넣는다(지역 변수를 만들지 않는다).</p><p class="para"><span class="pn">(2)</span> <code>to (a, b, c)</code> 는 위의 값 셋을 한 번에 넣는다. 오른쪽 이름이 맨 위 값을 받는다 — 서명에 적은 차례와 같다.</p><div class="example run"><p class="ex-file"><code>09-locals.pnx</code></p><pre><code data-lang="pinax"><span style="color: #d73948">use</span> io
+<span style="color: #d73948">use</span> <span style="color: #d73948">str</span>
+<span style="color: #d73948">word</span> stats (a <span style="color: #d73948">int</span>, b <span style="color: #d73948">int</span>, c <span style="color: #d73948">int</span> <span style="color: #d73948">gives</span> s <span style="color: #d73948">str</span>)
+  a b add c add <span style="color: #d73948">to</span> total                <span style="color: #74747c">rem the first `to` makes a local of that type</span>
+  total <span style="color: #b60157">3</span> div <span style="color: #d73948">to</span> mean
+  a b max c max <span style="color: #d73948">to</span> top
+  <span style="color: #d73948">cat</span> (<span style="color: #198810">"total "</span>, total, <span style="color: #198810">", mean "</span>, mean, <span style="color: #198810">", max "</span>, top)
+<span style="color: #d73948">end</span>
+<span style="color: #d73948">word</span> split3 (<span style="color: #d73948">gives</span> <span style="color: #d73948">int</span>, <span style="color: #d73948">int</span>, <span style="color: #d73948">int</span>) <span style="color: #b60157">1</span> <span style="color: #b60157">2</span> <span style="color: #b60157">3</span> <span style="color: #d73948">end</span>
+<span style="color: #b60157">3</span> <span style="color: #b60157">9</span> <span style="color: #b60157">6</span> stats io.println
+<span style="color: #d73948">word</span> show3 () split3 <span style="color: #d73948">to</span> (x, y, z) <span style="color: #d73948">cat</span> (x, y, z) io.println <span style="color: #d73948">end</span>   <span style="color: #74747c">rem the rightmost is the top</span>
+show3
+</code></pre><p class="ex-label">출력</p><pre><code data-lang="text">$ pnx 09-locals.pnx
+total 18, mean 6, max 9
+123
+</code></pre></div><div class="example run"><p class="ex-file"><code>09-store-global.pnx</code></p><pre><code data-lang="pinax"><span style="color: #d73948">use</span> io
+<span style="color: #d73948">use</span> <span style="color: #d73948">str</span>
+<span style="color: #d73948">global</span> calls <span style="color: #d73948">int</span>
+<span style="color: #d73948">word</span> tick () calls <span style="color: #b60157">1</span> add <span style="color: #d73948">to</span> calls <span style="color: #d73948">end</span>      <span style="color: #74747c">rem `to` with a global's name stores into the global</span>
+tick tick tick
+calls <span style="color: #d73948">str</span>.to_str io.println
+</code></pre><p class="ex-label">출력</p><pre><code data-lang="text">$ pnx 09-store-global.pnx
+3
+</code></pre></div><p class="para"><span class="pn">(3)</span> 지역 변수가 보이는 범위는 처음 넣은 자리부터 그것을 둘러싼 가지, 루프, 블록의 끝까지다. 바깥에서 만든 지역 변수에는 안에서 넣을 수 있다.</p><h5>제약</h5><p class="para"><span class="pn">(4)</span> 지역 변수에 처음과 다른 타입의 값을 넣으면 거절된다.</p><div class="example refused"><p class="ex-file"><code>09-local-type.pnx</code></p><pre><code data-lang="pinax"><span style="color: #d73948">word</span> f (<span style="color: #d73948">gives</span> s <span style="color: #d73948">str</span>)
+  <span style="color: #b60157">5</span> <span style="color: #d73948">to</span> v
+  <span style="color: #198810">"five"</span> <span style="color: #d73948">to</span> v
+  v
+<span style="color: #d73948">end</span>
+</code></pre><p class="ex-label">거절</p><pre><code data-lang="text">$ pnx 09-local-type.pnx
+09-local-type.pnx:3:13: this local variable has another type than the value stored into it
+</code></pre></div><p class="para"><span class="pn">(5)</span> 가지 안에서 처음 만든 지역 변수는 가지 밖에서 읽지 못한다. 다른 가지로 왔다면 값이 없기 때문이다.</p><div class="example refused"><p class="ex-file"><code>09-local-scope.pnx</code></p><pre><code data-lang="pinax"><span style="color: #d73948">word</span> f (flag <span style="color: #d73948">bool</span> <span style="color: #d73948">gives</span> <span style="color: #d73948">int</span>)
+  flag <span style="color: #d73948">if</span> <span style="color: #b60157">1</span> <span style="color: #d73948">to</span> v <span style="color: #d73948">end</span>
+  v
+<span style="color: #d73948">end</span>
+</code></pre><p class="ex-label">거절</p><pre><code data-lang="text">$ pnx 09-local-scope.pnx
+09-local-scope.pnx:3:3: this name is not declared before this place
+</code></pre></div><h3>9.5 가림 금지</h3><p class="para"><span class="pn">(1)</span> 새 이름(매개변수, 지역 변수, 루프의 이름)은 그 자리에서 보이는 이름 — 낱말, 전역, 상수, 타입, 바깥의 지역 변수 — 과 같을 수 없다. 이름 하나가 한 자리에서 늘 한 가지만 뜻하게 하려는 규칙이다.</p><h5>제약</h5><p class="para"><span class="pn">(2)</span> 보이는 이름과 같은 매개변수나 지역 변수는 거절된다.</p><div class="example refused"><p class="ex-file"><code>09-shadow.pnx</code></p><pre><code data-lang="pinax"><span style="color: #d73948">global</span> limit <span style="color: #d73948">int</span>
+<span style="color: #d73948">word</span> clip (n <span style="color: #d73948">int</span>, limit <span style="color: #d73948">int</span> <span style="color: #d73948">gives</span> <span style="color: #d73948">int</span>) n limit min <span style="color: #d73948">end</span>
+</code></pre><p class="ex-label">거절</p><pre><code data-lang="text">$ pnx 09-shadow.pnx
+09-shadow.pnx:2:40: this name is already visible here; a new name may not hide it
+</code></pre></div><div class="example refused"><p class="ex-file"><code>09-shadow-word.pnx</code></p><pre><code data-lang="pinax"><span style="color: #d73948">word</span> f (add <span style="color: #d73948">int</span> <span style="color: #d73948">gives</span> <span style="color: #d73948">int</span>) add <span style="color: #b60157">1</span> add <span style="color: #d73948">end</span>
+</code></pre><p class="ex-label">거절</p><pre><code data-lang="text">$ pnx 09-shadow-word.pnx
+09-shadow-word.pnx:1:28: this name is already visible here; a new name may not hide it
+</code></pre></div><h3>9.6 되부름과 꼬리 부름</h3><p class="para"><span class="pn">(1)</span> 낱말은 자기를 부를 수 있다. 앞선 선언은 필요 없다.</p><p class="para"><span class="pn">(2)</span> 낱말의 마지막 일로 다른 낱말을 부르는 <strong>꼬리 부름</strong>(tail call)은 부른 낱말의 자리를 다시 쓴다. 그래서 꼬리 부름으로 도는 되부름은 깊이가 자라지 않는다. 따로 표시하지 않는다.</p><div class="example run"><p class="ex-file"><code>09-recursion.pnx</code></p><pre><code data-lang="pinax"><span style="color: #d73948">use</span> io
+<span style="color: #d73948">use</span> <span style="color: #d73948">str</span>
+<span style="color: #d73948">word</span> fact (n <span style="color: #d73948">int</span> <span style="color: #d73948">gives</span> <span style="color: #d73948">int</span>) n <span style="color: #b60157">1</span> le <span style="color: #d73948">if</span> <span style="color: #b60157">1</span> <span style="color: #d73948">else</span> n n <span style="color: #b60157">1</span> sub fact mul <span style="color: #d73948">end</span> <span style="color: #d73948">end</span>
+<span style="color: #d73948">word</span> count_down (n <span style="color: #d73948">int</span>, acc <span style="color: #d73948">int</span> <span style="color: #d73948">gives</span> <span style="color: #d73948">int</span>)            <span style="color: #74747c">rem a call in tail place reuses the frame</span>
+  n <span style="color: #b60157">0</span> eq <span style="color: #d73948">if</span> acc <span style="color: #d73948">return</span> <span style="color: #d73948">end</span>
+  n <span style="color: #b60157">1</span> sub acc <span style="color: #b60157">1</span> add count_down
+<span style="color: #d73948">end</span>
+<span style="color: #b60157">20</span> fact <span style="color: #d73948">str</span>.to_str io.println
+<span style="color: #b60157">1000000</span> <span style="color: #b60157">0</span> count_down <span style="color: #d73948">str</span>.to_str io.println
+</code></pre><p class="ex-label">출력</p><pre><code data-lang="text">$ pnx 09-recursion.pnx
+2432902008176640000
+1000000
+</code></pre></div><h5>결함</h5><p class="para"><span class="pn">(3)</span> 꼬리 부름이 아닌 부름이 쌓여 호출 깊이의 한계(부속서 C)를 넘으면 결함 <code>depth</code> 다.</p><div class="example fault"><p class="ex-file"><code>09-depth.pnx</code></p><pre><code data-lang="pinax"><span style="color: #d73948">word</span> deep (n <span style="color: #d73948">int</span> <span style="color: #d73948">gives</span> <span style="color: #d73948">int</span>) n <span style="color: #b60157">0</span> eq <span style="color: #d73948">if</span> <span style="color: #b60157">0</span> <span style="color: #d73948">else</span> n <span style="color: #b60157">1</span> sub deep <span style="color: #b60157">1</span> add <span style="color: #d73948">end</span> <span style="color: #d73948">end</span>
+<span style="color: #b60157">1000000</span> deep drop
+</code></pre><p class="ex-label">결함으로 멈춤</p><pre><code data-lang="text">$ pnx 09-depth.pnx
+09-depth.pnx:1: call depth limit
+  n int = 983617
+</code></pre></div><h3>9.7 앞선 낱말 선언</h3><p class="para"><span class="pn">(1)</span> <code>forward word 이름 (서명)</code> 은 뒤에서 정의할 낱말을 미리 알린다. 서로를 부르는 두 낱말에 쓴다.</p><div class="example run"><p class="ex-file"><code>09-forward-word.pnx</code></p><pre><code data-lang="pinax"><span style="color: #d73948">use</span> io
+<span style="color: #d73948">forward</span> <span style="color: #d73948">word</span> is_odd (n <span style="color: #d73948">int</span> <span style="color: #d73948">gives</span> <span style="color: #d73948">bool</span>)
+<span style="color: #d73948">word</span> is_even (n <span style="color: #d73948">int</span> <span style="color: #d73948">gives</span> <span style="color: #d73948">bool</span>) n <span style="color: #b60157">0</span> eq <span style="color: #d73948">if</span> <span style="color: #d73948">true</span> <span style="color: #d73948">else</span> n <span style="color: #b60157">1</span> sub is_odd <span style="color: #d73948">end</span> <span style="color: #d73948">end</span>
+<span style="color: #d73948">word</span> is_odd (n <span style="color: #d73948">int</span> <span style="color: #d73948">gives</span> <span style="color: #d73948">bool</span>) n <span style="color: #b60157">0</span> eq <span style="color: #d73948">if</span> <span style="color: #d73948">false</span> <span style="color: #d73948">else</span> n <span style="color: #b60157">1</span> sub is_even <span style="color: #d73948">end</span> <span style="color: #d73948">end</span>
+<span style="color: #b60157">7</span> is_even <span style="color: #d73948">if</span> <span style="color: #198810">"7 is even"</span> <span style="color: #d73948">else</span> <span style="color: #198810">"7 is odd"</span> <span style="color: #d73948">end</span> io.println
+</code></pre><p class="ex-label">출력</p><pre><code data-lang="text">$ pnx 09-forward-word.pnx
+7 is odd
+</code></pre></div><h5>제약</h5><p class="para"><span class="pn">(2)</span> 정의의 서명은 미리 알린 서명과 같아야 한다. 같은 모듈에서 정의되지 않으면 거절된다.</p><div class="example refused"><p class="ex-file"><code>09-forward-other.pnx</code></p><pre><code data-lang="pinax"><span style="color: #d73948">forward</span> <span style="color: #d73948">word</span> f (n <span style="color: #d73948">int</span> <span style="color: #d73948">gives</span> <span style="color: #d73948">int</span>)
+<span style="color: #d73948">word</span> f (n <span style="color: #d73948">int</span> <span style="color: #d73948">gives</span> <span style="color: #d73948">bool</span>) n <span style="color: #b60157">0</span> eq <span style="color: #d73948">end</span>
+</code></pre><p class="ex-label">거절</p><pre><code data-lang="text">$ pnx 09-forward-other.pnx
+09-forward-other.pnx:2:27: the definition has another signature than its forward declaration
+</code></pre></div><h3>9.8 글 잇기</h3><h5>구문</h5><pre><code data-lang="ebnf">cat    = "cat" "(" phrase { "," phrase } ")" ;
+phrase = body { body } ;                   (* code that leaves one value *)</code></pre><p class="para"><span class="pn">(1)</span> <code>cat ( … )</code> 은 쉼표로 가른 항목을 이어 <code>str</code> 하나를 낸다. 항목마다 값 하나를 남기는 코드다. <code>str</code> 은 그대로, <code>int</code> 는 십진으로, <code>bool</code> 은 <code>true</code> <code>false</code> 로 들어간다. 다른 모양(십육진 등)은 그 모양을 만드는 낱말(16.2)로 먼저 <code>str</code> 을 만든다.</p><p class="para"><span class="pn">(2)</span> 결과는 구역(12.2)에 만든 뷰다. 항목의 수는 글에 보이는 만큼이고, 처리기는 길이를 먼저 더해 한 번에 쓴다.</p><div class="example run"><p class="ex-file"><code>09-cat.pnx</code></p><pre><code data-lang="pinax"><span style="color: #d73948">use</span> io
+<span style="color: #d73948">use</span> fmt
+<span style="color: #d73948">word</span> show (id <span style="color: #d73948">int</span>, name <span style="color: #d73948">str</span>, ok <span style="color: #d73948">bool</span>) <span style="color: #d73948">cat</span> (<span style="color: #198810">"id="</span>, id, <span style="color: #198810">" name="</span>, name, <span style="color: #198810">" ok="</span>, ok, <span style="color: #198810">" hex="</span>, id fmt.hex) io.println <span style="color: #d73948">end</span>
+<span style="color: #b60157">255</span> <span style="color: #198810">"kim"</span> <span style="color: #d73948">true</span> show
+</code></pre><p class="ex-label">출력</p><pre><code data-lang="text">$ pnx 09-cat.pnx
+id=255 name=kim ok=true hex=ff
+</code></pre></div><h5>진단</h5><table><thead><tr><th><strong>조건</strong></th><th><strong>메시지</strong></th></tr></thead><tbody><tr><td>입력에 이름 있는 것과 없는 것이 섞임</td><td><code>inputs are all named or all bare types, not a mix</code></td></tr><tr><td>끝나는 자리의 스택이 결과와 다름</td><td><code>the stack does not hold exactly the results of the signature here</code></td></tr><tr><td>스택의 값이 모자람</td><td><code>the stack does not hold enough values for this word</code></td></tr><tr><td>정의되지 않은 이름</td><td><code>this name is not declared before this place</code></td></tr><tr><td>지역 변수의 타입이 바뀜</td><td><code>this local variable has another type than the value stored into it</code></td></tr><tr><td>보이는 이름을 가림</td><td><code>this name is already visible here; a new name may not hide it</code></td></tr><tr><td>앞선 선언과 다른 서명</td><td><code>the definition has another signature than its forward declaration</code></td></tr></tbody></table></main><nav class="bottom"><a href="index.html">처음</a> · <a href="08.html">앞</a> · <a href="10.html">다음</a> · <a href="../html-en/09.html">English</a></nav></body></html>

@@ -1,0 +1,12 @@
+rem see
+use str
+word tally (s str gives n int, longest int)
+  0 to n
+  0 to longest
+  s str.words do (w str)
+    n 1 add to n
+    w str.len
+    longest max to longest
+  end each
+  n longest
+end

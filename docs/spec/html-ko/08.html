@@ -1,0 +1,262 @@
+<!DOCTYPE html>
+<html lang="ko"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>8 선언 - Pinax 표준</title><link rel="stylesheet" href="style.css"></head><body><nav class="top"><a href="index.html">처음</a> · <a href="07.html">앞</a> · <a href="09.html">다음</a> · <a href="../html-en/08.html">English</a></nav><main><h2>8 선언</h2><h3>8.1 일반</h3><h5>구문</h5><pre><code data-lang="ebnf">declaration = [ "export" ] ( [ "bound" ] bindable | decl ) ;
+bindable    = "global" NAME type
+            | "array"  NAME type size
+            | "buffer" NAME size ;
+decl        = "const"  NAME literal
+            | "list"   NAME type size
+            | "queue"  NAME type size
+            | "pool"   NAME NAME size
+            | "record" NAME { field | "big_endian" } "end"
+            | "type"   NAME base
+            | "index"  NAME NAME PATH
+            | "tasks"  NAME size [ size [ size ] ]
+            | "extern" c-name "(" effect ")" "from" STRING [ "as" NAME ]
+            | "test"   NAME { body } "end" ;
+size        = INT | NAME ;                         (* NAME: a const *)</code></pre><p class="para"><span class="pn">(1)</span> <strong>선언</strong>(declaration)은 이름과 그 이름이 가리키는 것(값, 저장소, 타입)을 만든다. 선언은 정의 밖, 소스의 맨 바깥에만 쓴다.</p><p class="para"><span class="pn">(2)</span> 처리기는 소스를 위에서 아래로 한 번 읽는다. 이름은 쓰는 자리보다 앞에서 선언돼 있어야 한다. 예외는 자기를 부르는 낱말과 <code>forward</code>(8.11)다.</p><p class="para"><span class="pn">(3)</span> 한 모듈 안에서 같은 이름을 두 번 짓지 못한다. 종류가 달라도 그렇다. 핵 낱말과 타입의 이름도 다시 짓지 못한다.</p><p class="para"><span class="pn">(4)</span> 용량(<code>size</code>)은 양의 정수 리터럴이거나 그런 값의 <code>const</code> 다. 용량은 적재 때 정해지고 돌 때 바뀌지 않는다. 모든 저장소는 적재 때 상태의 덩이 안에 자리를 잡는다.</p><p class="para"><span class="pn">(5)</span> 전역, 배열의 칸, 목록·큐·풀의 칸, 버퍼, 레코드의 필드는 0 으로 시작한다(7 (3)).</p><h5>제약</h5><p class="para"><span class="pn">(6)</span> 이미 있는 이름을 다시 지으면 거절된다.</p><div class="example refused"><p class="ex-file"><code>08-name-twice.pnx</code></p><pre><code data-lang="pinax"><span style="color: #d73948">global</span> total <span style="color: #d73948">int</span>
+<span style="color: #d73948">const</span> total <span style="color: #b60157">5</span>
+</code></pre><p class="ex-label">거절</p><pre><code data-lang="text">$ pnx 08-name-twice.pnx
+08-name-twice.pnx:2:7: this name is already defined
+</code></pre></div><p class="para"><span class="pn">(7)</span> 선언보다 앞에서 이름을 쓰면 거절된다.</p><div class="example refused"><p class="ex-file"><code>08-use-before.pnx</code></p><pre><code data-lang="pinax"><span style="color: #d73948">use</span> <span style="color: #d73948">str</span>
+<span style="color: #d73948">word</span> show (<span style="color: #d73948">gives</span> s <span style="color: #d73948">str</span>) total <span style="color: #d73948">str</span>.to_str <span style="color: #d73948">end</span>
+<span style="color: #d73948">global</span> total <span style="color: #d73948">int</span>
+</code></pre><p class="ex-label">거절</p><pre><code data-lang="text">$ pnx 08-use-before.pnx
+08-use-before.pnx:2:25: this name is not declared before this place
+</code></pre></div><h3>8.2 상수</h3><p class="para"><span class="pn">(1)</span> <code>const 이름 리터럴</code> 은 <strong>상수</strong>(constant)를 만든다. 타입은 리터럴의 타입이다. 상수는 저장소가 없다 — 쓰는 자리에 값이 들어간다. 용량, <code>case</code> 의 가지 값, <code>row</code> 의 값에 쓸 수 있다.</p><h5>제약</h5><p class="para"><span class="pn">(2)</span> 상수에는 넣지 못한다. 정의 안에서 <code>v to 상수</code> 는 같은 이름의 지역 변수를 새로 만들려는 것이 되어 가림 금지(9.5)로 거절된다. 정의 밖에서는 전역이 아닌 이름에 넣는 것으로 거절된다.</p><div class="example refused"><p class="ex-file"><code>08-const-store.pnx</code></p><pre><code data-lang="pinax"><span style="color: #d73948">const</span> limit <span style="color: #b60157">3</span>
+<span style="color: #d73948">word</span> raise () <span style="color: #b60157">4</span> <span style="color: #d73948">to</span> limit <span style="color: #d73948">end</span>
+</code></pre><p class="ex-label">거절</p><pre><code data-lang="text">$ pnx 08-const-store.pnx
+08-const-store.pnx:2:20: this name is already visible here; a new name may not hide it
+</code></pre></div><h3>8.3 전역</h3><p class="para"><span class="pn">(1)</span> <code>global 이름 타입</code> 은 값 하나를 담는 <strong>전역</strong>(global)을 만든다. 타입은 <code>int</code> <code>bool</code> <code>str(N)</code>, 선언한 타입, 줄의 타입(표의 이름), 핸들 타입이다. <code>str</code> 는 쓰지 못한다(7.3).</p><p class="para"><span class="pn">(2)</span> 전역을 읽으려면 이름을 쓰고, 넣으려면 <code>to 이름</code> 을 쓴다. 상태가 살아 있는 동안 값이 남는다 — 한 낱말의 실행이 끝나도, 다음 적재가 와도 그대로다.</p><div class="example run"><p class="ex-file"><code>08-const-global.pnx</code></p><pre><code data-lang="pinax"><span style="color: #d73948">use</span> io
+<span style="color: #d73948">use</span> <span style="color: #d73948">str</span>
+<span style="color: #d73948">const</span> limit <span style="color: #b60157">3</span>
+<span style="color: #d73948">const</span> greeting <span style="color: #198810">"hello"</span>
+<span style="color: #d73948">global</span> hits <span style="color: #d73948">int</span>
+<span style="color: #d73948">global</span> last <span style="color: #d73948">str</span>(<span style="color: #b60157">16</span>)
+<span style="color: #d73948">global</span> seen <span style="color: #d73948">bool</span>
+hits <span style="color: #d73948">str</span>.to_str io.println           <span style="color: #74747c">rem a global starts at zero</span>
+limit <span style="color: #d73948">to</span> hits
+greeting <span style="color: #d73948">to</span> last
+<span style="color: #d73948">true</span> <span style="color: #d73948">to</span> seen
+<span style="color: #d73948">cat</span> (last, <span style="color: #198810">" "</span>, hits, <span style="color: #198810">" "</span>, seen) io.println
+</code></pre><p class="ex-label">출력</p><pre><code data-lang="text">$ pnx 08-const-global.pnx
+0
+hello 3 true
+</code></pre></div><h3>8.4 배열</h3><h5>구문</h5><pre><code data-lang="ebnf">assign-item = "assign" NAME "(" value { "," value } ")" ;</code></pre><p class="para"><span class="pn">(1)</span> <code>array 이름 타입 용량</code> 은 칸이 용량만큼 있는 <strong>배열</strong>(array)을 만든다. 배열은 늘 가득 차 있다: <code>len</code> 은 용량과 같다. 원소 타입은 <code>int</code> <code>bool</code> <code>str(N)</code>, 선언한 타입, 레코드의 이름이다.</p><p class="para"><span class="pn">(2)</span> <code>i 배열 idx</code> 는 칸 <code>i</code> 의 값을 읽는다. <code>v i to 배열</code> 은 칸 <code>i</code> 에 넣는다. 번호는 0 부터 센다. 레코드의 배열에서 <code>idx</code> 는 값이 아니라 줄(8.8)을 낸다.</p><p class="para"><span class="pn">(3)</span> <code>assign 배열 (값, …)</code> 은 정의 밖에서 배열을 0 번 칸부터 채운다. 값이 칸보다 적으면 나머지 칸은 그대로다. 같은 배열에 다시 쓰면 0 번 칸부터 다시 넣는다. 자료 적재(13.4)에서도 쓸 수 있다.</p><p class="para"><span class="pn">(4)</span> 배열의 이름을 줄기로 쓰면 칸의 값을 0 번부터 차례로 낸다(10.6).</p><div class="example run"><p class="ex-file"><code>08-array.pnx</code></p><pre><code data-lang="pinax"><span style="color: #d73948">use</span> io
+<span style="color: #d73948">use</span> <span style="color: #d73948">str</span>
+<span style="color: #d73948">array</span> primes <span style="color: #d73948">int</span> <span style="color: #b60157">6</span>
+<span style="color: #d73948">assign</span> primes (<span style="color: #b60157">2</span>, <span style="color: #b60157">3</span>, <span style="color: #b60157">5</span>, <span style="color: #b60157">7</span>)                <span style="color: #74747c">rem cells 4 and 5 stay 0</span>
+<span style="color: #b60157">11</span> <span style="color: #b60157">4</span> <span style="color: #d73948">to</span> primes                            <span style="color: #74747c">rem v i to array: store into cell i</span>
+primes <span style="color: #d73948">do</span> (p <span style="color: #d73948">int</span>) p <span style="color: #d73948">str</span>.to_str io.print <span style="color: #198810">" "</span> io.print <span style="color: #d73948">end</span> each
+<span style="color: #198810">""</span> io.println
+<span style="color: #d73948">cat</span> (<span style="color: #198810">"len "</span>, primes len, <span style="color: #198810">", cell 2 is "</span>, <span style="color: #b60157">2</span> primes idx) io.println
+</code></pre><p class="ex-label">출력</p><pre><code data-lang="text">$ pnx 08-array.pnx
+2 3 5 7 11 0 
+len 6, cell 2 is 5
+</code></pre></div><h5>제약</h5><p class="para"><span class="pn">(5)</span> <code>assign</code> 의 값이 칸보다 많으면 거절된다.</p><div class="example refused"><p class="ex-file"><code>08-assign-many.pnx</code></p><pre><code data-lang="pinax"><span style="color: #d73948">array</span> small <span style="color: #d73948">int</span> <span style="color: #b60157">2</span>
+<span style="color: #d73948">assign</span> small (<span style="color: #b60157">1</span>, <span style="color: #b60157">2</span>, <span style="color: #b60157">3</span>)
+</code></pre><p class="ex-label">거절</p><pre><code data-lang="text">$ pnx 08-assign-many.pnx
+08-assign-many.pnx:2:21: assign has more values than the array has cells
+</code></pre></div><h5>결함</h5><p class="para"><span class="pn">(6)</span> 번호가 0 보다 작거나 용량과 같거나 크면 결함 <code>range</code> 다.</p><div class="example fault"><p class="ex-file"><code>08-array-range.pnx</code></p><pre><code data-lang="pinax"><span style="color: #d73948">use</span> io
+<span style="color: #d73948">array</span> primes <span style="color: #d73948">int</span> <span style="color: #b60157">4</span>
+<span style="color: #198810">"reading cell 4 of 4"</span> io.println
+<span style="color: #b60157">4</span> primes idx drop
+</code></pre><p class="ex-label">결함으로 멈춤</p><pre><code data-lang="text">$ pnx 08-array-range.pnx
+reading cell 4 of 4
+08-array-range.pnx:4: index out of range
+</code></pre></div><h3>8.5 목록</h3><p class="para"><span class="pn">(1)</span> <code>list 이름 타입 용량</code> 은 길이가 0 에서 용량까지 자라는 <strong>목록</strong>(list)을 만든다. 칸을 읽고 쓰는 것은 배열과 같으나, 번호는 길이 안에서만 쓴다.</p><p class="para"><span class="pn">(2)</span> <code>v 목록 push</code> 는 끝에 하나를 더하고, <code>목록 pop</code> 은 끝의 하나를 빼서 준다. 둘은 실패할 수 있다 (<code>or fail</code>): 가득 찬 목록에 <code>push</code> 하면 <code>err.full</code>, 빈 목록에서 <code>pop</code> 하면 <code>err.range</code> 다. 레코드의 목록에는 <code>목록 add_row</code> 로 빈 줄을 더하고 그 줄을 받는다. <code>목록 clear</code> 는 길이를 0 으로 한다.</p><div class="example run"><p class="ex-file"><code>08-list.pnx</code></p><pre><code data-lang="pinax"><span style="color: #d73948">use</span> io
+<span style="color: #d73948">use</span> <span style="color: #d73948">str</span>
+<span style="color: #d73948">list</span> stack <span style="color: #d73948">int</span> <span style="color: #b60157">3</span>
+<span style="color: #d73948">word</span> fill (<span style="color: #d73948">or</span> <span style="color: #d73948">fail</span>)
+  <span style="color: #b60157">1</span> stack push <span style="color: #d73948">or_fail</span>
+  <span style="color: #b60157">2</span> stack push <span style="color: #d73948">or_fail</span>
+<span style="color: #d73948">end</span>
+fill <span style="color: #d73948">or_else</span> (e) <span style="color: #198810">"fill failed"</span> io.println <span style="color: #d73948">end</span>
+<span style="color: #d73948">cat</span> (<span style="color: #198810">"len "</span>, stack len, <span style="color: #198810">" of "</span>, stack capacity) io.println
+stack pop <span style="color: #d73948">or_else</span> (e) <span style="color: #b60157">-1</span> <span style="color: #d73948">end</span> <span style="color: #d73948">str</span>.to_str io.println
+<span style="color: #d73948">cat</span> (<span style="color: #198810">"len "</span>, stack len) io.println
+</code></pre><p class="ex-label">출력</p><pre><code data-lang="text">$ pnx 08-list.pnx
+len 2 of 3
+2
+len 1
+</code></pre></div><div class="example run"><p class="ex-file"><code>08-list-full.pnx</code></p><pre><code data-lang="pinax"><span style="color: #d73948">use</span> io
+<span style="color: #d73948">list</span> two <span style="color: #d73948">int</span> <span style="color: #b60157">2</span>
+<span style="color: #b60157">1</span> two push <span style="color: #d73948">or_else</span> (e) <span style="color: #d73948">end</span>
+<span style="color: #b60157">2</span> two push <span style="color: #d73948">or_else</span> (e) <span style="color: #d73948">end</span>
+<span style="color: #b60157">3</span> two push <span style="color: #d73948">or_else</span> (e) <span style="color: #d73948">cat</span> (<span style="color: #198810">"third push failed: "</span>, e err_text) io.println <span style="color: #d73948">end</span>
+</code></pre><p class="ex-label">출력</p><pre><code data-lang="text">$ pnx 08-list-full.pnx
+third push failed: full
+</code></pre></div><h5>결함</h5><p class="para"><span class="pn">(3)</span> 길이 밖의 번호는 용량 안이라도 결함 <code>range</code> 다.</p><div class="example fault"><p class="ex-file"><code>08-list-past-len.pnx</code></p><pre><code data-lang="pinax"><span style="color: #d73948">list</span> items <span style="color: #d73948">int</span> <span style="color: #b60157">8</span>
+<span style="color: #b60157">1</span> items push <span style="color: #d73948">or_else</span> (e) <span style="color: #d73948">end</span>
+<span style="color: #b60157">1</span> items idx drop                          <span style="color: #74747c">rem the list holds one value: index 1 is past it</span>
+</code></pre><p class="ex-label">결함으로 멈춤</p><pre><code data-lang="text">$ pnx 08-list-past-len.pnx
+08-list-past-len.pnx:3: index out of range
+</code></pre></div><h3>8.6 큐</h3><p class="para"><span class="pn">(1)</span> <code>queue 이름 타입 용량</code> 은 먼저 넣은 것이 먼저 나오는 <strong>큐</strong>(queue)를 만든다. <code>v 큐 put</code> 은 뒤에 넣고, <code>큐 take</code> 는 앞에서 빼서 주며, <code>큐 peek</code> 은 빼지 않고 앞의 것을 준다. 셋 다 실패할 수 있다: 가득 찬 큐에 넣으면 <code>err.full</code>, 빈 큐에서 꺼내면 <code>err.range</code> 다.</p><div class="example run"><p class="ex-file"><code>08-queue.pnx</code></p><pre><code data-lang="pinax"><span style="color: #d73948">use</span> io
+<span style="color: #d73948">use</span> <span style="color: #d73948">str</span>
+<span style="color: #d73948">queue</span> jobs <span style="color: #d73948">int</span> <span style="color: #b60157">4</span>
+<span style="color: #d73948">word</span> show (<span style="color: #d73948">gives</span> s <span style="color: #d73948">str</span> <span style="color: #d73948">or</span> <span style="color: #d73948">fail</span>) jobs take <span style="color: #d73948">or_fail</span> <span style="color: #d73948">str</span>.to_str <span style="color: #d73948">end</span>
+<span style="color: #b60157">10</span> jobs put <span style="color: #d73948">or_else</span> (e) <span style="color: #d73948">end</span>
+<span style="color: #b60157">20</span> jobs put <span style="color: #d73948">or_else</span> (e) <span style="color: #d73948">end</span>
+jobs peek <span style="color: #d73948">or_else</span> (e) <span style="color: #b60157">0</span> <span style="color: #d73948">end</span> <span style="color: #d73948">str</span>.to_str io.println
+show <span style="color: #d73948">or_else</span> (e) <span style="color: #198810">"?"</span> <span style="color: #d73948">end</span> io.println
+show <span style="color: #d73948">or_else</span> (e) <span style="color: #198810">"?"</span> <span style="color: #d73948">end</span> io.println
+show <span style="color: #d73948">or_else</span> (e) <span style="color: #d73948">cat</span> (<span style="color: #198810">"empty: "</span>, e err_text) <span style="color: #d73948">end</span> io.println
+</code></pre><p class="ex-label">출력</p><pre><code data-lang="text">$ pnx 08-queue.pnx
+10
+10
+20
+empty: range
+</code></pre></div><h3>8.7 버퍼</h3><p class="para"><span class="pn">(1)</span> <code>buffer 이름 용량</code> 은 용량만큼의 바이트를 담는 <strong>버퍼</strong>(buffer)를 만든다. 버퍼는 고칠 수 있는 바이트의 열이다. 글을 조금씩 이어 붙일 때 쓴다.</p><p class="para"><span class="pn">(2)</span> <code>s 버퍼 append</code>, <code>n 버퍼 append_int</code>(십진), <code>b 버퍼 append_byte</code> 는 끝에 붙이고, 자리가 모자라면 <code>err.full</code> 로 실패한다(실패하면 아무것도 붙이지 않는다). <code>버퍼 contents</code> 는 지금 내용의 <code>str</code> 뷰를 준다. <code>n 버퍼 truncate</code> 는 길이를 <code>n</code> 으로 줄인다. <code>버퍼 clear</code> 는 길이를 0 으로 한다.</p><div class="example run"><p class="ex-file"><code>08-buffer.pnx</code></p><pre><code data-lang="pinax"><span style="color: #d73948">use</span> io
+<span style="color: #d73948">buffer</span> out <span style="color: #b60157">32</span>
+<span style="color: #d73948">word</span> build (<span style="color: #d73948">or</span> <span style="color: #d73948">fail</span>)
+  <span style="color: #198810">"x="</span> out append <span style="color: #d73948">or_fail</span>
+  <span style="color: #b60157">42</span> out append_int <span style="color: #d73948">or_fail</span>
+  <span style="color: #b60157">'!'</span> out append_byte <span style="color: #d73948">or_fail</span>
+<span style="color: #d73948">end</span>
+build <span style="color: #d73948">or_else</span> (e) <span style="color: #198810">"full"</span> io.println <span style="color: #d73948">end</span>
+out contents io.println
+<span style="color: #b60157">2</span> out truncate
+out contents io.println
+</code></pre><p class="ex-label">출력</p><pre><code data-lang="text">$ pnx 08-buffer.pnx
+x=42!
+x=
+</code></pre></div><p class="para"><span class="pn">(3)</span> <code>contents</code> 가 준 뷰는 버퍼의 바이트를 가리킨다. 버퍼를 고치면 뷰가 보는 바이트도 바뀐다.</p><h3>8.8 레코드와 줄</h3><h5>구문</h5><pre><code data-lang="ebnf">record   = "record" NAME { field | "big_endian" } "end" ;
+field    = NAME width ;
+width    = "u8" | "u16" | "u32" | "u64" | "i8" | "i16" | "i32" | "i64"
+         | "int" | "bool" | "varint" | "str" "(" size ")" | NAME ;   (* NAME: a table *)
+row-item = [ "export" ] "row" NAME [ NAME ] "(" value { "," value } ")" ;
+value    = literal | NAME ;                         (* NAME: a const, a row name, none *)</code></pre><p class="para"><span class="pn">(1)</span> <code>record 이름 … end</code> 는 필드의 나열인 <strong>레코드</strong>(record) 타입을 만든다. 필드마다 폭을 적는다. 정수 필드는 읽으면 <code>int</code>, <code>bool</code> 필드는 <code>bool</code>, <code>str(N)</code> 필드는 <code>str</code> 뷰가 된다. 필드의 타입에 표의 이름을 쓰면 그 표의 줄을 담는다.</p><p class="para"><span class="pn">(2)</span> 레코드는 값으로 다루지 않는다. 레코드를 원소로 하는 배열·목록·풀(<strong>표</strong>(table))을 선언하고, 그 한 칸인 <strong>줄</strong>(row)을 다룬다. 줄의 타입은 표의 이름이다. 줄은 표의 번호 하나를 담고, 쓸 때마다 범위를 검사한다(풀이면 세대도, 8.9).</p><p class="para"><span class="pn">(3)</span> 필드는 경로 <code>레코드.필드</code> 로 적는다. <code>줄 레코드.필드</code> 는 읽고, <code>v 줄 to 레코드.필드</code> 는 넣는다.</p><p class="para"><span class="pn">(4)</span> <code>row 표 (값, …)</code> 는 정의 밖에서 목록에 줄 하나를 더한다. 값은 필드의 차례로 적고, 뒤쪽 필드는 줄일 수 있다(0 이 된다). <code>row 표 이름 (…)</code> 은 그 줄에 이름을 붙인다. 줄의 이름은 뒤의 <code>row</code> 값과 코드에서 그 줄로 쓴다.</p><div class="example run"><p class="ex-file"><code>08-record.pnx</code></p><pre><code data-lang="pinax"><span style="color: #d73948">use</span> io
+<span style="color: #d73948">record</span> user
+  name <span style="color: #d73948">str</span>(<span style="color: #b60157">16</span>)
+  age <span style="color: #d73948">u8</span>
+  admin <span style="color: #d73948">bool</span>
+<span style="color: #d73948">end</span>
+<span style="color: #d73948">list</span> users user <span style="color: #b60157">8</span>
+<span style="color: #d73948">row</span> users (<span style="color: #198810">"kim"</span>, <span style="color: #b60157">30</span>, <span style="color: #d73948">true</span>)
+<span style="color: #d73948">row</span> users lee (<span style="color: #198810">"lee"</span>, <span style="color: #b60157">25</span>)                  <span style="color: #74747c">rem a named row; the fields left out stay zero</span>
+<span style="color: #d73948">word</span> show (u users) <span style="color: #d73948">cat</span> (u user.name, <span style="color: #198810">" "</span>, u user.age, <span style="color: #198810">" "</span>, u user.admin) io.println <span style="color: #d73948">end</span>
+users <span style="color: #d73948">do</span> (u users) u show <span style="color: #d73948">end</span> each
+<span style="color: #b60157">26</span> lee <span style="color: #d73948">to</span> user.age                         <span style="color: #74747c">rem v row to record.field</span>
+lee show
+</code></pre><p class="ex-label">출력</p><pre><code data-lang="text">$ pnx 08-record.pnx
+kim 30 true
+lee 25 false
+lee 26 false
+</code></pre></div><p class="para"><span class="pn">(5)</span> 줄을 담는 필드와 전역의 처음 값은 “없음” 이다. <code>줄 is_none</code> 은 없음인지 묻고, <code>표 none</code> 은 그 표의 없음 줄을 낸다. <code>줄 row_index</code> 는 줄의 번호를 준다.</p><p class="para"><span class="pn">(6)</span> <code>big_endian</code> 은 16.5 의 <code>bytes.pack</code> 과 <code>bytes.unpack</code> 이 쓰는 바이트 순서만 정한다. 메모리 안의 모양은 바꾸지 않는다.</p><h5>제약</h5><p class="para"><span class="pn">(7)</span> <code>row</code> 의 값은 필드의 차례와 타입에 맞아야 한다.</p><div class="example refused"><p class="ex-file"><code>08-row-types.pnx</code></p><pre><code data-lang="pinax"><span style="color: #d73948">record</span> user
+  name <span style="color: #d73948">str</span>(<span style="color: #b60157">16</span>)
+  age <span style="color: #d73948">u8</span>
+<span style="color: #d73948">end</span>
+<span style="color: #d73948">list</span> users user <span style="color: #b60157">8</span>
+<span style="color: #d73948">row</span> users (<span style="color: #b60157">30</span>, <span style="color: #198810">"kim"</span>)
+</code></pre><p class="ex-label">거절</p><pre><code data-lang="text">$ pnx 08-row-types.pnx
+08-row-types.pnx:6:12: a value has another type than its field
+</code></pre></div><h5>결함</h5><p class="para"><span class="pn">(8)</span> 좁은 정수 필드에 그 폭에 맞지 않는 값을 넣으면 결함 <code>overflow</code> 다. 자르지 않는다 — 잘라 넣으려면 먼저 <code>bit_and</code> 로 가린다. 없음 줄의 필드를 읽거나 쓰면 결함 <code>range</code> 다.</p><div class="example fault"><p class="ex-file"><code>08-record-narrow.pnx</code></p><pre><code data-lang="pinax"><span style="color: #d73948">record</span> pixel
+  level <span style="color: #d73948">u8</span>
+<span style="color: #d73948">end</span>
+<span style="color: #d73948">array</span> image pixel <span style="color: #b60157">4</span>
+<span style="color: #b60157">300</span> <span style="color: #b60157">0</span> image idx <span style="color: #d73948">to</span> pixel.level            <span style="color: #74747c">rem 300 does not fit in u8</span>
+</code></pre><p class="ex-label">결함으로 멈춤</p><pre><code data-lang="text">$ pnx 08-record-narrow.pnx
+08-record-narrow.pnx:5: integer overflow
+</code></pre></div><h3>8.9 풀</h3><p class="para"><span class="pn">(1)</span> <code>pool 이름 레코드 용량</code> 은 줄을 얻고 돌려주는 <strong>풀</strong>(pool)을 만든다. <code>풀 alloc</code> 은 빈 줄 하나를 얻고(<code>or fail</code>, 남은 줄이 없으면 <code>err.full</code>), <code>줄 풀 free</code> 는 돌려준다. <code>줄 풀 is_alive</code> 는 그 줄이 아직 살아 있는지 묻는다.</p><p class="para"><span class="pn">(2)</span> 풀의 줄은 번호와 함께 <strong>세대</strong>(generation)를 담는다. 줄을 돌려주면 그 칸의 세대가 바뀐다. 그래서 돌려준 줄을 다시 쓰면 — 그 사이 같은 칸을 다른 줄이 얻었더라도 — 알아챈다.</p><p class="para"><span class="pn">(3)</span> <code>alloc</code> 이 준 줄은 <code>owned</code> 값(12.4)이다. 모든 경로에서 정확히 한 번, 필드나 전역에 넣거나 <code>free</code> 에 줘야 한다. 넣은 뒤에는 세대 검사가 그 줄을 지킨다.</p><div class="example run"><p class="ex-file"><code>08-pool.pnx</code></p><pre><code data-lang="pinax"><span style="color: #d73948">use</span> io
+<span style="color: #d73948">record</span> node
+  value <span style="color: #d73948">int</span>
+<span style="color: #d73948">end</span>
+<span style="color: #d73948">pool</span> nodes node <span style="color: #b60157">2</span>
+<span style="color: #d73948">global</span> kept nodes
+<span style="color: #d73948">word</span> demo (<span style="color: #d73948">or</span> <span style="color: #d73948">fail</span>)
+  nodes alloc <span style="color: #d73948">or_fail</span> <span style="color: #d73948">to</span> a                 <span style="color: #74747c">rem an owned row: it must be stored or freed</span>
+  <span style="color: #b60157">7</span> a <span style="color: #d73948">to</span> node.value
+  a <span style="color: #d73948">to</span> kept                                <span style="color: #74747c">rem stored: the global holds the row now</span>
+  <span style="color: #d73948">cat</span> (<span style="color: #198810">"value "</span>, kept node.value, <span style="color: #198810">", alive: "</span>, kept nodes is_alive) io.println
+  kept nodes free
+  <span style="color: #d73948">cat</span> (<span style="color: #198810">"alive after free: "</span>, kept nodes is_alive) io.println
+<span style="color: #d73948">end</span>
+demo <span style="color: #d73948">or_else</span> (e) <span style="color: #198810">"no room"</span> io.println <span style="color: #d73948">end</span>
+</code></pre><p class="ex-label">출력</p><pre><code data-lang="text">$ pnx 08-pool.pnx
+value 7, alive: true
+alive after free: false
+</code></pre></div><h5>제약</h5><p class="para"><span class="pn">(4)</span> 얻은 줄을 넣지도 돌려주지도 않는 경로가 있으면 거절된다.</p><div class="example refused"><p class="ex-file"><code>08-pool-leak.pnx</code></p><pre><code data-lang="pinax"><span style="color: #d73948">record</span> node
+  value <span style="color: #d73948">int</span>
+<span style="color: #d73948">end</span>
+<span style="color: #d73948">pool</span> nodes node <span style="color: #b60157">2</span>
+<span style="color: #d73948">word</span> leak (<span style="color: #d73948">or</span> <span style="color: #d73948">fail</span>)
+  nodes alloc <span style="color: #d73948">or_fail</span> <span style="color: #d73948">to</span> a
+  <span style="color: #b60157">7</span> a <span style="color: #d73948">to</span> node.value
+<span style="color: #d73948">end</span>
+</code></pre><p class="ex-label">거절</p><pre><code data-lang="text">$ pnx 08-pool-leak.pnx
+08-pool-leak.pnx:8:1: an owned value in a local is not given on every path (close, free or store it)
+</code></pre></div><h5>결함</h5><p class="para"><span class="pn">(5)</span> 돌려준 줄을 쓰면 결함 <code>stale</code> 이다. <code>pnx</code> 는 결함 아래에 그 낱말의 지역 변수를 함께 보인다.</p><div class="example fault"><p class="ex-file"><code>08-pool-stale.pnx</code></p><pre><code data-lang="pinax"><span style="color: #d73948">record</span> node
+  value <span style="color: #d73948">int</span>
+<span style="color: #d73948">end</span>
+<span style="color: #d73948">pool</span> nodes node <span style="color: #b60157">2</span>
+<span style="color: #d73948">global</span> keep nodes
+<span style="color: #d73948">word</span> demo (<span style="color: #d73948">or</span> <span style="color: #d73948">fail</span>)
+  nodes alloc <span style="color: #d73948">or_fail</span> <span style="color: #d73948">to</span> a
+  a <span style="color: #d73948">to</span> keep                                 <span style="color: #74747c">rem stored: the row is handed over</span>
+  keep nodes free
+  keep node.value drop                      <span style="color: #74747c">rem the row was given back: stale</span>
+<span style="color: #d73948">end</span>
+demo <span style="color: #d73948">or_else</span> (e) <span style="color: #d73948">end</span>
+</code></pre><p class="ex-label">결함으로 멈춤</p><pre><code data-lang="text">$ pnx 08-pool-stale.pnx
+08-pool-stale.pnx:10: a row or handle was used after it was given back
+  a nodes = 4294967297
+</code></pre></div><h3>8.10 찾아보기</h3><p class="para"><span class="pn">(1)</span> <code>index 이름 표 레코드.필드</code> 는 레코드의 표를 한 필드로 찾는 <strong>찾아보기</strong>(index)를 만든다. 키 필드는 <code>int</code> 이거나 <code>str(N)</code> 이다. 찾아보기는 표의 용량에 맞춘 고정 크기의 해시 표이고 줄의 번호만 담는다. 자료는 표에 있다.</p><p class="para"><span class="pn">(2)</span> <code>키 찾아보기 lookup</code> 은 그 키의 줄을 준다(<code>or fail</code>, 없으면 <code>err.not_found</code>). <code>줄 찾아보기 insert</code> 는 줄을 넣고(<code>or fail</code>, 같은 키가 이미 있으면 실패), <code>줄 찾아보기 remove</code> 는 뺀다. 키 필드를 바꾸려면 빼고, 고치고, 다시 넣는다.</p><p class="para"><span class="pn">(3)</span> 적재 때 <code>row</code> 로 적은 줄은 찾아보기에 들어 있다. 돌 때 <code>add_row</code> 로 더한 줄은 <code>insert</code> 해야 찾아진다.</p><div class="example run"><p class="ex-file"><code>08-index.pnx</code></p><pre><code data-lang="pinax"><span style="color: #d73948">use</span> io
+<span style="color: #d73948">use</span> <span style="color: #d73948">str</span>
+<span style="color: #d73948">record</span> user
+  name <span style="color: #d73948">str</span>(<span style="color: #b60157">16</span>)
+  age <span style="color: #d73948">u8</span>
+<span style="color: #d73948">end</span>
+<span style="color: #d73948">list</span> users user <span style="color: #b60157">8</span>
+<span style="color: #d73948">index</span> by_name users user.name
+<span style="color: #d73948">row</span> users (<span style="color: #198810">"kim"</span>, <span style="color: #b60157">30</span>)
+<span style="color: #d73948">row</span> users (<span style="color: #198810">"lee"</span>, <span style="color: #b60157">25</span>)
+<span style="color: #d73948">word</span> find_age (name <span style="color: #d73948">str</span> <span style="color: #d73948">gives</span> age <span style="color: #d73948">int</span> <span style="color: #d73948">or</span> <span style="color: #d73948">fail</span>) name by_name lookup <span style="color: #d73948">or_fail</span> user.age <span style="color: #d73948">end</span>
+<span style="color: #198810">"lee"</span> find_age <span style="color: #d73948">or_else</span> (e) <span style="color: #b60157">-1</span> <span style="color: #d73948">end</span> <span style="color: #d73948">str</span>.to_str io.println
+<span style="color: #198810">"park"</span> find_age <span style="color: #d73948">or_else</span> (e) <span style="color: #b60157">-1</span> <span style="color: #d73948">end</span> <span style="color: #d73948">str</span>.to_str io.println
+</code></pre><p class="ex-label">출력</p><pre><code data-lang="text">$ pnx 08-index.pnx
+25
+-1
+</code></pre></div><div class="example run"><p class="ex-file"><code>08-index-insert.pnx</code></p><pre><code data-lang="pinax"><span style="color: #d73948">use</span> io
+<span style="color: #d73948">use</span> <span style="color: #d73948">str</span>
+<span style="color: #d73948">record</span> user
+  name <span style="color: #d73948">str</span>(<span style="color: #b60157">16</span>)
+  age <span style="color: #d73948">int</span>
+<span style="color: #d73948">end</span>
+<span style="color: #d73948">list</span> users user <span style="color: #b60157">4</span>
+<span style="color: #d73948">index</span> by_name users user.name
+<span style="color: #d73948">word</span> add_user (name <span style="color: #d73948">str</span>, age <span style="color: #d73948">int</span>, indexed <span style="color: #d73948">bool</span> <span style="color: #d73948">or</span> <span style="color: #d73948">fail</span>)
+  users add_row <span style="color: #d73948">or_fail</span> <span style="color: #d73948">to</span> r
+  name r <span style="color: #d73948">to</span> user.name
+  age r <span style="color: #d73948">to</span> user.age
+  indexed <span style="color: #d73948">if</span> r by_name insert <span style="color: #d73948">or_fail</span> <span style="color: #d73948">end</span>  <span style="color: #74747c">rem a row added while running is indexed by insert</span>
+<span style="color: #d73948">end</span>
+<span style="color: #d73948">word</span> age_of (name <span style="color: #d73948">str</span> <span style="color: #d73948">gives</span> <span style="color: #d73948">int</span> <span style="color: #d73948">or</span> <span style="color: #d73948">fail</span>) name by_name lookup <span style="color: #d73948">or_fail</span> user.age <span style="color: #d73948">end</span>
+<span style="color: #198810">"kim"</span> <span style="color: #b60157">30</span> <span style="color: #d73948">true</span> add_user <span style="color: #d73948">or_else</span> (e) <span style="color: #d73948">end</span>
+<span style="color: #198810">"lee"</span> <span style="color: #b60157">25</span> <span style="color: #d73948">false</span> add_user <span style="color: #d73948">or_else</span> (e) <span style="color: #d73948">end</span>
+<span style="color: #198810">"kim"</span> age_of <span style="color: #d73948">or_else</span> (e) <span style="color: #b60157">-1</span> <span style="color: #d73948">end</span> <span style="color: #d73948">str</span>.to_str io.println
+<span style="color: #198810">"lee"</span> age_of <span style="color: #d73948">or_else</span> (e) <span style="color: #b60157">-1</span> <span style="color: #d73948">end</span> <span style="color: #d73948">str</span>.to_str io.println     <span style="color: #74747c">rem not inserted: not found</span>
+</code></pre><p class="ex-label">출력</p><pre><code data-lang="text">$ pnx 08-index-insert.pnx
+30
+-1
+</code></pre></div><p class="para"><span class="pn">(4)</span> 해시는 키가 있는 해시(SipHash-2-4)다. 키는 호스트가 준다(19.2). 밖에서 온 글을 키로 쓰는 호스트는 무작위 키를 줘야 한다 — 키를 아는 쪽은 충돌을 몰아 찾기를 느리게 만들 수 있다.</p><h3>8.11 앞선 선언</h3><h5>구문</h5><pre><code data-lang="ebnf">forward = "forward" ( "array" | "list" | "pool" ) NAME
+        | "forward" "word" NAME "(" effect ")" ;</code></pre><p class="para"><span class="pn">(1)</span> <code>forward list 이름</code> 은 뒤에서 선언할 표를 미리 알린다. 레코드가 자기를 담을 표의 줄을 필드로 가질 때 쓴다. 미리 알린 표의 이름은 타입 자리에만 쓴다. <code>forward word</code> 는 9.7 이 정한다.</p><div class="example run"><p class="ex-file"><code>08-forward.pnx</code></p><pre><code data-lang="pinax"><span style="color: #d73948">use</span> io
+<span style="color: #d73948">use</span> <span style="color: #d73948">str</span>
+<span style="color: #d73948">forward</span> <span style="color: #d73948">list</span> nodes                         <span style="color: #74747c">rem the record below points into this list</span>
+<span style="color: #d73948">record</span> node
+  value <span style="color: #d73948">int</span>
+  next nodes
+<span style="color: #d73948">end</span>
+<span style="color: #d73948">list</span> nodes node <span style="color: #b60157">4</span>
+<span style="color: #d73948">row</span> nodes b (<span style="color: #b60157">2</span>)
+<span style="color: #d73948">row</span> nodes a (<span style="color: #b60157">1</span>, b)
+a node.next node.value <span style="color: #d73948">str</span>.to_str io.println
+a node.next node.next is_none <span style="color: #d73948">if</span> <span style="color: #198810">"the chain ends at b"</span> io.println <span style="color: #d73948">end</span>
+</code></pre><p class="ex-label">출력</p><pre><code data-lang="text">$ pnx 08-forward.pnx
+2
+the chain ends at b
+</code></pre></div><h5>제약</h5><p class="para"><span class="pn">(2)</span> 미리 알린 표는 같은 모듈에서 같은 종류로 선언돼야 한다.</p><div class="example refused"><p class="ex-file"><code>08-forward-missing.pnx</code></p><pre><code data-lang="pinax"><span style="color: #d73948">forward</span> <span style="color: #d73948">list</span> nodes
+<span style="color: #d73948">record</span> node
+  value <span style="color: #d73948">int</span>
+<span style="color: #d73948">end</span>
+</code></pre><p class="ex-label">거절</p><pre><code data-lang="text">$ pnx 08-forward-missing.pnx
+08-forward-missing.pnx:5:1: a table announced by forward is never declared
+</code></pre></div><h3>8.12 묶은 저장소</h3><p class="para"><span class="pn">(1)</span> <code>bound</code> 를 앞에 붙인 <code>global</code> <code>array</code> <code>buffer</code> 는 저장소를 호스트가 준다. 스크립트에서는 다른 전역과 같이 쓴다. 호스트가 묶기 전에는 상태 안의 자리를 쓴다. 묶는 법은 19.7 이 정한다.</p><h5>진단</h5><table><thead><tr><th><strong>조건</strong></th><th><strong>메시지</strong></th></tr></thead><tbody><tr><td>이미 있는 이름</td><td><code>this name is already defined</code></td></tr><tr><td>선언 앞에서 쓴 이름</td><td><code>this name is not declared before this place</code></td></tr><tr><td>정의 밖의 <code>to</code> 가 전역이 아닌 이름에</td><td><code>outside a definition `to` stores into a declared global, not a new local</code></td></tr><tr><td><code>assign</code> 의 값이 칸보다 많음</td><td><code>assign has more values than the array has cells</code></td></tr><tr><td><code>row</code> 의 값이 필드와 다름</td><td><code>a value has another type than its field</code></td></tr><tr><td><code>owned</code> 줄을 넘기지 않는 경로</td><td><code>an owned value in a local is not given on every path (close, free or store it)</code></td></tr><tr><td>미리 알린 표가 없음</td><td><code>a table announced by forward is never declared</code></td></tr></tbody></table></main><nav class="bottom"><a href="index.html">처음</a> · <a href="07.html">앞</a> · <a href="09.html">다음</a> · <a href="../html-en/08.html">English</a></nav></body></html>

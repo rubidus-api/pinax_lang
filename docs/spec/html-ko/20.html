@@ -1,0 +1,73 @@
+<!DOCTYPE html>
+<html lang="ko"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>20 명령 pnx - Pinax 표준</title><link rel="stylesheet" href="style.css"></head><body><nav class="top"><a href="index.html">처음</a> · <a href="19.html">앞</a> · <a href="21.html">다음</a> · <a href="../html-en/20.html">English</a></nav><main><h2>20 명령 <code>pnx</code></h2><p class="para"><p><span class="pn">(1)</span> <code>pnx</code> 는 이 라이브러리를 쓰는 호스트이자 개발 도구다. 표준 호스트 모듈(17절)을 모두 등록한다.</p><pre><code data-lang="text">pnx [--lib NAME=PATH]... file.pnx [arguments]
+pnx test file.pnx
+pnx repl
+pnx see file.pnx
+pnx fmt file.pnx</code></pre></p><h3>20.1 돌리기</h3><p class="para"><span class="pn">(1)</span> <code>pnx file.pnx 인자…</code> 는 파일을 적재하고 적재 코드를 돌린다. 파일이 <code>use</code> 하는 모듈 가운데 등록되지 않은 것은 파일 옆의 <code>모듈.pnx</code> 에서 먼저 적재한다(13.1). 파일은 이름에서 <code>.pnx</code> 를 뗀 모듈로 적재된다 — 그 이름이 낱말처럼 적히지 않으면(숫자로 시작하거나 <code>-</code> 를 담으면) 이름 없는 모듈이 된다.</p><p class="para"><span class="pn">(2)</span> 성공하면 0 으로 끝난다. 거절하면 <code>파일:줄:칸: 까닭</code> 을 표준 오류에 쓰고 1 로, 결함이면 <code>파일:줄: 갈래</code> 와 그 낱말의 지역 변수를 쓰고 1 로 끝난다.</p><p class="para"><span class="pn">(3)</span> <code>--lib NAME=PATH</code> 는 <code>PATH</code> 의 공유 라이브러리를 열어 <code>extern … from "NAME"</code>(18절)의 해결 함수가 그 라이브러리의 함수를 찾게 한다. 그 라이브러리가 정의한 함수만 찾는다(그것이 들여온 함수는 찾지 않는다). <code>--lib</code> 가 없으면 <code>extern</code> 은 모두 거절된다.</p><h3>20.2 시험</h3><h5>구문</h5><pre><code data-lang="ebnf">test = "test" NAME { body } "end" ;</code></pre><p class="para"><span class="pn">(1)</span> <code>test 이름 … end</code> 는 <strong>시험</strong>(test)을 정의한다. 시험은 받는 것도 주는 것도 없는 낱말이다. 적재할 때는 돌지 않는다. <code>pnx test file.pnx</code> 는 그 파일의 시험을 차례로 돌리고, 시험마다 <code>ok</code> 나 <code>FAIL</code> 을 쓰고, 모두 통과하면 0, 하나라도 실패하면 1 로 끝난다. 시험 안의 결함(거짓인 <code>assert</code> 를 포함해)은 그 시험의 실패다.</p><div class="example test"><p class="ex-file"><code>20-test.pnx</code></p><pre><code data-lang="pinax"><span style="color: #d73948">use</span> <span style="color: #d73948">str</span>
+<span style="color: #d73948">word</span> middle (s <span style="color: #d73948">str</span> <span style="color: #d73948">gives</span> <span style="color: #d73948">str</span>) s <span style="color: #b60157">1</span> <span style="color: #d73948">str</span>.skip <span style="color: #b60157">1</span> <span style="color: #d73948">str</span>.skip_last <span style="color: #d73948">end</span>
+<span style="color: #d73948">test</span> middle_trims_both_ends
+  <span style="color: #198810">"[abc]"</span> middle <span style="color: #198810">"abc"</span> eq assert
+<span style="color: #d73948">end</span>
+<span style="color: #d73948">test</span> middle_of_two_is_empty
+  <span style="color: #198810">"ab"</span> middle <span style="color: #d73948">str</span>.is_empty assert
+<span style="color: #d73948">end</span>
+</code></pre><p class="ex-label">시험 결과</p><pre><code data-lang="text">$ pnx test 20-test.pnx
+ok   middle_trims_both_ends
+ok   middle_of_two_is_empty
+2 tests, 0 failed
+</code></pre></div><div class="example test-fail"><p class="ex-file"><code>20-test-fail.pnx</code></p><pre><code data-lang="pinax"><span style="color: #d73948">word</span> twice (n <span style="color: #d73948">int</span> <span style="color: #d73948">gives</span> <span style="color: #d73948">int</span>) n <span style="color: #b60157">2</span> mul <span style="color: #d73948">end</span>
+<span style="color: #d73948">test</span> doubles <span style="color: #b60157">21</span> twice <span style="color: #b60157">42</span> eq assert <span style="color: #d73948">end</span>
+<span style="color: #d73948">test</span> wrong <span style="color: #b60157">21</span> twice <span style="color: #b60157">43</span> eq assert <span style="color: #d73948">end</span>
+</code></pre><p class="ex-label">test-fail</p><pre><code data-lang="text">$ pnx test 20-test-fail.pnx
+ok   doubles
+FAIL wrong (failed)
+2 tests, 1 failed
+</code></pre></div><h3>20.3 대화</h3><p class="para"><span class="pn">(1)</span> <code>pnx repl</code> 은 표준 입력에서 한 줄씩 읽어 돌린다(19.4 의 <code>pinax_eval</code>). 줄이 남긴 값을 표준 출력에 쓴다. 앞 줄에서 정의한 것을 뒤 줄에서 쓸 수 있다. 정의나 블록이 끝나지 않은 줄은 다음 줄과 이어 읽는다. 거절되거나 결함으로 끝난 줄은 아무것도 남기지 않는다.</p><p class="para"><span class="pn">(2)</span> 대화에서만 쓰는 도구 낱말이 있다: <code>list_words</code>(정의한 낱말), <code>stack</code>(그 자리의 스택의 타입), <code>see</code>(뒤따르는 정의의 줄마다 스택), <code>redefine word …</code>(같은 서명으로 낱말을 바꿈. 그 낱말을 부르는 코드도 새것을 부른다).</p><div class="example repl"><p class="ex-file"><code>20-repl.pnx</code></p><pre><code data-lang="pinax"><span style="color: #d73948">use</span> <span style="color: #d73948">str</span>
+<span style="color: #b60157">1</span> <span style="color: #b60157">2</span> add
+<span style="color: #d73948">word</span> sq (n <span style="color: #d73948">int</span> <span style="color: #d73948">gives</span> <span style="color: #d73948">int</span>) n n mul <span style="color: #d73948">end</span>
+<span style="color: #b60157">7</span> sq
+<span style="color: #198810">"x"</span> <span style="color: #b60157">3</span> <span style="color: #d73948">str</span>.repeat
+<span style="color: #b60157">1</span> <span style="color: #b60157">0</span> div
+</code></pre><p class="ex-label">대화</p><pre><code data-lang="text">$ pnx repl
+3
+49
+"xxx"
+error: line 1: div_zero
+</code></pre></div><h3>20.4 스택 보기와 정리</h3><p class="para"><span class="pn">(1)</span> <code>pnx see file.pnx</code> 는 정의의 줄마다 그 줄이 끝난 자리의 스택(타입)을 보인다.</p><div class="example see"><p class="ex-file"><code>20-see.pnx</code></p><pre><code data-lang="pinax"><span style="color: #d73948">use</span> <span style="color: #d73948">str</span>
+<span style="color: #d73948">word</span> tally (s <span style="color: #d73948">str</span> <span style="color: #d73948">gives</span> n <span style="color: #d73948">int</span>, longest <span style="color: #d73948">int</span>)
+  <span style="color: #b60157">0</span> <span style="color: #d73948">to</span> n
+  <span style="color: #b60157">0</span> <span style="color: #d73948">to</span> longest
+  s <span style="color: #d73948">str</span>.words <span style="color: #d73948">do</span> (w <span style="color: #d73948">str</span>)
+    n <span style="color: #b60157">1</span> add <span style="color: #d73948">to</span> n
+    w <span style="color: #d73948">str</span>.len
+    longest max <span style="color: #d73948">to</span> longest
+  <span style="color: #d73948">end</span> each
+  n longest
+<span style="color: #d73948">end</span>
+</code></pre><p class="ex-label">목록</p><pre><code data-lang="text">$ pnx see 20-see.pnx
+    3    0 to n                                         | (empty)
+    4    0 to longest                                   | (empty)
+    5    s str.words do (w str)                         | (empty)
+    6      n 1 add to n                                 | (empty)
+    7      w str.len                                    | int
+    8      longest max to longest                       | (empty)
+    9    end each                                       | (empty)
+   10    n longest                                      | int int
+</code></pre></div><p class="para"><span class="pn">(2)</span> <code>pnx fmt file.pnx</code> 는 들여쓰기와 공백만 고친 글을 표준 출력에 쓴다. 토큰과 줄바꿈의 자리, 주석은 그대로다. 고친 글을 다시 고쳐도 같다.</p><div class="example fmt"><p class="ex-file"><code>20-fmt.pnx</code></p><pre><code data-lang="pinax"><span style="color: #d73948">use</span> io
+<span style="color: #d73948">word</span> sign (n <span style="color: #d73948">int</span> <span style="color: #d73948">gives</span> r <span style="color: #d73948">int</span>)
+n <span style="color: #b60157">0</span> gt <span style="color: #d73948">if</span>
+<span style="color: #b60157">1</span>
+   <span style="color: #d73948">else</span>   
+n <span style="color: #b60157">0</span> lt <span style="color: #d73948">if</span> <span style="color: #b60157">-1</span> <span style="color: #d73948">else</span> <span style="color: #b60157">0</span> <span style="color: #d73948">end</span>
+<span style="color: #d73948">end</span>
+<span style="color: #d73948">end</span>
+</code></pre><p class="ex-label">정리한 모양</p><pre><code data-lang="text">$ pnx fmt 20-fmt.pnx
+use io
+word sign (n int gives r int)
+  n 0 gt if
+    1
+  else
+    n 0 lt if -1 else 0 end
+  end
+end
+</code></pre></div></main><nav class="bottom"><a href="index.html">처음</a> · <a href="19.html">앞</a> · <a href="21.html">다음</a> · <a href="../html-en/20.html">English</a></nav></body></html>

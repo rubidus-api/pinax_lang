@@ -1,0 +1,400 @@
+<!DOCTYPE html>
+<html lang="ko"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>19 호스트 인터페이스 - Pinax 표준</title><link rel="stylesheet" href="style.css"></head><body><nav class="top"><a href="index.html">처음</a> · <a href="18.html">앞</a> · <a href="20.html">다음</a> · <a href="../html-en/19.html">English</a></nav><main><h2>19 호스트 인터페이스</h2><p class="para"><span class="pn">(1)</span> 호스트 인터페이스는 C 헤더 <code>pinax.h</code> 하나다. 그 헤더는 <code>&lt;stddef.h&gt;</code> 와 <code>&lt;stdint.h&gt;</code> 만 쓰고 C99, C23, C++ 컴파일러로 읽힌다. 이 절은 그 함수들이 무엇을 하는지 정한다. 함수마다 헤더의 주석이 더 자세하다.</p><p class="para"><span class="pn">(2)</span> 한 상태는 한 번에 한 스레드만 쓴다. 상태 사이에는 나누는 것이 없다. 함수가 돌려주는 <code>pinax_str</code> 는 따로 적지 않으면 그 상태에 대한 다음 호출 전까지만 쓸 수 있다.</p><h3>19.1 오류 번호</h3><p class="para"><span class="pn">(1)</span> 함수는 <code>pinax_err</code> 를 돌려준다. <code>PINAX_OK</code> 는 0 이다. 실패가 아닌 결과 셋이 있다: <code>PINAX_SUSPENDED</code>(예산이 다함, 19.5), <code>PINAX_WAITING</code>(모든 작업이 호스트를 기다림, 19.8), <code>PINAX_PENDING</code>(호스트 낱말이 나중에 끝남). <code>0x100</code> 부터는 스크립트의 결함과 실패(11.1 의 번호와 같다), <code>0x200</code> 부터는 인터페이스 자체의 실패다: <code>ARGUMENT</code>, <code>NO_ROOM</code>(덩이가 모자람), <code>SYNTAX</code>, <code>TYPE</code>(적재 거절), <code>NOT_FOUND</code>, <code>SIGNATURE</code>, <code>FORMAT</code>, <code>STATE</code>(지금 할 수 없는 호출).</p><p class="para"><span class="pn">(2)</span> <code>pinax_error_text</code> 는 마지막 실패를 글로 준다. 결함이면 <code>모듈:줄: 이름</code> 꼴이다.</p><h3>19.2 열기와 닫기</h3><p class="para"><span class="pn">(1)</span> <code>pinax_open(block, config, &amp;state)</code> 은 덩이 <code>block</code> 안에 상태를 연다. <code>config</code> 의 0 인 칸은 처리기의 기본값이다: 뱅크의 칸 수, 주 실행의 구역 크기, 동시에 살 수 있는 핸들의 수, 실행 한 번의 명령 예산(0 이면 끝이 없다), 적재 진단을 받을 함수. 덩이가 모자라면 <code>PINAX_ERR_NO_ROOM</code> 이고, <code>pinax_needed</code> 가 넉넉했을 크기를 알려 준다.</p><p class="para"><span class="pn">(2)</span> <code>config.hash_key</code> 는 찾아보기(8.10)가 쓰는 해시의 열쇠 16 바이트다. 밖에서 온 글을 키로 찾는 호스트는 무작위 열쇠를 준다. 모두 0 이면 정해진 열쇠를 쓴다.</p><p class="para"><span class="pn">(3)</span> <code>pinax_close</code> 는 아직 열린 핸들을 닫는다(그 타입의 닫는 함수를 부른다). 덩이는 놓지 않는다 — 덩이는 호스트의 것이다.</p><h3>19.3 호스트 낱말</h3><p class="para"><span class="pn">(1)</span> <code>pinax_register(state, 모듈, defs, count)</code> 는 호스트 함수를 모듈 하나의 낱말로 등록한다. <code>defs</code> 의 칸마다 이름, 서명 글(9.2 의 꼴, 예: <code>"(s str gives n int or fail)"</code>), 함수, 사용자 포인터, 깃발이 있다. 서명은 등록할 때 한 번 검사한다. 그 낱말을 쓰는 소스보다 먼저 등록한다.</p><p class="para"><span class="pn">(2)</span> 호스트 함수는 <code>(call, user, args)</code> 를 받는다. 인자와 결과는 타입별 배열에 있다: 정수(그리고 <code>bool</code>, 문자, 핸들, <code>int</code> 위의 선언한 타입)는 <code>args-&gt;i[]</code> 와 <code>args-&gt;ri[]</code>, 문자열은 <code>args-&gt;s[]</code> 와 <code>args-&gt;rs[]</code>. 서명에 적힌 차례로, 타입마다 0 부터 센다. 정수 포인터는 상태의 칸을 바로 가리킨다.</p><p class="para"><span class="pn">(3)</span> 함수가 <code>PINAX_OK</code> 가 아닌 값을 돌려주면, 서명에 <code>or fail</code> 이 있는 낱말은 그 번호로 실패하고(11.2) 없는 낱말은 결함으로 실행을 끝낸다.</p><p class="para"><span class="pn">(4)</span> 문자열 결과는 <code>PINAX_WORD_KEEP_STR</code> 깃발이 없으면 부른 쪽의 구역으로 복사된다. 새 바이트를 만들 자리는 <code>pinax_call_alloc</code> 이 부른 쪽의 구역에서 준다. 서명에서 <code>buffer</code> 타입으로 받은 매개변수는 스크립트의 버퍼다. <code>pinax_call_buffer</code> 로 그 버퍼의 빈 자리를 얻고, 채운 바이트 수를 알린다.</p><div class="example embed"><p class="ex-file"><code>19-host-words.c</code></p><pre><code data-lang="c"><span style="color: #d73948">#include</span> <span style="color: #198810">"</span><span style="color: #198810">pinax.h</span><span style="color: #198810">"</span>
+<span style="color: #d73948">#include</span> <span style="color: #198810">&lt;</span><span style="color: #198810">stdio.h</span><span style="color: #198810">&gt;</span>
+<span style="color: #d73948">#include</span> <span style="color: #198810">&lt;</span><span style="color: #198810">string.h</span><span style="color: #198810">&gt;</span>
+
+<span style="color: #74747c">/*</span><span style="color: #74747c"> (s str gives r str): the result is written into the caller's region. </span><span style="color: #74747c">*/</span>
+<span style="color: #d73948">static</span> pinax_err <span style="color: #4b69c6">shout</span>(pinax_call <span style="color: #d73948">*</span>call, <span style="color: #d73948">void</span> <span style="color: #d73948">*</span>user, <span style="color: #d73948">const</span> pinax_args <span style="color: #d73948">*</span>args) {
+    (<span style="color: #d73948">void</span>)user;
+    pinax_mem room <span style="color: #d73948">=</span> <span style="color: #4b69c6">pinax_call_alloc</span>(call, args-&gt;s[<span style="color: #b60157">0</span>].len <span style="color: #d73948">+</span> <span style="color: #b60157">1</span>);
+    <span style="color: #d73948">if</span> (<span style="color: #d73948">!</span>room.ptr)
+        <span style="color: #d73948">return</span> PINAX_ERR_FULL;                       <span style="color: #74747c">/*</span><span style="color: #74747c"> no `or fail`: this is a fault </span><span style="color: #74747c">*/</span>
+    <span style="color: #d73948">unsigned</span> <span style="color: #d73948">char</span> <span style="color: #d73948">*</span>out <span style="color: #d73948">=</span> room.ptr;
+    <span style="color: #d73948">for</span> (<span style="color: #4b69c6">size_t</span> k <span style="color: #d73948">=</span> <span style="color: #b60157">0</span>; k <span style="color: #d73948">&lt;</span> args-&gt;s[<span style="color: #b60157">0</span>].len; <span style="color: #d73948">++</span>k) {
+        <span style="color: #d73948">unsigned</span> <span style="color: #d73948">char</span> c <span style="color: #d73948">=</span> args-&gt;s[<span style="color: #b60157">0</span>].ptr[k];
+        out[k] <span style="color: #d73948">=</span> c <span style="color: #d73948">&gt;=</span> <span style="color: #198810">'</span><span style="color: #198810">a</span><span style="color: #198810">'</span> <span style="color: #d73948">&amp;&amp;</span> c <span style="color: #d73948">&lt;=</span> <span style="color: #198810">'</span><span style="color: #198810">z</span><span style="color: #198810">'</span> <span style="color: #d73948">?</span> (<span style="color: #d73948">unsigned</span> <span style="color: #d73948">char</span>)(c <span style="color: #d73948">-</span> <span style="color: #b60157">32</span>) <span style="color: #d73948">:</span> c;
+    }
+    out[args-&gt;s[<span style="color: #b60157">0</span>].len] <span style="color: #d73948">=</span> <span style="color: #198810">'</span><span style="color: #198810">!</span><span style="color: #198810">'</span>;
+    args-&gt;rs[<span style="color: #b60157">0</span>] <span style="color: #d73948">=</span> (pinax_str){out, args-&gt;s[<span style="color: #b60157">0</span>].len <span style="color: #d73948">+</span> <span style="color: #b60157">1</span>};
+    <span style="color: #d73948">return</span> PINAX_OK;
+}
+
+<span style="color: #74747c">/*</span><span style="color: #74747c"> (s str gives n int or fail): an outcome other than PINAX_OK is the word's failure. </span><span style="color: #74747c">*/</span>
+<span style="color: #d73948">static</span> pinax_err <span style="color: #4b69c6">digits</span>(pinax_call <span style="color: #d73948">*</span>call, <span style="color: #d73948">void</span> <span style="color: #d73948">*</span>user, <span style="color: #d73948">const</span> pinax_args <span style="color: #d73948">*</span>args) {
+    (<span style="color: #d73948">void</span>)call; (<span style="color: #d73948">void</span>)user;
+    <span style="color: #4b69c6">int64_t</span> n <span style="color: #d73948">=</span> <span style="color: #b60157">0</span>;
+    <span style="color: #d73948">if</span> (args-&gt;s[<span style="color: #b60157">0</span>].len <span style="color: #d73948">==</span> <span style="color: #b60157">0</span>)
+        <span style="color: #d73948">return</span> PINAX_ERR_FORMAT;
+    <span style="color: #d73948">for</span> (<span style="color: #4b69c6">size_t</span> k <span style="color: #d73948">=</span> <span style="color: #b60157">0</span>; k <span style="color: #d73948">&lt;</span> args-&gt;s[<span style="color: #b60157">0</span>].len; <span style="color: #d73948">++</span>k) {
+        <span style="color: #d73948">unsigned</span> <span style="color: #d73948">char</span> c <span style="color: #d73948">=</span> args-&gt;s[<span style="color: #b60157">0</span>].ptr[k];
+        <span style="color: #d73948">if</span> (c <span style="color: #d73948">&lt;</span> <span style="color: #198810">'</span><span style="color: #198810">0</span><span style="color: #198810">'</span> <span style="color: #d73948">||</span> c <span style="color: #d73948">&gt;</span> <span style="color: #198810">'</span><span style="color: #198810">9</span><span style="color: #198810">'</span>)
+            <span style="color: #d73948">return</span> PINAX_ERR_FORMAT;
+        n <span style="color: #d73948">=</span> n <span style="color: #d73948">*</span> <span style="color: #b60157">10</span> <span style="color: #d73948">+</span> (c <span style="color: #d73948">-</span> <span style="color: #198810">'</span><span style="color: #198810">0</span><span style="color: #198810">'</span>);
+    }
+    args-&gt;ri[<span style="color: #b60157">0</span>] <span style="color: #d73948">=</span> n;
+    <span style="color: #d73948">return</span> PINAX_OK;
+}
+
+<span style="color: #74747c">/*</span><span style="color: #74747c"> (b buffer or fail): writes straight into a buffer the script declared. </span><span style="color: #74747c">*/</span>
+<span style="color: #d73948">static</span> pinax_err <span style="color: #4b69c6">stamp</span>(pinax_call <span style="color: #d73948">*</span>call, <span style="color: #d73948">void</span> <span style="color: #d73948">*</span>user, <span style="color: #d73948">const</span> pinax_args <span style="color: #d73948">*</span>args) {
+    (<span style="color: #d73948">void</span>)user;
+    pinax_mem room <span style="color: #d73948">=</span> <span style="color: #4b69c6">pinax_call_buffer</span>(call, args-&gt;i[<span style="color: #b60157">0</span>], <span style="color: #b60157">0</span>);
+    <span style="color: #d73948">if</span> (room.len <span style="color: #d73948">&lt;</span> <span style="color: #b60157">5</span>)
+        <span style="color: #d73948">return</span> PINAX_ERR_FULL;
+    <span style="color: #4b69c6">memcpy</span>(room.ptr, <span style="color: #198810">"</span><span style="color: #198810">[ok] </span><span style="color: #198810">"</span>, <span style="color: #b60157">5</span>);
+    <span style="color: #4b69c6">pinax_call_buffer</span>(call, args-&gt;i[<span style="color: #b60157">0</span>], <span style="color: #b60157">5</span>);
+    <span style="color: #d73948">return</span> PINAX_OK;
+}
+
+<span style="color: #d73948">int</span> <span style="color: #4b69c6">main</span>(<span style="color: #d73948">void</span>) {
+    <span style="color: #d73948">static</span> <span style="color: #d73948">unsigned</span> <span style="color: #d73948">char</span> block[<span style="color: #b60157">1</span> <span style="color: #d73948">&lt;&lt;</span> <span style="color: #b60157">20</span>];
+    pinax_config config <span style="color: #d73948">=</span> {.struct_size <span style="color: #d73948">=</span> <span style="color: #d73948">sizeof</span> config};
+    pinax_state <span style="color: #d73948">*</span>st;
+    <span style="color: #d73948">if</span> (<span style="color: #4b69c6">pinax_open</span>((pinax_mem){block, <span style="color: #d73948">sizeof</span> block}, <span style="color: #d73948">&amp;</span>config, <span style="color: #d73948">&amp;</span>st) <span style="color: #d73948">!=</span> PINAX_OK)
+        <span style="color: #d73948">return</span> <span style="color: #b60157">1</span>;
+    <span style="color: #d73948">static</span> <span style="color: #d73948">const</span> pinax_word_def words[] <span style="color: #d73948">=</span> {
+        {<span style="color: #198810">"</span><span style="color: #198810">shout</span><span style="color: #198810">"</span>, <span style="color: #198810">"</span><span style="color: #198810">(s str gives r str)</span><span style="color: #198810">"</span>, shout, <span style="color: #d73948">NULL</span>, <span style="color: #b60157">0</span>},
+        {<span style="color: #198810">"</span><span style="color: #198810">digits</span><span style="color: #198810">"</span>, <span style="color: #198810">"</span><span style="color: #198810">(s str gives n int or fail)</span><span style="color: #198810">"</span>, digits, <span style="color: #d73948">NULL</span>, <span style="color: #b60157">0</span>},
+        {<span style="color: #198810">"</span><span style="color: #198810">stamp</span><span style="color: #198810">"</span>, <span style="color: #198810">"</span><span style="color: #198810">(b buffer or fail)</span><span style="color: #198810">"</span>, stamp, <span style="color: #d73948">NULL</span>, <span style="color: #b60157">0</span>},
+    };
+    <span style="color: #4b69c6">pinax_register</span>(st, <span style="color: #198810">"</span><span style="color: #198810">app</span><span style="color: #198810">"</span>, words, <span style="color: #b60157">3</span>);
+    <span style="color: #d73948">static</span> <span style="color: #d73948">const</span> <span style="color: #d73948">char</span> source[] <span style="color: #d73948">=</span>
+        <span style="color: #198810">"</span><span style="color: #198810">use app</span><span style="color: #1d6c76">\n</span><span style="color: #198810">"</span>
+        <span style="color: #198810">"</span><span style="color: #198810">buffer line 32</span><span style="color: #1d6c76">\n</span><span style="color: #198810">"</span>
+        <span style="color: #198810">"</span><span style="color: #198810">word demo (gives s str)</span><span style="color: #1d6c76">\n</span><span style="color: #198810">"</span>
+        <span style="color: #198810">"</span><span style="color: #198810">  line clear</span><span style="color: #1d6c76">\n</span><span style="color: #198810">"</span>
+        <span style="color: #198810">"</span><span style="color: #198810">  line app.stamp or_else (e) end</span><span style="color: #1d6c76">\n</span><span style="color: #198810">"</span>
+        <span style="color: #198810">"</span><span style="color: #198810">  </span><span style="color: #1d6c76">\"</span><span style="color: #198810">12x</span><span style="color: #1d6c76">\"</span><span style="color: #198810"> app.digits or_else (e) -1 end to n</span><span style="color: #1d6c76">\n</span><span style="color: #198810">"</span>
+        <span style="color: #198810">"</span><span style="color: #198810">  cat (</span><span style="color: #1d6c76">\"</span><span style="color: #198810">hello</span><span style="color: #1d6c76">\"</span><span style="color: #198810"> app.shout, </span><span style="color: #1d6c76">\"</span><span style="color: #198810"> </span><span style="color: #1d6c76">\"</span><span style="color: #198810">, </span><span style="color: #1d6c76">\"</span><span style="color: #198810">42</span><span style="color: #1d6c76">\"</span><span style="color: #198810"> app.digits or_else (e) -1 end, </span><span style="color: #1d6c76">\"</span><span style="color: #198810"> </span><span style="color: #1d6c76">\"</span><span style="color: #198810">, n) line append or_else (e) end</span><span style="color: #1d6c76">\n</span><span style="color: #198810">"</span>
+        <span style="color: #198810">"</span><span style="color: #198810">  line contents</span><span style="color: #1d6c76">\n</span><span style="color: #198810">"</span>
+        <span style="color: #198810">"</span><span style="color: #198810">end</span><span style="color: #1d6c76">\n</span><span style="color: #198810">"</span>;
+    <span style="color: #d73948">if</span> (<span style="color: #4b69c6">pinax_load</span>(st, <span style="color: #198810">"</span><span style="color: #198810">main</span><span style="color: #198810">"</span>, (pinax_str){(<span style="color: #d73948">const</span> <span style="color: #d73948">unsigned</span> <span style="color: #d73948">char</span> <span style="color: #d73948">*</span>)source, <span style="color: #d73948">sizeof</span> source <span style="color: #d73948">-</span> <span style="color: #b60157">1</span>}, PINAX_LOAD_CODE) <span style="color: #d73948">!=</span> PINAX_OK)
+        <span style="color: #d73948">return</span> <span style="color: #b60157">1</span>;
+    pinax_word w;
+    pinax_str out;
+    <span style="color: #d73948">if</span> (<span style="color: #4b69c6">pinax_find</span>(st, <span style="color: #198810">"</span><span style="color: #198810">demo</span><span style="color: #198810">"</span>, <span style="color: #198810">"</span><span style="color: #198810">(gives s str)</span><span style="color: #198810">"</span>, <span style="color: #b60157">0</span>, <span style="color: #d73948">&amp;</span>w) <span style="color: #d73948">!=</span> PINAX_OK)
+        <span style="color: #d73948">return</span> <span style="color: #b60157">1</span>;
+    <span style="color: #4b69c6">pinax_run</span>(st, w, <span style="color: #d73948">&amp;</span>(pinax_args){.rs <span style="color: #d73948">=</span> <span style="color: #d73948">&amp;</span>out});
+    <span style="color: #4b69c6">printf</span>(<span style="color: #198810">"</span><span style="color: #b60157">%.*s</span><span style="color: #1d6c76">\n</span><span style="color: #198810">"</span>, (<span style="color: #d73948">int</span>)out.len, (<span style="color: #d73948">const</span> <span style="color: #d73948">char</span> <span style="color: #d73948">*</span>)out.ptr);
+    <span style="color: #4b69c6">pinax_close</span>(st);
+    <span style="color: #d73948">return</span> <span style="color: #b60157">0</span>;
+}
+</code></pre><p class="ex-label">출력</p><pre><code data-lang="text">$ ./19-host-words
+[ok] HELLO! 42 -1
+</code></pre></div><h3>19.4 적재와 한 줄</h3><p class="para"><span class="pn">(1)</span> <code>pinax_load(state, 이름, 소스, 방식)</code> 은 소스를 적재한다(5.2). <code>이름</code> 은 모듈의 이름이다. 방식은 <code>PINAX_LOAD_CODE</code> 와 <code>PINAX_LOAD_DATA</code>(13.4)다. 거절하면 <code>PINAX_ERR_SYNTAX</code> 나 <code>PINAX_ERR_TYPE</code> 이고, 진단은 <code>config.diag</code> 에 (파일, 줄, 칸, 글)로 온다.</p><p class="para"><span class="pn">(2)</span> <code>pinax_eval(state, 글)</code> 은 대화처럼 한 줄을 돌린다. 모든 줄은 한 모듈(세션)이다. 줄이 남긴 값은 <code>pinax_eval_count</code> 와 <code>pinax_eval_value</code> 로 읽는다.</p><h3>19.5 찾기와 돌리기</h3><p class="para"><span class="pn">(1)</span> <code>pinax_find(state, 이름, 서명, 깃발, &amp;word)</code> 은 낱말을 찾고 그 서명이 주어진 서명과 같은지 본다. 다르면 <code>PINAX_ERR_SIGNATURE</code> 다. 맨 이름은 처음 적재한 소스의 낱말이고, <code>모듈.낱말</code> 은 그 모듈의 낱말이다(내보내지 않았어도).</p><p class="para"><span class="pn">(2)</span> <code>pinax_run(state, word, args)</code> 은 낱말을 돌린다. 예산이 다하면 <code>PINAX_SUSPENDED</code> 로 돌아오고, <code>pinax_resume</code> 이 멈춘 자리부터 잇는다. 예산은 결과를 바꾸지 않는다. 결함은 그 번호로 돌아오고, 상태는 다음 실행을 받는다.</p><div class="example embed"><p class="ex-file"><code>19-run.c</code></p><pre><code data-lang="c"><span style="color: #d73948">#include</span> <span style="color: #198810">"</span><span style="color: #198810">pinax.h</span><span style="color: #198810">"</span>
+<span style="color: #d73948">#include</span> <span style="color: #198810">&lt;</span><span style="color: #198810">stdio.h</span><span style="color: #198810">&gt;</span>
+<span style="color: #d73948">#include</span> <span style="color: #198810">&lt;</span><span style="color: #198810">string.h</span><span style="color: #198810">&gt;</span>
+
+<span style="color: #d73948">static</span> <span style="color: #d73948">void</span> <span style="color: #4b69c6">load</span>(pinax_state <span style="color: #d73948">*</span>st, <span style="color: #d73948">const</span> <span style="color: #d73948">char</span> <span style="color: #d73948">*</span>text) {
+    <span style="color: #d73948">if</span> (<span style="color: #4b69c6">pinax_load</span>(st, <span style="color: #198810">"</span><span style="color: #198810">main</span><span style="color: #198810">"</span>, (pinax_str){(<span style="color: #d73948">const</span> <span style="color: #d73948">unsigned</span> <span style="color: #d73948">char</span> <span style="color: #d73948">*</span>)text, <span style="color: #4b69c6">strlen</span>(text)}, PINAX_LOAD_CODE) <span style="color: #d73948">!=</span> PINAX_OK) {
+        pinax_str why <span style="color: #d73948">=</span> <span style="color: #4b69c6">pinax_error_text</span>(st);
+        <span style="color: #4b69c6">printf</span>(<span style="color: #198810">"</span><span style="color: #198810">refused: </span><span style="color: #b60157">%.*s</span><span style="color: #1d6c76">\n</span><span style="color: #198810">"</span>, (<span style="color: #d73948">int</span>)why.len, (<span style="color: #d73948">const</span> <span style="color: #d73948">char</span> <span style="color: #d73948">*</span>)why.ptr);
+    }
+}
+
+<span style="color: #d73948">int</span> <span style="color: #4b69c6">main</span>(<span style="color: #d73948">void</span>) {
+    <span style="color: #d73948">static</span> <span style="color: #d73948">unsigned</span> <span style="color: #d73948">char</span> block[<span style="color: #b60157">1</span> <span style="color: #d73948">&lt;&lt;</span> <span style="color: #b60157">20</span>];
+    pinax_config config <span style="color: #d73948">=</span> {.struct_size <span style="color: #d73948">=</span> <span style="color: #d73948">sizeof</span> config, .budget <span style="color: #d73948">=</span> <span style="color: #b60157">1000</span>};   <span style="color: #74747c">/*</span><span style="color: #74747c"> instructions per run or resume </span><span style="color: #74747c">*/</span>
+    pinax_state <span style="color: #d73948">*</span>st;
+    <span style="color: #d73948">if</span> (<span style="color: #4b69c6">pinax_open</span>((pinax_mem){block, <span style="color: #d73948">sizeof</span> block}, <span style="color: #d73948">&amp;</span>config, <span style="color: #d73948">&amp;</span>st) <span style="color: #d73948">!=</span> PINAX_OK)
+        <span style="color: #d73948">return</span> <span style="color: #b60157">1</span>;
+    <span style="color: #4b69c6">load</span>(st,
+         <span style="color: #198810">"</span><span style="color: #198810">word total (n int gives r int) 0 to s  1 n 1 add range do (i int) s i add to s end each  s end</span><span style="color: #1d6c76">\n</span><span style="color: #198810">"</span>
+         <span style="color: #198810">"</span><span style="color: #198810">word ratio (a int, b int gives r int) a 100 mul b div end</span><span style="color: #1d6c76">\n</span><span style="color: #198810">"</span>);
+
+    pinax_word w;
+    <span style="color: #74747c">/*</span><span style="color: #74747c"> the signature asked for must be the word's </span><span style="color: #74747c">*/</span>
+    <span style="color: #4b69c6">printf</span>(<span style="color: #198810">"</span><span style="color: #198810">find with another signature: </span><span style="color: #b60157">%s</span><span style="color: #1d6c76">\n</span><span style="color: #198810">"</span>,
+           <span style="color: #4b69c6">pinax_find</span>(st, <span style="color: #198810">"</span><span style="color: #198810">total</span><span style="color: #198810">"</span>, <span style="color: #198810">"</span><span style="color: #198810">(gives r int)</span><span style="color: #198810">"</span>, <span style="color: #b60157">0</span>, <span style="color: #d73948">&amp;</span>w) <span style="color: #d73948">==</span> PINAX_ERR_SIGNATURE <span style="color: #d73948">?</span> <span style="color: #198810">"</span><span style="color: #198810">PINAX_ERR_SIGNATURE</span><span style="color: #198810">"</span> <span style="color: #d73948">:</span> <span style="color: #198810">"</span><span style="color: #198810">?</span><span style="color: #198810">"</span>);
+    <span style="color: #4b69c6">pinax_find</span>(st, <span style="color: #198810">"</span><span style="color: #198810">total</span><span style="color: #198810">"</span>, <span style="color: #198810">"</span><span style="color: #198810">(n int gives r int)</span><span style="color: #198810">"</span>, <span style="color: #b60157">0</span>, <span style="color: #d73948">&amp;</span>w);
+    <span style="color: #4b69c6">int64_t</span> n <span style="color: #d73948">=</span> <span style="color: #b60157">100000</span>, r <span style="color: #d73948">=</span> <span style="color: #b60157">0</span>;
+    pinax_args args <span style="color: #d73948">=</span> {.i <span style="color: #d73948">=</span> <span style="color: #d73948">&amp;</span>n, .ri <span style="color: #d73948">=</span> <span style="color: #d73948">&amp;</span>r};
+    <span style="color: #d73948">int</span> resumes <span style="color: #d73948">=</span> <span style="color: #b60157">0</span>;
+    pinax_err err <span style="color: #d73948">=</span> <span style="color: #4b69c6">pinax_run</span>(st, w, <span style="color: #d73948">&amp;</span>args);
+    <span style="color: #d73948">while</span> (err <span style="color: #d73948">==</span> PINAX_SUSPENDED) {                 <span style="color: #74747c">/*</span><span style="color: #74747c"> the budget ran out: go on where it stopped </span><span style="color: #74747c">*/</span>
+        <span style="color: #d73948">++</span>resumes;
+        err <span style="color: #d73948">=</span> <span style="color: #4b69c6">pinax_resume</span>(st, <span style="color: #d73948">&amp;</span>args);
+    }
+    <span style="color: #4b69c6">printf</span>(<span style="color: #198810">"</span><span style="color: #198810">total(100000) = </span><span style="color: #b60157">%lld</span><span style="color: #198810"> after </span><span style="color: #b60157">%s</span><span style="color: #198810"> resumes</span><span style="color: #1d6c76">\n</span><span style="color: #198810">"</span>, (<span style="color: #d73948">long</span> <span style="color: #d73948">long</span>)r, resumes <span style="color: #d73948">&gt;</span> <span style="color: #b60157">10</span> <span style="color: #d73948">?</span> <span style="color: #198810">"</span><span style="color: #198810">many</span><span style="color: #198810">"</span> <span style="color: #d73948">:</span> <span style="color: #198810">"</span><span style="color: #198810">few</span><span style="color: #198810">"</span>);
+
+    <span style="color: #74747c">/*</span><span style="color: #74747c"> a fault comes back as the error code, with its place in the error text </span><span style="color: #74747c">*/</span>
+    <span style="color: #4b69c6">pinax_find</span>(st, <span style="color: #198810">"</span><span style="color: #198810">ratio</span><span style="color: #198810">"</span>, <span style="color: #198810">"</span><span style="color: #198810">(a int, b int gives r int)</span><span style="color: #198810">"</span>, <span style="color: #b60157">0</span>, <span style="color: #d73948">&amp;</span>w);
+    <span style="color: #4b69c6">int64_t</span> ab[<span style="color: #b60157">2</span>] <span style="color: #d73948">=</span> {<span style="color: #b60157">3</span>, <span style="color: #b60157">0</span>};
+    err <span style="color: #d73948">=</span> <span style="color: #4b69c6">pinax_run</span>(st, w, <span style="color: #d73948">&amp;</span>(pinax_args){.i <span style="color: #d73948">=</span> ab, .ri <span style="color: #d73948">=</span> <span style="color: #d73948">&amp;</span>r});
+    pinax_str why <span style="color: #d73948">=</span> <span style="color: #4b69c6">pinax_error_text</span>(st);
+    <span style="color: #4b69c6">printf</span>(<span style="color: #198810">"</span><span style="color: #198810">ratio(3, 0): </span><span style="color: #b60157">%s</span><span style="color: #198810">, </span><span style="color: #1d6c76">\"</span><span style="color: #b60157">%.*s</span><span style="color: #1d6c76">\"</span><span style="color: #1d6c76">\n</span><span style="color: #198810">"</span>, err <span style="color: #d73948">==</span> PINAX_ERR_DIV_ZERO <span style="color: #d73948">?</span> <span style="color: #198810">"</span><span style="color: #198810">PINAX_ERR_DIV_ZERO</span><span style="color: #198810">"</span> <span style="color: #d73948">:</span> <span style="color: #198810">"</span><span style="color: #198810">?</span><span style="color: #198810">"</span>, (<span style="color: #d73948">int</span>)why.len, (<span style="color: #d73948">const</span> <span style="color: #d73948">char</span> <span style="color: #d73948">*</span>)why.ptr);
+
+    <span style="color: #74747c">/*</span><span style="color: #74747c"> the state is still usable </span><span style="color: #74747c">*/</span>
+    ab[<span style="color: #b60157">1</span>] <span style="color: #d73948">=</span> <span style="color: #b60157">4</span>;
+    err <span style="color: #d73948">=</span> <span style="color: #4b69c6">pinax_run</span>(st, w, <span style="color: #d73948">&amp;</span>(pinax_args){.i <span style="color: #d73948">=</span> ab, .ri <span style="color: #d73948">=</span> <span style="color: #d73948">&amp;</span>r});
+    <span style="color: #4b69c6">printf</span>(<span style="color: #198810">"</span><span style="color: #198810">ratio(3, 4) = </span><span style="color: #b60157">%lld</span><span style="color: #1d6c76">\n</span><span style="color: #198810">"</span>, (<span style="color: #d73948">long</span> <span style="color: #d73948">long</span>)r);
+
+    <span style="color: #74747c">/*</span><span style="color: #74747c"> one line at a time, as a session does </span><span style="color: #74747c">*/</span>
+    <span style="color: #d73948">const</span> <span style="color: #d73948">char</span> <span style="color: #d73948">*</span>line <span style="color: #d73948">=</span> <span style="color: #198810">"</span><span style="color: #198810">6 7 mul </span><span style="color: #1d6c76">\"</span><span style="color: #198810">done</span><span style="color: #1d6c76">\"</span><span style="color: #198810">"</span>;
+    <span style="color: #d73948">if</span> (<span style="color: #4b69c6">pinax_eval</span>(st, (pinax_str){(<span style="color: #d73948">const</span> <span style="color: #d73948">unsigned</span> <span style="color: #d73948">char</span> <span style="color: #d73948">*</span>)line, <span style="color: #4b69c6">strlen</span>(line)}) <span style="color: #d73948">==</span> PINAX_OK) {
+        <span style="color: #d73948">for</span> (<span style="color: #4b69c6">uint32_t</span> k <span style="color: #d73948">=</span> <span style="color: #b60157">0</span>; k <span style="color: #d73948">&lt;</span> <span style="color: #4b69c6">pinax_eval_count</span>(st); <span style="color: #d73948">++</span>k) {
+            pinax_value v;
+            <span style="color: #4b69c6">pinax_eval_value</span>(st, k, <span style="color: #d73948">&amp;</span>v);
+            <span style="color: #d73948">if</span> (v.kind <span style="color: #d73948">==</span> PINAX_VALUE_INT)
+                <span style="color: #4b69c6">printf</span>(<span style="color: #198810">"</span><span style="color: #198810">value </span><span style="color: #b60157">%u</span><span style="color: #198810">: </span><span style="color: #b60157">%lld</span><span style="color: #198810"> (</span><span style="color: #b60157">%.*s</span><span style="color: #198810">)</span><span style="color: #1d6c76">\n</span><span style="color: #198810">"</span>, k, (<span style="color: #d73948">long</span> <span style="color: #d73948">long</span>)v.i, (<span style="color: #d73948">int</span>)v.type.len, (<span style="color: #d73948">const</span> <span style="color: #d73948">char</span> <span style="color: #d73948">*</span>)v.type.ptr);
+            <span style="color: #d73948">else</span>
+                <span style="color: #4b69c6">printf</span>(<span style="color: #198810">"</span><span style="color: #198810">value </span><span style="color: #b60157">%u</span><span style="color: #198810">: </span><span style="color: #b60157">%.*s</span><span style="color: #198810"> (</span><span style="color: #b60157">%.*s</span><span style="color: #198810">)</span><span style="color: #1d6c76">\n</span><span style="color: #198810">"</span>, k, (<span style="color: #d73948">int</span>)v.s.len, (<span style="color: #d73948">const</span> <span style="color: #d73948">char</span> <span style="color: #d73948">*</span>)v.s.ptr, (<span style="color: #d73948">int</span>)v.type.len, (<span style="color: #d73948">const</span> <span style="color: #d73948">char</span> <span style="color: #d73948">*</span>)v.type.ptr);
+        }
+    }
+    <span style="color: #4b69c6">pinax_close</span>(st);
+    <span style="color: #d73948">return</span> <span style="color: #b60157">0</span>;
+}
+</code></pre><p class="ex-label">출력</p><pre><code data-lang="text">$ ./19-run
+find with another signature: PINAX_ERR_SIGNATURE
+total(100000) = 5000050000 after many resumes
+ratio(3, 0): PINAX_ERR_DIV_ZERO, "main:2: div_zero"
+ratio(3, 4) = 75
+value 0: 42 (int)
+value 1: done (str)
+</code></pre></div><p class="para"><span class="pn">(3)</span> 호스트 낱말 안에서도 <code>pinax_run</code> 을 부를 수 있다. 그때는 <code>PINAX_FIND_NESTED</code> 깃발로 찾은 낱말만 돌리며, 양보할 수 있는 낱말(14.2)은 그 깃발로 찾지 못한다.</p><h3>19.6 핸들</h3><p class="para"><span class="pn">(1)</span> <code>pinax_handle_type</code> 은 핸들 타입 하나를 이름과 닫는 함수로 만든다. 스크립트는 그 이름을 서명의 타입으로 쓴다. <code>pinax_handle_new</code> 는 C 포인터를 핸들로 만들고, <code>pinax_handle_get</code> 은 핸들의 포인터를 준다(돌려준 핸들이면 NULL). <code>pinax_handle_release</code> 는 핸들을 돌려준다.</p><p class="para"><span class="pn">(2)</span> 핸들은 번호와 세대다(8.9 와 같다). 스크립트는 핸들로 주소를 얻지 못한다. 결함으로 끝난 실행이 연 핸들은 상태가 닫는 함수를 불러 닫는다.</p><div class="example embed"><p class="ex-file"><code>19-handles.c</code></p><pre><code data-lang="c"><span style="color: #d73948">#include</span> <span style="color: #198810">"</span><span style="color: #198810">pinax.h</span><span style="color: #198810">"</span>
+<span style="color: #d73948">#include</span> <span style="color: #198810">&lt;</span><span style="color: #198810">stdio.h</span><span style="color: #198810">&gt;</span>
+
+<span style="color: #d73948">typedef</span> <span style="color: #d73948">struct</span> { <span style="color: #d73948">int</span> value; <span style="color: #d73948">int</span> open; } <span style="color: #4b69c6">counter</span>;
+<span style="color: #d73948">static</span> counter pool_[<span style="color: #b60157">4</span>];
+<span style="color: #d73948">static</span> <span style="color: #4b69c6">uint32_t</span> counter_type;
+
+<span style="color: #d73948">static</span> <span style="color: #d73948">void</span> <span style="color: #4b69c6">close_counter</span>(<span style="color: #d73948">void</span> <span style="color: #d73948">*</span>object, <span style="color: #d73948">void</span> <span style="color: #d73948">*</span>user) {   <span style="color: #74747c">/*</span><span style="color: #74747c"> called for handles the script never closed </span><span style="color: #74747c">*/</span>
+    (<span style="color: #d73948">void</span>)user;
+    ((counter <span style="color: #d73948">*</span>)object)-&gt;open <span style="color: #d73948">=</span> <span style="color: #b60157">0</span>;
+    <span style="color: #4b69c6">printf</span>(<span style="color: #198810">"</span><span style="color: #198810">closed by the state: counter at </span><span style="color: #b60157">%d</span><span style="color: #1d6c76">\n</span><span style="color: #198810">"</span>, ((counter <span style="color: #d73948">*</span>)object)-&gt;value);
+}
+<span style="color: #d73948">static</span> pinax_err <span style="color: #4b69c6">c_new</span>(pinax_call <span style="color: #d73948">*</span>call, <span style="color: #d73948">void</span> <span style="color: #d73948">*</span>user, <span style="color: #d73948">const</span> pinax_args <span style="color: #d73948">*</span>args) {
+    (<span style="color: #d73948">void</span>)user;
+    <span style="color: #d73948">for</span> (<span style="color: #d73948">int</span> k <span style="color: #d73948">=</span> <span style="color: #b60157">0</span>; k <span style="color: #d73948">&lt;</span> <span style="color: #b60157">4</span>; <span style="color: #d73948">++</span>k)
+        <span style="color: #d73948">if</span> (<span style="color: #d73948">!</span>pool_[k].open) {
+            pool_[k] <span style="color: #d73948">=</span> (counter){<span style="color: #b60157">0</span>, <span style="color: #b60157">1</span>};
+            pinax_handle h;
+            pinax_err err <span style="color: #d73948">=</span> <span style="color: #4b69c6">pinax_handle_new</span>(<span style="color: #4b69c6">pinax_call_state</span>(call), counter_type, <span style="color: #d73948">&amp;</span>pool_[k], <span style="color: #d73948">&amp;</span>h);
+            args-&gt;ri[<span style="color: #b60157">0</span>] <span style="color: #d73948">=</span> (<span style="color: #4b69c6">int64_t</span>)h;
+            <span style="color: #d73948">return</span> err;
+        }
+    <span style="color: #d73948">return</span> PINAX_ERR_FULL;
+}
+<span style="color: #d73948">static</span> pinax_err <span style="color: #4b69c6">c_bump</span>(pinax_call <span style="color: #d73948">*</span>call, <span style="color: #d73948">void</span> <span style="color: #d73948">*</span>user, <span style="color: #d73948">const</span> pinax_args <span style="color: #d73948">*</span>args) {
+    (<span style="color: #d73948">void</span>)user;
+    counter <span style="color: #d73948">*</span>c <span style="color: #d73948">=</span> <span style="color: #4b69c6">pinax_handle_get</span>(<span style="color: #4b69c6">pinax_call_state</span>(call), counter_type, (pinax_handle)args-&gt;i[<span style="color: #b60157">0</span>]);
+    <span style="color: #d73948">if</span> (<span style="color: #d73948">!</span>c)
+        <span style="color: #d73948">return</span> PINAX_ERR_STALE;
+    args-&gt;ri[<span style="color: #b60157">0</span>] <span style="color: #d73948">=</span> <span style="color: #d73948">++</span>c-&gt;value;
+    <span style="color: #d73948">return</span> PINAX_OK;
+}
+<span style="color: #d73948">static</span> pinax_err <span style="color: #4b69c6">c_free</span>(pinax_call <span style="color: #d73948">*</span>call, <span style="color: #d73948">void</span> <span style="color: #d73948">*</span>user, <span style="color: #d73948">const</span> pinax_args <span style="color: #d73948">*</span>args) {
+    (<span style="color: #d73948">void</span>)user;
+    counter <span style="color: #d73948">*</span>c <span style="color: #d73948">=</span> <span style="color: #4b69c6">pinax_handle_get</span>(<span style="color: #4b69c6">pinax_call_state</span>(call), counter_type, (pinax_handle)args-&gt;i[<span style="color: #b60157">0</span>]);
+    <span style="color: #d73948">if</span> (c) {
+        <span style="color: #4b69c6">printf</span>(<span style="color: #198810">"</span><span style="color: #198810">freed by the script: counter at </span><span style="color: #b60157">%d</span><span style="color: #1d6c76">\n</span><span style="color: #198810">"</span>, c-&gt;value);
+        c-&gt;open <span style="color: #d73948">=</span> <span style="color: #b60157">0</span>;
+    }
+    <span style="color: #d73948">return</span> <span style="color: #4b69c6">pinax_handle_release</span>(<span style="color: #4b69c6">pinax_call_state</span>(call), counter_type, (pinax_handle)args-&gt;i[<span style="color: #b60157">0</span>]);
+}
+
+<span style="color: #d73948">int</span> <span style="color: #4b69c6">main</span>(<span style="color: #d73948">void</span>) {
+    <span style="color: #d73948">static</span> <span style="color: #d73948">unsigned</span> <span style="color: #d73948">char</span> block[<span style="color: #b60157">1</span> <span style="color: #d73948">&lt;&lt;</span> <span style="color: #b60157">20</span>];
+    pinax_config config <span style="color: #d73948">=</span> {.struct_size <span style="color: #d73948">=</span> <span style="color: #d73948">sizeof</span> config};
+    pinax_state <span style="color: #d73948">*</span>st;
+    <span style="color: #d73948">if</span> (<span style="color: #4b69c6">pinax_open</span>((pinax_mem){block, <span style="color: #d73948">sizeof</span> block}, <span style="color: #d73948">&amp;</span>config, <span style="color: #d73948">&amp;</span>st) <span style="color: #d73948">!=</span> PINAX_OK)
+        <span style="color: #d73948">return</span> <span style="color: #b60157">1</span>;
+    <span style="color: #4b69c6">pinax_handle_type</span>(st, <span style="color: #198810">"</span><span style="color: #198810">counter</span><span style="color: #198810">"</span>, close_counter, <span style="color: #d73948">NULL</span>, <span style="color: #d73948">&amp;</span>counter_type);
+    <span style="color: #d73948">static</span> <span style="color: #d73948">const</span> pinax_word_def words[] <span style="color: #d73948">=</span> {
+        {<span style="color: #198810">"</span><span style="color: #198810">new</span><span style="color: #198810">"</span>, <span style="color: #198810">"</span><span style="color: #198810">(gives owned counter or fail)</span><span style="color: #198810">"</span>, c_new, <span style="color: #d73948">NULL</span>, <span style="color: #b60157">0</span>},
+        {<span style="color: #198810">"</span><span style="color: #198810">bump</span><span style="color: #198810">"</span>, <span style="color: #198810">"</span><span style="color: #198810">(c counter gives n int)</span><span style="color: #198810">"</span>, c_bump, <span style="color: #d73948">NULL</span>, <span style="color: #b60157">0</span>},
+        {<span style="color: #198810">"</span><span style="color: #198810">free</span><span style="color: #198810">"</span>, <span style="color: #198810">"</span><span style="color: #198810">(c owned counter)</span><span style="color: #198810">"</span>, c_free, <span style="color: #d73948">NULL</span>, <span style="color: #b60157">0</span>},
+    };
+    <span style="color: #4b69c6">pinax_register</span>(st, <span style="color: #198810">"</span><span style="color: #198810">ctr</span><span style="color: #198810">"</span>, words, <span style="color: #b60157">3</span>);
+    <span style="color: #d73948">static</span> <span style="color: #d73948">const</span> <span style="color: #d73948">char</span> source[] <span style="color: #d73948">=</span>
+        <span style="color: #198810">"</span><span style="color: #198810">use ctr</span><span style="color: #1d6c76">\n</span><span style="color: #198810">"</span>
+        <span style="color: #198810">"</span><span style="color: #198810">word twice (gives n int or fail)</span><span style="color: #1d6c76">\n</span><span style="color: #198810">"</span>
+        <span style="color: #198810">"</span><span style="color: #198810">  ctr.new or_fail to c</span><span style="color: #1d6c76">\n</span><span style="color: #198810">"</span>
+        <span style="color: #198810">"</span><span style="color: #198810">  c ctr.bump drop  c ctr.bump to n</span><span style="color: #1d6c76">\n</span><span style="color: #198810">"</span>
+        <span style="color: #198810">"</span><span style="color: #198810">  c ctr.free</span><span style="color: #1d6c76">\n</span><span style="color: #198810">"</span>
+        <span style="color: #198810">"</span><span style="color: #198810">  n</span><span style="color: #1d6c76">\n</span><span style="color: #198810">"</span>
+        <span style="color: #198810">"</span><span style="color: #198810">end</span><span style="color: #1d6c76">\n</span><span style="color: #198810">"</span>
+        <span style="color: #198810">"</span><span style="color: #198810">word broken (gives n int or fail)</span><span style="color: #1d6c76">\n</span><span style="color: #198810">"</span>
+        <span style="color: #198810">"</span><span style="color: #198810">  ctr.new or_fail to c</span><span style="color: #1d6c76">\n</span><span style="color: #198810">"</span>
+        <span style="color: #198810">"</span><span style="color: #198810">  c ctr.bump 0 div to n</span><span style="color: #1d6c76">\n</span><span style="color: #198810">"</span>            <span style="color: #74747c">/*</span><span style="color: #74747c"> a fault while the counter is open </span><span style="color: #74747c">*/</span>
+        <span style="color: #198810">"</span><span style="color: #198810">  c ctr.free</span><span style="color: #1d6c76">\n</span><span style="color: #198810">"</span>
+        <span style="color: #198810">"</span><span style="color: #198810">  n</span><span style="color: #1d6c76">\n</span><span style="color: #198810">"</span>
+        <span style="color: #198810">"</span><span style="color: #198810">end</span><span style="color: #1d6c76">\n</span><span style="color: #198810">"</span>;
+    <span style="color: #d73948">if</span> (<span style="color: #4b69c6">pinax_load</span>(st, <span style="color: #198810">"</span><span style="color: #198810">main</span><span style="color: #198810">"</span>, (pinax_str){(<span style="color: #d73948">const</span> <span style="color: #d73948">unsigned</span> <span style="color: #d73948">char</span> <span style="color: #d73948">*</span>)source, <span style="color: #d73948">sizeof</span> source <span style="color: #d73948">-</span> <span style="color: #b60157">1</span>}, PINAX_LOAD_CODE) <span style="color: #d73948">!=</span> PINAX_OK)
+        <span style="color: #d73948">return</span> <span style="color: #b60157">1</span>;
+    pinax_word w;
+    <span style="color: #4b69c6">int64_t</span> n <span style="color: #d73948">=</span> <span style="color: #b60157">0</span>;
+    <span style="color: #4b69c6">pinax_find</span>(st, <span style="color: #198810">"</span><span style="color: #198810">twice</span><span style="color: #198810">"</span>, <span style="color: #198810">"</span><span style="color: #198810">(gives n int or fail)</span><span style="color: #198810">"</span>, <span style="color: #b60157">0</span>, <span style="color: #d73948">&amp;</span>w);
+    <span style="color: #4b69c6">pinax_run</span>(st, w, <span style="color: #d73948">&amp;</span>(pinax_args){.ri <span style="color: #d73948">=</span> <span style="color: #d73948">&amp;</span>n});
+    <span style="color: #4b69c6">printf</span>(<span style="color: #198810">"</span><span style="color: #198810">twice = </span><span style="color: #b60157">%lld</span><span style="color: #1d6c76">\n</span><span style="color: #198810">"</span>, (<span style="color: #d73948">long</span> <span style="color: #d73948">long</span>)n);
+    <span style="color: #4b69c6">pinax_find</span>(st, <span style="color: #198810">"</span><span style="color: #198810">broken</span><span style="color: #198810">"</span>, <span style="color: #198810">"</span><span style="color: #198810">(gives n int or fail)</span><span style="color: #198810">"</span>, <span style="color: #b60157">0</span>, <span style="color: #d73948">&amp;</span>w);
+    pinax_err err <span style="color: #d73948">=</span> <span style="color: #4b69c6">pinax_run</span>(st, w, <span style="color: #d73948">&amp;</span>(pinax_args){.ri <span style="color: #d73948">=</span> <span style="color: #d73948">&amp;</span>n});
+    <span style="color: #4b69c6">printf</span>(<span style="color: #198810">"</span><span style="color: #198810">broken: </span><span style="color: #b60157">%s</span><span style="color: #1d6c76">\n</span><span style="color: #198810">"</span>, err <span style="color: #d73948">==</span> PINAX_ERR_DIV_ZERO <span style="color: #d73948">?</span> <span style="color: #198810">"</span><span style="color: #198810">PINAX_ERR_DIV_ZERO</span><span style="color: #198810">"</span> <span style="color: #d73948">:</span> <span style="color: #198810">"</span><span style="color: #198810">?</span><span style="color: #198810">"</span>);
+    <span style="color: #4b69c6">pinax_close</span>(st);
+    <span style="color: #d73948">return</span> <span style="color: #b60157">0</span>;
+}
+</code></pre><p class="ex-label">출력</p><pre><code data-lang="text">$ ./19-handles
+freed by the script: counter at 2
+twice = 2
+closed by the state: counter at 1
+broken: PINAX_ERR_DIV_ZERO
+</code></pre></div><h3>19.7 묶기</h3><p class="para"><span class="pn">(1)</span> <code>pinax_bind(state, 전역, 메모리, 바이트)</code> 는 <code>bound</code> 로 선언한 전역(8.12)의 저장소를 호스트 메모리로 바꾼다. 크기는 선언과 같아야 한다. 스크립트와 호스트는 복사 없이 같은 바이트를 읽고 쓴다. <code>pinax_global_find</code> 는 선언한 전역의 자리와 크기를 알려 준다.</p><div class="example embed"><p class="ex-file"><code>19-bind.c</code></p><pre><code data-lang="c"><span style="color: #d73948">#include</span> <span style="color: #198810">"</span><span style="color: #198810">pinax.h</span><span style="color: #198810">"</span>
+<span style="color: #d73948">#include</span> <span style="color: #198810">&lt;</span><span style="color: #198810">stdio.h</span><span style="color: #198810">&gt;</span>
+
+<span style="color: #d73948">int</span> <span style="color: #4b69c6">main</span>(<span style="color: #d73948">void</span>) {
+    <span style="color: #d73948">static</span> <span style="color: #d73948">unsigned</span> <span style="color: #d73948">char</span> block[<span style="color: #b60157">1</span> <span style="color: #d73948">&lt;&lt;</span> <span style="color: #b60157">20</span>];
+    pinax_config config <span style="color: #d73948">=</span> {.struct_size <span style="color: #d73948">=</span> <span style="color: #d73948">sizeof</span> config};
+    pinax_state <span style="color: #d73948">*</span>st;
+    <span style="color: #d73948">if</span> (<span style="color: #4b69c6">pinax_open</span>((pinax_mem){block, <span style="color: #d73948">sizeof</span> block}, <span style="color: #d73948">&amp;</span>config, <span style="color: #d73948">&amp;</span>st) <span style="color: #d73948">!=</span> PINAX_OK)
+        <span style="color: #d73948">return</span> <span style="color: #b60157">1</span>;
+    <span style="color: #d73948">static</span> <span style="color: #d73948">const</span> <span style="color: #d73948">char</span> source[] <span style="color: #d73948">=</span>
+        <span style="color: #198810">"</span><span style="color: #198810">bound array samples int 5</span><span style="color: #1d6c76">\n</span><span style="color: #198810">"</span>
+        <span style="color: #198810">"</span><span style="color: #198810">bound global scale int</span><span style="color: #1d6c76">\n</span><span style="color: #198810">"</span>
+        <span style="color: #198810">"</span><span style="color: #198810">word scaled_sum (gives n int) samples sum scale mul end</span><span style="color: #1d6c76">\n</span><span style="color: #198810">"</span>
+        <span style="color: #198810">"</span><span style="color: #198810">word clear_first () 0 0 to samples end</span><span style="color: #1d6c76">\n</span><span style="color: #198810">"</span>;
+    <span style="color: #d73948">if</span> (<span style="color: #4b69c6">pinax_load</span>(st, <span style="color: #198810">"</span><span style="color: #198810">main</span><span style="color: #198810">"</span>, (pinax_str){(<span style="color: #d73948">const</span> <span style="color: #d73948">unsigned</span> <span style="color: #d73948">char</span> <span style="color: #d73948">*</span>)source, <span style="color: #d73948">sizeof</span> source <span style="color: #d73948">-</span> <span style="color: #b60157">1</span>}, PINAX_LOAD_CODE) <span style="color: #d73948">!=</span> PINAX_OK)
+        <span style="color: #d73948">return</span> <span style="color: #b60157">1</span>;
+    <span style="color: #d73948">static</span> <span style="color: #4b69c6">int64_t</span> samples[<span style="color: #b60157">5</span>] <span style="color: #d73948">=</span> {<span style="color: #b60157">1</span>, <span style="color: #b60157">2</span>, <span style="color: #b60157">3</span>, <span style="color: #b60157">4</span>, <span style="color: #b60157">5</span>};    <span style="color: #74747c">/*</span><span style="color: #74747c"> host memory the script reads and writes in place </span><span style="color: #74747c">*/</span>
+    <span style="color: #d73948">static</span> <span style="color: #4b69c6">int64_t</span> scale <span style="color: #d73948">=</span> <span style="color: #b60157">10</span>;
+    <span style="color: #4b69c6">pinax_bind</span>(st, <span style="color: #198810">"</span><span style="color: #198810">samples</span><span style="color: #198810">"</span>, samples, <span style="color: #d73948">sizeof</span> samples);
+    <span style="color: #4b69c6">pinax_bind</span>(st, <span style="color: #198810">"</span><span style="color: #198810">scale</span><span style="color: #198810">"</span>, <span style="color: #d73948">&amp;</span>scale, <span style="color: #d73948">sizeof</span> scale);
+    pinax_word w;
+    <span style="color: #4b69c6">int64_t</span> n <span style="color: #d73948">=</span> <span style="color: #b60157">0</span>;
+    <span style="color: #4b69c6">pinax_find</span>(st, <span style="color: #198810">"</span><span style="color: #198810">scaled_sum</span><span style="color: #198810">"</span>, <span style="color: #198810">"</span><span style="color: #198810">(gives n int)</span><span style="color: #198810">"</span>, <span style="color: #b60157">0</span>, <span style="color: #d73948">&amp;</span>w);
+    <span style="color: #4b69c6">pinax_run</span>(st, w, <span style="color: #d73948">&amp;</span>(pinax_args){.ri <span style="color: #d73948">=</span> <span style="color: #d73948">&amp;</span>n});
+    <span style="color: #4b69c6">printf</span>(<span style="color: #198810">"</span><span style="color: #198810">scaled_sum = </span><span style="color: #b60157">%lld</span><span style="color: #1d6c76">\n</span><span style="color: #198810">"</span>, (<span style="color: #d73948">long</span> <span style="color: #d73948">long</span>)n);
+    samples[<span style="color: #b60157">4</span>] <span style="color: #d73948">=</span> <span style="color: #b60157">105</span>;                                <span style="color: #74747c">/*</span><span style="color: #74747c"> the host changes it; no copy to refresh </span><span style="color: #74747c">*/</span>
+    <span style="color: #4b69c6">pinax_run</span>(st, w, <span style="color: #d73948">&amp;</span>(pinax_args){.ri <span style="color: #d73948">=</span> <span style="color: #d73948">&amp;</span>n});
+    <span style="color: #4b69c6">printf</span>(<span style="color: #198810">"</span><span style="color: #198810">after the host wrote samples[4]: </span><span style="color: #b60157">%lld</span><span style="color: #1d6c76">\n</span><span style="color: #198810">"</span>, (<span style="color: #d73948">long</span> <span style="color: #d73948">long</span>)n);
+    <span style="color: #4b69c6">pinax_find</span>(st, <span style="color: #198810">"</span><span style="color: #198810">clear_first</span><span style="color: #198810">"</span>, <span style="color: #198810">"</span><span style="color: #198810">()</span><span style="color: #198810">"</span>, <span style="color: #b60157">0</span>, <span style="color: #d73948">&amp;</span>w);
+    <span style="color: #4b69c6">pinax_run</span>(st, w, <span style="color: #d73948">NULL</span>);
+    <span style="color: #4b69c6">printf</span>(<span style="color: #198810">"</span><span style="color: #198810">after the script wrote cell 0: samples[0] = </span><span style="color: #b60157">%lld</span><span style="color: #1d6c76">\n</span><span style="color: #198810">"</span>, (<span style="color: #d73948">long</span> <span style="color: #d73948">long</span>)samples[<span style="color: #b60157">0</span>]);
+    <span style="color: #4b69c6">pinax_close</span>(st);
+    <span style="color: #d73948">return</span> <span style="color: #b60157">0</span>;
+}
+</code></pre><p class="ex-label">출력</p><pre><code data-lang="text">$ ./19-bind
+scaled_sum = 150
+after the host wrote samples[4]: 1150
+after the script wrote cell 0: samples[0] = 0
+</code></pre></div><h3>19.8 나중에 끝나는 호스트 낱말</h3><p class="para"><span class="pn">(1)</span> <code>PINAX_WORD_AWAITABLE</code> 로 등록한 호스트 낱말은 일을 시작하고 <code>pinax_call_pending</code> 으로 표를 받은 뒤 <code>PINAX_PENDING</code> 을 돌려줄 수 있다. 부른 작업은 기다리고 다른 작업이 돈다. 돌 것이 없으면 <code>pinax_run</code> 이나 <code>pinax_resume</code> 이 <code>PINAX_WAITING</code> 을 돌려준다. 호스트는 <code>pinax_complete(state, 표, 결과, 값)</code> 로 일을 끝내고 <code>pinax_resume</code> 을 부른다.</p><div class="example embed"><p class="ex-file"><code>19-await.c</code></p><pre><code data-lang="c"><span style="color: #d73948">#include</span> <span style="color: #198810">"</span><span style="color: #198810">pinax.h</span><span style="color: #198810">"</span>
+<span style="color: #d73948">#include</span> <span style="color: #198810">&lt;</span><span style="color: #198810">stdio.h</span><span style="color: #198810">&gt;</span>
+
+<span style="color: #74747c">/*</span><span style="color: #74747c"> A host word that finishes later: it starts the work, keeps a token and returns PINAX_PENDING. </span><span style="color: #74747c">*/</span>
+<span style="color: #d73948">static</span> pinax_token waiting[<span style="color: #b60157">4</span>];
+<span style="color: #d73948">static</span> <span style="color: #4b69c6">int64_t</span> asked[<span style="color: #b60157">4</span>];
+<span style="color: #d73948">static</span> <span style="color: #d73948">int</span> n_waiting;
+<span style="color: #d73948">static</span> pinax_err <span style="color: #4b69c6">fetch</span>(pinax_call <span style="color: #d73948">*</span>call, <span style="color: #d73948">void</span> <span style="color: #d73948">*</span>user, <span style="color: #d73948">const</span> pinax_args <span style="color: #d73948">*</span>args) {
+    (<span style="color: #d73948">void</span>)user;
+    asked[n_waiting] <span style="color: #d73948">=</span> args-&gt;i[<span style="color: #b60157">0</span>];
+    waiting[n_waiting<span style="color: #d73948">++</span>] <span style="color: #d73948">=</span> <span style="color: #4b69c6">pinax_call_pending</span>(call);
+    <span style="color: #d73948">return</span> PINAX_PENDING;
+}
+
+<span style="color: #d73948">int</span> <span style="color: #4b69c6">main</span>(<span style="color: #d73948">void</span>) {
+    <span style="color: #d73948">static</span> <span style="color: #d73948">unsigned</span> <span style="color: #d73948">char</span> block[<span style="color: #b60157">1</span> <span style="color: #d73948">&lt;&lt;</span> <span style="color: #b60157">20</span>];
+    pinax_config config <span style="color: #d73948">=</span> {.struct_size <span style="color: #d73948">=</span> <span style="color: #d73948">sizeof</span> config};
+    pinax_state <span style="color: #d73948">*</span>st;
+    <span style="color: #d73948">if</span> (<span style="color: #4b69c6">pinax_open</span>((pinax_mem){block, <span style="color: #d73948">sizeof</span> block}, <span style="color: #d73948">&amp;</span>config, <span style="color: #d73948">&amp;</span>st) <span style="color: #d73948">!=</span> PINAX_OK)
+        <span style="color: #d73948">return</span> <span style="color: #b60157">1</span>;
+    <span style="color: #d73948">static</span> <span style="color: #d73948">const</span> pinax_word_def words[] <span style="color: #d73948">=</span> {{<span style="color: #198810">"</span><span style="color: #198810">fetch</span><span style="color: #198810">"</span>, <span style="color: #198810">"</span><span style="color: #198810">(n int gives r int or fail)</span><span style="color: #198810">"</span>, fetch, <span style="color: #d73948">NULL</span>, PINAX_WORD_AWAITABLE}};
+    <span style="color: #4b69c6">pinax_register</span>(st, <span style="color: #198810">"</span><span style="color: #198810">net</span><span style="color: #198810">"</span>, words, <span style="color: #b60157">1</span>);
+    <span style="color: #d73948">static</span> <span style="color: #d73948">const</span> <span style="color: #d73948">char</span> source[] <span style="color: #d73948">=</span>
+        <span style="color: #198810">"</span><span style="color: #198810">use net</span><span style="color: #1d6c76">\n</span><span style="color: #198810">"</span>
+        <span style="color: #198810">"</span><span style="color: #198810">tasks workers 2</span><span style="color: #1d6c76">\n</span><span style="color: #198810">"</span>
+        <span style="color: #198810">"</span><span style="color: #198810">list got int 4</span><span style="color: #1d6c76">\n</span><span style="color: #198810">"</span>
+        <span style="color: #198810">"</span><span style="color: #198810">word both (gives r int)</span><span style="color: #1d6c76">\n</span><span style="color: #198810">"</span>
+        <span style="color: #198810">"</span><span style="color: #198810">  do 1 net.fetch or_else (e) -1 end got push or_else (e) end end workers spawn or_else (e) 0 return end drop</span><span style="color: #1d6c76">\n</span><span style="color: #198810">"</span>
+        <span style="color: #198810">"</span><span style="color: #198810">  do 2 net.fetch or_else (e) -1 end got push or_else (e) end end workers spawn or_else (e) 0 return end drop</span><span style="color: #1d6c76">\n</span><span style="color: #198810">"</span>
+        <span style="color: #198810">"</span><span style="color: #198810">  workers run_all</span><span style="color: #1d6c76">\n</span><span style="color: #198810">"</span>
+        <span style="color: #198810">"</span><span style="color: #198810">  got sum</span><span style="color: #1d6c76">\n</span><span style="color: #198810">"</span>
+        <span style="color: #198810">"</span><span style="color: #198810">end</span><span style="color: #1d6c76">\n</span><span style="color: #198810">"</span>;
+    <span style="color: #d73948">if</span> (<span style="color: #4b69c6">pinax_load</span>(st, <span style="color: #198810">"</span><span style="color: #198810">main</span><span style="color: #198810">"</span>, (pinax_str){(<span style="color: #d73948">const</span> <span style="color: #d73948">unsigned</span> <span style="color: #d73948">char</span> <span style="color: #d73948">*</span>)source, <span style="color: #d73948">sizeof</span> source <span style="color: #d73948">-</span> <span style="color: #b60157">1</span>}, PINAX_LOAD_CODE) <span style="color: #d73948">!=</span> PINAX_OK)
+        <span style="color: #d73948">return</span> <span style="color: #b60157">1</span>;
+    pinax_word w;
+    <span style="color: #4b69c6">int64_t</span> r <span style="color: #d73948">=</span> <span style="color: #b60157">0</span>;
+    pinax_args args <span style="color: #d73948">=</span> {.ri <span style="color: #d73948">=</span> <span style="color: #d73948">&amp;</span>r};
+    <span style="color: #4b69c6">pinax_find</span>(st, <span style="color: #198810">"</span><span style="color: #198810">both</span><span style="color: #198810">"</span>, <span style="color: #198810">"</span><span style="color: #198810">(gives r int)</span><span style="color: #198810">"</span>, <span style="color: #b60157">0</span>, <span style="color: #d73948">&amp;</span>w);
+    pinax_err err <span style="color: #d73948">=</span> <span style="color: #4b69c6">pinax_run</span>(st, w, <span style="color: #d73948">&amp;</span>args);
+    <span style="color: #4b69c6">printf</span>(<span style="color: #198810">"</span><span style="color: #198810">run: </span><span style="color: #b60157">%s</span><span style="color: #198810">, </span><span style="color: #b60157">%d</span><span style="color: #198810"> operations started</span><span style="color: #1d6c76">\n</span><span style="color: #198810">"</span>, err <span style="color: #d73948">==</span> PINAX_WAITING <span style="color: #d73948">?</span> <span style="color: #198810">"</span><span style="color: #198810">PINAX_WAITING</span><span style="color: #198810">"</span> <span style="color: #d73948">:</span> <span style="color: #198810">"</span><span style="color: #198810">?</span><span style="color: #198810">"</span>, n_waiting);
+    <span style="color: #74747c">/*</span><span style="color: #74747c"> the host finishes them in its own time, here the second first </span><span style="color: #74747c">*/</span>
+    <span style="color: #d73948">for</span> (<span style="color: #d73948">int</span> k <span style="color: #d73948">=</span> n_waiting <span style="color: #d73948">-</span> <span style="color: #b60157">1</span>; k <span style="color: #d73948">&gt;=</span> <span style="color: #b60157">0</span>; <span style="color: #d73948">--</span>k) {
+        <span style="color: #4b69c6">int64_t</span> result <span style="color: #d73948">=</span> asked[k] <span style="color: #d73948">*</span> <span style="color: #b60157">100</span>;
+        <span style="color: #4b69c6">pinax_complete</span>(st, waiting[k], PINAX_OK, <span style="color: #d73948">&amp;</span>(pinax_args){.ri <span style="color: #d73948">=</span> <span style="color: #d73948">&amp;</span>result});
+    }
+    err <span style="color: #d73948">=</span> <span style="color: #4b69c6">pinax_resume</span>(st, <span style="color: #d73948">&amp;</span>args);
+    <span style="color: #4b69c6">printf</span>(<span style="color: #198810">"</span><span style="color: #198810">resume: </span><span style="color: #b60157">%s</span><span style="color: #198810">, both = </span><span style="color: #b60157">%lld</span><span style="color: #1d6c76">\n</span><span style="color: #198810">"</span>, err <span style="color: #d73948">==</span> PINAX_OK <span style="color: #d73948">?</span> <span style="color: #198810">"</span><span style="color: #198810">PINAX_OK</span><span style="color: #198810">"</span> <span style="color: #d73948">:</span> <span style="color: #198810">"</span><span style="color: #198810">?</span><span style="color: #198810">"</span>, (<span style="color: #d73948">long</span> <span style="color: #d73948">long</span>)r);
+    <span style="color: #4b69c6">pinax_close</span>(st);
+    <span style="color: #d73948">return</span> <span style="color: #b60157">0</span>;
+}
+</code></pre><p class="ex-label">출력</p><pre><code data-lang="text">$ ./19-await
+run: PINAX_WAITING, 2 operations started
+resume: PINAX_OK, both = 300
+</code></pre></div><h3>19.9 상과 복제</h3><p class="para"><span class="pn">(1)</span> <strong>상</strong>(image)은 상태 전체다: 코드, 선언, 전역, 칸, 구역, 멈춘 실행과 작업. <code>pinax_image_save</code> 가 쓰고 <code>pinax_image_open</code> 이 연다. 상이 덩이의 처음에 놓여 있으면 복사 없이 그 자리에서 연다. 다른 형식이나 다른 빌드의 메모리 배치로 만든 상은 <code>PINAX_ERR_FORMAT</code> 이다.</p><p class="para"><span class="pn">(2)</span> 연 상태에는 호스트 낱말, 핸들 타입, <code>extern</code> 함수를 이름으로 다시 준다. 다 주기 전에는 실행이 <code>PINAX_ERR_NOT_FOUND</code> 로 거절된다. 핸들은 닫힌 채(닫는 함수 없이), 묶은 전역은 자기 저장소로 돌아와 있다. <code>pinax_clone</code> 은 한 번에 저장하고 다른 덩이에서 연다.</p><div class="example embed"><p class="ex-file"><code>19-image.c</code></p><pre><code data-lang="c"><span style="color: #d73948">#include</span> <span style="color: #198810">"</span><span style="color: #198810">pinax.h</span><span style="color: #198810">"</span>
+<span style="color: #d73948">#include</span> <span style="color: #198810">&lt;</span><span style="color: #198810">stdio.h</span><span style="color: #198810">&gt;</span>
+<span style="color: #d73948">#include</span> <span style="color: #198810">&lt;</span><span style="color: #198810">stdlib.h</span><span style="color: #198810">&gt;</span>
+
+<span style="color: #d73948">static</span> pinax_err <span style="color: #4b69c6">twice</span>(pinax_call <span style="color: #d73948">*</span>call, <span style="color: #d73948">void</span> <span style="color: #d73948">*</span>user, <span style="color: #d73948">const</span> pinax_args <span style="color: #d73948">*</span>args) {
+    (<span style="color: #d73948">void</span>)call; (<span style="color: #d73948">void</span>)user;
+    args-&gt;ri[<span style="color: #b60157">0</span>] <span style="color: #d73948">=</span> args-&gt;i[<span style="color: #b60157">0</span>] <span style="color: #d73948">*</span> <span style="color: #b60157">2</span>;
+    <span style="color: #d73948">return</span> PINAX_OK;
+}
+<span style="color: #d73948">static</span> <span style="color: #d73948">const</span> pinax_word_def words[] <span style="color: #d73948">=</span> {{<span style="color: #198810">"</span><span style="color: #198810">twice</span><span style="color: #198810">"</span>, <span style="color: #198810">"</span><span style="color: #198810">(n int gives r int)</span><span style="color: #198810">"</span>, twice, <span style="color: #d73948">NULL</span>, <span style="color: #b60157">0</span>}};
+
+<span style="color: #d73948">static</span> <span style="color: #4b69c6">int64_t</span> <span style="color: #4b69c6">call_next</span>(pinax_state <span style="color: #d73948">*</span>st) {
+    pinax_word w;
+    <span style="color: #4b69c6">int64_t</span> r <span style="color: #d73948">=</span> <span style="color: #b60157">0</span>;
+    <span style="color: #d73948">if</span> (<span style="color: #4b69c6">pinax_find</span>(st, <span style="color: #198810">"</span><span style="color: #198810">next</span><span style="color: #198810">"</span>, <span style="color: #198810">"</span><span style="color: #198810">(gives r int)</span><span style="color: #198810">"</span>, <span style="color: #b60157">0</span>, <span style="color: #d73948">&amp;</span>w) <span style="color: #d73948">!=</span> PINAX_OK)
+        <span style="color: #d73948">return</span> <span style="color: #d73948">-</span><span style="color: #b60157">1</span>;
+    pinax_err err <span style="color: #d73948">=</span> <span style="color: #4b69c6">pinax_run</span>(st, w, <span style="color: #d73948">&amp;</span>(pinax_args){.ri <span style="color: #d73948">=</span> <span style="color: #d73948">&amp;</span>r});
+    <span style="color: #d73948">return</span> err <span style="color: #d73948">==</span> PINAX_OK <span style="color: #d73948">?</span> r <span style="color: #d73948">:</span> <span style="color: #d73948">-</span>(<span style="color: #4b69c6">int64_t</span>)err;
+}
+
+<span style="color: #d73948">int</span> <span style="color: #4b69c6">main</span>(<span style="color: #d73948">void</span>) {
+    <span style="color: #d73948">static</span> <span style="color: #4b69c6">_Alignas</span>(<span style="color: #b60157">16</span>) <span style="color: #d73948">unsigned</span> <span style="color: #d73948">char</span> a[<span style="color: #b60157">1</span> <span style="color: #d73948">&lt;&lt;</span> <span style="color: #b60157">20</span>], b[<span style="color: #b60157">1</span> <span style="color: #d73948">&lt;&lt;</span> <span style="color: #b60157">20</span>], c[<span style="color: #b60157">1</span> <span style="color: #d73948">&lt;&lt;</span> <span style="color: #b60157">20</span>];
+    pinax_config config <span style="color: #d73948">=</span> {.struct_size <span style="color: #d73948">=</span> <span style="color: #d73948">sizeof</span> config};
+    pinax_state <span style="color: #d73948">*</span>st;
+    <span style="color: #d73948">if</span> (<span style="color: #4b69c6">pinax_open</span>((pinax_mem){a, <span style="color: #d73948">sizeof</span> a}, <span style="color: #d73948">&amp;</span>config, <span style="color: #d73948">&amp;</span>st) <span style="color: #d73948">!=</span> PINAX_OK)
+        <span style="color: #d73948">return</span> <span style="color: #b60157">1</span>;
+    <span style="color: #4b69c6">pinax_register</span>(st, <span style="color: #198810">"</span><span style="color: #198810">host</span><span style="color: #198810">"</span>, words, <span style="color: #b60157">1</span>);
+    <span style="color: #d73948">static</span> <span style="color: #d73948">const</span> <span style="color: #d73948">char</span> source[] <span style="color: #d73948">=</span>
+        <span style="color: #198810">"</span><span style="color: #198810">use host</span><span style="color: #1d6c76">\n</span><span style="color: #198810">"</span>
+        <span style="color: #198810">"</span><span style="color: #198810">global calls int</span><span style="color: #1d6c76">\n</span><span style="color: #198810">"</span>
+        <span style="color: #198810">"</span><span style="color: #198810">word next (gives r int) calls 1 add to calls  calls host.twice end</span><span style="color: #1d6c76">\n</span><span style="color: #198810">"</span>;
+    <span style="color: #d73948">if</span> (<span style="color: #4b69c6">pinax_load</span>(st, <span style="color: #198810">"</span><span style="color: #198810">main</span><span style="color: #198810">"</span>, (pinax_str){(<span style="color: #d73948">const</span> <span style="color: #d73948">unsigned</span> <span style="color: #d73948">char</span> <span style="color: #d73948">*</span>)source, <span style="color: #d73948">sizeof</span> source <span style="color: #d73948">-</span> <span style="color: #b60157">1</span>}, PINAX_LOAD_CODE) <span style="color: #d73948">!=</span> PINAX_OK)
+        <span style="color: #d73948">return</span> <span style="color: #b60157">1</span>;
+    <span style="color: #4b69c6">call_next</span>(st);
+    <span style="color: #4b69c6">printf</span>(<span style="color: #198810">"</span><span style="color: #198810">in the first state: </span><span style="color: #b60157">%lld</span><span style="color: #1d6c76">\n</span><span style="color: #198810">"</span>, (<span style="color: #d73948">long</span> <span style="color: #d73948">long</span>)<span style="color: #4b69c6">call_next</span>(st));
+
+    <span style="color: #74747c">/*</span><span style="color: #74747c"> save the whole state: code, globals, everything </span><span style="color: #74747c">*/</span>
+    <span style="color: #4b69c6">size_t</span> size <span style="color: #d73948">=</span> <span style="color: #4b69c6">pinax_image_size</span>(st), written <span style="color: #d73948">=</span> <span style="color: #b60157">0</span>;
+    <span style="color: #d73948">unsigned</span> <span style="color: #d73948">char</span> <span style="color: #d73948">*</span>image <span style="color: #d73948">=</span> <span style="color: #4b69c6">malloc</span>(size);
+    <span style="color: #4b69c6">pinax_image_save</span>(st, (pinax_mem){image, size}, <span style="color: #d73948">&amp;</span>written);
+
+    <span style="color: #74747c">/*</span><span style="color: #74747c"> open it in another block; host words are given again by name </span><span style="color: #74747c">*/</span>
+    pinax_state <span style="color: #d73948">*</span>copy;
+    <span style="color: #d73948">if</span> (<span style="color: #4b69c6">pinax_image_open</span>((pinax_mem){b, <span style="color: #d73948">sizeof</span> b}, (pinax_str){image, written}, <span style="color: #d73948">&amp;</span>config, <span style="color: #d73948">&amp;</span>copy) <span style="color: #d73948">!=</span> PINAX_OK)
+        <span style="color: #d73948">return</span> <span style="color: #b60157">1</span>;
+    <span style="color: #4b69c6">printf</span>(<span style="color: #198810">"</span><span style="color: #198810">before the host word is given again: </span><span style="color: #b60157">%s</span><span style="color: #1d6c76">\n</span><span style="color: #198810">"</span>, <span style="color: #4b69c6">call_next</span>(copy) <span style="color: #d73948">==</span> <span style="color: #d73948">-</span>PINAX_ERR_NOT_FOUND <span style="color: #d73948">?</span> <span style="color: #198810">"</span><span style="color: #198810">PINAX_ERR_NOT_FOUND</span><span style="color: #198810">"</span> <span style="color: #d73948">:</span> <span style="color: #198810">"</span><span style="color: #198810">?</span><span style="color: #198810">"</span>);
+    <span style="color: #4b69c6">pinax_register</span>(copy, <span style="color: #198810">"</span><span style="color: #198810">host</span><span style="color: #198810">"</span>, words, <span style="color: #b60157">1</span>);
+    <span style="color: #4b69c6">printf</span>(<span style="color: #198810">"</span><span style="color: #198810">the copy goes on: </span><span style="color: #b60157">%lld</span><span style="color: #1d6c76">\n</span><span style="color: #198810">"</span>, (<span style="color: #d73948">long</span> <span style="color: #d73948">long</span>)<span style="color: #4b69c6">call_next</span>(copy));
+    <span style="color: #4b69c6">printf</span>(<span style="color: #198810">"</span><span style="color: #198810">the first state is its own: </span><span style="color: #b60157">%lld</span><span style="color: #1d6c76">\n</span><span style="color: #198810">"</span>, (<span style="color: #d73948">long</span> <span style="color: #d73948">long</span>)<span style="color: #4b69c6">call_next</span>(st));
+
+    <span style="color: #74747c">/*</span><span style="color: #74747c"> a clone is the same in one call </span><span style="color: #74747c">*/</span>
+    pinax_state <span style="color: #d73948">*</span>twin;
+    <span style="color: #d73948">if</span> (<span style="color: #4b69c6">pinax_clone</span>(copy, (pinax_mem){c, <span style="color: #d73948">sizeof</span> c}, <span style="color: #d73948">&amp;</span>twin) <span style="color: #d73948">!=</span> PINAX_OK)
+        <span style="color: #d73948">return</span> <span style="color: #b60157">1</span>;
+    <span style="color: #4b69c6">pinax_register</span>(twin, <span style="color: #198810">"</span><span style="color: #198810">host</span><span style="color: #198810">"</span>, words, <span style="color: #b60157">1</span>);
+    <span style="color: #4b69c6">printf</span>(<span style="color: #198810">"</span><span style="color: #198810">the clone of the copy: </span><span style="color: #b60157">%lld</span><span style="color: #1d6c76">\n</span><span style="color: #198810">"</span>, (<span style="color: #d73948">long</span> <span style="color: #d73948">long</span>)<span style="color: #4b69c6">call_next</span>(twin));
+    <span style="color: #4b69c6">free</span>(image);
+    <span style="color: #4b69c6">pinax_close</span>(twin);
+    <span style="color: #4b69c6">pinax_close</span>(copy);
+    <span style="color: #4b69c6">pinax_close</span>(st);
+    <span style="color: #d73948">return</span> <span style="color: #b60157">0</span>;
+}
+</code></pre><p class="ex-label">출력</p><pre><code data-lang="text">$ ./19-image
+in the first state: 4
+before the host word is given again: PINAX_ERR_NOT_FOUND
+the copy goes on: 6
+the first state is its own: 6
+the clone of the copy: 8
+</code></pre></div><h3>19.10 재기와 결함의 지역 변수</h3><p class="para"><span class="pn">(1)</span> <code>pinax_stats_get</code> 은 칸, 구역, 핸들, 호출 깊이의 가장 높았던 값과 돈 명령의 수를 준다. 덩이와 용량을 정할 때 쓴다.</p><p class="para"><span class="pn">(2)</span> <code>pinax_fault_local</code> 은 결함으로 끝난 실행에서 결함이 난 낱말의 지역 변수를 그때의 값으로 준다(16 개까지, 글은 처음 32 바이트). <code>pnx</code> 가 결함 아래에 보이는 것이 이것이다(11.3).</p></main><nav class="bottom"><a href="index.html">처음</a> · <a href="18.html">앞</a> · <a href="20.html">다음</a> · <a href="../html-en/19.html">English</a></nav></body></html>

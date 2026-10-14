@@ -68,6 +68,7 @@
 
 // A diagnostics table: pairs of (condition, message).
 #let diag(..rows) = {
+  [#metadata(rows.pos().map(r => r.at(1)))<diag>]
   let cells = rows.pos().map(r => (r.at(0), raw(r.at(1)))).flatten()
   table(columns: (1fr, 1.3fr), inset: 5pt, stroke: 0.5pt + luma(170),
         table.header([*#tr("조건", "Condition")*], [*#tr("메시지", "Message")*]), ..cells)
@@ -178,4 +179,23 @@
     outline(depth: 2)
   }
   body
+}
+
+// Every diagnostic of the document, with the clause that states it (for an annex).
+#let all-diagnostics() = context {
+  let seen = (:)
+  let rows = ()
+  for m in query(<diag>) {
+    let n = counter(heading).at(m.location())
+    let clause = str(n.first())
+    for msg in m.value {
+      if msg not in seen {
+        seen.insert(msg, clause)
+        rows.push((clause, msg))
+      }
+    }
+  }
+  table(columns: (auto, 1fr), inset: 5pt, stroke: 0.5pt + luma(170),
+        table.header([*#tr("조항", "Clause")*], [*#tr("메시지", "Message")*]),
+        ..rows.map(r => (r.at(0), raw(r.at(1)))).flatten())
 }

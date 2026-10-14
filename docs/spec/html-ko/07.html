@@ -1,0 +1,79 @@
+<!DOCTYPE html>
+<html lang="ko"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>7 타입과 값 - Pinax 표준</title><link rel="stylesheet" href="style.css"></head><body><nav class="top"><a href="index.html">처음</a> · <a href="06.html">앞</a> · <a href="08.html">다음</a> · <a href="../html-en/07.html">English</a></nav><main><h2>7 타입과 값</h2><p class="para"><span class="pn">(1)</span> 모든 값에는 적재 때 정해지는 타입이 있다. 돌 때 값이 타입을 들고 다니지 않고, 돌 때 타입을 묻는 낱말도 없다. 타입이 맞지 않는 프로그램은 적재 때 거절된다.</p><p class="para"><p><span class="pn">(2)</span> 타입은 다음과 같다.</p><table><tr><td><strong>타입</strong></td><td><strong>값</strong></td></tr><tr><td><code>int</code></td><td>64 비트 2 의 보수 정수(7.1)</td></tr><tr><td><code>bool</code></td><td><code>true</code>, <code>false</code>(7.2)</td></tr><tr><td><code>str</code></td><td>바이트의 뷰(7.3). 지역 변수, 인자, 결과에만 쓴다</td></tr><tr><td><code>str(N)</code></td><td>N 바이트까지 담는 저장된 글(7.3). 전역, 배열의 칸, 레코드의 필드에 쓴다</td></tr><tr><td><code>err</code></td><td>실패의 오류 번호(11.2)</td></tr><tr><td>선언한 타입</td><td><code>type 이름 바탕</code> 으로 만든, 바탕과 같은 표현의 다른 타입(7.4)</td></tr><tr><td>줄</td><td>레코드를 담은 표(배열, 목록, 풀)의 한 줄. 타입의 이름은 표의 이름이다(8.8)</td></tr><tr><td>핸들</td><td>호스트가 준 객체를 가리키는 번호. 타입의 이름은 호스트가 정한다(19.6)</td></tr><tr><td>블록</td><td><code>word (서명)</code> 으로 적는 낱말 값(10.5)</td></tr><tr><td><code>regex</code></td><td>정규 표현식 프로그램(16.7). <code>use rex</code> 가 있는 소스에서만 보인다</td></tr><tr><td><code>buffer</code></td><td>호스트 낱말의 서명에만 쓰는 매개변수 타입. 스크립트가 선언한 버퍼(8.7)를 받는다(19.3)</td></tr></table></p><p class="para"><span class="pn">(3)</span> 전역, 배열의 칸, 레코드의 필드는 처음에 0 이다: <code>int</code> 는 0, <code>bool</code> 은 <code>false</code>, <code>str(N)</code> 은 빈 글, 줄은 “없음”(8.8).</p><h3>7.1 정수</h3><p class="para"><span class="pn">(1)</span> <code>int</code> 의 값은 −2<sup>63</sup> 부터 2<sup>63</sup>−1 까지의 정수다. 모든 처리기에서 같다.</p><p class="para"><span class="pn">(2)</span> 산술 낱말 <code>add</code> <code>sub</code> <code>mul</code> <code>div</code> <code>mod</code> <code>neg</code> <code>abs</code> 는 결과가 범위를 벗어나면 결함 <code>overflow</code> 로 멈춘다(11.3). 값을 감아 돌리는 낱말(<code>wrap_add</code> …), 끝에서 멈추는 낱말(<code>sat_add</code> …), 넘침을 실패로 알리는 낱말(<code>chk_add</code> …)이 따로 있다(15.1).</p><p class="para"><span class="pn">(3)</span> <code>div</code> 는 0 쪽으로 버리고, <code>mod</code> 의 결과는 나뉘는 수의 부호를 따른다(<code>a b div b mul a b mod add</code> 가 <code>a</code> 다). <code>floor_div</code> 와 <code>floor_mod</code> 는 아래로 버린다. 0 으로 나누면 결함 <code>div_zero</code> 다.</p><div class="example run"><p class="ex-file"><code>07-int.pnx</code></p><pre><code data-lang="pinax"><span style="color: #d73948">use</span> io
+<span style="color: #d73948">use</span> <span style="color: #d73948">str</span>
+<span style="color: #b60157">9223372036854775807</span> <span style="color: #d73948">str</span>.to_str io.println          <span style="color: #74747c">rem the largest int</span>
+<span style="color: #b60157">7</span> <span style="color: #b60157">2</span> div <span style="color: #d73948">str</span>.to_str io.println                       <span style="color: #74747c">rem division rounds toward zero</span>
+<span style="color: #b60157">-7</span> <span style="color: #b60157">2</span> div <span style="color: #d73948">str</span>.to_str io.println
+<span style="color: #b60157">-7</span> <span style="color: #b60157">2</span> mod <span style="color: #d73948">str</span>.to_str io.println                      <span style="color: #74747c">rem the remainder has the sign of the dividend</span>
+<span style="color: #b60157">-7</span> <span style="color: #b60157">2</span> floor_div <span style="color: #d73948">str</span>.to_str io.println                <span style="color: #74747c">rem floor_div rounds down</span>
+<span style="color: #b60157">9223372036854775807</span> <span style="color: #b60157">1</span> wrap_add <span style="color: #d73948">str</span>.to_str io.println    <span style="color: #74747c">rem wrap_add wraps around</span>
+<span style="color: #b60157">9223372036854775807</span> <span style="color: #b60157">1</span> sat_add <span style="color: #d73948">str</span>.to_str io.println     <span style="color: #74747c">rem sat_add stops at the edge</span>
+</code></pre><p class="ex-label">출력</p><pre><code data-lang="text">$ pnx 07-int.pnx
+9223372036854775807
+3
+-3
+-1
+-4
+-9223372036854775808
+9223372036854775807
+</code></pre></div><h5>결함</h5><p class="para"><span class="pn">(4)</span> 넘침은 그 자리에서 실행을 끝낸다. 아래 예에서 넘친 줄 뒤의 코드는 돌지 않는다.</p><div class="example fault"><p class="ex-file"><code>07-int-overflow.pnx</code></p><pre><code data-lang="pinax"><span style="color: #d73948">use</span> io
+<span style="color: #d73948">global</span> big <span style="color: #d73948">int</span>
+<span style="color: #b60157">9223372036854775807</span> <span style="color: #d73948">to</span> big
+<span style="color: #198810">"before"</span> io.println
+big <span style="color: #b60157">1</span> add <span style="color: #d73948">to</span> big
+<span style="color: #198810">"never printed"</span> io.println
+</code></pre><p class="ex-label">결함으로 멈춤</p><pre><code data-lang="text">$ pnx 07-int-overflow.pnx
+before
+07-int-overflow.pnx:5: integer overflow
+</code></pre></div><h3>7.2 참거짓</h3><p class="para"><span class="pn">(1)</span> <code>bool</code> 의 값은 <code>true</code> 와 <code>false</code> 둘이다. 비교 낱말(<code>eq</code> <code>lt</code> …)이 내고, <code>if</code> <code>while</code> <code>until</code> 과 논리 낱말(<code>and</code> <code>or</code> <code>not</code>)이 받는다.</p><div class="example run"><p class="ex-file"><code>07-bool.pnx</code></p><pre><code data-lang="pinax"><span style="color: #d73948">use</span> io
+<span style="color: #d73948">use</span> <span style="color: #d73948">str</span>
+<span style="color: #b60157">3</span> <span style="color: #b60157">4</span> lt <span style="color: #d73948">if</span> <span style="color: #198810">"3 is less than 4"</span> <span style="color: #d73948">else</span> <span style="color: #198810">"no"</span> <span style="color: #d73948">end</span> io.println
+<span style="color: #d73948">true</span> <span style="color: #d73948">false</span> <span style="color: #d73948">or</span> not <span style="color: #d73948">if</span> <span style="color: #198810">"never"</span> <span style="color: #d73948">else</span> <span style="color: #198810">"true false or not is false"</span> <span style="color: #d73948">end</span> io.println
+</code></pre><p class="ex-label">출력</p><pre><code data-lang="text">$ pnx 07-bool.pnx
+3 is less than 4
+true false or not is false
+</code></pre></div><h5>제약</h5><p class="para"><span class="pn">(2)</span> <code>bool</code> 과 <code>int</code> 는 서로 바뀌지 않는다. 조건 자리에 <code>int</code> 를, 산술 낱말에 <code>bool</code> 을 줄 수 없다.</p><div class="example refused"><p class="ex-file"><code>07-bool-not-int.pnx</code></p><pre><code data-lang="pinax"><span style="color: #b60157">1</span> <span style="color: #d73948">if</span> <span style="color: #b60157">2</span> drop <span style="color: #d73948">end</span>
+</code></pre><p class="ex-label">거절</p><pre><code data-lang="text">$ pnx 07-bool-not-int.pnx
+07-bool-not-int.pnx:1:3: a bool is expected here
+</code></pre></div><div class="example refused"><p class="ex-file"><code>07-int-not-bool.pnx</code></p><pre><code data-lang="pinax"><span style="color: #d73948">true</span> <span style="color: #b60157">1</span> add drop
+</code></pre><p class="ex-label">거절</p><pre><code data-lang="text">$ pnx 07-int-not-bool.pnx
+07-int-not-bool.pnx:1:8: this word takes two int values, or two of the same declared type
+</code></pre></div><h3>7.3 문자열</h3><p class="para"><span class="pn">(1)</span> <strong>문자열</strong>(string)은 바이트의 열이다. UTF-8 이어야 한다는 규칙은 없다 — 바이트를 다루는 낱말은 바이트로, 글자를 다루는 낱말(<code>str.char_count</code> 등)은 UTF-8 로 읽는다.</p><p class="para"><p><span class="pn">(2)</span> 문자열의 타입은 둘이다.</p><ul><li><code>str</code> 는 <strong>뷰</strong>다. 어딘가에 있는 바이트(리터럴, 전역의 글, 버퍼, 구역)의 시작과 길이를 가리키며, 만들 때 바이트를 복사하지 않는다. 지역 변수, 인자, 결과, 스택에만 있다.</li><li><code>str(N)</code> 는 <strong>저장된 글</strong>(stored text)이다. N 바이트의 자리를 차지하고, 넣을 때 바이트를 복사한다. 전역, 배열과 목록의 칸, 레코드의 필드에만 쓴다. 읽으면 그 자리를 가리키는 <code>str</code> 뷰가 된다.</li></ul></p><div class="example run"><p class="ex-file"><code>07-str.pnx</code></p><pre><code data-lang="pinax"><span style="color: #d73948">use</span> io
+<span style="color: #d73948">use</span> <span style="color: #d73948">str</span>
+<span style="color: #d73948">global</span> name <span style="color: #d73948">str</span>(<span style="color: #b60157">8</span>)                 <span style="color: #74747c">rem stored text: up to 8 bytes, copied in</span>
+<span style="color: #d73948">word</span> show (s <span style="color: #d73948">str</span>) <span style="color: #d73948">cat</span> (<span style="color: #198810">"["</span>, s, <span style="color: #198810">"] "</span>, s <span style="color: #d73948">str</span>.len) io.println <span style="color: #d73948">end</span>
+<span style="color: #198810">"Pinax"</span> <span style="color: #d73948">to</span> name
+name show
+<span style="color: #198810">"hello, world"</span> <span style="color: #b60157">7</span> <span style="color: #d73948">str</span>.skip show        <span style="color: #74747c">rem a view: no byte is copied</span>
+</code></pre><p class="ex-label">출력</p><pre><code data-lang="text">$ pnx 07-str.pnx
+[Pinax] 5
+[world] 5
+</code></pre></div><h5>제약</h5><p class="para"><span class="pn">(3)</span> 전역, 배열, 레코드의 필드에 <code>str</code> 를 쓰면 거절된다. 뷰가 가리키는 바이트가 그 자리보다 먼저 사라질 수 있기 때문이다.</p><div class="example refused"><p class="ex-file"><code>07-str-global.pnx</code></p><pre><code data-lang="pinax"><span style="color: #d73948">global</span> name <span style="color: #d73948">str</span>
+</code></pre><p class="ex-label">거절</p><pre><code data-lang="text">$ pnx 07-str-global.pnx
+07-str-global.pnx:2:1: stored text is str(N); a str view lives only in locals, arguments and results
+</code></pre></div><h5>결함</h5><p class="para"><span class="pn">(4)</span> <code>str(N)</code> 자리에 N 바이트보다 긴 글을 넣으면 결함 <code>range</code> 로 멈춘다. 자르지 않는다.</p><div class="example fault"><p class="ex-file"><code>07-str-too-long.pnx</code></p><pre><code data-lang="pinax"><span style="color: #d73948">use</span> io
+<span style="color: #d73948">global</span> name <span style="color: #d73948">str</span>(<span style="color: #b60157">4</span>)
+<span style="color: #198810">"four"</span> <span style="color: #d73948">to</span> name
+<span style="color: #198810">"more than four"</span> <span style="color: #d73948">to</span> name
+</code></pre><p class="ex-label">결함으로 멈춤</p><pre><code data-lang="text">$ pnx 07-str-too-long.pnx
+07-str-too-long.pnx:4: index out of range
+</code></pre></div><p class="para"><span class="pn">(5)</span> 구역에 만든 뷰는 그 구역이 되감기면 쓸 수 없다. 이 규칙은 12.2 가 정한다.</p><h3>7.4 선언한 타입</h3><h5>구문</h5><pre><code data-lang="ebnf">type-decl = "type" NAME base ;
+base      = "int" | "bool" | "str" ;</code></pre><p class="para"><span class="pn">(1)</span> <code>type meters int</code> 는 <strong>선언한 타입</strong>(declared type) <code>meters</code> 를 만든다. 값의 표현은 <code>int</code> 와 같고 실행에 드는 비용도 없지만, 적재 때는 다른 타입이다. 단위가 다른 두 수를 섞는 실수를 막으려고 쓴다.</p><p class="para"><span class="pn">(2)</span> 바탕 타입의 값 뒤에 타입의 이름을 쓰면 그 타입의 값이 된다(<code>1500 meters</code>). 낱말 <code>raw</code> 는 선언한 타입의 값을 바탕 타입의 값으로 돌린다.</p><p class="para"><span class="pn">(3)</span> 같은 선언한 타입의 두 값은 <code>add</code> 와 <code>sub</code> 로 더하고 뺄 수 있고, 결과도 그 타입이다. 비교 낱말도 같은 타입끼리 쓴다. 다른 산술은 <code>raw</code> 로 바꾼 뒤에 한다.</p><div class="example run"><p class="ex-file"><code>07-type.pnx</code></p><pre><code data-lang="pinax"><span style="color: #d73948">use</span> io
+<span style="color: #d73948">use</span> <span style="color: #d73948">str</span>
+<span style="color: #d73948">type</span> meters <span style="color: #d73948">int</span>
+<span style="color: #d73948">type</span> seconds <span style="color: #d73948">int</span>
+<span style="color: #d73948">word</span> pace (d meters, t seconds <span style="color: #d73948">gives</span> <span style="color: #d73948">int</span>) d raw t raw div <span style="color: #d73948">end</span>     <span style="color: #74747c">rem raw: the plain int</span>
+<span style="color: #b60157">1500</span> meters <span style="color: #b60157">300</span> meters add <span style="color: #b60157">300</span> seconds pace <span style="color: #d73948">str</span>.to_str io.println
+</code></pre><p class="ex-label">출력</p><pre><code data-lang="text">$ pnx 07-type.pnx
+6
+</code></pre></div><h5>제약</h5><p class="para"><span class="pn">(4)</span> 선언한 타입의 값을 다른 타입의 자리에 주면 거절된다. 아래는 두 인자의 차례를 바꾼 것이다.</p><div class="example refused"><p class="ex-file"><code>07-type-mixed.pnx</code></p><pre><code data-lang="pinax"><span style="color: #d73948">type</span> meters <span style="color: #d73948">int</span>
+<span style="color: #d73948">type</span> seconds <span style="color: #d73948">int</span>
+<span style="color: #d73948">word</span> pace (d meters, t seconds <span style="color: #d73948">gives</span> <span style="color: #d73948">int</span>) d raw t raw div <span style="color: #d73948">end</span>
+<span style="color: #b60157">300</span> seconds <span style="color: #b60157">1500</span> meters pace drop          <span style="color: #74747c">rem the two arguments are swapped</span>
+</code></pre><p class="ex-label">거절</p><pre><code data-lang="text">$ pnx 07-type-mixed.pnx
+07-type-mixed.pnx:4:25: an argument has another type than the word's signature asks for
+</code></pre></div><p class="para"><span class="pn">(5)</span> 선언한 타입의 두 값에 <code>add</code> <code>sub</code> 밖의 산술 낱말을 쓰면 거절된다.</p><div class="example refused"><p class="ex-file"><code>07-type-arith.pnx</code></p><pre><code data-lang="pinax"><span style="color: #d73948">type</span> meters <span style="color: #d73948">int</span>
+<span style="color: #b60157">2</span> meters <span style="color: #b60157">3</span> meters mul drop
+</code></pre><p class="ex-label">거절</p><pre><code data-lang="text">$ pnx 07-type-arith.pnx
+07-type-arith.pnx:2:19: values of a declared type are added and subtracted; for other arithmetic take raw
+</code></pre></div><h5>진단</h5><table><thead><tr><th><strong>조건</strong></th><th><strong>메시지</strong></th></tr></thead><tbody><tr><td>조건 자리에 <code>bool</code> 이 아닌 값</td><td><code>a bool is expected here</code></td></tr><tr><td>산술 낱말의 두 값의 타입이 다르거나 <code>int</code> 가 아님</td><td><code>this word takes two int values, or two of the same declared type</code></td></tr><tr><td>선언한 타입에 <code>add</code> <code>sub</code> 밖의 산술</td><td><code>values of a declared type are added and subtracted; for other arithmetic take raw</code></td></tr><tr><td>인자의 타입이 서명과 다름</td><td><code>an argument has another type than the word's signature asks for</code></td></tr><tr><td>전역 등에 <code>str</code></td><td><code>stored text is str(N); a str view lives only in locals, arguments and results</code></td></tr></tbody></table></main><nav class="bottom"><a href="index.html">처음</a> · <a href="06.html">앞</a> · <a href="08.html">다음</a> · <a href="../html-en/07.html">English</a></nav></body></html>

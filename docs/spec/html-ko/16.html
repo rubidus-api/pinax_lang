@@ -1,0 +1,546 @@
+<!DOCTYPE html>
+<html lang="ko"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>16 표준 모듈 - Pinax 표준</title><link rel="stylesheet" href="style.css"></head><body><nav class="top"><a href="index.html">처음</a> · <a href="15.html">앞</a> · <a href="17.html">다음</a> · <a href="../html-en/16.html">English</a></nav><main><h2>16 표준 모듈</h2><p class="para"><span class="pn">(1)</span> 표준 모듈은 처리기에 들어 있다. <code>use 모듈</code> 로 열고 <code>모듈.낱말</code> 로 쓴다(13.1). 표준 모듈의 낱말은 호스트의 허락 없이 바깥과 닿지 못한다 — 파일도, 시계도, 환경도 쓰지 않는다.</p><p class="para"><p><span class="pn">(2)</span> 표준 모듈의 낱말은 새 저장소를 만들지 않는다. 결과는 다음 가운데 하나다.</p><ul><li>받은 바이트를 가리키는 뷰. 복사가 없다.</li><li>구역(12.2)에 새로 쓴 바이트의 뷰.</li><li>부른 쪽이 준 버퍼에 붙인 바이트. 이런 낱말은 이름이 <code>_into</code> 로 끝나거나 버퍼를 받고, 자리가 모자라면 <code>err.full</code> 로 실패한다.</li></ul></p><h3>16.1 <code>str</code> — 문자열</h3><p class="para"><span class="pn">(1)</span> 모듈 <code>str</code> 은 문자열을 바이트로 다룬다. 바이트의 번호는 0 부터 센다. 글자 단위로 다루는 낱말 (<code>chars</code> <code>char_count</code> <code>is_utf8</code>)만 UTF-8 로 읽는다. 대소문자 바꾸기(<code>upper</code> <code>lower</code>)는 ASCII 만 바꾼다.</p><p class="para"><span class="pn">(2)</span> 구분자나 찾는 것을 받는 자리(<code>sep</code>, <code>part</code>)에는 <code>str</code> 이나 문자 하나(<code>int</code>, 6.5)를 줄 수 있다.</p><h4>16.1.1 보기와 자르기</h4><p class="para"><p><span class="pn">(3)</span> 결과는 모두 받은 문자열의 뷰다.</p><table><tr><td><strong>낱말</strong></td><td><strong>서명</strong></td><td><strong>뜻</strong></td></tr><tr><td><code>len</code> <code>is_empty</code></td><td><code>(str gives int)</code> <code>(str gives bool)</code></td><td>바이트 수, 비었는가</td></tr><tr><td><code>take</code> <code>skip</code></td><td><code>(s str, n int gives str)</code></td><td>앞의 <code>n</code> 바이트, 앞의 <code>n</code> 바이트를 뺀 나머지. 모자라면 있는 만큼</td></tr><tr><td><code>take_last</code> <code>skip_last</code></td><td><code>(s str, n int gives str)</code></td><td>뒤의 <code>n</code> 바이트, 뒤의 <code>n</code> 바이트를 뺀 앞</td></tr><tr><td><code>slice</code></td><td><code>(s str, start int, n int gives str)</code></td><td><code>start</code> 부터 <code>n</code> 바이트. 범위 밖이면 결함 <code>range</code></td></tr><tr><td><code>trim</code> <code>trim_left</code> <code>trim_right</code></td><td><code>(str gives str)</code></td><td>앞뒤의 공백(스페이스, 탭, CR, LF)을 뺀 뷰</td></tr><tr><td><code>cut</code></td><td><code>(s str, sep gives str, str)</code></td><td>처음 <code>sep</code> 의 앞과 뒤. <code>sep</code> 이 없으면 <code>s</code> 와 빈 글</td></tr><tr><td><code>try_cut</code></td><td><code>(s str, sep gives str, str or fail)</code></td><td><code>cut</code> 과 같으나 <code>sep</code> 이 없으면 <code>err.not_found</code></td></tr><tr><td><code>span</code></td><td><code>(s str, class int gives str, str)</code></td><td>앞에서 그 갈래의 바이트가 이어진 부분과 나머지</td></tr></table></p><p class="para"><span class="pn">(4)</span> <code>span</code> 의 갈래는 상수 <code>str.digit</code> <code>str.alpha</code> <code>str.alnum</code> <code>str.space</code> <code>str.upper_case</code> <code>str.lower_case</code> <code>str.hex_digit</code> <code>str.punct</code> 다(ASCII).</p><div class="example run"><p class="ex-file"><code>16-str-views.pnx</code></p><pre><code data-lang="pinax"><span style="color: #d73948">use</span> io
+<span style="color: #d73948">use</span> <span style="color: #d73948">str</span>
+<span style="color: #d73948">word</span> show (label <span style="color: #d73948">str</span>, s <span style="color: #d73948">str</span>) <span style="color: #d73948">cat</span> (label, <span style="color: #198810">" ["</span>, s, <span style="color: #198810">"]"</span>) io.println <span style="color: #d73948">end</span>
+<span style="color: #d73948">word</span> demo ()
+  <span style="color: #198810">"  key = value  "</span> <span style="color: #d73948">to</span> line
+  <span style="color: #198810">"trim"</span> line <span style="color: #d73948">str</span>.trim show
+  <span style="color: #198810">"trim_left"</span> line <span style="color: #d73948">str</span>.trim_left show
+  <span style="color: #198810">"take 5"</span> <span style="color: #198810">"hello, world"</span> <span style="color: #b60157">5</span> <span style="color: #d73948">str</span>.take show
+  <span style="color: #198810">"skip 7"</span> <span style="color: #198810">"hello, world"</span> <span style="color: #b60157">7</span> <span style="color: #d73948">str</span>.skip show
+  <span style="color: #198810">"take_last 5"</span> <span style="color: #198810">"hello, world"</span> <span style="color: #b60157">5</span> <span style="color: #d73948">str</span>.take_last show
+  <span style="color: #198810">"skip_last 7"</span> <span style="color: #198810">"hello, world"</span> <span style="color: #b60157">7</span> <span style="color: #d73948">str</span>.skip_last show
+  <span style="color: #198810">"take 99"</span> <span style="color: #198810">"short"</span> <span style="color: #b60157">99</span> <span style="color: #d73948">str</span>.take show                 <span style="color: #74747c">rem n beyond the end: what is there</span>
+  <span style="color: #198810">"slice 7 3"</span> <span style="color: #198810">"hello, world"</span> <span style="color: #b60157">7</span> <span style="color: #b60157">3</span> <span style="color: #d73948">str</span>.slice show
+  <span style="color: #198810">"key = value"</span> <span style="color: #198810">" = "</span> <span style="color: #d73948">str</span>.cut <span style="color: #d73948">to</span> (k, v)
+  <span style="color: #198810">"cut, before"</span> k show
+  <span style="color: #198810">"cut, after"</span> v show
+  <span style="color: #198810">"a=b=c"</span> <span style="color: #b60157">'='</span> <span style="color: #d73948">str</span>.cut <span style="color: #d73948">to</span> (k2, v2)                    <span style="color: #74747c">rem the separator may be a character</span>
+  <span style="color: #198810">"cut at a char"</span> v2 show
+  <span style="color: #198810">"2026-10-15"</span> <span style="color: #d73948">str</span>.digit <span style="color: #d73948">str</span>.span <span style="color: #d73948">to</span> (year, rest)
+  <span style="color: #198810">"span digits"</span> year show
+  <span style="color: #198810">"span rest"</span> rest show
+<span style="color: #d73948">end</span>
+demo
+</code></pre><p class="ex-label">출력</p><pre><code data-lang="text">$ pnx 16-str-views.pnx
+trim [key = value]
+trim_left [key = value  ]
+take 5 [hello]
+skip 7 [world]
+take_last 5 [world]
+skip_last 7 [hello]
+take 99 [short]
+slice 7 3 [wor]
+cut, before [key]
+cut, after [value]
+cut at a char [b=c]
+span digits [2026]
+span rest [-10-15]
+</code></pre></div><h4>16.1.2 찾기와 견주기</h4><p class="para"><p><span class="pn">(5)</span></p><table><tr><td><strong>낱말</strong></td><td><strong>서명</strong></td><td><strong>뜻</strong></td></tr><tr><td><code>starts_with</code> <code>ends_with</code> <code>contains</code></td><td><code>(s str, part gives bool)</code></td><td></td></tr><tr><td><code>find</code> <code>find_last</code></td><td><code>(s str, part gives int or fail)</code></td><td>처음, 마지막으로 나온 자리. 없으면 <code>err.not_found</code></td></tr><tr><td><code>compare</code></td><td><code>(str, str gives int)</code></td><td>바이트 차례로 견주어 음수, 0, 양수</td></tr><tr><td><code>byte_at</code></td><td><code>(s str, i int gives int)</code></td><td>바이트 <code>i</code>. 범위 밖이면 결함 <code>range</code></td></tr><tr><td><code>char_count</code></td><td><code>(str gives int)</code></td><td>UTF-8 글자의 수</td></tr><tr><td><code>is_utf8</code></td><td><code>(str gives bool)</code></td><td>올바른 UTF-8 인가</td></tr></table><p><code>eq</code> <code>ne</code> <code>lt</code> 등 비교 낱말도 문자열을 바이트 차례로 견준다(15.2).</p></p><div class="example run"><p class="ex-file"><code>16-str-search.pnx</code></p><pre><code data-lang="pinax"><span style="color: #d73948">use</span> io
+<span style="color: #d73948">use</span> <span style="color: #d73948">str</span>
+<span style="color: #d73948">word</span> yes (b <span style="color: #d73948">bool</span> <span style="color: #d73948">gives</span> <span style="color: #d73948">str</span>) b <span style="color: #d73948">if</span> <span style="color: #198810">"yes"</span> <span style="color: #d73948">else</span> <span style="color: #198810">"no"</span> <span style="color: #d73948">end</span> <span style="color: #d73948">end</span>
+<span style="color: #198810">"hello.pnx"</span> <span style="color: #198810">".pnx"</span> <span style="color: #d73948">str</span>.ends_with yes io.println
+<span style="color: #198810">"hello.pnx"</span> <span style="color: #198810">"he"</span> <span style="color: #d73948">str</span>.starts_with yes io.println
+<span style="color: #198810">"hello.pnx"</span> <span style="color: #198810">"lo."</span> <span style="color: #d73948">str</span>.contains yes io.println
+<span style="color: #198810">"a,b,c,b"</span> <span style="color: #198810">",b"</span> <span style="color: #d73948">str</span>.find <span style="color: #d73948">or_else</span> (e) <span style="color: #b60157">-1</span> <span style="color: #d73948">end</span> <span style="color: #d73948">str</span>.to_str io.println
+<span style="color: #198810">"a,b,c,b"</span> <span style="color: #198810">",b"</span> <span style="color: #d73948">str</span>.find_last <span style="color: #d73948">or_else</span> (e) <span style="color: #b60157">-1</span> <span style="color: #d73948">end</span> <span style="color: #d73948">str</span>.to_str io.println
+<span style="color: #198810">"a,b,c,b"</span> <span style="color: #198810">"x"</span> <span style="color: #d73948">str</span>.find <span style="color: #d73948">or_else</span> (e) <span style="color: #b60157">-1</span> <span style="color: #d73948">end</span> <span style="color: #d73948">str</span>.to_str io.println
+<span style="color: #198810">"abc"</span> <span style="color: #198810">"abd"</span> <span style="color: #d73948">str</span>.compare <span style="color: #d73948">str</span>.to_str io.println
+<span style="color: #198810">"hello"</span> <span style="color: #b60157">1</span> <span style="color: #d73948">str</span>.byte_at <span style="color: #d73948">str</span>.to_str io.println
+<span style="color: #198810">"hello"</span> <span style="color: #d73948">str</span>.len <span style="color: #d73948">str</span>.to_str io.println
+<span style="color: #198810">""</span> <span style="color: #d73948">str</span>.is_empty yes io.println
+</code></pre><p class="ex-label">출력</p><pre><code data-lang="text">$ pnx 16-str-search.pnx
+yes
+yes
+yes
+1
+5
+-1
+-1
+101
+5
+yes
+</code></pre></div><h4>16.1.3 새 글 만들기</h4><p class="para"><p><span class="pn">(6)</span> 결과는 구역에 쓴 새 바이트다. 수로 읽는 낱말은 실패할 수 있다.</p><table><tr><td><strong>낱말</strong></td><td><strong>서명</strong></td><td><strong>뜻</strong></td></tr><tr><td><code>upper</code> <code>lower</code></td><td><code>(str gives str)</code></td><td>ASCII 대소문자 바꾸기</td></tr><tr><td><code>repeat</code></td><td><code>(s str, n int gives str)</code></td><td><code>n</code> 번 이은 글</td></tr><tr><td><code>replace</code></td><td><code>(s str, old str, new str gives str)</code></td><td>모든 <code>old</code> 를 <code>new</code> 로</td></tr><tr><td><code>pad_left</code> <code>pad_right</code></td><td><code>(s str, width int gives str)</code></td><td>스페이스로 채워 <code>width</code> 바이트로. 이미 길면 그대로</td></tr><tr><td><code>to_str</code></td><td><code>(int gives str)</code></td><td>십진 글</td></tr><tr><td><code>to_int</code></td><td><code>(str gives int or fail)</code></td><td>십진으로 읽기. 부호 하나와 숫자만 받는다(공백도 안 된다). 아니거나 64 비트를 넘으면 <code>err.format</code></td></tr><tr><td><code>to_int_base</code></td><td><code>(s str, base int gives int or fail)</code></td><td>2–36 진법으로 읽기. 그 밖의 <code>base</code> 는 결함 <code>range</code></td></tr></table></p><div class="example run"><p class="ex-file"><code>16-str-make.pnx</code></p><pre><code data-lang="pinax"><span style="color: #d73948">use</span> io
+<span style="color: #d73948">use</span> <span style="color: #d73948">str</span>
+<span style="color: #198810">"Hello, World"</span> <span style="color: #d73948">str</span>.upper io.println
+<span style="color: #198810">"Hello, World"</span> <span style="color: #d73948">str</span>.lower io.println
+<span style="color: #198810">"ab"</span> <span style="color: #b60157">3</span> <span style="color: #d73948">str</span>.repeat io.println
+<span style="color: #198810">"one two one"</span> <span style="color: #198810">"one"</span> <span style="color: #198810">"1"</span> <span style="color: #d73948">str</span>.replace io.println
+<span style="color: #d73948">cat</span> (<span style="color: #198810">"["</span>, <span style="color: #198810">"7"</span> <span style="color: #b60157">4</span> <span style="color: #d73948">str</span>.pad_left, <span style="color: #198810">"]"</span>) io.println
+<span style="color: #d73948">cat</span> (<span style="color: #198810">"["</span>, <span style="color: #198810">"7"</span> <span style="color: #b60157">4</span> <span style="color: #d73948">str</span>.pad_right, <span style="color: #198810">"]"</span>) io.println
+<span style="color: #b60157">-42</span> <span style="color: #d73948">str</span>.to_str io.println
+<span style="color: #198810">"ff"</span> <span style="color: #b60157">16</span> <span style="color: #d73948">str</span>.to_int_base <span style="color: #d73948">or_else</span> (e) <span style="color: #b60157">-1</span> <span style="color: #d73948">end</span> <span style="color: #d73948">str</span>.to_str io.println
+<span style="color: #198810">"  12"</span> <span style="color: #d73948">str</span>.to_int <span style="color: #d73948">or_else</span> (e) <span style="color: #b60157">-1</span> <span style="color: #d73948">end</span> <span style="color: #d73948">str</span>.to_str io.println
+<span style="color: #198810">"12x"</span> <span style="color: #d73948">str</span>.to_int <span style="color: #d73948">or_else</span> (e) <span style="color: #b60157">-1</span> <span style="color: #d73948">end</span> <span style="color: #d73948">str</span>.to_str io.println
+<span style="color: #198810">"한글"</span> <span style="color: #d73948">str</span>.len <span style="color: #d73948">str</span>.to_str io.println
+<span style="color: #198810">"한글"</span> <span style="color: #d73948">str</span>.char_count <span style="color: #d73948">str</span>.to_str io.println
+<span style="color: #198810">"</span><span style="color: #1d6c76">\x</span><span style="color: #198810">ff"</span> <span style="color: #d73948">str</span>.is_utf8 <span style="color: #d73948">if</span> <span style="color: #198810">"utf-8"</span> <span style="color: #d73948">else</span> <span style="color: #198810">"not utf-8"</span> <span style="color: #d73948">end</span> io.println
+</code></pre><p class="ex-label">출력</p><pre><code data-lang="text">$ pnx 16-str-make.pnx
+HELLO, WORLD
+hello, world
+ababab
+1 two 1
+[   7]
+[7   ]
+-42
+255
+-1
+-1
+6
+2
+not utf-8
+</code></pre></div><h4>16.1.4 줄기와 버퍼에 쓰기</h4><p class="para"><p><span class="pn">(7)</span> 줄기(10.6)를 내는 낱말:</p><ul><li><code>s sep str.split</code> — <code>sep</code> 으로 가른 조각. 빈 조각도 낸다.</li><li><code>s str.words</code> — 공백으로 가른 조각. 빈 조각은 내지 않는다.</li><li><code>s str.lines</code> — 줄. 줄 끝의 LF 와 CR LF 는 빼고 낸다.</li><li><code>s str.bytes</code> — 바이트(<code>int</code>).</li><li><code>s str.chars</code> — UTF-8 글자 하나씩의 뷰(<code>str</code>).</li></ul></p><p class="para"><p><span class="pn">(8)</span> 버퍼에 쓰는 낱말:</p><ul><li><code>sep buf 줄기 str.join_into</code> — 줄기의 조각을 <code>sep</code> 으로 이어 버퍼에 붙인다(<code>or fail</code>). 줄기는 바로 뒤의 낱말이 받아야 하므로 줄기를 맨 뒤에 둔다.</li><li><code>s old new buf str.replace_into</code> — 바꾼 글을 버퍼에 붙이고 바꾼 횟수를 준다(<code>gives n int or fail</code>).</li></ul></p><div class="example run"><p class="ex-file"><code>16-str-stems.pnx</code></p><pre><code data-lang="pinax"><span style="color: #d73948">use</span> io
+<span style="color: #d73948">use</span> <span style="color: #d73948">str</span>
+<span style="color: #198810">"one two  three"</span> <span style="color: #d73948">str</span>.words <span style="color: #d73948">do</span> (w <span style="color: #d73948">str</span>) <span style="color: #d73948">cat</span> (<span style="color: #198810">"&lt;"</span>, w, <span style="color: #198810">"&gt;"</span>) io.print <span style="color: #d73948">end</span> each
+<span style="color: #198810">""</span> io.println
+<span style="color: #198810">"a,b,,c"</span> <span style="color: #b60157">','</span> <span style="color: #d73948">str</span>.split <span style="color: #d73948">do</span> (w <span style="color: #d73948">str</span>) <span style="color: #d73948">cat</span> (<span style="color: #198810">"&lt;"</span>, w, <span style="color: #198810">"&gt;"</span>) io.print <span style="color: #d73948">end</span> each
+<span style="color: #198810">""</span> io.println
+<span style="color: #d73948">text</span><span style="color: #198810"> </span><span style="color: #4b69c6">END</span>
+<span style="color: #198810">first line</span>
+<span style="color: #198810">second line</span>
+<span style="color: #4b69c6">END</span>
+<span style="color: #d73948">str</span>.lines <span style="color: #d73948">do</span> (l <span style="color: #d73948">str</span>) <span style="color: #d73948">cat</span> (<span style="color: #198810">"line: "</span>, l) io.println <span style="color: #d73948">end</span> each
+<span style="color: #198810">"hi"</span> <span style="color: #d73948">str</span>.bytes <span style="color: #d73948">do</span> (b <span style="color: #d73948">int</span>) b <span style="color: #d73948">str</span>.to_str io.print <span style="color: #198810">" "</span> io.print <span style="color: #d73948">end</span> each
+<span style="color: #198810">""</span> io.println
+<span style="color: #198810">"가a!"</span> <span style="color: #d73948">str</span>.chars <span style="color: #d73948">do</span> (c <span style="color: #d73948">str</span>) <span style="color: #d73948">cat</span> (<span style="color: #198810">"&lt;"</span>, c, <span style="color: #198810">" "</span>, c <span style="color: #d73948">str</span>.len, <span style="color: #198810">"&gt;"</span>) io.print <span style="color: #d73948">end</span> each
+<span style="color: #198810">""</span> io.println
+<span style="color: #d73948">buffer</span> out <span style="color: #b60157">64</span>
+<span style="color: #198810">", "</span> out <span style="color: #198810">"x y z"</span> <span style="color: #d73948">str</span>.words <span style="color: #d73948">str</span>.join_into <span style="color: #d73948">or_else</span> (e) <span style="color: #d73948">end</span>
+out contents io.println
+out clear
+<span style="color: #d73948">word</span> swap_dashes () <span style="color: #198810">"a-b-c"</span> <span style="color: #198810">"-"</span> <span style="color: #198810">"+"</span> out <span style="color: #d73948">str</span>.replace_into <span style="color: #d73948">or_else</span> (e) <span style="color: #b60157">0</span> <span style="color: #d73948">end</span> <span style="color: #d73948">to</span> n  <span style="color: #d73948">cat</span> (out contents, <span style="color: #198810">" ("</span>, n, <span style="color: #198810">" replaced)"</span>) io.println <span style="color: #d73948">end</span>
+swap_dashes
+</code></pre><p class="ex-label">출력</p><pre><code data-lang="text">$ pnx 16-str-stems.pnx
+&lt;one&gt;&lt;two&gt;&lt;three&gt;
+&lt;a&gt;&lt;b&gt;&lt;&gt;&lt;c&gt;
+line: first line
+line: second line
+104 105 
+&lt;가 3&gt;&lt;a 1&gt;&lt;! 1&gt;
+x, y, z
+a+b+c (2 replaced)
+</code></pre></div><h5>제약</h5><p class="para"><span class="pn">(9)</span> <code>str</code> 의 낱말에 <code>str</code> 가 아닌 값을 주면 거절된다.</p><div class="example refused"><p class="ex-file"><code>16-str-type.pnx</code></p><pre><code data-lang="pinax"><span style="color: #d73948">use</span> <span style="color: #d73948">str</span>
+<span style="color: #b60157">42</span> <span style="color: #d73948">str</span>.upper drop
+</code></pre><p class="ex-label">거절</p><pre><code data-lang="text">$ pnx 16-str-type.pnx
+16-str-type.pnx:2:4: this word takes a str
+</code></pre></div><h5>결함</h5><p class="para"><span class="pn">(10)</span> <code>slice</code> 와 <code>byte_at</code> 의 범위 밖 번호는 결함이다. 모자라도 되는 자르기는 <code>take</code> <code>skip</code> 을 쓴다.</p><div class="example fault"><p class="ex-file"><code>16-str-slice-range.pnx</code></p><pre><code data-lang="pinax"><span style="color: #d73948">use</span> io
+<span style="color: #d73948">use</span> <span style="color: #d73948">str</span>
+<span style="color: #198810">"hello"</span> <span style="color: #b60157">3</span> <span style="color: #b60157">5</span> <span style="color: #d73948">str</span>.slice io.println
+</code></pre><p class="ex-label">결함으로 멈춤</p><pre><code data-lang="text">$ pnx 16-str-slice-range.pnx
+16-str-slice-range.pnx:3: index out of range
+</code></pre></div><div class="example fault"><p class="ex-file"><code>16-str-byte-range.pnx</code></p><pre><code data-lang="pinax"><span style="color: #d73948">use</span> <span style="color: #d73948">str</span>
+<span style="color: #198810">"hello"</span> <span style="color: #b60157">5</span> <span style="color: #d73948">str</span>.byte_at drop
+</code></pre><p class="ex-label">결함으로 멈춤</p><pre><code data-lang="text">$ pnx 16-str-byte-range.pnx
+16-str-byte-range.pnx:2: index out of range
+</code></pre></div><h3>16.2 <code>fmt</code> — 수를 글로</h3><p class="para"><p><span class="pn">(1)</span> <code>cat</code> 은 <code>int</code> 를 십진으로 넣는다(9.8). 다른 모양은 모듈 <code>fmt</code> 의 낱말로 <code>str</code> 을 만든다. 형식을 적는 작은 언어(<code>%08x</code> 같은 것)는 없다. 결과는 구역에 쓴다.</p><table><tr><td><strong>낱말</strong></td><td><strong>서명</strong></td><td><strong>뜻</strong></td></tr><tr><td><code>hex</code> <code>bin</code></td><td><code>(int gives str)</code></td><td>십육진(소문자), 이진. 음수는 64 비트 2 의 보수로</td></tr><tr><td><code>hex_pad</code></td><td><code>(n int, width int gives str)</code></td><td>십육진을 앞에 0 을 채워 <code>width</code> 자리로</td></tr><tr><td><code>zero_pad</code></td><td><code>(n int, width int gives str)</code></td><td>십진을 앞에 0 을 채워 <code>width</code> 자리로. 부호도 자리를 차지한다</td></tr><tr><td><code>append_hex</code></td><td><code>(n int, buf or fail)</code></td><td>십육진을 버퍼에 붙인다</td></tr></table><p>십진은 <code>str.to_str</code>, 버퍼에 붙이는 십진은 <code>append_int</code>(15.3)다.</p></p><div class="example run"><p class="ex-file"><code>16-fmt.pnx</code></p><pre><code data-lang="pinax"><span style="color: #d73948">use</span> io
+<span style="color: #d73948">use</span> fmt
+<span style="color: #b60157">255</span> fmt.hex io.println
+<span style="color: #b60157">5</span> fmt.bin io.println
+<span style="color: #b60157">255</span> <span style="color: #b60157">8</span> fmt.hex_pad io.println
+<span style="color: #b60157">7</span> <span style="color: #b60157">3</span> fmt.zero_pad io.println
+<span style="color: #b60157">-7</span> <span style="color: #b60157">3</span> fmt.zero_pad io.println
+<span style="color: #d73948">buffer</span> out <span style="color: #b60157">32</span>
+<span style="color: #198810">"0x"</span> out append <span style="color: #d73948">or_else</span> (e) <span style="color: #d73948">end</span>
+<span style="color: #b60157">48879</span> out fmt.append_hex <span style="color: #d73948">or_else</span> (e) <span style="color: #d73948">end</span>
+out contents io.println
+</code></pre><p class="ex-label">출력</p><pre><code data-lang="text">$ pnx 16-fmt.pnx
+ff
+101
+000000ff
+007
+-07
+0xbeef
+</code></pre></div><h3>16.3 <code>hash</code> — 해시</h3><p class="para"><p><span class="pn">(1)</span> 모듈 <code>hash</code> 는 바이트의 해시를 <code>int</code> 로 준다. 암호에 쓰는 해시는 없다 — 그런 것은 호스트 낱말로 준다.</p><table><tr><td><strong>낱말</strong></td><td><strong>서명</strong></td><td><strong>뜻</strong></td></tr><tr><td><code>crc32</code></td><td><code>(str gives int)</code></td><td>CRC-32 (IEEE 802.3, zlib 과 같음). 0 부터 2<sup>32</sup>−1</td></tr><tr><td><code>fnv1a</code></td><td><code>(str gives int)</code></td><td>64 비트 FNV-1a</td></tr><tr><td><code>hash64</code></td><td><code>(str gives int)</code></td><td>키가 0 인 SipHash-2-4</td></tr></table></p><div class="example run"><p class="ex-file"><code>16-hash.pnx</code></p><pre><code data-lang="pinax"><span style="color: #d73948">use</span> io
+<span style="color: #d73948">use</span> hash
+<span style="color: #d73948">use</span> fmt
+<span style="color: #198810">"hello"</span> hash.crc32 fmt.hex io.println
+<span style="color: #198810">"hello"</span> hash.fnv1a fmt.hex io.println
+<span style="color: #198810">"hello"</span> hash.hash64 fmt.hex io.println
+</code></pre><p class="ex-label">출력</p><pre><code data-lang="text">$ pnx 16-hash.pnx
+3610a686
+a430d84680aabd0b
+8cc15d5db2f752b9
+</code></pre></div><h5>제약</h5><p class="para"><span class="pn">(2)</span> <code>str</code> 가 아닌 값의 해시는 거절된다. 수의 해시는 먼저 바이트로 만든다(16.5).</p><div class="example refused"><p class="ex-file"><code>16-hash-type.pnx</code></p><pre><code data-lang="pinax"><span style="color: #d73948">use</span> hash
+<span style="color: #b60157">42</span> hash.crc32 drop
+</code></pre><p class="ex-label">거절</p><pre><code data-lang="text">$ pnx 16-hash-type.pnx
+16-hash-type.pnx:2:4: this word takes a str
+</code></pre></div><h3>16.4 <code>encode</code> — 바이트를 글로</h3><p class="para"><p><span class="pn">(1)</span> 모듈 <code>encode</code> 의 낱말은 모두 <code>(s str, buf or fail)</code> 이다. 바꾼 결과를 버퍼에 붙이고, 자리가 모자라면 <code>err.full</code>, 입력의 모양이 틀리면 <code>err.format</code> 으로 실패한다.</p><table><tr><td><strong>낱말</strong></td><td><strong>뜻</strong></td></tr><tr><td><code>base64_encode</code> <code>base64_decode</code></td><td>RFC 4648 의 Base64. 풀 때 끝의 <code>=</code> 는 없어도 된다</td></tr><tr><td><code>hex_encode</code> <code>hex_decode</code></td><td>바이트마다 십육진 두 자리. 쓸 때 소문자, 읽을 때 대소문자 모두</td></tr><tr><td><code>url_encode</code> <code>url_decode</code></td><td>RFC 3986 의 퍼센트 부호화. 문자, 숫자, <code>-</code> <code>.</code> <code>_</code> <code>~</code> 밖의 바이트를 <code>%XX</code> 로</td></tr></table></p><div class="example run"><p class="ex-file"><code>16-encode.pnx</code></p><pre><code data-lang="pinax"><span style="color: #d73948">use</span> io
+<span style="color: #d73948">use</span> encode
+<span style="color: #d73948">buffer</span> out <span style="color: #b60157">64</span>
+<span style="color: #d73948">word</span> show (label <span style="color: #d73948">str</span>) <span style="color: #d73948">cat</span> (label, <span style="color: #198810">" "</span>, out contents) io.println  out clear <span style="color: #d73948">end</span>
+<span style="color: #d73948">word</span> demo (<span style="color: #d73948">or</span> <span style="color: #d73948">fail</span>)
+  <span style="color: #198810">"Pinax!"</span> out encode.base64_encode <span style="color: #d73948">or_fail</span>  <span style="color: #198810">"base64"</span> show
+  <span style="color: #198810">"UGluYXgh"</span> out encode.base64_decode <span style="color: #d73948">or_fail</span>  <span style="color: #198810">"decoded"</span> show
+  <span style="color: #198810">"</span><span style="color: #1d6c76">\x</span><span style="color: #198810">00</span><span style="color: #1d6c76">\x</span><span style="color: #198810">ff"</span> out encode.hex_encode <span style="color: #d73948">or_fail</span>  <span style="color: #198810">"hex"</span> show
+  <span style="color: #198810">"a b&amp;c=d/é"</span> out encode.url_encode <span style="color: #d73948">or_fail</span>  <span style="color: #198810">"url"</span> show
+  <span style="color: #198810">"a%20b"</span> out encode.url_decode <span style="color: #d73948">or_fail</span>  <span style="color: #198810">"url decoded"</span> show
+<span style="color: #d73948">end</span>
+demo <span style="color: #d73948">or_else</span> (e) <span style="color: #d73948">cat</span> (<span style="color: #198810">"failed: "</span>, e err_text) io.println <span style="color: #d73948">end</span>
+</code></pre><p class="ex-label">출력</p><pre><code data-lang="text">$ pnx 16-encode.pnx
+base64 UGluYXgh
+decoded Pinax!
+hex 00ff
+url a%20b%26c%3Dd%2F%C3%A9
+url decoded a b
+</code></pre></div><div class="example run"><p class="ex-file"><code>16-encode-bad.pnx</code></p><pre><code data-lang="pinax"><span style="color: #d73948">use</span> io
+<span style="color: #d73948">use</span> encode
+<span style="color: #d73948">buffer</span> out <span style="color: #b60157">16</span>
+<span style="color: #198810">"zz"</span> out encode.hex_decode <span style="color: #d73948">or_else</span> (e) <span style="color: #d73948">cat</span> (<span style="color: #198810">"hex_decode: "</span>, e err_text) io.println <span style="color: #d73948">end</span>
+<span style="color: #198810">"ab*c"</span> out encode.base64_decode <span style="color: #d73948">or_else</span> (e) <span style="color: #d73948">cat</span> (<span style="color: #198810">"base64_decode: "</span>, e err_text) io.println <span style="color: #d73948">end</span>
+</code></pre><p class="ex-label">출력</p><pre><code data-lang="text">$ pnx 16-encode-bad.pnx
+hex_decode: format
+base64_decode: format
+</code></pre></div><h3>16.5 <code>bytes</code> — 이진 자료</h3><p class="para"><span class="pn">(1)</span> 모듈 <code>bytes</code> 는 수와 글을 정해진 바이트 모양으로 버퍼에 쓰고, 바이트에서 읽는다. 쓰는 낱말은 <code>(값, buf or fail)</code> 이고(자리가 모자라면 <code>err.full</code>, 아무것도 쓰지 않는다), 읽는 낱말은 <code>(s str gives 값, 나머지<br>str or fail)</code> 이다(바이트가 모자라거나 모양이 틀리면 <code>err.format</code>).</p><p class="para"><p><span class="pn">(2)</span></p><table><tr><td><strong>낱말</strong></td><td><strong>바이트</strong></td></tr><tr><td><code>put_u8</code> <code>put_u16</code> <code>put_u32</code> <code>put_u64</code><br><code>put_i8</code> <code>put_i16</code> <code>put_i32</code> <code>put_i64</code></td><td>그 폭의 정수. 작은 끝이 먼저</td></tr><tr><td>같은 이름 뒤에 <code>_be</code></td><td>큰 끝이 먼저</td></tr><tr><td><code>get_u8</code> … <code>get_i64</code>, <code>get_u16_be</code> …</td><td>위의 짝. <code>u8</code> <code>u16</code> <code>u32</code> 는 0 이상으로 읽는다. <code>u64</code> 는 64 비트를 그대로 <code>int</code> 에 담는다(위 비트가 서면 음수)</td></tr><tr><td><code>put_varint</code> <code>get_varint</code></td><td>LEB128. 값을 부호 없는 64 비트로 보고 7 비트씩 쓴다(음수는 10 바이트)</td></tr><tr><td><code>put_str</code> <code>get_str</code></td><td>길이(varint) 다음에 바이트</td></tr></table></p><div class="example run"><p class="ex-file"><code>16-bytes.pnx</code></p><pre><code data-lang="pinax"><span style="color: #d73948">use</span> io
+<span style="color: #d73948">use</span> bytes
+<span style="color: #d73948">use</span> encode
+<span style="color: #d73948">use</span> <span style="color: #d73948">str</span>
+<span style="color: #d73948">buffer</span> out <span style="color: #b60157">64</span>
+<span style="color: #d73948">buffer</span> hex <span style="color: #b60157">128</span>
+<span style="color: #d73948">word</span> dump () out contents hex encode.hex_encode <span style="color: #d73948">or_else</span> (e) <span style="color: #d73948">end</span>  hex contents io.println  hex clear <span style="color: #d73948">end</span>
+<span style="color: #d73948">word</span> demo (<span style="color: #d73948">or</span> <span style="color: #d73948">fail</span>)
+  <span style="color: #b60157">258</span> out bytes.put_u16 <span style="color: #d73948">or_fail</span>            <span style="color: #74747c">rem little end first: 02 01</span>
+  <span style="color: #b60157">258</span> out bytes.put_u16_be <span style="color: #d73948">or_fail</span>         <span style="color: #74747c">rem big end first: 01 02</span>
+  <span style="color: #b60157">300</span> out bytes.put_varint <span style="color: #d73948">or_fail</span>         <span style="color: #74747c">rem LEB128: ac 02</span>
+  <span style="color: #198810">"hi"</span> out bytes.put_str <span style="color: #d73948">or_fail</span>           <span style="color: #74747c">rem a varint length, then the bytes</span>
+  dump
+  out contents <span style="color: #d73948">to</span> s
+  s bytes.get_u16 <span style="color: #d73948">or_fail</span> <span style="color: #d73948">to</span> (a, s1)       <span style="color: #74747c">rem the value and the rest</span>
+  s1 bytes.get_u16_be <span style="color: #d73948">or_fail</span> <span style="color: #d73948">to</span> (b, s2)
+  s2 bytes.get_varint <span style="color: #d73948">or_fail</span> <span style="color: #d73948">to</span> (c, s3)
+  s3 bytes.get_str <span style="color: #d73948">or_fail</span> <span style="color: #d73948">to</span> (d, s4)
+  <span style="color: #d73948">cat</span> (a, <span style="color: #198810">" "</span>, b, <span style="color: #198810">" "</span>, c, <span style="color: #198810">" "</span>, d, <span style="color: #198810">", left "</span>, s4 <span style="color: #d73948">str</span>.len) io.println
+<span style="color: #d73948">end</span>
+demo <span style="color: #d73948">or_else</span> (e) e err_text io.println <span style="color: #d73948">end</span>
+</code></pre><p class="ex-label">출력</p><pre><code data-lang="text">$ pnx 16-bytes.pnx
+02010102ac02026869
+258 258 300 hi, left 0
+</code></pre></div><h4>16.5.1 레코드</h4><p class="para"><span class="pn">(3)</span> <code>줄 buf bytes.pack</code> 은 레코드(8.8)의 줄 하나를 필드의 차례대로 버퍼에 붙인다(<code>or fail</code>). <code>s 줄 bytes.unpack</code> 은 바이트에서 필드를 읽어 줄에 넣고 나머지 뷰를 준다(<code>gives str or fail</code>). <code>줄 bytes.packed_size</code> 는 <code>pack</code> 이 쓸 바이트 수다.</p><p class="para"><span class="pn">(4)</span> 필드의 바이트: 정수 폭은 그 폭으로(레코드에 <code>big_endian</code> 이 있으면 큰 끝이 먼저, 없으면 작은 끝이 먼저), <code>int</code> 는 8 바이트, <code>bool</code> 은 1 바이트, <code>varint</code> 는 LEB128, <code>str(N)</code> 은 길이(varint) 다음에 바이트, 줄을 담는 필드는 담긴 수(varint).</p><p class="para"><span class="pn">(5)</span> <code>pack</code> 이 실패하면 버퍼는 부르기 전의 길이로 돌아간다. <code>unpack</code> 은 모든 필드를 읽을 수 있을 때만 줄에 쓴다 — 실패하면 줄은 그대로다.</p><div class="example run"><p class="ex-file"><code>16-bytes-pack.pnx</code></p><pre><code data-lang="pinax"><span style="color: #d73948">use</span> io
+<span style="color: #d73948">use</span> bytes
+<span style="color: #d73948">use</span> encode
+<span style="color: #d73948">use</span> <span style="color: #d73948">str</span>
+<span style="color: #d73948">record</span> item
+  id <span style="color: #d73948">u16</span>
+  name <span style="color: #d73948">str</span>(<span style="color: #b60157">8</span>)
+  delta varint
+<span style="color: #d73948">end</span>
+<span style="color: #d73948">record</span> wire
+  <span style="color: #d73948">big_endian</span>
+  id <span style="color: #d73948">u16</span>
+  count <span style="color: #d73948">u32</span>
+<span style="color: #d73948">end</span>
+<span style="color: #d73948">array</span> items item <span style="color: #b60157">2</span>
+<span style="color: #d73948">array</span> wires wire <span style="color: #b60157">1</span>
+<span style="color: #d73948">buffer</span> out <span style="color: #b60157">64</span>
+<span style="color: #d73948">buffer</span> hex <span style="color: #b60157">128</span>
+<span style="color: #d73948">word</span> dump () out contents hex encode.hex_encode <span style="color: #d73948">or_else</span> (e) <span style="color: #d73948">end</span>  hex contents io.println  hex clear <span style="color: #d73948">end</span>
+<span style="color: #d73948">word</span> demo (<span style="color: #d73948">or</span> <span style="color: #d73948">fail</span>)
+  <span style="color: #b60157">0</span> items idx <span style="color: #d73948">to</span> a
+  <span style="color: #b60157">513</span> a <span style="color: #d73948">to</span> item.id  <span style="color: #198810">"pinax"</span> a <span style="color: #d73948">to</span> item.name  <span style="color: #b60157">-3</span> a <span style="color: #d73948">to</span> item.delta
+  a out bytes.pack <span style="color: #d73948">or_fail</span>
+  dump
+  <span style="color: #d73948">cat</span> (<span style="color: #198810">"packed_size "</span>, a bytes.packed_size, <span style="color: #198810">", written "</span>, out contents <span style="color: #d73948">str</span>.len) io.println
+  <span style="color: #b60157">1</span> items idx <span style="color: #d73948">to</span> b
+  out contents b bytes.unpack <span style="color: #d73948">or_fail</span> <span style="color: #d73948">to</span> rest
+  <span style="color: #d73948">cat</span> (b item.id, <span style="color: #198810">" "</span>, b item.name, <span style="color: #198810">" "</span>, b item.delta, <span style="color: #198810">", rest "</span>, rest <span style="color: #d73948">str</span>.len) io.println
+  <span style="color: #198810">"</span><span style="color: #1d6c76">\x</span><span style="color: #198810">01</span><span style="color: #1d6c76">\x</span><span style="color: #198810">02</span><span style="color: #1d6c76">\x</span><span style="color: #198810">05"</span> b bytes.unpack <span style="color: #d73948">or_else</span> (e) <span style="color: #d73948">cat</span> (<span style="color: #198810">"short input: "</span>, e err_text) io.println <span style="color: #198810">""</span> <span style="color: #d73948">end</span> drop
+  <span style="color: #d73948">cat</span> (<span style="color: #198810">"the row is unchanged: "</span>, b item.name) io.println
+  out clear
+  <span style="color: #b60157">0</span> wires idx <span style="color: #d73948">to</span> w
+  <span style="color: #b60157">258</span> w <span style="color: #d73948">to</span> wire.id  <span style="color: #b60157">7</span> w <span style="color: #d73948">to</span> wire.count
+  w out bytes.pack <span style="color: #d73948">or_fail</span>
+  dump
+<span style="color: #d73948">end</span>
+demo <span style="color: #d73948">or_else</span> (e) e err_text io.println <span style="color: #d73948">end</span>
+</code></pre><p class="ex-label">출력</p><pre><code data-lang="text">$ pnx 16-bytes-pack.pnx
+01020570696e6178fdffffffffffffffff01
+packed_size 18, written 18
+513 pinax -3, rest 0
+short input: format
+the row is unchanged: pinax
+010200000007
+</code></pre></div><h5>제약</h5><p class="para"><span class="pn">(6)</span> <code>pack</code> <code>unpack</code> <code>packed_size</code> 는 레코드의 줄만 받는다.</p><div class="example refused"><p class="ex-file"><code>16-bytes-pack-int.pnx</code></p><pre><code data-lang="pinax"><span style="color: #d73948">use</span> bytes
+<span style="color: #d73948">buffer</span> b <span style="color: #b60157">8</span>
+<span style="color: #b60157">5</span> b bytes.pack <span style="color: #d73948">or_else</span> (e) <span style="color: #d73948">end</span>
+</code></pre><p class="ex-label">거절</p><pre><code data-lang="text">$ pnx 16-bytes-pack-int.pnx
+16-bytes-pack-int.pnx:3:5: pack takes a row of a table of records and a buffer: row buf bytes.pack
+</code></pre></div><h5>결함</h5><p class="para"><span class="pn">(7)</span> 쓰는 값이 폭에 맞지 않으면 결함 <code>overflow</code> 다. 자르지 않는다.</p><div class="example fault"><p class="ex-file"><code>16-bytes-narrow.pnx</code></p><pre><code data-lang="pinax"><span style="color: #d73948">use</span> bytes
+<span style="color: #d73948">buffer</span> b <span style="color: #b60157">8</span>
+<span style="color: #b60157">300</span> b bytes.put_u8 <span style="color: #d73948">or_else</span> (e) <span style="color: #d73948">end</span>
+</code></pre><p class="ex-label">결함으로 멈춤</p><pre><code data-lang="text">$ pnx 16-bytes-narrow.pnx
+16-bytes-narrow.pnx:3: integer overflow
+</code></pre></div><h3>16.6 <code>ptn</code> — 작은 패턴</h3><p class="para"><span class="pn">(1)</span> 모듈 <code>ptn</code> 은 Lua 의 패턴과 같은 크기의 <strong>패턴</strong>(pattern)으로 문자열을 찾고 바꾼다. 갈래 선택(<code>|</code>), 묶음의 되풀이, 역참조는 없다. 더 큰 문법은 <code>rex</code>(16.7)가 맡는다.</p><h4>16.6.1 패턴의 글</h4><p class="para"><p><span class="pn">(2)</span> 패턴은 다음 항목의 나열이다. 바이트 단위로 맞춘다.</p><table><tr><td><strong>항목</strong></td><td><strong>맞는 것</strong></td></tr><tr><td>보통 글자</td><td>그 바이트</td></tr><tr><td><code>.</code></td><td>아무 바이트</td></tr><tr><td><code>%a</code> <code>%d</code> <code>%l</code> <code>%u</code> <code>%s</code> <code>%w</code> <code>%x</code> <code>%p</code> <code>%c</code></td><td>글자, 숫자, 소문자, 대문자, 공백, 글자나 숫자, 십육진 숫자, 구두점, 제어 문자(ASCII). 대문자로 쓰면 그 밖</td></tr><tr><td><code>%</code> 와 글자·숫자가 아닌 것</td><td>그 바이트 자체(<code>%.</code> <code>%%</code> <code>%(</code>)</td></tr><tr><td><code>[…]</code> <code>[^…]</code></td><td>집합과 그 여집합. 안에 <code>a-z</code> 범위와 <code>%</code> 갈래를 쓴다. 여는 <code>[</code> 나 <code>[^</code> 바로 뒤의 <code>]</code> 는 글자다</td></tr><tr><td>항목 뒤의 <code>*</code> <code>+</code> <code>-</code> <code>?</code></td><td>0 번 이상(길게), 1 번 이상(길게), 0 번 이상(짧게), 0 번이나 1 번</td></tr><tr><td><code>( … )</code></td><td>갈무리(capture). 아홉까지</td></tr><tr><td>처음의 <code>^</code>, 끝의 <code>$</code></td><td>글의 처음, 글의 끝에 붙임</td></tr></table></p><div class="example run"><p class="ex-file"><code>16-ptn-classes.pnx</code></p><pre><code data-lang="pinax"><span style="color: #d73948">use</span> io
+<span style="color: #d73948">use</span> ptn
+<span style="color: #198810">"a1 B2_c3!"</span> <span style="color: #198810">"%a"</span> <span style="color: #198810">"."</span> ptn.replace io.println     <span style="color: #74747c">rem letters</span>
+<span style="color: #198810">"a1 B2_c3!"</span> <span style="color: #198810">"%d"</span> <span style="color: #198810">"."</span> ptn.replace io.println     <span style="color: #74747c">rem digits</span>
+<span style="color: #198810">"a1 B2_c3!"</span> <span style="color: #198810">"%W"</span> <span style="color: #198810">"."</span> ptn.replace io.println     <span style="color: #74747c">rem not letter or digit</span>
+<span style="color: #198810">"a1 B2_c3!"</span> <span style="color: #198810">"[%u_]"</span> <span style="color: #198810">"."</span> ptn.replace io.println  <span style="color: #74747c">rem a set: upper case or _</span>
+<span style="color: #198810">"aaab"</span> <span style="color: #198810">"a-b"</span> <span style="color: #198810">"&lt;%0&gt;"</span> ptn.replace io.println      <span style="color: #74747c">rem - is the shortest repetition</span>
+<span style="color: #198810">"color colour"</span> <span style="color: #198810">"colou?r"</span> <span style="color: #198810">"#"</span> ptn.replace io.println
+</code></pre><p class="ex-label">출력</p><pre><code data-lang="text">$ pnx 16-ptn-classes.pnx
+.1 .2_.3!
+a. B._c.!
+a1.B2.c3.
+a1 .2.c3!
+&lt;aaab&gt;
+# #
+</code></pre></div><h4>16.6.2 낱말</h4><p class="para"><p><span class="pn">(3)</span></p><table><tr><td><strong>낱말</strong></td><td><strong>서명</strong></td><td><strong>뜻</strong></td></tr><tr><td><code>is_match</code></td><td><code>(s str, pat gives bool)</code></td><td>어디든 맞는 곳이 있는가</td></tr><tr><td><code>match</code></td><td><code>(s str, pat gives str or fail)</code></td><td>처음 맞은 부분의 뷰. 없으면 <code>err.not_found</code></td></tr><tr><td><code>capture</code></td><td><code>(n int gives str)</code></td><td>마지막 <code>match</code> 의 갈무리 <code>n</code> (1–9). 0 은 맞은 전체</td></tr><tr><td><code>matches</code></td><td>줄기</td><td>맞은 부분을 차례로. 겹치지 않게 다음 자리에서 다시 찾는다</td></tr><tr><td><code>replace</code></td><td><code>(s str, pat, rep str gives str)</code></td><td>맞은 곳을 모두 <code>rep</code> 로 바꾼 새 글. <code>rep</code> 의 <code>%0</code>–<code>%9</code> 는 갈무리, <code>%%</code> 는 <code>%</code></td></tr></table></p><p class="para"><span class="pn">(4)</span> <code>^</code> 로 시작하는 패턴은 처음 자리에서만 맞춰 본다. 그래서 <code>matches</code> 와 <code>replace</code> 도 많아야 한 번 맞는다.</p><p class="para"><span class="pn">(5)</span> <code>capture</code> 가 읽는 마지막 맞음은 실행(작업)마다 따로 있다. 다른 <code>match</code> 를 부르면 바뀐다.</p><div class="example run"><p class="ex-file"><code>16-ptn.pnx</code></p><pre><code data-lang="pinax"><span style="color: #d73948">use</span> io
+<span style="color: #d73948">use</span> ptn
+<span style="color: #d73948">const</span> date <span style="color: #198810">"(%d+)-(%d+)-(%d+)"</span>
+<span style="color: #d73948">word</span> yes (b <span style="color: #d73948">bool</span> <span style="color: #d73948">gives</span> <span style="color: #d73948">str</span>) b <span style="color: #d73948">if</span> <span style="color: #198810">"true"</span> <span style="color: #d73948">else</span> <span style="color: #198810">"false"</span> <span style="color: #d73948">end</span> <span style="color: #d73948">end</span>
+<span style="color: #198810">"abc 123"</span> <span style="color: #198810">"%d+"</span> ptn.is_match yes io.println
+<span style="color: #d73948">word</span> demo ()
+  <span style="color: #198810">"on 2026-10-15 ok"</span> date ptn.match <span style="color: #d73948">or_else</span> (e) <span style="color: #198810">"?"</span> <span style="color: #d73948">end</span> io.println    <span style="color: #74747c">rem the whole match</span>
+  <span style="color: #d73948">cat</span> (<span style="color: #b60157">1</span> ptn.capture, <span style="color: #198810">"/"</span>, <span style="color: #b60157">2</span> ptn.capture, <span style="color: #198810">"/"</span>, <span style="color: #b60157">3</span> ptn.capture) io.println
+  <span style="color: #198810">"key = value"</span> <span style="color: #198810">"^(%w+)%s*=%s*(%w+)$"</span> ptn.match <span style="color: #d73948">or_else</span> (e) <span style="color: #198810">"?"</span> <span style="color: #d73948">end</span> drop
+  <span style="color: #d73948">cat</span> (<span style="color: #b60157">2</span> ptn.capture, <span style="color: #198810">" &lt;- "</span>, <span style="color: #b60157">1</span> ptn.capture) io.println
+<span style="color: #d73948">end</span>
+demo
+<span style="color: #198810">"x=1, y=22, z=333"</span> <span style="color: #198810">"%a=%d+"</span> ptn.matches <span style="color: #d73948">do</span> (m <span style="color: #d73948">str</span>) <span style="color: #d73948">cat</span> (<span style="color: #198810">"["</span>, m, <span style="color: #198810">"]"</span>) io.print <span style="color: #d73948">end</span> each
+<span style="color: #198810">""</span> io.println
+<span style="color: #198810">"2026-10-15"</span> date <span style="color: #198810">"%3.%2.%1 (%0)"</span> ptn.replace io.println
+<span style="color: #198810">"  trim me  "</span> <span style="color: #198810">"^%s*(.-)%s*$"</span> <span style="color: #198810">"%1"</span> ptn.replace io.println
+<span style="color: #198810">"aaa"</span> <span style="color: #198810">"^a"</span> <span style="color: #198810">"-"</span> ptn.replace io.println              <span style="color: #74747c">rem ^ anchors: one match, at the start</span>
+</code></pre><p class="ex-label">출력</p><pre><code data-lang="text">$ pnx 16-ptn.pnx
+true
+2026-10-15
+2026/10/15
+value &lt;- key
+[x=1][y=22][z=333]
+15.10.2026 (2026-10-15)
+trim me
+-aa
+</code></pre></div><h5>제약</h5><p class="para"><span class="pn">(6)</span> 패턴은 문자열 리터럴이거나 그런 값의 <code>const</code> 여야 한다. 적재 때 검사하기 위해서다. 돌 때 만든 글로 찾으려면 <code>rex.compile</code>(16.7)을 쓴다.</p><div class="example refused"><p class="ex-file"><code>16-ptn-variable.pnx</code></p><pre><code data-lang="pinax"><span style="color: #d73948">use</span> ptn
+<span style="color: #d73948">word</span> f (s <span style="color: #d73948">str</span>, p <span style="color: #d73948">str</span> <span style="color: #d73948">gives</span> <span style="color: #d73948">bool</span>) s p ptn.is_match <span style="color: #d73948">end</span>
+</code></pre><p class="ex-label">거절</p><pre><code data-lang="text">$ pnx 16-ptn-variable.pnx
+16-ptn-variable.pnx:2:38: a pattern is a string literal or a const name, so that it is checked at load
+</code></pre></div><p class="para"><span class="pn">(7)</span> 모양이 틀린 패턴(닫히지 않은 집합이나 갈무리, <code>%</code> 로 끝남, 열지 않은 <code>)</code>, 갈무리 열 개 이상)은 거절된다. <code>%b</code> <code>%f</code>, 역참조 <code>%1</code>, 위치 갈무리 <code>()</code> 도 거절된다.</p><div class="example refused"><p class="ex-file"><code>16-ptn-bad.pnx</code></p><pre><code data-lang="pinax"><span style="color: #d73948">use</span> ptn
+<span style="color: #d73948">word</span> f (s <span style="color: #d73948">str</span> <span style="color: #d73948">gives</span> <span style="color: #d73948">bool</span>) s <span style="color: #198810">"[a-z"</span> ptn.is_match <span style="color: #d73948">end</span>
+</code></pre><p class="ex-label">거절</p><pre><code data-lang="text">$ pnx 16-ptn-bad.pnx
+16-ptn-bad.pnx:2:36: a set is not closed by ]
+</code></pre></div><div class="example refused"><p class="ex-file"><code>16-ptn-balance.pnx</code></p><pre><code data-lang="pinax"><span style="color: #d73948">use</span> ptn
+<span style="color: #d73948">word</span> f (s <span style="color: #d73948">str</span> <span style="color: #d73948">gives</span> <span style="color: #d73948">bool</span>) s <span style="color: #198810">"%b()"</span> ptn.is_match <span style="color: #d73948">end</span>
+</code></pre><p class="ex-label">거절</p><pre><code data-lang="text">$ pnx 16-ptn-balance.pnx
+16-ptn-balance.pnx:2:36: %b, %f and back references are not supported
+</code></pre></div><h5>결함</h5><p class="para"><span class="pn">(8)</span> <code>capture</code> 의 <code>n</code> 이 마지막 맞음에 없는 갈무리이거나 아직 맞음이 없으면 결함 <code>range</code> 다.</p><div class="example fault"><p class="ex-file"><code>16-ptn-capture-none.pnx</code></p><pre><code data-lang="pinax"><span style="color: #d73948">use</span> ptn
+<span style="color: #d73948">use</span> io
+<span style="color: #d73948">word</span> f () <span style="color: #198810">"ab"</span> <span style="color: #198810">"(a)b"</span> ptn.match <span style="color: #d73948">or_else</span> (e) <span style="color: #198810">""</span> <span style="color: #d73948">end</span> drop  <span style="color: #b60157">2</span> ptn.capture io.println <span style="color: #d73948">end</span>
+f
+</code></pre><p class="ex-label">결함으로 멈춤</p><pre><code data-lang="text">$ pnx 16-ptn-capture-none.pnx
+16-ptn-capture-none.pnx:3: index out of range
+</code></pre></div><p class="para"><span class="pn">(9)</span> 맞추기는 되돌아가며 찾는다. 낱말 한 번에 2<sup>24</sup> 걸음을 넘으면 결함 <code>depth</code> 로 멈춘다. 그런 패턴은 짧은 되풀이(<code>-</code>)를 줄이거나 <code>rex</code> 를 쓴다(<code>rex</code> 는 되돌아가지 않는다).</p><div class="example fault"><p class="ex-file"><code>16-ptn-steps.pnx</code></p><pre><code data-lang="pinax"><span style="color: #d73948">use</span> ptn
+<span style="color: #d73948">use</span> <span style="color: #d73948">str</span>
+<span style="color: #198810">"a"</span> <span style="color: #b60157">300</span> <span style="color: #d73948">str</span>.repeat <span style="color: #198810">".-.-.-.-.-.-.-.-x"</span> ptn.is_match drop
+</code></pre><p class="ex-label">결함으로 멈춤</p><pre><code data-lang="text">$ pnx 16-ptn-steps.pnx
+16-ptn-steps.pnx:3: call depth limit
+</code></pre></div><h5>진단</h5><table><thead><tr><th><strong>조건</strong></th><th><strong>메시지</strong></th></tr></thead><tbody><tr><td>패턴이 상수가 아님</td><td><code>a pattern is a string literal or a const name, so that it is checked at load</code></td></tr><tr><td>닫히지 않은 집합</td><td><code>a set is not closed by ]</code></td></tr><tr><td><code>%b</code> <code>%f</code> 역참조</td><td><code>%b, %f and back references are not supported</code></td></tr></tbody></table><h3>16.7 <code>rex</code> — 정규 표현식</h3><p class="para"><span class="pn">(1)</span> 모듈 <code>rex</code> 는 <strong>정규 표현식</strong>(regular expression)으로 찾고 바꾼다. 맞추는 방법은 되돌아가지 않는 방식이라, 걸리는 시간이 글의 길이와 패턴의 크기의 곱을 넘지 않는다. 패턴을 적을 때는 날 문자열(6.5)을 쓴다 — 보통 문자열에서 <code>"\d"</code> 는 모르는 이스케이프로 거절되고, <code>"\b"</code> 는 백스페이스가 된다.</p><p class="para"><span class="pn">(2)</span> <code>use rex</code> 가 있는 소스에서는 타입 이름 <code>regex</code> 가 보인다. <code>regex</code> 값은 만든 뒤에 고치지 못하는 패턴 프로그램이다. 지역 변수, 인자, 결과에만 쓴다.</p><h4>16.7.1 패턴의 글</h4><p class="para"><p><span class="pn">(3)</span></p><table><tr><td><strong>모양</strong></td><td><strong>뜻</strong></td></tr><tr><td>글자</td><td>그 바이트들. 여러 바이트 글자는 그 바이트열</td></tr><tr><td><code>.</code></td><td>UTF-8 글자 하나. <code>(?s)</code> 가 없으면 줄바꿈은 뺀다</td></tr><tr><td><code>[abc]</code> <code>[a-z]</code> <code>[^…]</code></td><td>글자 집합. 범위는 ASCII. 부정 집합은 UTF-8 글자 하나를 먹는다</td></tr><tr><td><code>\d</code> <code>\w</code> <code>\s</code> <code>\D</code> <code>\W</code> <code>\S</code></td><td>숫자, 낱말 글자, 공백과 그 부정(ASCII)</td></tr><tr><td><code>*</code> <code>+</code> <code>?</code> <code>{n}</code> <code>{n,}</code> <code>{n,m}</code></td><td>되풀이(길게). 뒤에 <code>?</code> 를 붙이면 짧게</td></tr><tr><td><code>a|b</code></td><td>고르기. 왼쪽이 먼저</td></tr><tr><td><code>( … )</code> <code>(?: … )</code></td><td>묶음(갈무리함), 묶음(갈무리 안 함)</td></tr><tr><td><code>^</code> <code>$</code></td><td>글의 처음과 끝. <code>(?m)</code> 이면 줄마다</td></tr><tr><td><code>\b</code> <code>\B</code></td><td>낱말 경계와 그 부정(ASCII)</td></tr><tr><td><code>\n</code> <code>\t</code> <code>\r</code> <code>\f</code> <code>\v</code> <code>\0</code> <code>\xNN</code></td><td>그 바이트</td></tr><tr><td><code>\</code> 와 그 밖의 글자</td><td>그 글자(<code>\.</code> <code>\*</code> <code>\\</code>)</td></tr><tr><td><code>\zs</code> <code>\ze</code></td><td>맞은 부분의 시작과 끝을 여기로 좁힌다. 패턴 전체는 그대로 맞아야 한다</td></tr><tr><td><code>(?i)</code> <code>(?m)</code> <code>(?s)</code></td><td>패턴의 맨 앞에만. 대소문자 무시(ASCII), 줄마다의 닻, <code>.</code> 이 줄바꿈도</td></tr></table><p>역참조, 둘러보기, 유니코드 속성, 이름 붙은 묶음은 없다.</p></p><p class="para"><span class="pn">(4)</span> 빈 글에 맞을 수 있는 몸을 되풀이하는 패턴(<code>(a*)*</code> 같은 것)은 Perl 이나 Python 과 갈무리의 결과가 다를 수 있다.</p><h4>16.7.2 낱말</h4><p class="para"><p><span class="pn">(5)</span> <code>re</code> 는 <code>regex</code> 값이다. “맞은 부분” 은 <code>\zs</code> <code>\ze</code> 로 좁힌 범위다.</p><table><tr><td><strong>낱말</strong></td><td><strong>서명</strong></td><td><strong>뜻</strong></td></tr><tr><td><code>rx</code></td><td><code>(pat gives regex)</code></td><td>적재 때 패턴을 프로그램으로 만든다. <code>pat</code> 은 리터럴이나 <code>const</code></td></tr><tr><td><code>compile</code></td><td><code>(pat str gives regex or fail)</code></td><td>돌 때 만든다. 틀린 패턴은 <code>err.format</code>. 프로그램은 구역에 놓인다</td></tr><tr><td><code>is_match</code></td><td><code>(s str, re gives bool)</code></td><td>맞는 곳이 있는가</td></tr><tr><td><code>match</code></td><td><code>(s str, re gives str or fail)</code></td><td>처음 맞은 부분. 없으면 <code>err.not_found</code></td></tr><tr><td><code>cut_match</code></td><td><code>(s str, re gives str, str, str or fail)</code></td><td>처음 맞은 부분의 앞, 그 부분, 뒤</td></tr><tr><td><code>matches</code></td><td>줄기</td><td>맞은 부분을 차례로. 블록은 맞은 전체와 묶음마다 <code>str</code> 매개변수를 받는다</td></tr><tr><td><code>split</code></td><td>줄기</td><td>맞은 부분으로 가른 조각</td></tr><tr><td><code>with_match</code></td><td><code>(s str, re, 블록 or fail)</code></td><td>처음 맞은 것으로 블록을 한 번 돌린다. 없으면 <code>err.not_found</code></td></tr><tr><td><code>replace</code></td><td><code>(s str, re, rep str gives str)</code></td><td>모두 바꾼 새 글. <code>rep</code> 의 <code>\0</code>–<code>\9</code> 는 묶음</td></tr><tr><td><code>replace_into</code></td><td><code>(s str, re, rep str, buf gives int or fail)</code></td><td>바꾼 글을 버퍼에 붙이고 바꾼 횟수를 준다</td></tr><tr><td><code>replace_by</code></td><td><code>(s str, re, buf, 블록 gives int or fail)</code></td><td>맞은 곳마다 블록이 준 글로 바꿔 버퍼에 붙인다</td></tr></table></p><p class="para"><span class="pn">(6)</span> <code>matches</code> <code>split</code> <code>replace</code> 는 다음 자리에서 다시 찾을 때도 글 전체를 본다. 그래서 <code>^</code> 와 <code>\b</code> 는 그 자리 앞의 바이트를 안다.</p><div class="example run"><p class="ex-file"><code>16-rex.pnx</code></p><pre><code data-lang="pinax"><span style="color: #d73948">use</span> io
+<span style="color: #d73948">use</span> <span style="color: #d73948">str</span>
+<span style="color: #d73948">use</span> rex
+<span style="color: #d73948">const</span> pair <span style="color: #198810">r"(\w+)=(\d+)"</span>
+<span style="color: #d73948">word</span> yes (b <span style="color: #d73948">bool</span> <span style="color: #d73948">gives</span> <span style="color: #d73948">str</span>) b <span style="color: #d73948">if</span> <span style="color: #198810">"true"</span> <span style="color: #d73948">else</span> <span style="color: #198810">"false"</span> <span style="color: #d73948">end</span> <span style="color: #d73948">end</span>
+<span style="color: #d73948">word</span> total (line <span style="color: #d73948">str</span> <span style="color: #d73948">gives</span> n <span style="color: #d73948">int</span>)               <span style="color: #74747c">rem groups arrive as block parameters</span>
+  <span style="color: #b60157">0</span> <span style="color: #d73948">to</span> n
+  line pair rex.rx rex.matches <span style="color: #d73948">do</span> (whole <span style="color: #d73948">str</span>, key <span style="color: #d73948">str</span>, value <span style="color: #d73948">str</span>)
+    n value <span style="color: #d73948">str</span>.to_int <span style="color: #d73948">or_else</span> <span style="color: #b60157">0</span> <span style="color: #d73948">end</span> add <span style="color: #d73948">to</span> n
+  <span style="color: #d73948">end</span> each
+  n
+<span style="color: #d73948">end</span>
+<span style="color: #d73948">word</span> demo ()
+  <span style="color: #d73948">cat</span> (<span style="color: #198810">"sum "</span>, <span style="color: #198810">"id=7, x=20; name=kim, n=3"</span> total) io.println
+  <span style="color: #198810">"abc 123"</span> <span style="color: #198810">r"\d+"</span> rex.rx rex.is_match yes io.println
+  <span style="color: #198810">"on 2026-10-15 ok"</span> <span style="color: #198810">r"(\d+)-(\d+)"</span> rex.rx rex.match <span style="color: #d73948">or_else</span> (e) <span style="color: #198810">"?"</span> <span style="color: #d73948">end</span> io.println
+  <span style="color: #198810">"key: value"</span> <span style="color: #198810">r":\s*"</span> rex.rx rex.cut_match <span style="color: #d73948">or_else</span> (e) <span style="color: #198810">""</span> <span style="color: #198810">""</span> <span style="color: #198810">""</span> <span style="color: #d73948">end</span> <span style="color: #d73948">to</span> (before, m, after)
+  <span style="color: #d73948">cat</span> (<span style="color: #198810">"["</span>, before, <span style="color: #198810">"|"</span>, m, <span style="color: #198810">"|"</span>, after, <span style="color: #198810">"]"</span>) io.println
+  <span style="color: #198810">"from 2026-10-13 to 2026-11-02"</span> <span style="color: #198810">r"(\d{4})-(\d{2})-(\d{2})"</span> rex.rx <span style="color: #198810">r"\3/\2/\1"</span> rex.replace io.println
+  <span style="color: #198810">"a , b;c ,d"</span> <span style="color: #198810">r"\s*[,;]\s*"</span> rex.rx rex.split <span style="color: #d73948">do</span> (part <span style="color: #d73948">str</span>) <span style="color: #d73948">cat</span> (<span style="color: #198810">"&lt;"</span>, part, <span style="color: #198810">"&gt;"</span>) io.print <span style="color: #d73948">end</span> each
+  <span style="color: #198810">""</span> io.println
+  <span style="color: #198810">"가나다"</span> <span style="color: #198810">r"."</span> rex.rx rex.matches <span style="color: #d73948">do</span> (ch <span style="color: #d73948">str</span>) <span style="color: #d73948">cat</span> (<span style="color: #198810">"&lt;"</span>, ch, <span style="color: #198810">"&gt;"</span>) io.print <span style="color: #d73948">end</span> each   <span style="color: #74747c">rem . is one UTF-8 character</span>
+  <span style="color: #198810">""</span> io.println
+  <span style="color: #198810">"foobar"</span> <span style="color: #198810">r"foo\zsbar"</span> rex.rx rex.match <span style="color: #d73948">or_else</span> (e) <span style="color: #198810">"?"</span> <span style="color: #d73948">end</span> io.println              <span style="color: #74747c">rem \zs: the match starts here</span>
+  <span style="color: #198810">"Hello"</span> <span style="color: #198810">r"(?i)HELLO"</span> rex.rx rex.is_match yes io.println
+<span style="color: #d73948">end</span>
+demo
+</code></pre><p class="ex-label">출력</p><pre><code data-lang="text">$ pnx 16-rex.pnx
+sum 30
+true
+2026-10
+[key|: |value]
+from 13/10/2026 to 02/11/2026
+&lt;a&gt;&lt;b&gt;&lt;c&gt;&lt;d&gt;
+&lt;가&gt;&lt;나&gt;&lt;다&gt;
+bar
+true
+</code></pre></div><div class="example run"><p class="ex-file"><code>16-rex-blocks.pnx</code></p><pre><code data-lang="pinax"><span style="color: #d73948">use</span> io
+<span style="color: #d73948">use</span> <span style="color: #d73948">str</span>
+<span style="color: #d73948">use</span> rex
+<span style="color: #d73948">buffer</span> out <span style="color: #b60157">64</span>
+<span style="color: #d73948">word</span> demo ()
+  <span style="color: #198810">"2026-10-15"</span> <span style="color: #198810">r"(\d+)-(\d+)-(\d+)"</span> rex.rx <span style="color: #d73948">do</span> (whole <span style="color: #d73948">str</span>, y <span style="color: #d73948">str</span>, m <span style="color: #d73948">str</span>, d <span style="color: #d73948">str</span>)
+    <span style="color: #d73948">cat</span> (d, <span style="color: #198810">"/"</span>, m, <span style="color: #198810">"/"</span>, y) io.println
+  <span style="color: #d73948">end</span> rex.with_match <span style="color: #d73948">or_else</span> (e) <span style="color: #198810">"no date"</span> io.println <span style="color: #d73948">end</span>
+  <span style="color: #198810">"none here"</span> <span style="color: #198810">r"\d+"</span> rex.rx <span style="color: #d73948">do</span> (whole <span style="color: #d73948">str</span>) whole io.println <span style="color: #d73948">end</span> rex.with_match <span style="color: #d73948">or_else</span> (e) <span style="color: #198810">"no date"</span> io.println <span style="color: #d73948">end</span>
+  <span style="color: #198810">"the quick brown fox"</span> <span style="color: #198810">r"\b[a-z]"</span> rex.rx out <span style="color: #d73948">do</span> (w <span style="color: #d73948">str</span> <span style="color: #d73948">gives</span> <span style="color: #d73948">str</span>) w <span style="color: #d73948">str</span>.upper <span style="color: #d73948">end</span> rex.replace_by <span style="color: #d73948">or_else</span> (e) <span style="color: #b60157">-1</span> <span style="color: #d73948">end</span> <span style="color: #d73948">to</span> n
+  <span style="color: #d73948">cat</span> (n, <span style="color: #198810">" replaced: "</span>, out contents) io.println
+<span style="color: #d73948">end</span>
+demo
+</code></pre><p class="ex-label">출력</p><pre><code data-lang="text">$ pnx 16-rex-blocks.pnx
+15/10/2026
+no date
+4 replaced: The Quick Brown Fox
+</code></pre></div><div class="example run"><p class="ex-file"><code>16-rex-compile.pnx</code></p><pre><code data-lang="pinax"><span style="color: #d73948">use</span> io
+<span style="color: #d73948">use</span> rex
+<span style="color: #d73948">buffer</span> out <span style="color: #b60157">64</span>
+<span style="color: #d73948">word</span> swap_with (p <span style="color: #d73948">str</span>, s <span style="color: #d73948">str</span> <span style="color: #d73948">gives</span> n <span style="color: #d73948">int</span> <span style="color: #d73948">or</span> <span style="color: #d73948">fail</span>)  <span style="color: #74747c">rem a pattern made while running</span>
+  out clear
+  p rex.compile <span style="color: #d73948">or_fail</span> <span style="color: #d73948">to</span> re
+  s re <span style="color: #198810">"-"</span> out rex.replace_into <span style="color: #d73948">or_fail</span>
+<span style="color: #d73948">end</span>
+<span style="color: #d73948">word</span> demo ()
+  <span style="color: #198810">"X"</span> <span style="color: #198810">"aXbXc"</span> swap_with <span style="color: #d73948">or_else</span> (e) <span style="color: #b60157">-1</span> <span style="color: #d73948">end</span> <span style="color: #d73948">to</span> n
+  <span style="color: #d73948">cat</span> (n, <span style="color: #198810">" replaced: "</span>, out contents) io.println
+  <span style="color: #198810">"("</span> <span style="color: #198810">"aXbXc"</span> swap_with <span style="color: #d73948">or_else</span> (e) <span style="color: #d73948">cat</span> (<span style="color: #198810">"bad pattern: "</span>, e err_text) io.println <span style="color: #b60157">-1</span> <span style="color: #d73948">end</span> drop
+<span style="color: #d73948">end</span>
+demo
+</code></pre><p class="ex-label">출력</p><pre><code data-lang="text">$ pnx 16-rex-compile.pnx
+2 replaced: a-b-c
+bad pattern: format
+</code></pre></div><h5>제약</h5><p class="para"><span class="pn">(7)</span> <code>rx</code> 의 패턴은 문자열 리터럴이거나 <code>const</code> 여야 한다. 돌 때 만든 패턴은 <code>compile</code> 을 쓴다.</p><div class="example refused"><p class="ex-file"><code>16-rex-variable.pnx</code></p><pre><code data-lang="pinax"><span style="color: #d73948">use</span> rex
+<span style="color: #d73948">word</span> f (s <span style="color: #d73948">str</span>, p <span style="color: #d73948">str</span> <span style="color: #d73948">gives</span> <span style="color: #d73948">bool</span>) s p rex.rx rex.is_match <span style="color: #d73948">end</span>
+</code></pre><p class="ex-label">거절</p><pre><code data-lang="text">$ pnx 16-rex-variable.pnx
+16-rex-variable.pnx:2:38: rx takes a string literal or a const name; a pattern made while running is rex.compile
+</code></pre></div><p class="para"><span class="pn">(8)</span> 모양이 틀린 패턴과 없는 기능(역참조 등)은 거절된다.</p><div class="example refused"><p class="ex-file"><code>16-rex-bad.pnx</code></p><pre><code data-lang="pinax"><span style="color: #d73948">use</span> rex
+<span style="color: #d73948">word</span> f (s <span style="color: #d73948">str</span> <span style="color: #d73948">gives</span> <span style="color: #d73948">bool</span>) s <span style="color: #198810">r"a{3,1}"</span> rex.rx rex.is_match <span style="color: #d73948">end</span>
+</code></pre><p class="ex-label">거절</p><pre><code data-lang="text">$ pnx 16-rex-bad.pnx
+16-rex-bad.pnx:2:39: a counted repetition goes downwards
+</code></pre></div><div class="example refused"><p class="ex-file"><code>16-rex-backref.pnx</code></p><pre><code data-lang="pinax"><span style="color: #d73948">use</span> rex
+<span style="color: #d73948">word</span> f (s <span style="color: #d73948">str</span> <span style="color: #d73948">gives</span> <span style="color: #d73948">bool</span>) s <span style="color: #198810">r"(a)\1"</span> rex.rx rex.is_match <span style="color: #d73948">end</span>
+</code></pre><p class="ex-label">거절</p><pre><code data-lang="text">$ pnx 16-rex-backref.pnx
+16-rex-backref.pnx:2:38: back references are not supported
+</code></pre></div><p class="para"><span class="pn">(9)</span> <code>regex</code> 자리에 <code>str</code> 를 주면 거절된다. 블록의 묶음 매개변수는 <code>str</code> 이어야 한다.</p><div class="example refused"><p class="ex-file"><code>16-rex-str.pnx</code></p><pre><code data-lang="pinax"><span style="color: #d73948">use</span> rex
+<span style="color: #d73948">word</span> f (s <span style="color: #d73948">str</span> <span style="color: #d73948">gives</span> <span style="color: #d73948">bool</span>) s <span style="color: #198810">"a"</span> rex.is_match <span style="color: #d73948">end</span>
+</code></pre><p class="ex-label">거절</p><pre><code data-lang="text">$ pnx 16-rex-str.pnx
+16-rex-str.pnx:2:33: this word takes a str and a regex: s re rex.match
+</code></pre></div><div class="example refused"><p class="ex-file"><code>16-rex-group-type.pnx</code></p><pre><code data-lang="pinax"><span style="color: #d73948">use</span> rex
+<span style="color: #d73948">word</span> f (s <span style="color: #d73948">str</span>) s <span style="color: #198810">r"(a)"</span> rex.rx rex.matches <span style="color: #d73948">do</span> (m <span style="color: #d73948">str</span>, g <span style="color: #d73948">int</span>) <span style="color: #d73948">end</span> each <span style="color: #d73948">end</span>
+</code></pre><p class="ex-label">거절</p><pre><code data-lang="text">$ pnx 16-rex-group-type.pnx
+16-rex-group-type.pnx:2:44: the groups are named str parameters
+</code></pre></div><h5>결함</h5><p class="para"><span class="pn">(10)</span> 찾는 데 드는 작업 공간은 부를 때마다 구역의 끝에서 빌린다. 구역이 모자라면 결함 <code>full</code> 이다.</p><h5>진단</h5><table><thead><tr><th><strong>조건</strong></th><th><strong>메시지</strong></th></tr></thead><tbody><tr><td><code>rx</code> 에 상수가 아닌 패턴</td><td><code>rx takes a string literal or a const name; a pattern made while running is rex.compile</code></td></tr><tr><td>거꾸로 된 횟수</td><td><code>a counted repetition goes downwards</code></td></tr><tr><td>역참조</td><td><code>back references are not supported</code></td></tr><tr><td><code>regex</code> 자리의 <code>str</code></td><td><code>this word takes a str and a regex: s re rex.match</code></td></tr><tr><td><code>str</code> 가 아닌 묶음 매개변수</td><td><code>the groups are named str parameters</code></td></tr></tbody></table><h3>16.8 <code>json</code> — JSON</h3><p class="para"><span class="pn">(1)</span> 모듈 <code>json</code> 은 JSON(RFC 8259) 글을 나무로 만들지 않고 한 방향으로 읽고 쓴다. 읽기는 토큰 하나씩, 쓰기는 버퍼에 바로 한다.</p><h4>16.8.1 읽기</h4><p class="para"><span class="pn">(2)</span> <code>s json.next</code> 는 <code>s</code> 의 첫 토큰을 읽어 <code>(kind int, value str, rest str)</code> 를 준다(<code>or fail</code>). 끝에 이르면 <code>err.not_found</code>, 토큰이 아닌 것을 만나면 <code>err.format</code> 으로 실패한다. 토큰 사이의 공백, 쉼표, 쌍점은 건너뛴다. 괄호의 짝이나 쉼표의 자리 같은 문법의 짜임은 검사하지 않는다.</p><p class="para"><p><span class="pn">(3)</span> <code>kind</code> 는 아래 상수다. 문자열의 <code>value</code> 는 따옴표를 뗀 글이고, 이스케이프가 있으면 풀어서 구역에 쓴 글이다. 수의 <code>value</code> 는 적힌 그대로의 글이다.</p><table><tr><td><strong>상수</strong></td><td><strong>토큰</strong></td></tr><tr><td><code>json.object</code> <code>json.object_end</code></td><td><code>{</code> <code>}</code></td></tr><tr><td><code>json.array</code> <code>json.array_end</code></td><td><code>[</code> <code>]</code></td></tr><tr><td><code>json.key</code></td><td>쌍점이 뒤따르는 문자열</td></tr><tr><td><code>json.string</code></td><td>그 밖의 문자열</td></tr><tr><td><code>json.number</code></td><td>수</td></tr><tr><td><code>json.boolean</code> <code>json.null</code></td><td><code>true</code> <code>false</code>, <code>null</code></td></tr></table></p><p class="para"><span class="pn">(4)</span> <code>s json.skip</code> 은 값 하나(객체나 배열이면 그 안 전부)를 건너뛰고 나머지를 준다(<code>gives str or fail</code>).</p><div class="example run"><p class="ex-file"><code>16-json-read.pnx</code></p><pre><code data-lang="pinax"><span style="color: #d73948">use</span> io
+<span style="color: #d73948">use</span> json
+<span style="color: #d73948">word</span> kind_name (k <span style="color: #d73948">int</span> <span style="color: #d73948">gives</span> <span style="color: #d73948">str</span>)                    <span style="color: #74747c">rem the kinds are constants of json</span>
+  k json.key eq <span style="color: #d73948">if</span> <span style="color: #198810">"key"</span> <span style="color: #d73948">return</span> <span style="color: #d73948">end</span>
+  k json.string eq <span style="color: #d73948">if</span> <span style="color: #198810">"string"</span> <span style="color: #d73948">return</span> <span style="color: #d73948">end</span>
+  k json.number eq <span style="color: #d73948">if</span> <span style="color: #198810">"number"</span> <span style="color: #d73948">return</span> <span style="color: #d73948">end</span>
+  k json.boolean eq <span style="color: #d73948">if</span> <span style="color: #198810">"boolean"</span> <span style="color: #d73948">return</span> <span style="color: #d73948">end</span>
+  k json.null eq <span style="color: #d73948">if</span> <span style="color: #198810">"null"</span> <span style="color: #d73948">return</span> <span style="color: #d73948">end</span>
+  k json.object eq k json.array eq <span style="color: #d73948">or</span> <span style="color: #d73948">if</span> <span style="color: #198810">"open"</span> <span style="color: #d73948">return</span> <span style="color: #d73948">end</span>
+  <span style="color: #198810">"close"</span>
+<span style="color: #d73948">end</span>
+<span style="color: #d73948">word</span> tokens (s <span style="color: #d73948">str</span>)
+  s <span style="color: #d73948">to</span> rest
+  <span style="color: #d73948">loop</span>
+    rest json.next <span style="color: #d73948">or_else</span> (e) <span style="color: #d73948">break</span> <span style="color: #d73948">end</span> <span style="color: #d73948">to</span> (kind, value, rest)
+    <span style="color: #d73948">cat</span> (kind kind_name, <span style="color: #198810">" "</span>, value) io.println
+  <span style="color: #d73948">end</span>
+<span style="color: #d73948">end</span>
+<span style="color: #d73948">text</span><span style="color: #198810"> </span><span style="color: #4b69c6">END</span>
+<span style="color: #198810">{"name": "kim", "tags": [1, -2.5e3, true, null], "note": "café"}</span>
+<span style="color: #4b69c6">END</span>
+tokens
+</code></pre><p class="ex-label">출력</p><pre><code data-lang="text">$ pnx 16-json-read.pnx
+open {
+key name
+string kim
+key tags
+open [
+number 1
+number -2.5e3
+boolean true
+null null
+close ]
+key note
+string café
+close }
+</code></pre></div><h4>16.8.2 쓰기</h4><p class="para"><p><span class="pn">(5)</span> 쓰는 낱말은 모두 버퍼에 붙이고, 자리가 모자라면 <code>err.full</code> 로 실패한다. 쉼표는 낱말이 알아서 넣는다.</p><table><tr><td><strong>낱말</strong></td><td><strong>서명</strong></td></tr><tr><td><code>begin_object</code> <code>end_object</code> <code>begin_array</code> <code>end_array</code> <code>put_null</code></td><td><code>(buf or fail)</code></td></tr><tr><td><code>put_key</code> <code>put_str</code></td><td><code>(s str, buf or fail)</code>. 이스케이프는 낱말이 한다</td></tr><tr><td><code>put_int</code></td><td><code>(n int, buf or fail)</code></td></tr><tr><td><code>put_bool</code></td><td><code>(b bool, buf or fail)</code></td></tr></table></p><div class="example run"><p class="ex-file"><code>16-json-write.pnx</code></p><pre><code data-lang="pinax"><span style="color: #d73948">use</span> io
+<span style="color: #d73948">use</span> json
+<span style="color: #d73948">buffer</span> out <span style="color: #b60157">128</span>
+<span style="color: #d73948">word</span> demo (<span style="color: #d73948">or</span> <span style="color: #d73948">fail</span>)
+  out json.begin_object <span style="color: #d73948">or_fail</span>
+  <span style="color: #198810">"name"</span> out json.put_key <span style="color: #d73948">or_fail</span>  <span style="color: #198810">"kim </span><span style="color: #1d6c76">\"</span><span style="color: #198810">k</span><span style="color: #1d6c76">\"</span><span style="color: #198810">"</span> out json.put_str <span style="color: #d73948">or_fail</span>
+  <span style="color: #198810">"tags"</span> out json.put_key <span style="color: #d73948">or_fail</span>
+  out json.begin_array <span style="color: #d73948">or_fail</span>  <span style="color: #b60157">1</span> out json.put_int <span style="color: #d73948">or_fail</span>  <span style="color: #d73948">true</span> out json.put_bool <span style="color: #d73948">or_fail</span>  out json.put_null <span style="color: #d73948">or_fail</span>
+  out json.end_array <span style="color: #d73948">or_fail</span>
+  out json.end_object <span style="color: #d73948">or_fail</span>
+<span style="color: #d73948">end</span>
+demo <span style="color: #d73948">or_else</span> (e) e err_text io.println <span style="color: #d73948">end</span>
+out contents io.println
+</code></pre><p class="ex-label">출력</p><pre><code data-lang="text">$ pnx 16-json-write.pnx
+{"name":"kim \"k\"","tags":[1,true,null]}
+</code></pre></div><h4>16.8.3 레코드</h4><p class="para"><span class="pn">(6)</span> <code>줄 buf json.pack</code> 은 레코드의 줄을 필드 이름을 키로 한 객체로 붙인다. <code>s 줄 json.unpack</code> 은 객체를 읽어 이름이 같은 필드에 넣고 객체 뒤의 나머지를 준다. 모르는 키의 값은 건너뛴다. 수는 정수만 받고, 필드의 폭에 맞아야 한다. <code>null</code> 은 받지 않는다. 모든 것이 맞을 때만 줄에 쓴다 — 실패하면(<code>err.format</code>) 줄은 그대로다.</p><div class="example run"><p class="ex-file"><code>16-json-record.pnx</code></p><pre><code data-lang="pinax"><span style="color: #d73948">use</span> io
+<span style="color: #d73948">use</span> json
+<span style="color: #d73948">record</span> user
+  name <span style="color: #d73948">str</span>(<span style="color: #b60157">8</span>)
+  id <span style="color: #d73948">u16</span>
+  admin <span style="color: #d73948">bool</span>
+<span style="color: #d73948">end</span>
+<span style="color: #d73948">list</span> users user <span style="color: #b60157">4</span>
+<span style="color: #d73948">buffer</span> out <span style="color: #b60157">128</span>
+<span style="color: #d73948">word</span> input (<span style="color: #d73948">gives</span> <span style="color: #d73948">str</span>)
+<span style="color: #198810">  </span><span style="color: #d73948">text</span><span style="color: #198810"> </span><span style="color: #4b69c6">END</span>
+<span style="color: #198810">{"id": 9, "extra": {"x": [1, 2]}, "name": "park", "admin": false} and more</span>
+<span style="color: #4b69c6">END</span>
+<span style="color: #d73948">end</span>
+<span style="color: #d73948">word</span> demo (<span style="color: #d73948">or</span> <span style="color: #d73948">fail</span>)
+  users add_row <span style="color: #d73948">or_fail</span> <span style="color: #d73948">to</span> u
+  <span style="color: #198810">"lee"</span> u <span style="color: #d73948">to</span> user.name  <span style="color: #b60157">7</span> u <span style="color: #d73948">to</span> user.id  <span style="color: #d73948">true</span> u <span style="color: #d73948">to</span> user.admin
+  u out json.pack <span style="color: #d73948">or_fail</span>
+  out contents io.println
+  users add_row <span style="color: #d73948">or_fail</span> <span style="color: #d73948">to</span> v
+  input v json.unpack <span style="color: #d73948">or_fail</span> <span style="color: #d73948">to</span> rest                  <span style="color: #74747c">rem unknown keys are skipped</span>
+  <span style="color: #d73948">cat</span> (v user.name, <span style="color: #198810">" "</span>, v user.id, <span style="color: #198810">" "</span>, v user.admin, <span style="color: #198810">" /"</span>, rest, <span style="color: #198810">"/"</span>) io.println
+  <span style="color: #198810">"{</span><span style="color: #1d6c76">\"</span><span style="color: #198810">id</span><span style="color: #1d6c76">\"</span><span style="color: #198810">: 70000}"</span> v json.unpack <span style="color: #d73948">or_else</span> (e) <span style="color: #d73948">cat</span> (<span style="color: #198810">"70000 in u16: "</span>, e err_text) io.println <span style="color: #198810">""</span> <span style="color: #d73948">end</span> drop
+  <span style="color: #d73948">cat</span> (<span style="color: #198810">"the row is unchanged: "</span>, v user.id) io.println
+<span style="color: #d73948">end</span>
+demo <span style="color: #d73948">or_else</span> (e) e err_text io.println <span style="color: #d73948">end</span>
+</code></pre><p class="ex-label">출력</p><pre><code data-lang="text">$ pnx 16-json-record.pnx
+{"name":"lee","id":7,"admin":true}
+park 9 false / and more/
+70000 in u16: format
+the row is unchanged: 9
+</code></pre></div><h5>제약</h5><p class="para"><span class="pn">(7)</span> <code>json.next</code> 와 <code>json.skip</code> 은 <code>str</code> 만, <code>pack</code> 과 <code>unpack</code> 은 레코드의 줄만 받는다.</p><div class="example refused"><p class="ex-file"><code>16-json-type.pnx</code></p><pre><code data-lang="pinax"><span style="color: #d73948">use</span> json
+<span style="color: #d73948">word</span> f () <span style="color: #b60157">5</span> json.next drop drop drop <span style="color: #d73948">end</span>
+</code></pre><p class="ex-label">거절</p><pre><code data-lang="text">$ pnx 16-json-type.pnx
+16-json-type.pnx:2:13: this word takes the JSON text as a str
+</code></pre></div><h5>진단</h5><table><thead><tr><th><strong>조건</strong></th><th><strong>메시지</strong></th></tr></thead><tbody><tr><td>JSON 글이 <code>str</code> 이 아님</td><td><code>this word takes the JSON text as a str</code></td></tr></tbody></table><h3>16.9 <code>csv</code> — CSV</h3><p class="para"><span class="pn">(1)</span> 모듈 <code>csv</code> 는 RFC 4180 꼴의 CSV 를 읽고 쓴다. 필드는 쉼표로 가르고, 쉼표, 따옴표, 줄바꿈을 담은 필드는 따옴표로 싸며, 안의 따옴표는 두 번 적는다.</p><p class="para"><span class="pn">(2)</span> <code>s csv.fields</code> 는 줄 하나의 필드를 차례로 내는 줄기(10.6)다. 따옴표로 싼 필드는 따옴표를 떼고 겹친 따옴표를 풀어서 낸다. 닫히지 않은 따옴표는 남은 글 그대로를 마지막 필드로 낸다(줄기는 실패를 알리지 못한다).</p><p class="para"><span class="pn">(3)</span> 쓰는 낱말은 버퍼에 붙인다(<code>or fail</code>, 자리가 모자라면 <code>err.full</code>). <code>s buf csv.put</code>, <code>n buf<br>csv.put_int</code>, <code>b buf csv.put_bool</code> 은 필드 하나를(앞에 필요한 쉼표와 함께), <code>buf csv.end_line</code> 은 줄 끝을 붙인다. 참거짓은 <code>true</code> <code>false</code> 로 쓴다.</p><p class="para"><span class="pn">(4)</span> <code>줄 buf csv.pack</code> 은 레코드의 줄 하나를 한 줄로 붙인다. <code>s 줄 csv.unpack</code> 은 한 줄을 읽어 필드의 차례대로 넣고 그 줄 뒤의 나머지를 준다. 모든 필드가 맞을 때만 줄에 쓴다(<code>err.format</code>).</p><div class="example run"><p class="ex-file"><code>16-csv.pnx</code></p><pre><code data-lang="pinax"><span style="color: #d73948">use</span> io
+<span style="color: #d73948">use</span> csv
+<span style="color: #d73948">record</span> user
+  name <span style="color: #d73948">str</span>(<span style="color: #b60157">8</span>)
+  id <span style="color: #d73948">u16</span>
+  admin <span style="color: #d73948">bool</span>
+<span style="color: #d73948">end</span>
+<span style="color: #d73948">list</span> users user <span style="color: #b60157">4</span>
+<span style="color: #d73948">buffer</span> out <span style="color: #b60157">128</span>
+<span style="color: #198810">"a,</span><span style="color: #1d6c76">\"</span><span style="color: #198810">b,c</span><span style="color: #1d6c76">\"</span><span style="color: #198810">,</span><span style="color: #1d6c76">\"</span><span style="color: #198810">d</span><span style="color: #1d6c76">\"</span><span style="color: #1d6c76">\"</span><span style="color: #198810">e</span><span style="color: #1d6c76">\"</span><span style="color: #198810">,,f"</span> csv.fields <span style="color: #d73948">do</span> (x <span style="color: #d73948">str</span>) <span style="color: #d73948">cat</span> (<span style="color: #198810">"["</span>, x, <span style="color: #198810">"]"</span>) io.print <span style="color: #d73948">end</span> each
+<span style="color: #198810">""</span> io.println
+<span style="color: #d73948">word</span> demo (<span style="color: #d73948">or</span> <span style="color: #d73948">fail</span>)
+  users add_row <span style="color: #d73948">or_fail</span> <span style="color: #d73948">to</span> u
+  <span style="color: #198810">"lee, jr"</span> u <span style="color: #d73948">to</span> user.name  <span style="color: #b60157">7</span> u <span style="color: #d73948">to</span> user.id  <span style="color: #d73948">true</span> u <span style="color: #d73948">to</span> user.admin
+  u out csv.pack <span style="color: #d73948">or_fail</span>                               <span style="color: #74747c">rem a line, quoted where needed</span>
+  <span style="color: #198810">"x"</span> out csv.put <span style="color: #d73948">or_fail</span>  <span style="color: #b60157">5</span> out csv.put_int <span style="color: #d73948">or_fail</span>  <span style="color: #d73948">false</span> out csv.put_bool <span style="color: #d73948">or_fail</span>  out csv.end_line <span style="color: #d73948">or_fail</span>
+  out contents io.print
+  users add_row <span style="color: #d73948">or_fail</span> <span style="color: #d73948">to</span> v
+  <span style="color: #198810">"zed,5,true</span><span style="color: #1d6c76">\n</span><span style="color: #198810">rest"</span> v csv.unpack <span style="color: #d73948">or_fail</span> <span style="color: #d73948">to</span> rest
+  <span style="color: #d73948">cat</span> (v user.name, <span style="color: #198810">" "</span>, v user.id, <span style="color: #198810">" "</span>, v user.admin, <span style="color: #198810">" ["</span>, rest, <span style="color: #198810">"]"</span>) io.println
+  <span style="color: #198810">"zed,5,maybe"</span> v csv.unpack <span style="color: #d73948">or_else</span> (e) <span style="color: #d73948">cat</span> (<span style="color: #198810">"bad bool: "</span>, e err_text) io.println <span style="color: #198810">""</span> <span style="color: #d73948">end</span> drop
+<span style="color: #d73948">end</span>
+demo <span style="color: #d73948">or_else</span> (e) e err_text io.println <span style="color: #d73948">end</span>
+</code></pre><p class="ex-label">출력</p><pre><code data-lang="text">$ pnx 16-csv.pnx
+[a][b,c][d"e][][f]
+"lee, jr",7,true
+x,5,false
+zed 5 true [rest]
+bad bool: format
+</code></pre></div><h5>제약</h5><p class="para"><span class="pn">(5)</span> <code>pack</code> 과 <code>unpack</code> 은 레코드의 줄만 받는다.</p><div class="example refused"><p class="ex-file"><code>16-csv-pack-int.pnx</code></p><pre><code data-lang="pinax"><span style="color: #d73948">use</span> csv
+<span style="color: #d73948">buffer</span> b <span style="color: #b60157">8</span>
+<span style="color: #d73948">word</span> f () <span style="color: #b60157">5</span> b csv.pack <span style="color: #d73948">or_else</span> (e) <span style="color: #d73948">end</span> <span style="color: #d73948">end</span>
+</code></pre><p class="ex-label">거절</p><pre><code data-lang="text">$ pnx 16-csv-pack-int.pnx
+16-csv-pack-int.pnx:3:15: pack takes a row of a table of records and a buffer: row buf csv.pack
+</code></pre></div><h5>진단</h5><table><thead><tr><th><strong>조건</strong></th><th><strong>메시지</strong></th></tr></thead><tbody><tr><td>레코드의 줄이 아닌 값</td><td><code>pack takes a row of a table of records and a buffer: row buf csv.pack</code></td></tr></tbody></table></main><nav class="bottom"><a href="index.html">처음</a> · <a href="15.html">앞</a> · <a href="17.html">다음</a> · <a href="../html-en/16.html">English</a></nav></body></html>

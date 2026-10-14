@@ -1,0 +1,109 @@
+<!DOCTYPE html>
+<html lang="ko"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>14 작업 - Pinax 표준</title><link rel="stylesheet" href="style.css"></head><body><nav class="top"><a href="index.html">처음</a> · <a href="13.html">앞</a> · <a href="15.html">다음</a> · <a href="../html-en/14.html">English</a></nav><main><h2>14 작업</h2><h5>구문</h5><pre><code data-lang="ebnf">tasks-decl = "tasks" NAME size [ size [ size ] ] ;   (* count, call depth, region bytes *)</code></pre><p class="para"><span class="pn">(1)</span> <strong>작업</strong>은 한 상태 안에서 번갈아 도는 실행 흐름이다. 작업은 스스로 양보하는 자리(<code>yield</code>, 기다리는 호스트 낱말)에서만 바뀐다. 그래서 두 작업이 같은 전역을 쓰더라도, 한 작업의 두 양보 사이에서는 다른 작업이 끼어들지 않는다. 작업은 스레드가 아니다 — 한 상태는 늘 한 스레드에서 돈다(5.1).</p><p class="para"><span class="pn">(2)</span> <code>tasks 이름 수 [깊이 [구역]]</code> 은 <strong>작업 묶음</strong>(task group)을 선언한다. 묶음은 작업을 <code>수</code> 개까지 담는다. 작업마다 자기 호출 깊이(<code>깊이</code>)와 자기 구역(<code>구역</code> 바이트)이 있다. 줄이면 처리기의 기본값이다. 묶음의 이름은 그 묶음의 작업을 가리키는 값의 타입이다.</p><h3>14.1 만들기와 돌리기</h3><p class="para"><span class="pn">(1)</span> <code>블록 묶음 spawn</code> 은 받는 것도 주는 것도 없는 값이 되는 블록(10.5)으로 작업 하나를 만들고 그 작업을 준다(<code>or fail</code>, 빈 자리가 없으면 <code>err.full</code>). 작업은 만들어진 채 멈춰 있고, 아직 돌지 않는다.</p><p class="para"><span class="pn">(2)</span> <code>묶음 run_all</code> 은 그 묶음의 작업을 차례로, 모두 끝날 때까지 돌린다. 한 작업은 양보하거나 끝날 때까지 돌고, 그다음 작업이 이어 돈다.</p><div class="example run"><p class="ex-file"><code>14-tasks.pnx</code></p><pre><code data-lang="pinax"><span style="color: #d73948">use</span> io
+<span style="color: #d73948">tasks</span> workers <span style="color: #b60157">3</span>
+<span style="color: #d73948">word</span> say (s <span style="color: #d73948">str</span>) s io.println <span style="color: #d73948">end</span>
+<span style="color: #d73948">word</span> demo ()
+  <span style="color: #d73948">do</span> <span style="color: #198810">"a1"</span> say yield <span style="color: #d73948">or_return</span> <span style="color: #198810">"a2"</span> say yield <span style="color: #d73948">or_return</span> <span style="color: #198810">"a3"</span> say <span style="color: #d73948">end</span> workers spawn <span style="color: #d73948">or_else</span> <span style="color: #d73948">return</span> <span style="color: #d73948">end</span> drop
+  <span style="color: #d73948">do</span> <span style="color: #198810">"b1"</span> say yield <span style="color: #d73948">or_return</span> <span style="color: #198810">"b2"</span> say <span style="color: #d73948">end</span> workers spawn <span style="color: #d73948">or_else</span> <span style="color: #d73948">return</span> <span style="color: #d73948">end</span> drop
+  workers run_all                          <span style="color: #74747c">rem run every task of the group until all have ended</span>
+<span style="color: #d73948">end</span>
+demo
+</code></pre><p class="ex-label">출력</p><pre><code data-lang="text">$ pnx 14-tasks.pnx
+a1
+b1
+a2
+b2
+a3
+</code></pre></div><p class="para"><span class="pn">(3)</span> <code>작업 resume</code> 은 그 작업 하나를 다음 양보나 끝까지 돌리고, 끝났으면 <code>true</code> 를 준다. <code>작업 is_done</code> 은 끝났는지 묻는다. 끝난 작업의 자리는 다시 <code>spawn</code> 에 쓰인다.</p><div class="example run"><p class="ex-file"><code>14-resume.pnx</code></p><pre><code data-lang="pinax"><span style="color: #d73948">use</span> io
+<span style="color: #d73948">use</span> <span style="color: #d73948">str</span>
+<span style="color: #d73948">tasks</span> lone <span style="color: #b60157">1</span>
+<span style="color: #d73948">word</span> demo ()
+  <span style="color: #d73948">do</span> <span style="color: #198810">"step 1"</span> io.println yield <span style="color: #d73948">or_return</span> <span style="color: #198810">"step 2"</span> io.println <span style="color: #d73948">end</span> lone spawn <span style="color: #d73948">or_else</span> <span style="color: #d73948">return</span> <span style="color: #d73948">end</span> <span style="color: #d73948">to</span> t
+  <span style="color: #b60157">0</span> <span style="color: #d73948">to</span> turns
+  <span style="color: #d73948">loop</span> t resume <span style="color: #d73948">until</span> turns <span style="color: #b60157">1</span> add <span style="color: #d73948">to</span> turns <span style="color: #d73948">end</span>     <span style="color: #74747c">rem resume gives true when the task has ended</span>
+  <span style="color: #d73948">cat</span> (<span style="color: #198810">"resumed "</span>, turns <span style="color: #b60157">1</span> add, <span style="color: #198810">" times, done: "</span>, t is_done) io.println
+<span style="color: #d73948">end</span>
+demo
+</code></pre><p class="ex-label">출력</p><pre><code data-lang="text">$ pnx 14-resume.pnx
+step 1
+step 2
+resumed 2 times, done: true
+</code></pre></div><p class="para"><span class="pn">(4)</span> 작업은 상태 안에 남는다. 호스트가 부른 한 실행이 끝나도 멈춘 작업은 그대로 있고, 다음 실행에서 이어 돌릴 수 있다.</p><div class="example run"><p class="ex-file"><code>14-full.pnx</code></p><pre><code data-lang="pinax"><span style="color: #d73948">use</span> io
+<span style="color: #d73948">tasks</span> pair <span style="color: #b60157">2</span>
+<span style="color: #d73948">word</span> demo ()
+  <span style="color: #d73948">do</span> yield <span style="color: #d73948">or_return</span> <span style="color: #d73948">end</span> pair spawn <span style="color: #d73948">or_else</span> <span style="color: #d73948">return</span> <span style="color: #d73948">end</span> drop
+  <span style="color: #d73948">do</span> yield <span style="color: #d73948">or_return</span> <span style="color: #d73948">end</span> pair spawn <span style="color: #d73948">or_else</span> <span style="color: #d73948">return</span> <span style="color: #d73948">end</span> drop
+  <span style="color: #d73948">do</span> <span style="color: #d73948">end</span> pair spawn <span style="color: #d73948">or_else</span> (e) <span style="color: #d73948">cat</span> (<span style="color: #198810">"third spawn: "</span>, e err_text) io.println <span style="color: #d73948">return</span> <span style="color: #d73948">end</span> drop
+<span style="color: #d73948">end</span>
+demo
+</code></pre><p class="ex-label">출력</p><pre><code data-lang="text">$ pnx 14-full.pnx
+third spawn: full
+</code></pre></div><h3>14.2 양보</h3><p class="para"><span class="pn">(1)</span> <code>yield</code> 는 다른 작업에 차례를 넘긴다. 실패할 수 있다(<code>or fail</code>): 작업이 취소되었으면 <code>err.cancelled</code> 로 실패한다. 작업이 아닌 주 실행에서 <code>yield</code> 는 아무것도 하지 않고 바로 성공한다.</p><p class="para"><span class="pn">(2)</span> 작업 사이의 자료는 전역, 큐, 목록으로 나눈다. 가득 찬 큐나 빈 큐는 양보할 까닭이 된다.</p><div class="example run"><p class="ex-file"><code>14-queue.pnx</code></p><pre><code data-lang="pinax"><span style="color: #d73948">use</span> io
+<span style="color: #d73948">use</span> <span style="color: #d73948">str</span>
+<span style="color: #d73948">tasks</span> workers <span style="color: #b60157">2</span>
+<span style="color: #d73948">queue</span> jobs <span style="color: #d73948">int</span> <span style="color: #b60157">2</span>
+<span style="color: #d73948">list</span> done <span style="color: #d73948">int</span> <span style="color: #b60157">8</span>
+<span style="color: #d73948">word</span> producer ()
+  <span style="color: #b60157">1</span> <span style="color: #d73948">to</span> i
+  <span style="color: #d73948">loop</span>
+    i <span style="color: #b60157">5</span> gt <span style="color: #d73948">until</span>
+    <span style="color: #d73948">true</span> <span style="color: #d73948">to</span> ok
+    i jobs put <span style="color: #d73948">or_else</span> (e) <span style="color: #d73948">false</span> <span style="color: #d73948">to</span> ok <span style="color: #d73948">end</span>
+    ok <span style="color: #d73948">if</span> i <span style="color: #b60157">1</span> add <span style="color: #d73948">to</span> i <span style="color: #d73948">else</span> yield <span style="color: #d73948">or_return</span> <span style="color: #d73948">end</span>   <span style="color: #74747c">rem a full queue: let the consumer run</span>
+  <span style="color: #d73948">end</span>
+<span style="color: #d73948">end</span>
+<span style="color: #d73948">word</span> consumer ()
+  <span style="color: #b60157">0</span> <span style="color: #d73948">to</span> got
+  <span style="color: #d73948">loop</span>
+    got <span style="color: #b60157">5</span> ge <span style="color: #d73948">until</span>
+    jobs take <span style="color: #d73948">or_else</span> (e) <span style="color: #b60157">-1</span> <span style="color: #d73948">end</span> <span style="color: #d73948">to</span> v
+    v <span style="color: #b60157">0</span> lt <span style="color: #d73948">if</span> yield <span style="color: #d73948">or_return</span> <span style="color: #d73948">else</span> v done push <span style="color: #d73948">or_else</span> (e) <span style="color: #d73948">end</span> got <span style="color: #b60157">1</span> add <span style="color: #d73948">to</span> got <span style="color: #d73948">end</span>
+  <span style="color: #d73948">end</span>
+<span style="color: #d73948">end</span>
+<span style="color: #d73948">word</span> demo ()
+  <span style="color: #d73948">do</span> producer <span style="color: #d73948">end</span> workers spawn <span style="color: #d73948">or_else</span> <span style="color: #d73948">return</span> <span style="color: #d73948">end</span> drop
+  <span style="color: #d73948">do</span> consumer <span style="color: #d73948">end</span> workers spawn <span style="color: #d73948">or_else</span> <span style="color: #d73948">return</span> <span style="color: #d73948">end</span> drop
+  workers run_all
+<span style="color: #d73948">end</span>
+demo
+done <span style="color: #d73948">do</span> (v <span style="color: #d73948">int</span>) v <span style="color: #d73948">str</span>.to_str io.print <span style="color: #198810">" "</span> io.print <span style="color: #d73948">end</span> each
+<span style="color: #198810">""</span> io.println
+</code></pre><p class="ex-label">출력</p><pre><code data-lang="text">$ pnx 14-queue.pnx
+1 2 3 4 5 
+</code></pre></div><p class="para"><span class="pn">(3)</span> <code>yield</code> 를 (직접이든, 부른 낱말 안에서든) 할 수 있는 낱말은 적재 때 알려진다. 호스트 낱말 안에서 그런 낱말은 돌리지 못한다(19절).</p><h3>14.3 취소</h3><p class="para"><span class="pn">(1)</span> <code>작업 cancel</code> 은 작업에 취소를 알린다. 그 작업의 다음 <code>yield</code> 가 <code>err.cancelled</code> 로 실패한다. 작업은 그 실패를 받아 자기 방식으로 끝난다 — 취소는 작업을 억지로 멈추지 않는다.</p><div class="example run"><p class="ex-file"><code>14-cancel.pnx</code></p><pre><code data-lang="pinax"><span style="color: #d73948">use</span> io
+<span style="color: #d73948">tasks</span> workers <span style="color: #b60157">1</span>
+<span style="color: #d73948">word</span> demo ()
+  <span style="color: #d73948">do</span>
+    <span style="color: #d73948">loop</span>
+      <span style="color: #198810">"working"</span> io.println
+      yield <span style="color: #d73948">or_else</span> (e) <span style="color: #d73948">cat</span> (<span style="color: #198810">"stopped: "</span>, e err_text) io.println <span style="color: #d73948">return</span> <span style="color: #d73948">end</span>
+    <span style="color: #d73948">end</span>
+  <span style="color: #d73948">end</span> workers spawn <span style="color: #d73948">or_else</span> <span style="color: #d73948">return</span> <span style="color: #d73948">end</span> <span style="color: #d73948">to</span> t
+  t resume drop
+  t resume drop
+  t cancel                                 <span style="color: #74747c">rem the task's next yield fails with cancelled</span>
+  t resume drop
+<span style="color: #d73948">end</span>
+demo
+</code></pre><p class="ex-label">출력</p><pre><code data-lang="text">$ pnx 14-cancel.pnx
+working
+working
+stopped: cancelled
+</code></pre></div><h5>제약</h5><p class="para"><span class="pn">(2)</span> <code>spawn</code> 에 주는 블록은 값이 되는 블록이라 바깥의 지역 변수를 보지 못한다. 작업에 값을 주려면 전역이나 큐를 쓴다.</p><div class="example refused"><p class="ex-file"><code>14-spawn-refused.pnx</code></p><pre><code data-lang="pinax"><span style="color: #d73948">tasks</span> workers <span style="color: #b60157">2</span>
+<span style="color: #d73948">word</span> demo (n <span style="color: #d73948">int</span>) <span style="color: #d73948">do</span> n drop <span style="color: #d73948">end</span> workers spawn <span style="color: #d73948">or_else</span> <span style="color: #d73948">return</span> <span style="color: #d73948">end</span> drop <span style="color: #d73948">end</span>
+</code></pre><p class="ex-label">거절</p><pre><code data-lang="text">$ pnx 14-spawn-refused.pnx
+14-spawn-refused.pnx:2:22: this name is not declared before this place
+</code></pre></div><h5>결함</h5><p class="para"><span class="pn">(3)</span> 작업 안의 결함은 그 실행 전체와 모든 작업을 끝낸다. 결함은 주 실행의 결함처럼 호스트에게 간다. 상태는 남아 다음 실행을 받는다.</p><div class="example fault"><p class="ex-file"><code>14-fault.pnx</code></p><pre><code data-lang="pinax"><span style="color: #d73948">use</span> io
+<span style="color: #d73948">tasks</span> workers <span style="color: #b60157">2</span>
+<span style="color: #d73948">global</span> zero <span style="color: #d73948">int</span>
+<span style="color: #d73948">word</span> demo ()
+  <span style="color: #d73948">do</span> <span style="color: #198810">"task one"</span> io.println yield <span style="color: #d73948">or_return</span> <span style="color: #198810">"task one again"</span> io.println <span style="color: #d73948">end</span> workers spawn <span style="color: #d73948">or_else</span> <span style="color: #d73948">return</span> <span style="color: #d73948">end</span> drop
+  <span style="color: #d73948">do</span> <span style="color: #b60157">1</span> zero div drop <span style="color: #d73948">end</span> workers spawn <span style="color: #d73948">or_else</span> <span style="color: #d73948">return</span> <span style="color: #d73948">end</span> drop
+  workers run_all
+<span style="color: #d73948">end</span>
+demo
+<span style="color: #198810">"not reached"</span> io.println
+</code></pre><p class="ex-label">결함으로 멈춤</p><pre><code data-lang="text">$ pnx 14-fault.pnx
+task one
+14-fault.pnx:6: division by zero
+</code></pre></div><p class="para"><span class="pn">(4)</span> 두 작업이 같은 구역을 쓰는 일은 12.3 의 검사가 보지 않는다. 작업마다 자기 구역이 있으므로 보통은 일어나지 않는다.</p></main><nav class="bottom"><a href="index.html">처음</a> · <a href="13.html">앞</a> · <a href="15.html">다음</a> · <a href="../html-en/14.html">English</a></nav></body></html>

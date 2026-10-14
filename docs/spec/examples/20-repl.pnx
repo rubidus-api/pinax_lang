@@ -1,0 +1,7 @@
+rem repl
+use str
+1 2 add
+word sq (n int gives int) n n mul end
+7 sq
+"x" 3 str.repeat
+1 0 div

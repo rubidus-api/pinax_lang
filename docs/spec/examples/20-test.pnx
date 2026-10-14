@@ -1,0 +1,9 @@
+rem test
+use str
+word middle (s str gives str) s 1 str.skip 1 str.skip_last end
+test middle_trims_both_ends
+  "[abc]" middle "abc" eq assert
+end
+test middle_of_two_is_empty
+  "ab" middle str.is_empty assert
+end

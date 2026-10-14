@@ -1,0 +1,79 @@
+<!DOCTYPE html>
+<html lang="ko"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>12 메모리 - Pinax 표준</title><link rel="stylesheet" href="style.css"></head><body><nav class="top"><a href="index.html">처음</a> · <a href="11.html">앞</a> · <a href="13.html">다음</a> · <a href="../html-en/12.html">English</a></nav><main><h2>12 메모리</h2><h3>12.1 개요</h3><p class="para"><span class="pn">(1)</span> 상태의 모든 저장소는 호스트가 준 덩이 안에 있고(5.1), 적재 때 자리를 잡는다. 돌 때 새 저장소가 생기지 않는다. 쓰레기 수거기가 없고, 값이 다른 값을 주소로 가리키지 않는다.</p><p class="para"><p><span class="pn">(2)</span> 값이 놓이는 자리는 셋이다.</p><ul><li>선언된 저장소(8절): 전역, 배열, 목록, 큐, 풀, 버퍼. 크기는 선언이 정한다.</li><li>스택과 지역 변수의 칸. 깊이는 적재 때 정해진다(9.3).</li><li>작업마다 하나 있는 <strong>구역</strong>(12.2). 실행 중에 만든 글의 바이트가 여기 놓인다.</li></ul></p><p class="para"><span class="pn">(3)</span> 따라서 프로그램이 쓰는 메모리의 위쪽 한계는 적재 때 알 수 있다. 구역을 다 쓰거나 용량을 넘는 일은 돌 때 결함이나 실패로 드러나지, 처리기가 메모리를 더 청하는 것으로 이어지지 않는다.</p><h3>12.2 구역과 표시</h3><p class="para"><span class="pn">(1)</span> 새 바이트를 만드는 낱말 — <code>cat</code>, <code>str.upper</code>, <code>str.repeat</code>, 숫자를 글로 바꾸는 낱말 등 — 은 결과를 구역에 쓰고 그 뷰를 준다. 구역은 앞에서부터 차례로 채워진다. 낱말 <code>region_free</code> 는 남은 바이트 수를 준다.</p><p class="para"><span class="pn">(2)</span> <code>mark</code> 는 구역의 지금 자리를 <code>owned</code> 값(타입 <code>mark</code>)으로 준다. <code>표시 release</code> 는 구역을 그 자리로 되돌린다. 표시 뒤에 만든 바이트는 모두 다시 쓸 수 있게 된다. 많은 글을 만드는 루프는 바퀴마다 표시하고 되돌린다.</p><p class="para"><span class="pn">(3)</span> 저장된 글(<code>str(N)</code>)에 넣은 바이트는 그 자리로 복사되므로 구역을 되돌려도 남는다.</p><div class="example run"><p class="ex-file"><code>12-region.pnx</code></p><pre><code data-lang="pinax"><span style="color: #d73948">use</span> io
+<span style="color: #d73948">use</span> <span style="color: #d73948">str</span>
+<span style="color: #d73948">global</span> kept <span style="color: #d73948">str</span>(<span style="color: #b60157">32</span>)
+<span style="color: #d73948">word</span> line (i <span style="color: #d73948">int</span> <span style="color: #d73948">gives</span> <span style="color: #d73948">str</span>) <span style="color: #d73948">cat</span> (<span style="color: #198810">"line number "</span>, i) <span style="color: #d73948">end</span>
+<span style="color: #d73948">word</span> demo ()
+  region_free <span style="color: #d73948">to</span> start
+  <span style="color: #b60157">1</span> line <span style="color: #d73948">to</span> a                                 <span style="color: #74747c">rem a view of 13 new bytes in the region</span>
+  a <span style="color: #d73948">to</span> kept                                   <span style="color: #74747c">rem stored text: the bytes are copied out</span>
+  start region_free sub <span style="color: #d73948">to</span> one
+  <span style="color: #d73948">mark</span> <span style="color: #d73948">to</span> m
+  <span style="color: #b60157">2</span> <span style="color: #b60157">1000</span> range <span style="color: #d73948">do</span> (i <span style="color: #d73948">int</span>) i line drop <span style="color: #d73948">end</span> each
+  start region_free sub <span style="color: #d73948">to</span> many
+  m release                                   <span style="color: #74747c">rem back to the place of the mark</span>
+  start region_free sub <span style="color: #d73948">to</span> after
+  <span style="color: #d73948">cat</span> (<span style="color: #198810">"one line: "</span>, one, <span style="color: #198810">", 999 lines: "</span>, many, <span style="color: #198810">", after release: "</span>, after) io.println
+  kept io.println
+<span style="color: #d73948">end</span>
+demo
+</code></pre><p class="ex-label">출력</p><pre><code data-lang="text">$ pnx 12-region.pnx
+one line: 13, 999 lines: 14877, after release: 13
+line number 1
+</code></pre></div><p class="para"><span class="pn">(4)</span> 호스트가 받은 <code>str</code> 결과는 그 상태에 대한 다음 호출 전까지만 쓸 수 있다. 오래 쓸 글은 호스트가 제 메모리로 복사한다(19절).</p><h5>결함</h5><p class="para"><span class="pn">(5)</span> 구역이 모자라면 결함 <code>full</code> 이다.</p><div class="example fault"><p class="ex-file"><code>12-region-full.pnx</code></p><pre><code data-lang="pinax"><span style="color: #d73948">word</span> fill ()
+  <span style="color: #d73948">loop</span> <span style="color: #d73948">cat</span> (<span style="color: #198810">"this line takes some bytes of the region "</span>, <span style="color: #b60157">0</span>) drop <span style="color: #d73948">end</span>
+<span style="color: #d73948">end</span>
+fill
+</code></pre><p class="ex-label">결함으로 멈춤</p><pre><code data-lang="text">$ pnx 12-region-full.pnx
+12-region-full.pnx:2: a declared capacity is used up
+</code></pre></div><h3>12.3 뷰의 수명</h3><p class="para"><span class="pn">(1)</span> 구역을 가리키는 뷰는 그 바이트가 되감기면 쓸 수 없다. 처리기는 이것을 적재 때 검사한다. 한 몸 (낱말, 값이 되는 블록, 정의 밖의 코드) 안에서 <code>str</code> 값마다 그 앞에 만든 표시의 수를 센다. <code>표시 release</code> 는 그 표시 뒤에 만든 값을 거둔다.</p><h5>제약</h5><p class="para"><span class="pn">(2)</span> 거둘 값이 스택에 남아 있으면 <code>release</code> 가 거절된다.</p><div class="example refused"><p class="ex-file"><code>12-release-stack.pnx</code></p><pre><code data-lang="pinax"><span style="color: #d73948">word</span> f (<span style="color: #d73948">gives</span> <span style="color: #d73948">str</span>)
+  <span style="color: #d73948">mark</span> <span style="color: #d73948">to</span> m
+  <span style="color: #d73948">cat</span> (<span style="color: #198810">"a"</span>, <span style="color: #198810">"b"</span>)
+  m release
+<span style="color: #d73948">end</span>
+</code></pre><p class="ex-label">거절</p><pre><code data-lang="text">$ pnx 12-release-stack.pnx
+12-release-stack.pnx:4:5: a str made after this mark is still on the stack; the release gives its bytes back
+</code></pre></div><p class="para"><span class="pn">(3)</span> 거둔 값을 든 지역 변수는 다시 넣기 전까지 읽지 못한다.</p><div class="example refused"><p class="ex-file"><code>12-release-view.pnx</code></p><pre><code data-lang="pinax"><span style="color: #d73948">use</span> io
+<span style="color: #d73948">word</span> f ()
+  <span style="color: #d73948">mark</span> <span style="color: #d73948">to</span> m
+  <span style="color: #d73948">cat</span> (<span style="color: #198810">"made after "</span>, <span style="color: #198810">"the mark"</span>) <span style="color: #d73948">to</span> s
+  m release
+  s io.println
+<span style="color: #d73948">end</span>
+</code></pre><p class="ex-label">거절</p><pre><code data-lang="text">$ pnx 12-release-view.pnx
+12-release-view.pnx:6:3: this str was made after a mark that was released since; the region may hold other bytes there now
+</code></pre></div><p class="para"><span class="pn">(4)</span> 이 검사는 조심스러운 쪽으로 기운다. 리터럴의 문자열은 구역에 없으므로 거두지 않는다. 그 밖의 <code>str</code> — 뷰, 저장된 글을 읽은 것, 부른 낱말이 준 것 — 은 모두 새로 만든 것으로 센다. 갈래가 만나면 값은 가장 늦게 만든 것으로, 표시는 가장 이른 것으로 합친다. 그래서 맞는 프로그램을 거절할 수 있다. 그럴 때는 값을 <code>str(N)</code> 에 넣어 두거나 표시의 자리를 옮긴다.</p><p class="para"><span class="pn">(5)</span> <code>owned</code> 표시를 낱말에 넘기면 넘기는 자리를 <code>release</code> 로 본다. 표시를 받는 낱말은 자기 <code>str</code> 입력을 그 표시 뒤에 만든 것으로 본다. 두 작업이 같은 구역을 쓰는 경우는 이 검사가 보지 않는다(14절).</p><h3>12.4 한 번만 쓰는 값</h3><p class="para"><span class="pn">(1)</span> 타입 앞의 <code>owned</code> 는 <strong>한 번만 쓰는 값</strong>(owned value)을 뜻한다. 열린 파일 같은 핸들, 풀에서 얻은 줄, 구역의 표시가 그렇다. 처리기는 그런 값이 모든 경로에서 정확히 한 번 넘겨지는지 적재 때 검사한다.</p><p class="para"><p><span class="pn">(2)</span> <code>owned</code> 값을 쓰는 길은 둘이다.</p><ul><li><strong>빌려주기</strong>(borrowing): 서명에 <code>owned</code> 없이 그 타입을 받는 낱말(<code>f file.write</code>)에는 몇 번이든 줄 수 있다. 값은 그대로 남는다.</li><li><strong>넘겨주기</strong>(handing over): 서명에 <code>owned</code> 로 받는 낱말(<code>f file.close</code>)에 주거나, 전역·필드에 넣거나, <code>owned</code> 결과로 돌려준다. 그 뒤로 그 이름은 비어 읽지 못한다.</li></ul></p><p class="para"><span class="pn">(3)</span> <code>owned</code> 값은 지역 변수에 넣거나 바로 넘겨줘야 한다. <code>dup</code> 으로 늘리거나 <code>drop</code> 으로 버리지 못한다. 실패의 경로(<code>or_fail</code> <code>or_return</code>)와 <code>return</code> 의 자리에서도 넘겨줘야 한다.</p><div class="example run"><p class="ex-file"><code>12-owned-file.pnx</code></p><pre><code data-lang="pinax"><span style="color: #d73948">use</span> io
+<span style="color: #d73948">use</span> <span style="color: #d73948">file</span>
+<span style="color: #d73948">word</span> write_note (path <span style="color: #d73948">str</span> <span style="color: #d73948">or</span> <span style="color: #d73948">fail</span>)
+  path <span style="color: #d73948">file</span>.open_write <span style="color: #d73948">or_fail</span> <span style="color: #d73948">to</span> f            <span style="color: #74747c">rem an owned file: it must be closed on every path</span>
+  <span style="color: #198810">"a note"</span> f <span style="color: #d73948">file</span>.write <span style="color: #d73948">or_else</span> (e) f <span style="color: #d73948">file</span>.close e <span style="color: #d73948">fail</span> <span style="color: #d73948">end</span>
+  f <span style="color: #d73948">file</span>.close
+<span style="color: #d73948">end</span>
+<span style="color: #d73948">word</span> read_note (path <span style="color: #d73948">str</span> <span style="color: #d73948">gives</span> s <span style="color: #d73948">str</span> <span style="color: #d73948">or</span> <span style="color: #d73948">fail</span>) path <span style="color: #d73948">file</span>.read_all <span style="color: #d73948">or_fail</span> <span style="color: #d73948">end</span>
+<span style="color: #198810">"note.txt"</span> write_note <span style="color: #d73948">or_else</span> (e) <span style="color: #198810">"cannot write"</span> io.println <span style="color: #d73948">end</span>
+<span style="color: #198810">"note.txt"</span> read_note <span style="color: #d73948">or_else</span> (e) <span style="color: #198810">"cannot read"</span> <span style="color: #d73948">end</span> io.println
+</code></pre><p class="ex-label">출력</p><pre><code data-lang="text">$ pnx 12-owned-file.pnx
+a note
+</code></pre></div><h5>제약</h5><p class="para"><span class="pn">(4)</span> 넘겨준 값을 다시 쓰면 거절된다.</p><div class="example refused"><p class="ex-file"><code>12-owned-twice.pnx</code></p><pre><code data-lang="pinax"><span style="color: #d73948">use</span> <span style="color: #d73948">file</span>
+<span style="color: #d73948">word</span> f (path <span style="color: #d73948">str</span> <span style="color: #d73948">or</span> <span style="color: #d73948">fail</span>)
+  path <span style="color: #d73948">file</span>.open_read <span style="color: #d73948">or_fail</span> <span style="color: #d73948">to</span> h
+  h <span style="color: #d73948">file</span>.close
+  h <span style="color: #d73948">file</span>.close
+<span style="color: #d73948">end</span>
+</code></pre><p class="ex-label">거절</p><pre><code data-lang="text">$ pnx 12-owned-twice.pnx
+12-owned-twice.pnx:5:3: this local gave its owned value away; it holds nothing to read
+</code></pre></div><p class="para"><span class="pn">(5)</span> <code>owned</code> 값을 늘리거나 버리면 거절된다.</p><div class="example refused"><p class="ex-file"><code>12-owned-dup.pnx</code></p><pre><code data-lang="pinax"><span style="color: #d73948">use</span> <span style="color: #d73948">file</span>
+<span style="color: #d73948">word</span> f (path <span style="color: #d73948">str</span> <span style="color: #d73948">or</span> <span style="color: #d73948">fail</span>)
+  path <span style="color: #d73948">file</span>.open_read <span style="color: #d73948">or_fail</span> dup <span style="color: #d73948">file</span>.close <span style="color: #d73948">file</span>.close
+<span style="color: #d73948">end</span>
+</code></pre><p class="ex-label">거절</p><pre><code data-lang="text">$ pnx 12-owned-dup.pnx
+12-owned-dup.pnx:3:31: an owned value is kept in a local or given on at once; this word would lose it
+</code></pre></div><p class="para"><span class="pn">(6)</span> 어느 한 경로라도 넘겨주지 않으면 거절된다.</p><div class="example refused"><p class="ex-file"><code>12-owned-path.pnx</code></p><pre><code data-lang="pinax"><span style="color: #d73948">use</span> <span style="color: #d73948">file</span>
+<span style="color: #d73948">word</span> f (path <span style="color: #d73948">str</span>, quick <span style="color: #d73948">bool</span> <span style="color: #d73948">or</span> <span style="color: #d73948">fail</span>)
+  path <span style="color: #d73948">file</span>.open_read <span style="color: #d73948">or_fail</span> <span style="color: #d73948">to</span> h
+  quick <span style="color: #d73948">if</span> <span style="color: #d73948">return</span> <span style="color: #d73948">end</span>
+  h <span style="color: #d73948">file</span>.close
+<span style="color: #d73948">end</span>
+</code></pre><p class="ex-label">거절</p><pre><code data-lang="text">$ pnx 12-owned-path.pnx
+12-owned-path.pnx:4:12: an owned value in a local is not given on every path (close, free or store it)
+</code></pre></div><p class="para"><span class="pn">(7)</span> 결함으로 끝난 실행에서는 처리기가 그 실행이 연 핸들을 닫는다(11.3 (3)).</p><h5>진단</h5><table><thead><tr><th><strong>조건</strong></th><th><strong>메시지</strong></th></tr></thead><tbody><tr><td><code>release</code> 할 때 거둘 값이 스택에 있음</td><td><code>a str made after this mark is still on the stack; the release gives its bytes back</code></td></tr><tr><td>거둔 값을 읽음</td><td><code>this str was made after a mark that was released since; the region may hold other bytes there now</code></td></tr><tr><td>넘겨준 값을 다시 읽음</td><td><code>this local gave its owned value away; it holds nothing to read</code></td></tr><tr><td><code>owned</code> 값을 늘리거나 버림</td><td><code>an owned value is kept in a local or given on at once; this word would lose it</code></td></tr><tr><td>넘겨주지 않는 경로</td><td><code>an owned value in a local is not given on every path (close, free or store it)</code></td></tr></tbody></table></main><nav class="bottom"><a href="index.html">처음</a> · <a href="11.html">앞</a> · <a href="13.html">다음</a> · <a href="../html-en/12.html">English</a></nav></body></html>

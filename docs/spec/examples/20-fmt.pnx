@@ -1,0 +1,9 @@
+rem fmt
+use io
+word sign (n int gives r int)
+n 0 gt if
+1
+   else   
+n 0 lt if -1 else 0 end
+end
+end

@@ -1,0 +1,214 @@
+<!DOCTYPE html>
+<html lang="ko"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>10 제어 - Pinax 표준</title><link rel="stylesheet" href="style.css"></head><body><nav class="top"><a href="index.html">처음</a> · <a href="09.html">앞</a> · <a href="11.html">다음</a> · <a href="../html-en/10.html">English</a></nav><main><h2>10 제어</h2><h5>구문</h5><pre><code data-lang="ebnf">control = "if" { body } [ "else" { body } ] "end"
+        | "loop" [ "(" NAME ")" ] { body } "end"
+        | "case" { branch } [ "otherwise" { body } "end" ] "end" ;
+branch  = values "of" { body } "end" ;
+values  = case-value | "(" case-value { "," case-value } ")" ;
+leave   = ( "while" | "until" | "break" ) [ "(" NAME ")" ] | "return" ;
+block   = "do" [ "(" effect ")" ] { body } "end" ;</code></pre><p class="para"><span class="pn">(1)</span> <code>end</code> 는 가장 안쪽에 열린 것 하나를 닫는다. 여는 낱말은 <code>word</code> <code>test</code> <code>record</code> <code>do</code> <code>if</code> <code>loop</code> <code>case</code> <code>of</code> <code>otherwise</code> <code>or_else</code> 다.</p><p class="para"><span class="pn">(2)</span> 처리기는 적재 때 모든 갈래의 스택을 견준다. 갈래가 다시 만나는 자리에서 스택은 어느 갈래로 왔든 같아야 한다. <strong>떠나는 갈래</strong>(leaving branch) — <code>return</code> <code>fail</code> <code>break</code> 로 끝나거나 끝나지 않는 루프로 끝나는 갈래 — 는 견주지 않는다.</p><h3>10.1 갈림</h3><p class="para"><span class="pn">(1)</span> <code>조건 if 몸 end</code> 는 맨 위의 <code>bool</code> 을 내려 참이면 몸을 돈다. <code>조건 if 몸 else 몸 end</code> 는 거짓이면 <code>else</code> 의 몸을 돈다.</p><p class="para"><span class="pn">(2)</span> <code>else</code> 가 없는 <code>if</code> 의 몸은 스택을 들어올 때와 같게 둬야 한다. <code>else</code> 가 있으면 두 몸은 같은 스택을 남겨야 한다.</p><div class="example run"><p class="ex-file"><code>10-if.pnx</code></p><pre><code data-lang="pinax"><span style="color: #d73948">use</span> io
+<span style="color: #d73948">word</span> sign (n <span style="color: #d73948">int</span> <span style="color: #d73948">gives</span> <span style="color: #d73948">str</span>) n <span style="color: #b60157">0</span> lt <span style="color: #d73948">if</span> <span style="color: #198810">"negative"</span> <span style="color: #d73948">else</span> n <span style="color: #b60157">0</span> eq <span style="color: #d73948">if</span> <span style="color: #198810">"zero"</span> <span style="color: #d73948">else</span> <span style="color: #198810">"positive"</span> <span style="color: #d73948">end</span> <span style="color: #d73948">end</span> <span style="color: #d73948">end</span>
+<span style="color: #b60157">-5</span> sign io.println
+<span style="color: #b60157">0</span> sign io.println
+<span style="color: #d73948">word</span> warn (n <span style="color: #d73948">int</span>) n <span style="color: #b60157">100</span> gt <span style="color: #d73948">if</span> <span style="color: #198810">"big"</span> io.println <span style="color: #d73948">end</span> <span style="color: #d73948">end</span>      <span style="color: #74747c">rem no else: the branch leaves the stack as it was</span>
+<span style="color: #b60157">500</span> warn
+</code></pre><p class="ex-label">출력</p><pre><code data-lang="text">$ pnx 10-if.pnx
+negative
+zero
+big
+</code></pre></div><h5>제약</h5><p class="para"><span class="pn">(3)</span> 두 갈래가 남기는 스택이 다르면 거절된다.</p><div class="example refused"><p class="ex-file"><code>10-if-unequal.pnx</code></p><pre><code data-lang="pinax"><span style="color: #d73948">word</span> f (n <span style="color: #d73948">int</span> <span style="color: #d73948">gives</span> <span style="color: #d73948">int</span>) n <span style="color: #b60157">0</span> lt <span style="color: #d73948">if</span> <span style="color: #b60157">1</span> <span style="color: #b60157">2</span> <span style="color: #d73948">else</span> <span style="color: #b60157">3</span> <span style="color: #d73948">end</span> <span style="color: #d73948">end</span>
+</code></pre><p class="ex-label">거절</p><pre><code data-lang="text">$ pnx 10-if-unequal.pnx
+10-if-unequal.pnx:1:47: the two branches of this if leave different stacks
+</code></pre></div><h3>10.2 루프</h3><p class="para"><p><span class="pn">(1)</span> <code>loop 몸 end</code> 는 몸을 되풀이한다. 몸 안에서 다음 낱말이 루프를 떠난다.</p><ul><li><code>조건 while</code> — 조건이 거짓이면 떠난다.</li><li><code>조건 until</code> — 조건이 참이면 떠난다.</li><li><code>break</code> — 조건 없이 떠난다.</li></ul><p>셋은 몇 번이든 쓸 수 있고, 루프의 몸에 바로 쓰거나 그 안의 갈래(<code>if</code> <code>else</code> <code>case</code> <code>or_else</code>) 안에 쓴다. 가장 안쪽 루프를 떠난다.</p></p><p class="para"><span class="pn">(2)</span> 한 바퀴는 스택을 들어올 때와 같게 둬야 한다. 떠나는 자리마다 스택은 루프에 들어올 때와 같아야 한다. 루프의 결과가 필요하면 지역 변수에 둔다.</p><div class="example run"><p class="ex-file"><code>10-loop.pnx</code></p><pre><code data-lang="pinax"><span style="color: #d73948">use</span> io
+<span style="color: #d73948">use</span> <span style="color: #d73948">str</span>
+<span style="color: #d73948">word</span> digits (n <span style="color: #d73948">int</span> <span style="color: #d73948">gives</span> <span style="color: #d73948">int</span>)            <span style="color: #74747c">rem how many decimal digits</span>
+  <span style="color: #b60157">1</span> <span style="color: #d73948">to</span> count_
+  <span style="color: #d73948">loop</span>
+    n <span style="color: #b60157">10</span> div <span style="color: #d73948">to</span> n
+    n <span style="color: #b60157">0</span> eq <span style="color: #d73948">until</span>
+    count_ <span style="color: #b60157">1</span> add <span style="color: #d73948">to</span> count_
+  <span style="color: #d73948">end</span>
+  count_
+<span style="color: #d73948">end</span>
+<span style="color: #b60157">12345</span> digits <span style="color: #d73948">str</span>.to_str io.println
+<span style="color: #d73948">word</span> first_square_over (limit <span style="color: #d73948">int</span> <span style="color: #d73948">gives</span> <span style="color: #d73948">int</span>)
+  <span style="color: #b60157">1</span> <span style="color: #d73948">to</span> i
+  <span style="color: #d73948">loop</span>
+    i i mul limit gt <span style="color: #d73948">if</span> <span style="color: #d73948">break</span> <span style="color: #d73948">end</span>
+    i <span style="color: #b60157">1</span> add <span style="color: #d73948">to</span> i
+  <span style="color: #d73948">end</span>
+  i
+<span style="color: #d73948">end</span>
+<span style="color: #b60157">50</span> first_square_over <span style="color: #d73948">str</span>.to_str io.println
+</code></pre><p class="ex-label">출력</p><pre><code data-lang="text">$ pnx 10-loop.pnx
+5
+8
+</code></pre></div><p class="para"><span class="pn">(3)</span> <code>loop (이름)</code> 은 루프에 이름을 붙인다. <code>while (이름)</code> <code>until (이름)</code> <code>break (이름)</code> 은 그 이름의 루프까지 한 번에 떠난다. 이름은 그 루프의 몸 안에서만 보이고 값이 아니다. 가림 금지(9.5)를 따른다.</p><div class="example run"><p class="ex-file"><code>10-loop-named.pnx</code></p><pre><code data-lang="pinax"><span style="color: #d73948">use</span> io
+<span style="color: #d73948">use</span> <span style="color: #d73948">str</span>
+<span style="color: #d73948">word</span> find_pair (target <span style="color: #d73948">int</span> <span style="color: #d73948">gives</span> <span style="color: #d73948">str</span>)      <span style="color: #74747c">rem the first a, b in 1..9 with a*b = target</span>
+  <span style="color: #b60157">1</span> <span style="color: #d73948">to</span> a
+  <span style="color: #b60157">0</span> <span style="color: #d73948">to</span> b
+  <span style="color: #d73948">loop</span> (rows)
+    <span style="color: #b60157">1</span> <span style="color: #d73948">to</span> b
+    <span style="color: #d73948">loop</span>
+      a b mul target eq <span style="color: #d73948">until</span> (rows)       <span style="color: #74747c">rem leaves both loops at once</span>
+      b <span style="color: #b60157">1</span> add <span style="color: #d73948">to</span> b
+      b <span style="color: #b60157">9</span> gt <span style="color: #d73948">until</span>
+    <span style="color: #d73948">end</span>
+    a <span style="color: #b60157">1</span> add <span style="color: #d73948">to</span> a
+    a <span style="color: #b60157">9</span> gt <span style="color: #d73948">if</span> <span style="color: #198810">"none"</span> <span style="color: #d73948">return</span> <span style="color: #d73948">end</span>
+  <span style="color: #d73948">end</span>
+  <span style="color: #d73948">cat</span> (a, <span style="color: #198810">" x "</span>, b)
+<span style="color: #d73948">end</span>
+<span style="color: #b60157">42</span> find_pair io.println
+</code></pre><p class="ex-label">출력</p><pre><code data-lang="text">$ pnx 10-loop-named.pnx
+6 x 7
+</code></pre></div><p class="para"><span class="pn">(4)</span> 자기를 떠나는 <code>while</code> <code>until</code> <code>break</code> 가 하나도 없는 루프는 끝나지 않는 루프다. 끝나지 않는 루프는 떠나는 갈래로 센다. 그래서 그 뒤에 결과를 적지 않아도 낱말의 서명이 맞는다. 안쪽 루프의 <code>until</code> 은 바깥 루프를 떠나는 것으로 세지 않지만, 안쪽에 쓴 <code>until (바깥 이름)</code> 은 센다.</p><div class="example run"><p class="ex-file"><code>10-forever.pnx</code></p><pre><code data-lang="pinax"><span style="color: #d73948">use</span> io
+<span style="color: #d73948">use</span> <span style="color: #d73948">str</span>
+<span style="color: #d73948">word</span> first_multiple (n <span style="color: #d73948">int</span>, k <span style="color: #d73948">int</span> <span style="color: #d73948">gives</span> <span style="color: #d73948">int</span>)     <span style="color: #74747c">rem a loop with no exit counts as leaving</span>
+  <span style="color: #d73948">loop</span>
+    n k mod <span style="color: #b60157">0</span> eq <span style="color: #d73948">if</span> n <span style="color: #d73948">return</span> <span style="color: #d73948">end</span>
+    n <span style="color: #b60157">1</span> add <span style="color: #d73948">to</span> n
+  <span style="color: #d73948">end</span>
+<span style="color: #d73948">end</span>
+<span style="color: #b60157">100</span> <span style="color: #b60157">7</span> first_multiple <span style="color: #d73948">str</span>.to_str io.println
+</code></pre><p class="ex-label">출력</p><pre><code data-lang="text">$ pnx 10-forever.pnx
+105
+</code></pre></div><h5>제약</h5><p class="para"><span class="pn">(5)</span> 한 바퀴가 스택을 바꾸면 거절된다.</p><div class="example refused"><p class="ex-file"><code>10-loop-net.pnx</code></p><pre><code data-lang="pinax"><span style="color: #d73948">word</span> f (<span style="color: #d73948">gives</span> <span style="color: #d73948">int</span>)
+  <span style="color: #b60157">0</span>
+  <span style="color: #d73948">loop</span>
+    <span style="color: #b60157">1</span> add
+    dup <span style="color: #b60157">10</span> gt <span style="color: #d73948">until</span>
+    <span style="color: #b60157">1</span>
+  <span style="color: #d73948">end</span>
+<span style="color: #d73948">end</span>
+</code></pre><p class="ex-label">거절</p><pre><code data-lang="text">$ pnx 10-loop-net.pnx
+10-loop-net.pnx:7:3: one turn of a loop must leave the stack as it found it
+</code></pre></div><p class="para"><span class="pn">(6)</span> <code>while</code> <code>until</code> <code>break</code> 를 루프 밖에 쓰면 거절된다. <code>do</code> 블록 안에서 바깥 루프를 떠나지도 못한다.</p><div class="example refused"><p class="ex-file"><code>10-while-outside.pnx</code></p><pre><code data-lang="pinax"><span style="color: #d73948">word</span> f (n <span style="color: #d73948">int</span>) n <span style="color: #b60157">0</span> gt <span style="color: #d73948">while</span> <span style="color: #d73948">end</span>
+</code></pre><p class="ex-label">거절</p><pre><code data-lang="text">$ pnx 10-while-outside.pnx
+10-while-outside.pnx:1:23: while, until and break belong inside a loop
+</code></pre></div><p class="para"><span class="pn">(7)</span> 떠나는 낱말(<code>return</code> <code>fail</code> <code>break</code>)이나 끝나지 않는 루프 바로 뒤에 같은 갈래의 코드가 더 있으면 닿지 않는 코드로 거절된다.</p><div class="example refused"><p class="ex-file"><code>10-unreachable.pnx</code></p><pre><code data-lang="pinax"><span style="color: #d73948">word</span> f (n <span style="color: #d73948">int</span> <span style="color: #d73948">gives</span> <span style="color: #d73948">int</span>) n <span style="color: #d73948">return</span> <span style="color: #b60157">1</span> add <span style="color: #d73948">end</span>
+</code></pre><p class="ex-label">거절</p><pre><code data-lang="text">$ pnx 10-unreachable.pnx
+10-unreachable.pnx:1:35: this code cannot be reached: the code before it always leaves
+</code></pre></div><h3>10.3 고르기</h3><p class="para"><span class="pn">(1)</span> <code>값 case 가지… end</code> 는 맨 위의 <code>int</code> 나 <code>str</code> 를 내려 가지의 값과 견주고, 같은 첫 가지의 몸을 돈다. 가지의 값은 리터럴이나 이 소스의 <code>const</code> 다. 한 가지에 값이 여럿이면 괄호에 쉼표로 적는다. 맞는 가지가 없으면 <code>otherwise</code> 의 몸을 돈다. 가지마다 같은 스택을 남겨야 한다.</p><div class="example run"><p class="ex-file"><code>10-case.pnx</code></p><pre><code data-lang="pinax"><span style="color: #d73948">use</span> io
+<span style="color: #d73948">const</span> quit_code <span style="color: #b60157">9</span>
+<span style="color: #d73948">word</span> describe (cmd <span style="color: #d73948">str</span> <span style="color: #d73948">gives</span> <span style="color: #d73948">str</span>)
+  cmd <span style="color: #d73948">case</span>
+    <span style="color: #198810">"add"</span> <span style="color: #d73948">of</span> <span style="color: #198810">"adds a line"</span> <span style="color: #d73948">end</span>
+    (<span style="color: #198810">"rm"</span>, <span style="color: #198810">"del"</span>) <span style="color: #d73948">of</span> <span style="color: #198810">"deletes a line"</span> <span style="color: #d73948">end</span>
+    <span style="color: #d73948">otherwise</span> <span style="color: #198810">"unknown command"</span> <span style="color: #d73948">end</span>
+  <span style="color: #d73948">end</span>
+<span style="color: #d73948">end</span>
+<span style="color: #d73948">word</span> level (n <span style="color: #d73948">int</span> <span style="color: #d73948">gives</span> <span style="color: #d73948">str</span>)
+  n <span style="color: #d73948">case</span>
+    <span style="color: #b60157">0</span> <span style="color: #d73948">of</span> <span style="color: #198810">"off"</span> <span style="color: #d73948">end</span>
+    <span style="color: #b60157">1</span> <span style="color: #d73948">of</span> <span style="color: #198810">"low"</span> <span style="color: #d73948">end</span>
+    quit_code <span style="color: #d73948">of</span> <span style="color: #198810">"quit"</span> <span style="color: #d73948">end</span>
+    <span style="color: #d73948">otherwise</span> <span style="color: #198810">"high"</span> <span style="color: #d73948">end</span>
+  <span style="color: #d73948">end</span>
+<span style="color: #d73948">end</span>
+<span style="color: #198810">"del"</span> describe io.println
+<span style="color: #198810">"mv"</span> describe io.println
+<span style="color: #b60157">9</span> level io.println
+</code></pre><p class="ex-label">출력</p><pre><code data-lang="text">$ pnx 10-case.pnx
+deletes a line
+unknown command
+quit
+</code></pre></div><h5>제약</h5><p class="para"><span class="pn">(2)</span> 같은 값이 두 가지에 있으면 거절된다.</p><div class="example refused"><p class="ex-file"><code>10-case-twice.pnx</code></p><pre><code data-lang="pinax"><span style="color: #d73948">word</span> f (n <span style="color: #d73948">int</span> <span style="color: #d73948">gives</span> <span style="color: #d73948">int</span>) n <span style="color: #d73948">case</span> <span style="color: #b60157">1</span> <span style="color: #d73948">of</span> <span style="color: #b60157">10</span> <span style="color: #d73948">end</span> <span style="color: #b60157">1</span> <span style="color: #d73948">of</span> <span style="color: #b60157">20</span> <span style="color: #d73948">end</span> <span style="color: #d73948">otherwise</span> <span style="color: #b60157">0</span> <span style="color: #d73948">end</span> <span style="color: #d73948">end</span> <span style="color: #d73948">end</span>
+</code></pre><p class="ex-label">거절</p><pre><code data-lang="text">$ pnx 10-case-twice.pnx
+10-case-twice.pnx:1:45: this value is already in an earlier branch of the case
+</code></pre></div><p class="para"><span class="pn">(2a)</span> 모듈의 상수(<code>json.key</code>, <code>err.full</code> 같은 경로)는 가지의 값이 되지 못한다. 그런 값은 <code>eq</code> 로 견준다.</p><div class="example refused"><p class="ex-file"><code>10-case-path.pnx</code></p><pre><code data-lang="pinax"><span style="color: #d73948">use</span> json
+<span style="color: #d73948">word</span> f (k <span style="color: #d73948">int</span> <span style="color: #d73948">gives</span> <span style="color: #d73948">bool</span>) k <span style="color: #d73948">case</span> json.key <span style="color: #d73948">of</span> <span style="color: #d73948">true</span> <span style="color: #d73948">end</span> <span style="color: #d73948">otherwise</span> <span style="color: #d73948">false</span> <span style="color: #d73948">end</span> <span style="color: #d73948">end</span> <span style="color: #d73948">end</span>
+</code></pre><p class="ex-label">거절</p><pre><code data-lang="text">$ pnx 10-case-path.pnx
+10-case-path.pnx:2:34: a case value is a literal or the name of a const
+</code></pre></div><h5>결함</h5><p class="para"><span class="pn">(3)</span> <code>otherwise</code> 가 없고 맞는 가지도 없으면 결함 <code>range</code> 다.</p><div class="example fault"><p class="ex-file"><code>10-case-nomatch.pnx</code></p><pre><code data-lang="pinax"><span style="color: #d73948">use</span> io
+<span style="color: #d73948">word</span> f (n <span style="color: #d73948">int</span> <span style="color: #d73948">gives</span> <span style="color: #d73948">str</span>) n <span style="color: #d73948">case</span> <span style="color: #b60157">1</span> <span style="color: #d73948">of</span> <span style="color: #198810">"one"</span> <span style="color: #d73948">end</span> <span style="color: #b60157">2</span> <span style="color: #d73948">of</span> <span style="color: #198810">"two"</span> <span style="color: #d73948">end</span> <span style="color: #d73948">end</span> <span style="color: #d73948">end</span>
+<span style="color: #b60157">2</span> f io.println
+<span style="color: #b60157">3</span> f io.println
+</code></pre><p class="ex-label">결함으로 멈춤</p><pre><code data-lang="text">$ pnx 10-case-nomatch.pnx
+two
+10-case-nomatch.pnx:2: index out of range
+  n int = 3
+</code></pre></div><h3>10.4 돌아가기</h3><p class="para"><span class="pn">(1)</span> <code>return</code> 은 낱말을 그 자리에서 끝낸다. 그 자리의 스택은 결과와 맞아야 한다(9.2 (4)).</p><h5>제약</h5><p class="para"><span class="pn">(2)</span> <code>return</code> 은 정의(낱말, 값이 되는 블록, 시험) 안에서만 쓴다. 정의 밖의 코드에 쓰면 거절된다.</p><div class="example refused"><p class="ex-file"><code>10-return-outside.pnx</code></p><pre><code data-lang="pinax"><span style="color: #d73948">use</span> io
+<span style="color: #198810">"start"</span> io.println
+<span style="color: #d73948">return</span>
+</code></pre><p class="ex-label">거절</p><pre><code data-lang="text">$ pnx 10-return-outside.pnx
+10-return-outside.pnx:3:1: return belongs inside a definition
+</code></pre></div><h3>10.5 블록</h3><p class="para"><p><span class="pn">(1)</span> <code>do … end</code> 는 <strong>블록</strong>(block)이다. 블록은 두 가지로 쓰인다. 모양은 같고, 블록을 받는 쪽이 가른다.</p><ul><li><strong>끼워 넣는 블록</strong>(inline block) — 조합 낱말(10.6)에 바로 준 블록. 그 자리에 펼쳐진다. 그래서 바깥의 지역 변수를 읽고 쓸 수 있고, 안에서 <code>return</code> 하면 바깥 낱말을 떠난다.</li><li><strong>값이 되는 블록</strong>(block value) — 지역 변수에 넣거나, 블록을 받는 매개변수(<code>word (서명)</code> 타입)에 주는 블록. 이름 없는 낱말 하나가 되며 <code>call</code> 로 부른다. 바깥의 지역 변수를 보지 못한다(붙잡지 않는다). 전역은 본다.</li></ul></p><p class="para"><span class="pn">(2)</span> <code>do</code> 바로 뒤에 서명을 쓸 수 있고, 그 이름들은 낱말 정의와 같이 블록의 지역 변수가 된다. 받는 쪽이 효과를 정해 주면 서명을 줄일 수 있다.</p><div class="example run"><p class="ex-file"><code>10-inline-locals.pnx</code></p><pre><code data-lang="pinax"><span style="color: #d73948">use</span> io
+<span style="color: #d73948">use</span> <span style="color: #d73948">str</span>
+<span style="color: #d73948">word</span> total_over (limit <span style="color: #d73948">int</span> <span style="color: #d73948">gives</span> <span style="color: #d73948">int</span>)
+  <span style="color: #b60157">0</span> <span style="color: #d73948">to</span> acc
+  <span style="color: #b60157">1</span> <span style="color: #b60157">10</span> range <span style="color: #d73948">do</span> (i <span style="color: #d73948">int</span>) i limit gt <span style="color: #d73948">if</span> acc i add <span style="color: #d73948">to</span> acc <span style="color: #d73948">end</span> <span style="color: #d73948">end</span> each   <span style="color: #74747c">rem the block sees acc and limit</span>
+  acc
+<span style="color: #d73948">end</span>
+<span style="color: #b60157">5</span> total_over <span style="color: #d73948">str</span>.to_str io.println
+</code></pre><p class="ex-label">출력</p><pre><code data-lang="text">$ pnx 10-inline-locals.pnx
+30
+</code></pre></div><div class="example run"><p class="ex-file"><code>10-value-block.pnx</code></p><pre><code data-lang="pinax"><span style="color: #d73948">use</span> io
+<span style="color: #d73948">use</span> <span style="color: #d73948">str</span>
+<span style="color: #d73948">word</span> twice (n <span style="color: #d73948">int</span>, f <span style="color: #d73948">word</span> (<span style="color: #d73948">int</span> <span style="color: #d73948">gives</span> <span style="color: #d73948">int</span>) <span style="color: #d73948">gives</span> <span style="color: #d73948">int</span>) n f call f call <span style="color: #d73948">end</span>
+<span style="color: #b60157">5</span> <span style="color: #d73948">do</span> (x <span style="color: #d73948">int</span> <span style="color: #d73948">gives</span> <span style="color: #d73948">int</span>) x <span style="color: #b60157">3</span> mul <span style="color: #d73948">end</span> twice <span style="color: #d73948">str</span>.to_str io.println
+<span style="color: #d73948">word</span> add_one (<span style="color: #d73948">int</span> <span style="color: #d73948">gives</span> <span style="color: #d73948">int</span>) <span style="color: #b60157">1</span> add <span style="color: #d73948">end</span>
+<span style="color: #d73948">word</span> demo (<span style="color: #d73948">gives</span> <span style="color: #d73948">int</span>)
+  <span style="color: #d73948">do</span> (x <span style="color: #d73948">int</span> <span style="color: #d73948">gives</span> <span style="color: #d73948">int</span>) x add_one <span style="color: #d73948">end</span> <span style="color: #d73948">to</span> step     <span style="color: #74747c">rem a block value in a local</span>
+  <span style="color: #b60157">41</span> step call
+<span style="color: #d73948">end</span>
+demo <span style="color: #d73948">str</span>.to_str io.println
+</code></pre><p class="ex-label">출력</p><pre><code data-lang="text">$ pnx 10-value-block.pnx
+45
+42
+</code></pre></div><h5>제약</h5><p class="para"><span class="pn">(3)</span> 값이 되는 블록이 바깥의 지역 변수를 쓰면 거절된다(그 이름은 블록 안에 선언돼 있지 않다).</p><div class="example refused"><p class="ex-file"><code>10-value-block-outer.pnx</code></p><pre><code data-lang="pinax"><span style="color: #d73948">word</span> twice (n <span style="color: #d73948">int</span>, f <span style="color: #d73948">word</span> (<span style="color: #d73948">int</span> <span style="color: #d73948">gives</span> <span style="color: #d73948">int</span>) <span style="color: #d73948">gives</span> <span style="color: #d73948">int</span>) n f call f call <span style="color: #d73948">end</span>
+<span style="color: #d73948">word</span> scale (k <span style="color: #d73948">int</span> <span style="color: #d73948">gives</span> <span style="color: #d73948">int</span>) <span style="color: #b60157">5</span> <span style="color: #d73948">do</span> (x <span style="color: #d73948">int</span> <span style="color: #d73948">gives</span> <span style="color: #d73948">int</span>) x k mul <span style="color: #d73948">end</span> twice <span style="color: #d73948">end</span>
+</code></pre><p class="ex-label">거절</p><pre><code data-lang="text">$ pnx 10-value-block-outer.pnx
+10-value-block-outer.pnx:2:55: this name is not declared before this place
+</code></pre></div><p class="para"><span class="pn">(4)</span> 루프로 펼쳐지는 블록(<code>each</code> <code>times</code> 등)은 스택을 들어올 때와 같게 둬야 한다.</p><div class="example refused"><p class="ex-file"><code>10-block-net.pnx</code></p><pre><code data-lang="pinax"><span style="color: #d73948">array</span> xs <span style="color: #d73948">int</span> <span style="color: #b60157">3</span>
+<span style="color: #d73948">word</span> f (<span style="color: #d73948">gives</span> <span style="color: #d73948">int</span>) <span style="color: #b60157">0</span> xs <span style="color: #d73948">do</span> (x <span style="color: #d73948">int</span>) x <span style="color: #d73948">end</span> each <span style="color: #d73948">end</span>
+</code></pre><p class="ex-label">거절</p><pre><code data-lang="text">$ pnx 10-block-net.pnx
+10-block-net.pnx:2:38: this block must leave the stack as it found it
+</code></pre></div><h3>10.6 줄기와 조합 낱말</h3><p class="para"><p><span class="pn">(1)</span> <strong>줄기</strong>(stem)는 차례로 값을 내는 것이다. 줄기는 값이 아니어서 지역 변수에 넣지 못하고, 바로 뒤의 조합 낱말이 받아야 한다. 둘이 합쳐 루프 하나가 된다. 줄기를 내는 것은 다음과 같다.</p><table><tr><td><strong>줄기</strong></td><td><strong>원소</strong></td></tr><tr><td>배열, 목록의 이름</td><td>칸의 값(레코드면 줄). 목록은 길이까지. 큐, 풀, 버퍼, 찾아보기는 줄기가 아니다</td></tr><tr><td><code>lo hi range</code></td><td><code>lo</code> 부터 <code>hi</code> 앞까지의 <code>int</code></td></tr><tr><td><code>s sep str.split</code>, <code>s str.lines</code>, <code>s str.words</code>, <code>s str.chars</code></td><td><code>str</code> 뷰(16.1). <code>chars</code> 는 UTF-8 글자 하나씩</td></tr><tr><td><code>s str.bytes</code></td><td><code>int</code>: 바이트(16.1)</td></tr><tr><td><code>s pat ptn.matches</code>, <code>s re rex.matches</code>, <code>s re rex.split</code></td><td>맞은 부분(16.6, 16.7)</td></tr><tr><td><code>s csv.fields</code></td><td>필드(16.9)</td></tr></table></p><p class="para"><p><span class="pn">(2)</span> 조합 낱말은 다음과 같다. “블록” 열은 블록이 받고 주는 것이다.</p><table><tr><td><strong>낱말</strong></td><td><strong>블록</strong></td><td><strong>결과</strong></td></tr><tr><td><code>each</code></td><td><code>(T)</code></td><td>없음</td></tr><tr><td><code>each_index</code></td><td><code>(T, i int)</code></td><td>없음</td></tr><tr><td><code>fold</code></td><td><code>(acc U, T gives U)</code></td><td><code>U</code>. 첫 값을 줄기 앞에 둔다: <code>0 xs do … end fold</code></td></tr><tr><td><code>count</code></td><td><code>(T gives bool)</code></td><td><code>int</code></td></tr><tr><td><code>any</code> <code>all</code></td><td><code>(T gives bool)</code></td><td><code>bool</code>. 답이 정해지면 일찍 끝난다</td></tr><tr><td><code>first</code></td><td><code>(T gives bool)</code></td><td><code>T or fail</code>. 없으면 <code>err.not_found</code></td></tr><tr><td><code>sum</code></td><td>없음</td><td><code>int</code>. 넘치면 결함 <code>overflow</code></td></tr><tr><td><code>minimum</code> <code>maximum</code></td><td>없음</td><td><code>int or fail</code>. 빈 줄기면 <code>err.not_found</code></td></tr><tr><td><code>map_into</code></td><td><code>(T gives U)</code></td><td>뒤에 목적지. <code>or fail</code></td></tr><tr><td><code>filter_into</code></td><td><code>(T gives bool)</code></td><td>뒤에 목적지. <code>or fail</code></td></tr><tr><td><code>n times</code></td><td><code>()</code></td><td>없음. 줄기 없이 <code>n</code> 번</td></tr></table></p><div class="example run"><p class="ex-file"><code>10-combinators.pnx</code></p><pre><code data-lang="pinax"><span style="color: #d73948">use</span> io
+<span style="color: #d73948">use</span> <span style="color: #d73948">str</span>
+<span style="color: #d73948">array</span> scores <span style="color: #d73948">int</span> <span style="color: #b60157">6</span>
+<span style="color: #d73948">assign</span> scores (<span style="color: #b60157">72</span>, <span style="color: #b60157">95</span>, <span style="color: #b60157">88</span>, <span style="color: #b60157">61</span>, <span style="color: #b60157">90</span>, <span style="color: #b60157">79</span>)
+scores sum <span style="color: #d73948">str</span>.to_str io.println
+scores <span style="color: #d73948">do</span> (s <span style="color: #d73948">int</span> <span style="color: #d73948">gives</span> <span style="color: #d73948">bool</span>) s <span style="color: #b60157">90</span> ge <span style="color: #d73948">end</span> count <span style="color: #d73948">str</span>.to_str io.println
+scores <span style="color: #d73948">do</span> (s <span style="color: #d73948">int</span> <span style="color: #d73948">gives</span> <span style="color: #d73948">bool</span>) s <span style="color: #b60157">60</span> lt <span style="color: #d73948">end</span> any <span style="color: #d73948">if</span> <span style="color: #198810">"someone failed"</span> <span style="color: #d73948">else</span> <span style="color: #198810">"all passed"</span> <span style="color: #d73948">end</span> io.println
+<span style="color: #b60157">0</span> scores <span style="color: #d73948">do</span> (acc <span style="color: #d73948">int</span>, s <span style="color: #d73948">int</span> <span style="color: #d73948">gives</span> <span style="color: #d73948">int</span>) acc s max <span style="color: #d73948">end</span> fold <span style="color: #d73948">str</span>.to_str io.println
+scores <span style="color: #d73948">do</span> (s <span style="color: #d73948">int</span>, i <span style="color: #d73948">int</span>) i <span style="color: #b60157">2</span> lt <span style="color: #d73948">if</span> <span style="color: #d73948">cat</span> (<span style="color: #198810">"#"</span>, i, <span style="color: #198810">" "</span>, s) io.println <span style="color: #d73948">end</span> <span style="color: #d73948">end</span> each_index
+<span style="color: #b60157">1</span> <span style="color: #b60157">5</span> range <span style="color: #d73948">do</span> (i <span style="color: #d73948">int</span>) i <span style="color: #d73948">str</span>.to_str io.print <span style="color: #d73948">end</span> each
+<span style="color: #198810">""</span> io.println
+<span style="color: #b60157">3</span> <span style="color: #d73948">do</span> <span style="color: #198810">"x"</span> io.print <span style="color: #d73948">end</span> times
+<span style="color: #198810">""</span> io.println
+</code></pre><p class="ex-label">출력</p><pre><code data-lang="text">$ pnx 10-combinators.pnx
+485
+2
+all passed
+95
+#0 72
+#1 95
+1234
+xxx
+</code></pre></div><div class="example run"><p class="ex-file"><code>10-first.pnx</code></p><pre><code data-lang="pinax"><span style="color: #d73948">use</span> io
+<span style="color: #d73948">use</span> <span style="color: #d73948">str</span>
+<span style="color: #d73948">array</span> xs <span style="color: #d73948">int</span> <span style="color: #b60157">5</span>
+<span style="color: #d73948">assign</span> xs (<span style="color: #b60157">3</span>, <span style="color: #b60157">8</span>, <span style="color: #b60157">12</span>, <span style="color: #b60157">5</span>, <span style="color: #b60157">20</span>)
+xs <span style="color: #d73948">do</span> (x <span style="color: #d73948">int</span> <span style="color: #d73948">gives</span> <span style="color: #d73948">bool</span>) x <span style="color: #b60157">10</span> gt <span style="color: #d73948">end</span> first <span style="color: #d73948">or_else</span> (e) <span style="color: #b60157">-1</span> <span style="color: #d73948">end</span> <span style="color: #d73948">str</span>.to_str io.println
+xs <span style="color: #d73948">do</span> (x <span style="color: #d73948">int</span> <span style="color: #d73948">gives</span> <span style="color: #d73948">bool</span>) x <span style="color: #b60157">100</span> gt <span style="color: #d73948">end</span> first <span style="color: #d73948">or_else</span> (e) <span style="color: #b60157">-1</span> <span style="color: #d73948">end</span> <span style="color: #d73948">str</span>.to_str io.println
+xs minimum <span style="color: #d73948">or_else</span> (e) <span style="color: #b60157">0</span> <span style="color: #d73948">end</span> <span style="color: #d73948">str</span>.to_str io.println
+</code></pre><p class="ex-label">출력</p><pre><code data-lang="text">$ pnx 10-first.pnx
+12
+-1
+3
+</code></pre></div><p class="para"><span class="pn">(3)</span> <code>map_into</code> 와 <code>filter_into</code> 는 새 저장소를 만들지 않고 목적지에 쓴다. 목적지가 목록이면 끝에 <code>push</code> 하고 아무것도 주지 않는다. 목적지가 배열이면 0 번 칸부터 쓰고 쓴 칸의 수를 준다(<code>gives n int or<br>fail</code>). 목적지가 차면 <code>err.full</code> 로 실패하고, 그때까지 쓴 것은 남는다.</p><div class="example run"><p class="ex-file"><code>10-map-into.pnx</code></p><pre><code data-lang="pinax"><span style="color: #d73948">use</span> io
+<span style="color: #d73948">use</span> <span style="color: #d73948">str</span>
+<span style="color: #d73948">array</span> xs <span style="color: #d73948">int</span> <span style="color: #b60157">4</span>
+<span style="color: #d73948">assign</span> xs (<span style="color: #b60157">1</span>, <span style="color: #b60157">2</span>, <span style="color: #b60157">3</span>, <span style="color: #b60157">4</span>)
+<span style="color: #d73948">list</span> squares <span style="color: #d73948">int</span> <span style="color: #b60157">4</span>
+<span style="color: #d73948">array</span> evens <span style="color: #d73948">int</span> <span style="color: #b60157">4</span>
+<span style="color: #d73948">word</span> go (<span style="color: #d73948">or</span> <span style="color: #d73948">fail</span>)
+  xs <span style="color: #d73948">do</span> (x <span style="color: #d73948">int</span> <span style="color: #d73948">gives</span> <span style="color: #d73948">int</span>) x x mul <span style="color: #d73948">end</span> squares map_into <span style="color: #d73948">or_fail</span>
+  xs <span style="color: #d73948">do</span> (x <span style="color: #d73948">int</span> <span style="color: #d73948">gives</span> <span style="color: #d73948">bool</span>) x <span style="color: #b60157">2</span> mod <span style="color: #b60157">0</span> eq <span style="color: #d73948">end</span> evens filter_into <span style="color: #d73948">or_fail</span> <span style="color: #d73948">to</span> n
+  <span style="color: #d73948">cat</span> (<span style="color: #198810">"squares "</span>, <span style="color: #b60157">3</span> squares idx, <span style="color: #198810">", evens written "</span>, n) io.println
+<span style="color: #d73948">end</span>
+go <span style="color: #d73948">or_else</span> (e) e err_text io.println <span style="color: #d73948">end</span>
+</code></pre><p class="ex-label">출력</p><pre><code data-lang="text">$ pnx 10-map-into.pnx
+squares 16, evens written 2
+</code></pre></div><h5>진단</h5><table><thead><tr><th><strong>조건</strong></th><th><strong>메시지</strong></th></tr></thead><tbody><tr><td>두 갈래의 스택이 다름</td><td><code>the two branches of this if leave different stacks</code></td></tr><tr><td>한 바퀴가 스택을 바꿈</td><td><code>one turn of a loop must leave the stack as it found it</code></td></tr><tr><td>루프 밖의 <code>while</code> <code>until</code> <code>break</code></td><td><code>while, until and break belong inside a loop</code></td></tr><tr><td>닿지 않는 코드</td><td><code>this code cannot be reached: the code before it always leaves</code></td></tr><tr><td><code>case</code> 의 같은 값</td><td><code>this value is already in an earlier branch of the case</code></td></tr><tr><td>펼쳐지는 블록이 스택을 바꿈</td><td><code>this block must leave the stack as it found it</code></td></tr><tr><td>정의 밖의 <code>return</code></td><td><code>return belongs inside a definition</code></td></tr><tr><td>상수가 아닌 가지의 값</td><td><code>a case value is a literal or the name of a const</code></td></tr><tr><td>줄기가 아닌 것에 조합 낱말</td><td><code>a buffer or an index is not a stem; each goes over an array or a list</code></td></tr></tbody></table></main><nav class="bottom"><a href="index.html">처음</a> · <a href="09.html">앞</a> · <a href="11.html">다음</a> · <a href="../html-en/10.html">English</a></nav></body></html>
