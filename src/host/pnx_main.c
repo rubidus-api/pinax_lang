@@ -31,6 +31,8 @@
 #include <string.h>
 
 #if defined(_WIN32)
+#include <fcntl.h>
+#include <io.h>
 #include <windows.h>
 #else
 #include <dlfcn.h>
@@ -160,6 +162,17 @@ static void close_libs(void) {
         free((void *)libs[k].name);
     }
     n_libs = 0;
+}
+
+// The last separator of a path: / anywhere, and \ too on Windows.
+static const char *last_sep(const char *path) {
+    const char *slash = strrchr(path, '/');
+#if defined(_WIN32)
+    const char *back = strrchr(path, '\\');
+    if (back && (!slash || back > slash))
+        slash = back;
+#endif
+    return slash;
 }
 
 static bool is_name_byte(char c) {
@@ -307,7 +320,7 @@ static pinax_err load_file(pinax_state *state, const char *path, const char *nam
         return PINAX_ERR_NO_ROOM;
     strcpy(sources[self].path, path);
 
-    const char *slash = strrchr(path, '/');
+    const char *slash = last_sep(path);
     const size_t dir = slash ? (size_t)(slash - path) + 1 : 0;
     for (size_t i = 0; i + 4 < length; ++i) {
         if ((i != 0 && text[i - 1] != '\n') || memcmp(text + i, "use", 3) != 0 || (text[i + 3] != ' ' && text[i + 3] != '\t'))
@@ -474,6 +487,12 @@ static int run_tests(pinax_state *state, const char *module) {
 }
 
 int main(int argc, char **argv) {
+#if defined(_WIN32)
+    // What pnx prints is the same bytes on every system, as the module io writes them: no \r
+    // before each \n.
+    _setmode(_fileno(stdout), _O_BINARY);
+    _setmode(_fileno(stderr), _O_BINARY);
+#endif
     // options before the command; what follows is read as if they were not there
     int options = 0;
     while (options + 2 < argc && strcmp(argv[1 + options], "--lib") == 0) {
@@ -547,7 +566,7 @@ static int run(int argc, char **argv) {
     // The file is loaded under its own name without ".pnx" when that is written like a word,
     // so that its tests and its diagnostics can be told from those of the modules it uses.
     char        module[32] = "";
-    const char *base = strrchr(file_name, '/') ? strrchr(file_name, '/') + 1 : file_name;
+    const char *base = last_sep(file_name) ? last_sep(file_name) + 1 : file_name;
     size_t      stem = strlen(base);
     if (stem > 4 && strcmp(base + stem - 4, ".pnx") == 0)
         stem -= 4;
