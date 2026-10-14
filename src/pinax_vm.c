@@ -454,6 +454,8 @@ pinax_err pnx_execute(pinax_state *st) {
         RUN(RREP)
         RUN(SHASH)
         RUNFG(BENC)
+        RUN(BTRUNC)
+        RUN(VLEN)
         RUN(SATADD)
         RUN(SATSUB)
         RUN(SATMUL)

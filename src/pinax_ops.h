@@ -324,36 +324,98 @@ PNX_OP(BCLEAR) {
     __builtin_memcpy(st->globals[OP_BX(w)].ptr, &zero, 8);
     return PNX_R_OK;
 }
+// The bytes of `value` in width code `code` (PNX_W_BE, PNX_W_VARINT): their count.
+PNX_INLINE uint32_t pnx_store_code(uint8_t out[10], int64_t value, uint32_t code) {
+    if (code == PNX_W_VARINT) {
+        uint64_t v = (uint64_t)value;
+        uint32_t n = 0;
+        do {
+            out[n++] = (uint8_t)((v & 0x7fu) | (v > 0x7fu ? 0x80u : 0u));
+            v >>= 7;
+        } while (v);
+        return n;
+    }
+    const uint32_t n = pnx_width_bytes[code & 7u];
+    for (uint32_t k = 0; k < n; ++k) // little-endian whatever the machine
+        out[code & PNX_W_BE ? n - 1 - k : k] = (uint8_t)((uint64_t)value >> (8 * k));
+    return n;
+}
+// The value at the front of `p` (`length` bytes) in width code `code`, and the bytes it took;
+// 0 when there are not enough, or a varint is longer than ten bytes or past 64 bits.
+PNX_INLINE uint32_t pnx_load_code(const uint8_t *p, uint32_t length, uint32_t code, int64_t *value) {
+    if (code == PNX_W_VARINT) {
+        uint64_t v = 0;
+        for (uint32_t k = 0; k < length && k < 10; ++k) {
+            if (k == 9 && p[k] > 1)
+                return 0;
+            v |= (uint64_t)(p[k] & 0x7fu) << (7 * k);
+            if (!(p[k] & 0x80u)) {
+                *value = (int64_t)v;
+                return k + 1;
+            }
+        }
+        return 0;
+    }
+    const uint32_t width = code & 7u, n = pnx_width_bytes[width];
+    if (length < n)
+        return 0;
+    uint8_t le[8];
+    for (uint32_t k = 0; k < n; ++k)
+        le[k] = p[code & PNX_W_BE ? n - 1 - k : k];
+    *value = pnx_load_width(le, width);
+    return n;
+}
+
 PNX_OP(BPUT) {
     const pnx_global *g = &st->globals[x];
-    const uint32_t n = pnx_width_bytes[OP_B(w)];
     const int64_t value = R[OP_A(w)];
+    const uint32_t code = OP_B(w);
     uint64_t len = pnx_buffer_len(g);
+    if (code != PNX_W_VARINT && !pnx_fits_width(value, code & 7u))
+        return PINAX_ERR_OVERFLOW;
+    uint8_t bytes[10];
+    const uint32_t n = pnx_store_code(bytes, value, code);
     if (len + n > g->capacity) {
         st->fail = PINAX_ERR_FULL;
         return PNX_R_FAILED;
     }
-    if (!pnx_fits_width(value, OP_B(w)))
-        return PINAX_ERR_OVERFLOW;
-    __builtin_memcpy(g->ptr + 8 + len, &value, n);
+    __builtin_memcpy(g->ptr + 8 + len, bytes, n);
     len += n;
     __builtin_memcpy(g->ptr, &len, 8);
     return PNX_R_OK;
 }
-PNX_OP(BPUTS) { // one length byte, then the bytes
+// B 0: one length byte, then the bytes (longer than 255 is a fault); B 1: the length as a varint
+PNX_OP(BPUTS) {
     const pnx_global *g = &st->globals[x];
     const pnx_scell s = S[OP_A(w)];
     uint64_t len = pnx_buffer_len(g);
-    if (s.length > 255)
+    if (!OP_B(w) && s.length > 255)
         return PINAX_ERR_RANGE;
-    if (len + 1 + s.length > g->capacity) {
+    uint8_t head[10];
+    const uint32_t h = OP_B(w) ? pnx_store_code(head, s.length, PNX_W_VARINT) : (head[0] = (uint8_t)s.length, 1u);
+    if (len + h + s.length > g->capacity) {
         st->fail = PINAX_ERR_FULL;
         return PNX_R_FAILED;
     }
-    g->ptr[8 + len] = (uint8_t)s.length;
-    __builtin_memmove(g->ptr + 8 + len + 1, pnx_view_bytes(st, s), s.length);
-    len += 1 + s.length;
+    __builtin_memcpy(g->ptr + 8 + len, head, h);
+    __builtin_memmove(g->ptr + 8 + len + h, pnx_view_bytes(st, s), s.length);
+    len += h + s.length;
     __builtin_memcpy(g->ptr, &len, 8);
+    return PNX_R_OK;
+}
+// The buffer cut back to R[A] bytes; more than it holds, or fewer than none, is a fault.
+PNX_OP(BTRUNC) {
+    const pnx_global *g = &st->globals[OP_BX(w)];
+    const uint64_t    n = (uint64_t)R[OP_A(w)];
+    if (n > pnx_buffer_len(g))
+        return PINAX_ERR_RANGE;
+    __builtin_memcpy(g->ptr, &n, 8);
+    return PNX_R_OK;
+}
+// The bytes R[B] takes as a varint.
+PNX_OP(VLEN) {
+    uint8_t bytes[10];
+    R[OP_A(w)] = pnx_store_code(bytes, R[OP_B(w)], PNX_W_VARINT);
     return PNX_R_OK;
 }
 PNX_OP(BVIEW) {
@@ -364,29 +426,34 @@ PNX_OP(BVIEW) {
 }
 PNX_OP(SGET) {
     pnx_scell *s = &S[OP_B(w)];
-    const uint32_t n = pnx_width_bytes[OP_C(w)];
-    if (s->length < n) {
+    const uint32_t n = pnx_load_code(pnx_view_bytes(st, *s), s->length, OP_C(w), &R[OP_A(w)]);
+    if (!n) {
         st->fail = PINAX_ERR_FORMAT;
         return PNX_R_FAILED;
     }
-    R[OP_A(w)] = pnx_load_width(pnx_view_bytes(st, *s), OP_C(w));
     s->offset += n;
     s->length -= n;
     return PNX_R_OK;
 }
+// C 0: a length byte, then the bytes; C 1: the length as a varint
 PNX_OP(SGETS) {
     pnx_scell *s = &S[OP_B(w)];
-    if (s->length < 1 || s->length - 1u < pnx_view_bytes(st, *s)[0]) {
+    const uint8_t *p = pnx_view_bytes(st, *s);
+    int64_t  n = 0;
+    uint32_t h = 0;
+    if (OP_C(w))
+        h = pnx_load_code(p, s->length, PNX_W_VARINT, &n);
+    else if (s->length)
+        n = p[0], h = 1;
+    if (!h || n < 0 || (uint64_t)n > s->length - h) {
         st->fail = PINAX_ERR_FORMAT;
         return PNX_R_FAILED;
     }
-    const uint32_t n = pnx_view_bytes(st, *s)[0];
-    S[OP_A(w)] = (pnx_scell){s->segment, n, s->offset + 1};
-    s->offset += n + 1u;
-    s->length -= n + 1u;
+    S[OP_A(w)] = (pnx_scell){s->segment, (uint32_t)n, s->offset + h};
+    s->offset += h + (uint32_t)n;
+    s->length -= h + (uint32_t)n;
     return PNX_R_OK;
 }
-
 // ---- failures and strings built in the region ---------------------------------------------
 
 PNX_OP(GETFAIL) { R[OP_A(w)] = st->fail; return PNX_R_OK; }

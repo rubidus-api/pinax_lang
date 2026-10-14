@@ -418,7 +418,7 @@ static const char *check_word(const pinax_state *st, uint32_t index, span range,
         case PNX_AGET: case PNX_ASET: want = PNX_G_ARRAY; global = c; break; // or a list, below
         case PNX_GLEN: case PNX_GCLEAR: want = PNX_G_COUNT + 1; global = bx; break; // any collection
         case PNX_ADDROW: want = PNX_G_ROWS; global = bx; break;
-        case PNX_BCAT: case PNX_BCATI: want = PNX_G_BUFFER; global = bx; break;
+        case PNX_BCAT: case PNX_BCATI: case PNX_BTRUNC: want = PNX_G_BUFFER; global = bx; break;
         case PNX_QPUT: case PNX_QTAKE: case PNX_QPEEK: want = PNX_G_QUEUE; global = bx; break;
         case PNX_PALLOC: case PNX_PFREE: want = PNX_G_POOL; global = bx; break;
         case PNX_PALIVE: want = PNX_G_POOL; global = c; break;
@@ -472,7 +472,10 @@ static const char *check_word(const pinax_state *st, uint32_t index, span range,
             if (offset + (is_text ? 1u + extra : width_bytes[extra]) > st->globals[global].elem_bytes)
                 return "code: field outside its record";
         }
-        if (((op == PNX_BPUT || op == PNX_BPUTW) && b >= PNX_W_COUNT) || (op == PNX_SGET && c >= PNX_W_COUNT))
+        const uint32_t wcode = op == PNX_SGET ? c : b; // a width, or varint; big-endian on a width
+        if (((op == PNX_BPUT || op == PNX_BPUTW || op == PNX_SGET) &&
+             (wcode & ~(PNX_W_BE | 7u) || (wcode & 7u) > PNX_W_VARINT || wcode == (PNX_W_VARINT | PNX_W_BE))) ||
+            ((op == PNX_BPUTS || op == PNX_BPUTSW) && b > 1) || (op == PNX_SGETS && c > 1))
             return "code: unknown width";
         if (((op == PNX_BENC || op == PNX_BENCW) && b >= PNX_ENC_COUNT) || (op == PNX_SHASH && c >= PNX_HASH_COUNT))
             return "code: unknown encoding or hash";

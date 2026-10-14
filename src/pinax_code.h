@@ -162,6 +162,7 @@ enum {
     X(SHRI, 0x36, PNX_K_I, PNX_K_I, PNX_K_IMM, PNX_F_ABC, PNX_X_NONE, 0, "wr-") \
     X(USHRI, 0x37, PNX_K_I, PNX_K_I, PNX_K_IMM, PNX_F_ABC, PNX_X_NONE, 0, "wr-") \
     X(WMULI, 0x38, PNX_K_I, PNX_K_I, PNX_K_IMM, PNX_F_ABC, PNX_X_NONE, 0, "wr-") \
+    X(VLEN, 0x39, PNX_K_I, PNX_K_I, PNX_K_NONE, PNX_F_ABC, PNX_X_NONE, 0, "wr-") \
     /* jumps */ \
     X(JEQ, 0x48, PNX_K_I, PNX_K_I, PNX_K_J, PNX_F_ABC, PNX_X_NONE, 0, "rr-") \
     X(JNE, 0x49, PNX_K_I, PNX_K_I, PNX_K_J, PNX_F_ABC, PNX_X_NONE, 0, "rr-") \
@@ -249,7 +250,7 @@ enum {
     X(SFINDL, 0xa5, PNX_K_I, PNX_K_S, PNX_K_S, PNX_F_ABC, PNX_X_NONE, 1, "wrr") \
     X(SCMP, 0xa6, PNX_K_I, PNX_K_S, PNX_K_S, PNX_F_ABC, PNX_X_NONE, 0, "wrr") \
     X(SGET, 0xa7, PNX_K_I, PNX_K_S, PNX_K_IMM, PNX_F_ABC, PNX_X_NONE, 1, "wm-") \
-    X(SGETS, 0xa8, PNX_K_S, PNX_K_S, PNX_K_NONE, PNX_F_ABC, PNX_X_NONE, 1, "wm-") \
+    X(SGETS, 0xa8, PNX_K_S, PNX_K_S, PNX_K_IMM, PNX_F_ABC, PNX_X_NONE, 1, "wm-") \
     X(SUTF, 0xa9, PNX_K_I, PNX_K_S, PNX_K_IMM, PNX_F_ABC, PNX_X_NONE, 0, "wr-") \
     X(TOINTB, 0xaa, PNX_K_I, PNX_K_S, PNX_K_I, PNX_F_ABC, PNX_X_NONE, 1, "wrr") \
     X(SSPAN, 0xab, PNX_K_S, PNX_K_S, PNX_K_IMM, PNX_F_ABC, PNX_X_NONE, 0, "mw-") \
@@ -273,12 +274,12 @@ enum {
     /* buffers */ \
     X(BCLEAR, 0xc8, PNX_K_NONE, PNX_K_NONE, PNX_K_NONE, PNX_F_GLOBAL, PNX_X_NONE, 0, "---") \
     X(BPUT, 0xc9, PNX_K_I, PNX_K_IMM, PNX_K_G, PNX_F_ABC, PNX_X_NONE, 1, "r--") \
-    X(BPUTS, 0xca, PNX_K_S, PNX_K_NONE, PNX_K_G, PNX_F_ABC, PNX_X_NONE, 1, "r--") \
+    X(BPUTS, 0xca, PNX_K_S, PNX_K_IMM, PNX_K_G, PNX_F_ABC, PNX_X_NONE, 1, "r--") \
     X(BVIEW, 0xcb, PNX_K_S, PNX_K_NONE, PNX_K_NONE, PNX_F_GLOBAL, PNX_X_NONE, 0, "w--") \
     X(BCAT, 0xcc, PNX_K_S, PNX_K_NONE, PNX_K_NONE, PNX_F_GLOBAL, PNX_X_NONE, 1, "r--") \
     X(BCATI, 0xcd, PNX_K_I, PNX_K_NONE, PNX_K_NONE, PNX_F_GLOBAL, PNX_X_NONE, 1, "r--") \
     X(BPUTW, 0xce, PNX_K_I, PNX_K_IMM, PNX_K_NONE, PNX_F_ABC, PNX_X_GLOBAL, 1, "r--") \
-    X(BPUTSW, 0xcf, PNX_K_S, PNX_K_NONE, PNX_K_NONE, PNX_F_ABC, PNX_X_GLOBAL, 1, "r--") \
+    X(BPUTSW, 0xcf, PNX_K_S, PNX_K_IMM, PNX_K_NONE, PNX_F_ABC, PNX_X_GLOBAL, 1, "r--") \
     /* tasks */ \
     X(TSPAWN, 0xd0, PNX_K_I, PNX_K_I, PNX_K_G, PNX_F_ABC, PNX_X_NONE, 1, "wr-") \
     X(TRESUME, 0xd1, PNX_K_I, PNX_K_I, PNX_K_G, PNX_F_ABC, PNX_X_NONE, 0, "wr-") \
@@ -292,7 +293,8 @@ enum {
     /* more collections */ \
     X(LCOPYR, 0xe0, PNX_K_I, PNX_K_NONE, PNX_K_NONE, PNX_F_GLOBAL, PNX_X_GLOBAL, 1, "r--") \
     X(BENC, 0xe1, PNX_K_S, PNX_K_IMM, PNX_K_G, PNX_F_ABC, PNX_X_NONE, 1, "r--") \
-    X(BENCW, 0xe2, PNX_K_S, PNX_K_IMM, PNX_K_NONE, PNX_F_ABC, PNX_X_GLOBAL, 1, "r--")
+    X(BENCW, 0xe2, PNX_K_S, PNX_K_IMM, PNX_K_NONE, PNX_F_ABC, PNX_X_GLOBAL, 1, "r--") \
+    X(BTRUNC, 0xe3, PNX_K_I, PNX_K_NONE, PNX_K_NONE, PNX_F_GLOBAL, PNX_X_NONE, 0, "r--")
 
 enum {
 #define PNX_ENUM(name, number, a, b, c, shape, second, fails, roles) PNX_##name = number,
@@ -309,8 +311,11 @@ enum {
 #define PNX_FIELD(global, offset, extra)                                                           \
     (((uint32_t)(global) & 0xfffu) | ((uint32_t)(offset) & 0xfffu) << 12 | ((uint32_t)(extra) & 0xffu) << 24)
 
-// Width codes of FGET, FSET, BPUT and SGET. Bytes are little-endian.
+// Width codes of FGET, FSET, BPUT and SGET. Bytes are little-endian. BPUT and SGET also take
+// PNX_W_VARINT (unsigned LEB128 of the 64 bits) and, on a fixed width, PNX_W_BE: big-endian.
 enum { PNX_W_U8, PNX_W_U16, PNX_W_U32, PNX_W_64, PNX_W_I8, PNX_W_I16, PNX_W_I32, PNX_W_COUNT };
+#define PNX_W_VARINT PNX_W_COUNT
+#define PNX_W_BE 0x08u
 
 // What SHASH computes (its C) and what BENC writes (its B).
 enum { PNX_HASH_CRC32, PNX_HASH_FNV1A, PNX_HASH_SIP, PNX_HASH_COUNT };

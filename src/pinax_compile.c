@@ -229,6 +229,7 @@ typedef struct field {
     uint16_t offset;
     uint8_t  extra;
     bool     is_str;
+    bool     varint; // packed as a varint (RFC-0009 section 4.4); held as 64 bits
 } field;
 
 typedef struct record {
@@ -237,6 +238,7 @@ typedef struct record {
     uint32_t size;
     uint16_t module;   // the source module it was declared in (set when the load is done)
     bool     exported; // visible to other modules as module.name
+    bool     big_endian; // packed big-endian (only bytes.pack and unpack; memory stays as it is)
 } record;
 
 // extern NAME ( effect ) from "lib" : a C function the host's resolver gave
@@ -1244,7 +1246,7 @@ enum {
     BW_HEX, BW_BIN, BW_HEX_PAD, BW_ZERO_PAD, BW_PAD_LEFT, BW_PAD_RIGHT, BW_CALL, BW_MARK, BW_RELEASE, BW_REGION_FREE,
     BW_SPAN, BW_CHARS, BW_JOIN_INTO, BW_UPPER, BW_LOWER, BW_REPEAT, BW_TO_INT_BASE, BW_IS_UTF8, BW_CHAR_COUNT,
     BW_REPLACE_INTO, BW_APPEND_HEX, BW_CRC32, BW_FNV1A, BW_HASH64, BW_BASE64_ENCODE, BW_BASE64_DECODE,
-    BW_HEX_ENCODE, BW_HEX_DECODE, BW_URL_ENCODE, BW_URL_DECODE
+    BW_HEX_ENCODE, BW_HEX_DECODE, BW_URL_ENCODE, BW_URL_DECODE, BW_TRUNCATE
 };
 static const struct builtin {
     const char *name;
@@ -1288,6 +1290,7 @@ static const struct builtin {
     {"base64_encode", BW_BASE64_ENCODE, 4}, {"base64_decode", BW_BASE64_DECODE, 4},
     {"hex_encode", BW_HEX_ENCODE, 4}, {"hex_decode", BW_HEX_DECODE, 4},
     {"url_encode", BW_URL_ENCODE, 4}, {"url_decode", BW_URL_DECODE, 4},
+    {"truncate", BW_TRUNCATE, 0},
     {"len", BW_LEN, 1},             {"is_empty", BW_IS_EMPTY, 1},  {"take", BW_TAKE, 1},
 };
 
@@ -1296,7 +1299,8 @@ static const struct builtin {
 // and queues, in `str` for strings.
 // The standard modules, part of the language: their number in the builtin table, or 0.
 static uint8_t standard_module(name n) {
-    return name_is(n, "str") ? 1 : name_is(n, "fmt") ? 2 : name_is(n, "hash") ? 3 : name_is(n, "encode") ? 4 : 0;
+    return name_is(n, "str") ? 1 : name_is(n, "fmt") ? 2 : name_is(n, "hash") ? 3 : name_is(n, "encode") ? 4
+         : name_is(n, "bytes") ? 5 : 0;
 }
 
 static const struct builtin *find_builtin(name n, uint8_t module) {
@@ -3459,6 +3463,223 @@ static bool do_replace_into(comp *c) {
     return guard_op(c, TY_INT);
 }
 
+// How field `fd` of a record is packed: a width code of BPUT and SGET, or NONE for str(N) (a
+// varint length, then the bytes).
+static uint32_t pack_code(const record *r, const field *fd) {
+    if (fd->is_str)
+        return NONE;
+    if (fd->varint)
+        return PNX_W_VARINT;
+    const uint32_t width = fd->extra;
+    return r->big_endian && width != PNX_W_U8 && width != PNX_W_I8 ? width | PNX_W_BE : width;
+}
+
+// row buf pack (or fail) : the fields of the row in declaration order, appended to the buffer;
+// when it is full the buffer is cut back to what it held. s row unpack (gives rest or fail):
+// the fields read into the row, and the bytes after them; nothing is written unless all of
+// them read (format otherwise: short, a bool past 1, a str longer than its field). row
+// packed_size (gives int): the bytes pack would append.
+static bool pack_word(comp *c, name n) {
+    fn *f = c->f;
+    const bool unpack = name_is(n, "unpack"), size = name_is(n, "packed_size");
+    const globalsym *g = NULL;
+    uint32_t         gi = 0;
+    if (!unpack && !size && !need_coll(c, &g, &gi))
+        return false;
+    if (!need(c, unpack ? 2 : 1))
+        return false;
+    const tid row = f->stack[f->depth - 1].type;
+    const globalsym *table = is_row(row) ? (const globalsym *)c->globals.ptr + (row - TY_FIRST_DECLARED) : NULL;
+    if (!table || table->record == NONE || (g && g->kind != GK_BUFFER) || (unpack && f->stack[f->depth - 2].type != TY_STR))
+        return type_error(c, unpack ? "unpack takes a str and a row of a table of records: s row bytes.unpack"
+                           : size   ? "packed_size takes a row of a table of records"
+                                    : "pack takes a row of a table of records and a buffer: row buf bytes.pack");
+    if (f->stack[f->depth - 1].owned)
+        return type_error(c, "an owned row is kept in a local before its fields are used");
+    const record *r = (const record *)c->records.ptr + table->record;
+    const uint32_t tab = row - TY_FIRST_DECLARED;
+    uint32_t rr, rs = 0;
+    if (unpack && !settle(c, f->depth - 2))
+        return false;
+    if (unpack)
+        rs = slot_of(c, f->depth - 2);
+    if (!settle(c, f->depth - 1))
+        return false;
+    rr = slot_of(c, f->depth - 1);
+    f->depth -= unpack ? 2 : 1;
+    if (!settle_all(c))
+        return false;
+    // temporaries above the row and the string, which stay where they are
+    const uint32_t ib = top_slot(c, BANK_I, 5) + 1, t = ib, ok = ib + 1, aux = ib + 2, acc = ib + 3;
+    const uint32_t sb = top_slot(c, BANK_S, 3), v = sb + 1, piece = sb + 2;
+    uint32_t       bad = NONE, over = NONE;
+    if (size) {
+        int64_t fixed = 0;
+        for (uint32_t k = 0; k < r->count; ++k) {
+            const field *fd = (const field *)c->fields.ptr + r->first + k;
+            const uint32_t code = pack_code(r, fd);
+            if (code != NONE && code != PNX_W_VARINT)
+                fixed += code & PNX_W_BE ? (code & 7u) == PNX_W_64 ? 8 : (code & 7u) == PNX_W_U32 || (code & 7u) == PNX_W_I32 ? 4 : 2
+                                         : (code == PNX_W_U8 || code == PNX_W_I8) ? 1 : code == PNX_W_U16 || code == PNX_W_I16 ? 2
+                                         : code == PNX_W_U32 || code == PNX_W_I32 ? 4 : 8;
+        }
+        if (!load_int(c, acc, fixed))
+            return false;
+        for (uint32_t k = 0; k < r->count; ++k) {
+            const field *fd = (const field *)c->fields.ptr + r->first + k;
+            const uint32_t code = pack_code(r, fd), where = PNX_FIELD(tab, fd->offset, fd->extra);
+            if (code == PNX_W_VARINT) {
+                if (emit(c, PNX_ABC(PNX_FGET, t, rr, 0)) == NONE || emit(c, where) == NONE ||
+                    emit(c, PNX_ABC(PNX_VLEN, t, t, 0)) == NONE || emit(c, PNX_ABC(PNX_ADD, acc, acc, t)) == NONE)
+                    return false;
+            } else if (code == NONE) {
+                if (emit(c, PNX_ABC(PNX_FGETS, v, rr, 0)) == NONE || emit(c, where) == NONE ||
+                    emit(c, PNX_ABC(PNX_SLEN, t, v, 0)) == NONE || emit(c, PNX_ABC(PNX_ADD, acc, acc, t)) == NONE ||
+                    emit(c, PNX_ABC(PNX_VLEN, t, t, 0)) == NONE || emit(c, PNX_ABC(PNX_ADD, acc, acc, t)) == NONE)
+                    return false;
+            }
+        }
+        if (!push_slot(c, TY_INT))
+            return false;
+        f->def_at = NONE;
+        return emit(c, PNX_ABC(PNX_MOVI, slot_of(c, f->depth - 1), acc, 0)) != NONE && advance(c);
+    }
+    if (emit(c, PNX_ABX(PNX_LOADI, ok, 1)) == NONE)
+        return false;
+    if (!unpack) { // the length before, to cut back to
+        if (emit(c, PNX_ABX(PNX_BVIEW, v, gi)) == NONE || emit(c, PNX_ABC(PNX_SLEN, aux, v, 0)) == NONE)
+            return false;
+        for (uint32_t k = 0; k < r->count; ++k) {
+            const field *fd = (const field *)c->fields.ptr + r->first + k;
+            const uint32_t code = pack_code(r, fd), where = PNX_FIELD(tab, fd->offset, fd->extra);
+            if (code == NONE ? emit(c, PNX_ABC(PNX_FGETS, v, rr, 0)) == NONE || emit(c, where) == NONE ||
+                                   emit_g(c, PNX_BPUTS, v, 1, gi) == NONE
+                             : emit(c, PNX_ABC(PNX_FGET, t, rr, 0)) == NONE || emit(c, where) == NONE ||
+                                   emit_g(c, PNX_BPUT, t, code, gi) == NONE)
+                return false;
+            if (!jump_later(c, &bad))
+                return false;
+        }
+        if (!jump_later(c, &over))
+            return false;
+        land(c, &bad);
+        if (emit(c, PNX_ABX(PNX_BTRUNC, aux, gi)) == NONE || emit(c, PNX_ABX(PNX_LOADI, ok, 0)) == NONE)
+            return false;
+        land(c, &over);
+        f->def_at = NONE;
+        return emit(c, PNX_ABX(PNX_SETFAIL, 0, PINAX_ERR_FULL)) != NONE && emit(c, PNX_ABC(PNX_JNEI, ok, 0, 1)) != NONE &&
+               guard_op(c, TY_NONE);
+    }
+    // unpack: first every field is read and checked, then read again and stored
+    for (int pass = 0; pass < 2; ++pass) {
+        if (emit(c, PNX_ABC(PNX_MOVS, v, rs, 0)) == NONE)
+            return false;
+        for (uint32_t k = 0; k < r->count; ++k) {
+            const field *fd = (const field *)c->fields.ptr + r->first + k;
+            const uint32_t code = pack_code(r, fd), where = PNX_FIELD(tab, fd->offset, fd->extra);
+            if (code == NONE) {
+                if (emit(c, PNX_ABC(PNX_SGETS, piece, v, 1)) == NONE || !jump_later(c, &bad))
+                    return false;
+                if (pass == 0 && (emit(c, PNX_ABC(PNX_SLEN, t, piece, 0)) == NONE || !load_int(c, aux, fd->extra) ||
+                                  emit(c, PNX_ABC(PNX_JLE, t, aux, 1)) == NONE || !jump_later(c, &bad)))
+                    return false;
+                if (pass == 1 && (emit(c, PNX_ABC(PNX_FSETS, piece, rr, 0)) == NONE || emit(c, where) == NONE))
+                    return false;
+            } else {
+                if (emit(c, PNX_ABC(PNX_SGET, t, v, code)) == NONE || !jump_later(c, &bad))
+                    return false;
+                if (pass == 0 && fd->type == TY_BOOL &&
+                    (emit(c, PNX_ABC(PNX_JLTI, t, 2, 1)) == NONE || !jump_later(c, &bad)))
+                    return false;
+                if (pass == 1 && (emit(c, PNX_ABC(PNX_FSET, t, rr, 0)) == NONE || emit(c, where) == NONE))
+                    return false;
+            }
+        }
+    }
+    if (emit(c, PNX_ABC(PNX_MOVS, rs, v, 0)) == NONE || !jump_later(c, &over))
+        return false;
+    land(c, &bad);
+    if (emit(c, PNX_ABX(PNX_LOADI, ok, 0)) == NONE)
+        return false;
+    land(c, &over);
+    f->def_at = NONE;
+    return emit(c, PNX_ABX(PNX_SETFAIL, 0, PINAX_ERR_FORMAT)) != NONE && emit(c, PNX_ABC(PNX_JNEI, ok, 0, 1)) != NONE &&
+           guard_op(c, TY_STR);
+}
+
+// The words of the module bytes (RFC-0009 section 4.4): put_T and get_T for T in u8 u16 u32 u64
+// i8 i16 i32 i64 (with _be for big-endian, two bytes and more), varint and str (a varint length
+// and the bytes). put: (v, buf or fail); get: (s str gives v, rest str or fail).
+static bool bytes_word(comp *c, name n) {
+    fn *f = c->f;
+    static const struct {
+        const char *name;
+        uint32_t    code;
+    } kinds[] = {{"u8", PNX_W_U8},   {"u16", PNX_W_U16}, {"u32", PNX_W_U32}, {"u64", PNX_W_64},
+                 {"i8", PNX_W_I8},   {"i16", PNX_W_I16}, {"i32", PNX_W_I32}, {"i64", PNX_W_64},
+                 {"varint", PNX_W_VARINT}, {"str", NONE}};
+    if (name_is(n, "pack") || name_is(n, "unpack") || name_is(n, "packed_size"))
+        return pack_word(c, n);
+    const bool put = n.length > 4 && __builtin_memcmp(n.text, "put_", 4) == 0;
+    if (!put && !(n.length > 4 && __builtin_memcmp(n.text, "get_", 4) == 0))
+        return error(c, PINAX_ERR_NOT_FOUND, "the module has no word of this name");
+    name rest = {n.text + 4, n.length - 4};
+    const bool be = rest.length > 3 && __builtin_memcmp(rest.text + rest.length - 3, "_be", 3) == 0;
+    if (be)
+        rest.length -= 3;
+    uint32_t code = NONE - 1;
+    for (uint32_t k = 0; k < sizeof kinds / sizeof kinds[0]; ++k) {
+        if (name_is(rest, kinds[k].name))
+            code = kinds[k].code;
+    }
+    if (code == NONE - 1 || (be && (code == NONE || code == PNX_W_VARINT || code == PNX_W_U8 || code == PNX_W_I8)))
+        return error(c, PINAX_ERR_NOT_FOUND, "the module has no word of this name");
+    if (be)
+        code |= PNX_W_BE;
+    uint32_t ra;
+    if (put) { // v buf put_T
+        const globalsym *g;
+        uint32_t         gi;
+        if (!need_coll(c, &g, &gi) || !need(c, 1))
+            return false;
+        if (g->kind != GK_BUFFER || f->stack[f->depth - 1].type != (code == NONE ? TY_STR : TY_INT))
+            return type_error(c, code == NONE ? "put_str takes a str and a buffer: s buf bytes.put_str"
+                                              : "this word takes an int and a buffer: n buf bytes.put_u32");
+        if (!settle(c, f->depth - 1))
+            return false;
+        ra = slot_of(c, f->depth - 1);
+        --f->depth;
+        if (!settle_all(c))
+            return false;
+        return (code == NONE ? emit_g(c, PNX_BPUTS, ra, 1, gi) : emit_g(c, PNX_BPUT, ra, code, gi)) != NONE &&
+               guard_op(c, TY_NONE);
+    }
+    if (!need(c, 1))
+        return false;
+    if (f->stack[f->depth - 1].type != TY_STR)
+        return type_error(c, "this word takes a str: s bytes.get_u32");
+    if (!settle(c, f->depth - 1))
+        return false;
+    ra = slot_of(c, f->depth - 1);
+    --f->depth;
+    if (!settle_all(c))
+        return false;
+    sig two = {.n_out = 2, .fails = true};
+    two.out[0] = code == NONE ? TY_STR : TY_INT;
+    two.out[1] = TY_STR;
+    if (code == NONE) { // the value where s was, the rest above it
+        const uint32_t value = top_slot(c, BANK_S, 2);
+        if (emit(c, PNX_ABC(PNX_MOVS, value + 1, ra, 0)) == NONE ||
+            emit(c, PNX_ABC(PNX_SGETS, value, value + 1, 1)) == NONE || !advance(c))
+            return false;
+    } else if (emit(c, PNX_ABC(PNX_SGET, top_slot(c, BANK_I, 1), ra, code)) == NONE || !advance(c)) {
+        return false;
+    }
+    f->def_at = NONE;
+    const uint32_t base[2] = {0, 0}, in[2] = {0, 0};
+    return guard(c, &two, base, in, false);
+}
+
 // stem sum
 static bool do_sum(comp *c) {
     fn *f = c->f;
@@ -3600,6 +3821,16 @@ static bool builtin(comp *c, const struct builtin *w) {
         f->def_at = NONE;
         return push_slot(c, TY_STR) &&
                emit(c, PNX_ABC(PNX_SSPAN, ra, slot_of(c, f->depth - 1), (uint32_t)class.value)) != NONE && advance(c);
+    }
+    case BW_TRUNCATE: { // n buf truncate : the buffer cut back to n bytes; more than it holds is a fault
+        if (!need_coll(c, &g, &gi) || !need(c, 1))
+            return false;
+        if (g->kind != GK_BUFFER || f->stack[f->depth - 1].type != TY_INT)
+            return type_error(c, "truncate takes a length and a buffer: n buf truncate");
+        if (!reg_of(c, f->depth - 1, &ra))
+            return false;
+        --f->depth;
+        return emit(c, PNX_ABX(PNX_BTRUNC, ra, gi)) != NONE && advance(c);
     }
     case BW_CRC32:
     case BW_FNV1A:
@@ -4440,6 +4671,11 @@ static bool body_name(comp *c) {
                 if (name_is(n, classes[k]))
                     return push(c, (entry){.type = TY_INT, .kind = E_CONST, .value = k + 1}) && advance(c);
             }
+        }
+        if (standard == 5) { // bytes: the name says the width
+            if (c->data_only)
+                return syntax(c, "a data source calls no words; only literals, const names and stores");
+            return bytes_word(c, n);
         }
         if (standard) { // a word of a standard module
             if (c->data_only)
@@ -5335,8 +5571,14 @@ static bool declare_record(comp *c) {
     if (!advance(c))
         return false;
     while (!is_word(c, PNX_KW_end)) {
-        if (is_word(c, PNX_KW_big_endian) || is_word(c, PNX_KW_columns))
-            return syntax(c, "big_endian and columns are not supported by the compiler yet");
+        if (is_word(c, PNX_KW_columns))
+            return syntax(c, "columns is not supported by the compiler yet");
+        if (is_word(c, PNX_KW_big_endian)) {
+            r.big_endian = true;
+            if (!advance(c))
+                return false;
+            continue;
+        }
         if (c->tok.kind != PNX_T_NAME)
             return syntax(c, "a record is a list of fields: name type, closed by end");
         field fd = {.name = tok_name(c), .offset = (uint16_t)r.size};
@@ -5361,6 +5603,11 @@ static bool declare_record(comp *c) {
             return false;
         if (bytes) {
             // an integer of that width
+        } else if (name_is(tn, "varint")) { // an int, packed in as few bytes as it needs
+            fd.type = TY_INT;
+            fd.extra = PNX_W_64;
+            fd.varint = true;
+            bytes = 8;
         } else if (name_is(tn, "bool")) {
             fd.type = TY_BOOL;
             fd.extra = PNX_W_U8;
