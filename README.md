@@ -6,7 +6,7 @@ A small, fast scripting language to embed in C programs, with fixed, flat memory
 
 > **Status: early, and it runs.** Source files compile and run, from the command `pnx` and
 > from a C program. The language is not complete (no floating point
-> yet), nothing is released, and the bytecode format carries no promise.
+> yet), this is the first release (0.1.0), and the bytecode format carries no promise.
 
 Pinax is meant to live inside a host program. The host hands it one block of memory,
 registers the functions it may call, and runs scripts in it. Every value has a type and a
@@ -133,4 +133,5 @@ chapters, clauses and examples.
 
 ## License
 
-MIT. See [LICENSE](LICENSE).
+MIT. See [LICENSE](LICENSE). The standard in `docs/spec/` is MIT too; the manual in `docs/manual/` is
+CC BY-NC-SA 4.0 with its examples under MIT (see `docs/manual/LICENSE-NOTICE.md`).

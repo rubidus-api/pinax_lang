@@ -39,5 +39,5 @@ Needs Typst 0.15 and the fonts above (set `TYPST` and `TYPST_FONT_PATHS`); a PDF
 
 ## 라이선스 · License
 
-본문은 CC BY-NC-SA 4.0, 예제는 MIT 다. [`LICENSE-NOTICE.md`](LICENSE-NOTICE.md) 를 본다.
-Text under CC BY-NC-SA 4.0, examples under MIT; see [`LICENSE-NOTICE.md`](LICENSE-NOTICE.md).
+본문과 예제 모두 MIT 다. [`LICENSE`](LICENSE) 를 본다. 매뉴얼(`../manual/`)은 라이선스가 다르다.
+Text and examples are both under the MIT License ([`LICENSE`](LICENSE)). The manual (`../manual/`) has a different license.
