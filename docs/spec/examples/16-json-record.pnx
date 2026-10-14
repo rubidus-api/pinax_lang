@@ -1,0 +1,27 @@
+rem run
+use io
+use json
+record user
+  name str(8)
+  id u16
+  admin bool
+end
+list users user 4
+buffer out 128
+word input (gives str)
+  text END
+{"id": 9, "extra": {"x": [1, 2]}, "name": "park", "admin": false} and more
+END
+end
+word demo (or fail)
+  users add_row or_fail to u
+  "lee" u to user.name  7 u to user.id  true u to user.admin
+  u out json.pack or_fail
+  out contents io.println
+  users add_row or_fail to v
+  input v json.unpack or_fail to rest                  rem unknown keys are skipped
+  cat (v user.name, " ", v user.id, " ", v user.admin, " /", rest, "/") io.println
+  "{\"id\": 70000}" v json.unpack or_else (e) cat ("70000 in u16: ", e err_text) io.println "" end drop
+  cat ("the row is unchanged: ", v user.id) io.println
+end
+demo or_else (e) e err_text io.println end

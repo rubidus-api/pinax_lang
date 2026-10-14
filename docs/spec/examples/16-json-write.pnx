@@ -1,0 +1,14 @@
+rem run
+use io
+use json
+buffer out 128
+word demo (or fail)
+  out json.begin_object or_fail
+  "name" out json.put_key or_fail  "kim \"k\"" out json.put_str or_fail
+  "tags" out json.put_key or_fail
+  out json.begin_array or_fail  1 out json.put_int or_fail  true out json.put_bool or_fail  out json.put_null or_fail
+  out json.end_array or_fail
+  out json.end_object or_fail
+end
+demo or_else (e) e err_text io.println end
+out contents io.println

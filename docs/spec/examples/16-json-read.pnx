@@ -1,0 +1,23 @@
+rem run
+use io
+use json
+word kind_name (k int gives str)                    rem the kinds are constants of json
+  k json.key eq if "key" return end
+  k json.string eq if "string" return end
+  k json.number eq if "number" return end
+  k json.boolean eq if "boolean" return end
+  k json.null eq if "null" return end
+  k json.object eq k json.array eq or if "open" return end
+  "close"
+end
+word tokens (s str)
+  s to rest
+  loop
+    rest json.next or_else (e) break end to (kind, value, rest)
+    cat (kind kind_name, " ", value) io.println
+  end
+end
+text END
+{"name": "kim", "tags": [1, -2.5e3, true, null], "note": "café"}
+END
+tokens

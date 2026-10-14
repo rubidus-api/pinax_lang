@@ -40,7 +40,8 @@ source-text = [ shebang ] { space | remark | token } ;
 ```ebnf
 run    = ( letter | digit ) { letter | digit } ;
 NAME   = letter { letter | digit } ;             (* and not a reserved word *)
-PATH   = NAME "." NAME { "." NAME } ;            (* no space around a dot *)
+PATH   = NAME "." member { "." member } ;        (* no space around a dot *)
+member = letter { letter | digit } ;              (* a reserved word too: json.array *)
 ```
 
 #para("1")[영문자, 숫자, 밑줄이 이어진 것은 끊지 않고 #term("덩이", en: "run") 하나로 읽은 다음에 갈래를
@@ -52,6 +53,8 @@ PATH   = NAME "." NAME { "." NAME } ;            (* no space around a dot *)
 레코드의 필드(`p.x`), 상수(`str.digit`)를 가리킨다.]
 
 #part("제약")
+
+#para("2a")[점 뒤의 덩이는 예약 낱말이어도 경로의 일부다(`json.array`). 경로의 첫 덩이는 예약 낱말일 수 없다.]
 
 #para("3")[점 뒤에는 공백 없이 이름이 와야 한다.]
 

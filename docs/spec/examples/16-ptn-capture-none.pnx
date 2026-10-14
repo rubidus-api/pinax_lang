@@ -1,0 +1,5 @@
+rem fault
+use ptn
+use io
+word f () "ab" "(a)b" ptn.match or_else (e) "" end drop  2 ptn.capture io.println end
+f

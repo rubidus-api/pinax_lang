@@ -1,0 +1,15 @@
+rem run
+use io
+use rex
+buffer out 64
+word swap_with (p str, s str gives n int or fail)  rem a pattern made while running
+  out clear
+  p rex.compile or_fail to re
+  s re "-" out rex.replace_into or_fail
+end
+word demo ()
+  "X" "aXbXc" swap_with or_else (e) -1 end to n
+  cat (n, " replaced: ", out contents) io.println
+  "(" "aXbXc" swap_with or_else (e) cat ("bad pattern: ", e err_text) io.println -1 end drop
+end
+demo

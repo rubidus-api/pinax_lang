@@ -3915,8 +3915,10 @@ static bool text_record(comp *c, bool json, bool unpack) {
     const tid row = f->stack[f->depth - 1].type;
     const globalsym *table = is_row(row) ? (const globalsym *)c->globals.ptr + (row - TY_FIRST_DECLARED) : NULL;
     if (!table || table->record == NONE || (g && g->kind != GK_BUFFER) || (unpack && f->stack[f->depth - 2].type != TY_STR))
-        return type_error(c, unpack ? "unpack takes a str and a row of a table of records: s row json.unpack"
-                                    : "pack takes a row of a table of records and a buffer: row buf json.pack");
+        return type_error(c, unpack ? (json ? "unpack takes a str and a row of a table of records: s row json.unpack"
+                                            : "unpack takes a str and a row of a table of records: s row csv.unpack")
+                             : json ? "pack takes a row of a table of records and a buffer: row buf json.pack"
+                                    : "pack takes a row of a table of records and a buffer: row buf csv.pack");
     if (f->stack[f->depth - 1].owned)
         return type_error(c, "an owned row is kept in a local before its fields are used");
     const record *r = (const record *)c->records.ptr + table->record;

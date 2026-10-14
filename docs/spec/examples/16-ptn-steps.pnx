@@ -1,0 +1,4 @@
+rem fault
+use ptn
+use str
+"a" 300 str.repeat ".-.-.-.-.-.-.-.-x" ptn.is_match drop

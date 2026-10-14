@@ -1,0 +1,3 @@
+rem refused
+use json
+word f () 5 json.next drop drop drop end

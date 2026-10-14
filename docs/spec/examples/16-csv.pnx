@@ -1,0 +1,24 @@
+rem run
+use io
+use csv
+record user
+  name str(8)
+  id u16
+  admin bool
+end
+list users user 4
+buffer out 128
+"a,\"b,c\",\"d\"\"e\",,f" csv.fields do (x str) cat ("[", x, "]") io.print end each
+"" io.println
+word demo (or fail)
+  users add_row or_fail to u
+  "lee, jr" u to user.name  7 u to user.id  true u to user.admin
+  u out csv.pack or_fail                               rem a line, quoted where needed
+  "x" out csv.put or_fail  5 out csv.put_int or_fail  false out csv.put_bool or_fail  out csv.end_line or_fail
+  out contents io.print
+  users add_row or_fail to v
+  "zed,5,true\nrest" v csv.unpack or_fail to rest
+  cat (v user.name, " ", v user.id, " ", v user.admin, " [", rest, "]") io.println
+  "zed,5,maybe" v csv.unpack or_else (e) cat ("bad bool: ", e err_text) io.println "" end drop
+end
+demo or_else (e) e err_text io.println end

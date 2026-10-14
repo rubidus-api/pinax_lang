@@ -1,0 +1,14 @@
+rem run
+use io
+use str
+use rex
+buffer out 64
+word demo ()
+  "2026-10-15" r"(\d+)-(\d+)-(\d+)" rex.rx do (whole str, y str, m str, d str)
+    cat (d, "/", m, "/", y) io.println
+  end rex.with_match or_else (e) "no date" io.println end
+  "none here" r"\d+" rex.rx do (whole str) whole io.println end rex.with_match or_else (e) "no date" io.println end
+  "the quick brown fox" r"\b[a-z]" rex.rx out do (w str gives str) w str.upper end rex.replace_by or_else (e) -1 end to n
+  cat (n, " replaced: ", out contents) io.println
+end
+demo

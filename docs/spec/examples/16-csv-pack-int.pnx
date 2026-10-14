@@ -1,0 +1,4 @@
+rem refused
+use csv
+buffer b 8
+word f () 5 b csv.pack or_else (e) end end

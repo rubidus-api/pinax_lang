@@ -75,7 +75,7 @@ block   = "do" [ "(" effect ")" ] { body } "end" ;
 == 고르기 <control-case>
 
 #para("1")[`값 case 가지… end` 는 맨 위의 `int` 나 `str` 를 내려 가지의 값과 견주고, 같은 첫 가지의 몸을
-돈다. 가지의 값은 리터럴이나 상수다. 한 가지에 값이 여럿이면 괄호에 쉼표로 적는다. 맞는 가지가 없으면
+돈다. 가지의 값은 리터럴이나 이 소스의 `const` 다. 한 가지에 값이 여럿이면 괄호에 쉼표로 적는다. 맞는 가지가 없으면
 `otherwise` 의 몸을 돈다. 가지마다 같은 스택을 남겨야 한다.]
 
 #ex("spec", "10-case.pnx")
@@ -84,6 +84,9 @@ block   = "do" [ "(" effect ")" ] { body } "end" ;
 
 #para("2")[같은 값이 두 가지에 있으면 거절된다.]
 #ex("spec", "10-case-twice.pnx")
+
+#para("2a")[모듈의 상수(`json.key`, `err.full` 같은 경로)는 가지의 값이 되지 못한다. 그런 값은 `eq` 로 견준다.]
+#ex("spec", "10-case-path.pnx")
 
 #part("결함")
 
@@ -171,5 +174,6 @@ fail`). 목적지가 차면 `err.full` 로 실패하고, 그때까지 쓴 것은
   ([`case` 의 같은 값], "this value is already in an earlier branch of the case"),
   ([펼쳐지는 블록이 스택을 바꿈], "this block must leave the stack as it found it"),
   ([정의 밖의 `return`], "return belongs inside a definition"),
+  ([상수가 아닌 가지의 값], "a case value is a literal or the name of a const"),
   ([줄기가 아닌 것에 조합 낱말], "a buffer or an index is not a stem; each goes over an array or a list"),
 )

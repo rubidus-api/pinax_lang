@@ -561,8 +561,8 @@ bool pnx_lex_next(pnx_lexer *lx, pnx_token *t) {
             uint32_t k = part;
             while (is_run(peek(lx, k)))
                 ++k;
-            if (reserved_word(lx->source + part, k - part) != PNX_KW_NONE)
-                return fail_at(lx, part, "a reserved word is not part of a path");
+            // After a dot a run is a member name, reserved or not (json.array): only what a module
+            // defines itself can be named so, since a script declares no reserved name.
             if (peek(lx, k) == '"' || peek(lx, k) == '\'')
                 return fail_at(lx, k, "a literal must be separated from the name before it");
             t->kind = PNX_T_PATH;

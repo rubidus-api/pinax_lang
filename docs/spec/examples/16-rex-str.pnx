@@ -1,0 +1,3 @@
+rem refused
+use rex
+word f (s str gives bool) s "a" rex.is_match end

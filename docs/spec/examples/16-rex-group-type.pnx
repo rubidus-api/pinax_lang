@@ -1,0 +1,3 @@
+rem refused
+use rex
+word f (s str) s r"(a)" rex.rx rex.matches do (m str, g int) end each end

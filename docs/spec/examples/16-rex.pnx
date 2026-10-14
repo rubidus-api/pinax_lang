@@ -1,0 +1,28 @@
+rem run
+use io
+use str
+use rex
+const pair r"(\w+)=(\d+)"
+word yes (b bool gives str) b if "true" else "false" end end
+word total (line str gives n int)               rem groups arrive as block parameters
+  0 to n
+  line pair rex.rx rex.matches do (whole str, key str, value str)
+    n value str.to_int or_else 0 end add to n
+  end each
+  n
+end
+word demo ()
+  cat ("sum ", "id=7, x=20; name=kim, n=3" total) io.println
+  "abc 123" r"\d+" rex.rx rex.is_match yes io.println
+  "on 2026-10-15 ok" r"(\d+)-(\d+)" rex.rx rex.match or_else (e) "?" end io.println
+  "key: value" r":\s*" rex.rx rex.cut_match or_else (e) "" "" "" end to (before, m, after)
+  cat ("[", before, "|", m, "|", after, "]") io.println
+  "from 2026-10-13 to 2026-11-02" r"(\d{4})-(\d{2})-(\d{2})" rex.rx r"\3/\2/\1" rex.replace io.println
+  "a , b;c ,d" r"\s*[,;]\s*" rex.rx rex.split do (part str) cat ("<", part, ">") io.print end each
+  "" io.println
+  "가나다" r"." rex.rx rex.matches do (ch str) cat ("<", ch, ">") io.print end each   rem . is one UTF-8 character
+  "" io.println
+  "foobar" r"foo\zsbar" rex.rx rex.match or_else (e) "?" end io.println              rem \zs: the match starts here
+  "Hello" r"(?i)HELLO" rex.rx rex.is_match yes io.println
+end
+demo

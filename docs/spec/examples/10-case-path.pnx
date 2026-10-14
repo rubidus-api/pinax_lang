@@ -1,0 +1,3 @@
+rem refused
+use json
+word f (k int gives bool) k case json.key of true end otherwise false end end end

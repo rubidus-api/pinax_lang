@@ -1,0 +1,18 @@
+rem run
+use io
+use ptn
+const date "(%d+)-(%d+)-(%d+)"
+word yes (b bool gives str) b if "true" else "false" end end
+"abc 123" "%d+" ptn.is_match yes io.println
+word demo ()
+  "on 2026-10-15 ok" date ptn.match or_else (e) "?" end io.println    rem the whole match
+  cat (1 ptn.capture, "/", 2 ptn.capture, "/", 3 ptn.capture) io.println
+  "key = value" "^(%w+)%s*=%s*(%w+)$" ptn.match or_else (e) "?" end drop
+  cat (2 ptn.capture, " <- ", 1 ptn.capture) io.println
+end
+demo
+"x=1, y=22, z=333" "%a=%d+" ptn.matches do (m str) cat ("[", m, "]") io.print end each
+"" io.println
+"2026-10-15" date "%3.%2.%1 (%0)" ptn.replace io.println
+"  trim me  " "^%s*(.-)%s*$" "%1" ptn.replace io.println
+"aaa" "^a" "-" ptn.replace io.println              rem ^ anchors: one match, at the start

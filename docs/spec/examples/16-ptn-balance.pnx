@@ -1,0 +1,3 @@
+rem refused
+use ptn
+word f (s str gives bool) s "%b()" ptn.is_match end
