@@ -16,3 +16,5 @@
 #include "chapters/08-errors.typ"
 #include "chapters/09-owned.typ"
 #include "chapters/10-modules.typ"
+#include "chapters/11-formats.typ"
+#include "chapters/12-patterns.typ"

@@ -1,0 +1,39 @@
+rem run
+use io
+use csv
+use json
+use str
+rem Read CSV rows into records, write them out as JSON.
+record city
+  name str(16)
+  people i32
+  capital bool
+end
+list cities city 8
+buffer out 512
+array scratch city 1                         rem a row to try a line on first
+word read_rows (input str or fail)
+  input str.lines do (line str)
+    true to ok
+    line 0 scratch idx csv.unpack or_else (e) false to ok "" end drop
+    ok if
+      cities add_row or_fail to c
+      line c csv.unpack or_fail drop
+    else
+      cat ("bad row: ", line) io.println
+    end
+  end each
+end
+word to_json (or fail)
+  out json.begin_array or_fail
+  cities do (c cities) c out json.pack or_else (e) end end each
+  out json.end_array or_fail
+end
+text END
+Seoul,9411000,true
+Busan,3349000,false
+Daejeon,lots,false
+END
+read_rows or_else (e) end
+to_json or_else (e) e err_text io.println end
+out contents io.println

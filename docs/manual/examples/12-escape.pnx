@@ -1,0 +1,3 @@
+rem refused
+use rex
+word digits (s str gives bool) s "\d+" rex.rx rex.is_match end

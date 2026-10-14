@@ -1,0 +1,6 @@
+rem refused
+record city
+  name str(16)
+end
+list cities city 4
+word undo () cities pop or_else (e) cities none end drop end

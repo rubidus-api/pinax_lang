@@ -1,0 +1,15 @@
+rem run
+use io
+use rex
+use str
+rem Dates in any of two forms, rewritten to one.
+const iso r"(\d{4})-(\d{2})-(\d{2})"
+word demo ()
+  "due 2026-10-15, paid 2026-11-02" iso rex.rx r"\3.\2.\1" rex.replace io.println
+  "id=7, x=20; name=kim, n=3" r"(\w+)=(\d+)" rex.rx rex.matches do (whole str, key str, value str)
+    cat (key, " -> ", value) io.println
+  end each
+  "a , b;c ,d" r"\s*[,;]\s*" rex.rx rex.split do (p str) cat ("<", p, ">") io.print end each
+  "" io.println
+end
+demo

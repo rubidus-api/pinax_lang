@@ -1,0 +1,18 @@
+rem run
+use io
+use json
+use str
+rem Sum every number in a JSON text, at any depth, without building a tree.
+word sum_numbers (s str gives int)
+  0 to total
+  s to rest
+  loop
+    rest json.next or_else (e) break end to (kind, value, rest)
+    kind json.number eq if total value str.to_int or_else (e) 0 end add to total end
+  end
+  total
+end
+text END
+{"a": 1, "b": [2, 3, {"c": 4}], "d": {"e": [5]}, "f": "6"}
+END
+sum_numbers str.to_str io.println

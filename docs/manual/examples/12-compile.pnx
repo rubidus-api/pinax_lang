@@ -1,0 +1,17 @@
+rem run
+rem args: [0-9]+
+use io
+use rex
+use env
+word count_matches (pattern str, s str gives int or fail)
+  pattern rex.compile or_fail to re
+  0 to n
+  s re rex.matches do (m str) n 1 add to n end each
+  n
+end
+word main ()
+  1 env.arg or_else (e) "x" end to p
+  cat ("matches of ", p, ": ", p "a1 b22 c333" count_matches or_else (e) -1 end) io.println
+  "(" "a1" count_matches or_else (e) cat ("bad pattern: ", e err_text) io.println -1 end drop
+end
+main

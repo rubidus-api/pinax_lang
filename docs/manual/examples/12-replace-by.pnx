@@ -1,0 +1,11 @@
+rem run
+use io
+use rex
+use str
+buffer out 128
+word title (s str gives int or fail)          rem capitalize every word
+  out clear
+  s r"\b[a-z]" rex.rx out do (w str gives str) w str.upper end rex.replace_by or_fail
+end
+word show () "the quick brown fox" title or_else (e) -1 end to n  cat (out contents, " (", n, " letters)") io.println end
+show

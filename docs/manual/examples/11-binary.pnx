@@ -1,0 +1,28 @@
+rem run
+use io
+use bytes
+use encode
+use hash
+use fmt
+record header
+  big_endian
+  magic u32
+  version u16
+  length varint
+end
+array headers header 2
+buffer wire 32
+buffer hex 64
+word demo (or fail)
+  0 headers idx to h
+  0x50494e58 h to header.magic           rem "PINX"
+  1 h to header.version
+  300 h to header.length
+  h wire bytes.pack or_fail
+  wire contents hex encode.hex_encode or_fail
+  cat ("bytes: ", hex contents, ", crc32: ", wire contents hash.crc32 fmt.hex) io.println
+  1 headers idx to back
+  wire contents back bytes.unpack or_fail drop
+  cat ("read back: version ", back header.version, ", length ", back header.length) io.println
+end
+demo or_else (e) e err_text io.println end
