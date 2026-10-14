@@ -186,7 +186,7 @@ pinax_err pnx_execute(pinax_state *st) {
     pnx_scell *S = st->sbank + sbase;
     const uint64_t budget = st->budget;
     uint64_t left = st->left, count = 0;
-    uint32_t w = 0;
+    uint32_t w = 0, gl = 0; // gl: the global of a task instruction, narrow or wide
     pinax_err result = PINAX_OK;
 
 #define FAULT(error)                                                                               \
@@ -272,6 +272,39 @@ pinax_err pnx_execute(pinax_state *st) {
         NEXT();                                                                                    \
     }
         // Instructions that can fail: on success the next word (the failure word) is skipped.
+// An instruction that names a global: C in the narrow form, the second word in the wide one.
+#define RUNG(name)                                                                                 \
+    CASE(name) {                                                                                   \
+        const int r = pnx_op_##name(st, R, S, w, OP_C(w));                                         \
+        if (r != PNX_R_OK)                                                                         \
+            FAULT((pinax_err)r);                                                                   \
+        NEXT();                                                                                    \
+    }                                                                                              \
+    CASE(name##W) {                                                                                \
+        const int r = pnx_op_##name(st, R, S, w, *pc);                                             \
+        ++pc;                                                                                      \
+        if (r != PNX_R_OK)                                                                         \
+            FAULT((pinax_err)r);                                                                   \
+        NEXT();                                                                                    \
+    }
+#define RUNFG(name)                                                                                \
+    CASE(name) {                                                                                   \
+        const int r = pnx_op_##name(st, R, S, w, OP_C(w));                                         \
+        if (r == PNX_R_OK)                                                                         \
+            ++pc;                                                                                  \
+        else if (r != PNX_R_FAILED)                                                                \
+            FAULT((pinax_err)r);                                                                   \
+        NEXT();                                                                                    \
+    }                                                                                              \
+    CASE(name##W) {                                                                                \
+        const int r = pnx_op_##name(st, R, S, w, *pc);                                             \
+        ++pc;                                                                                      \
+        if (r == PNX_R_OK)                                                                         \
+            ++pc;                                                                                  \
+        else if (r != PNX_R_FAILED)                                                                \
+            FAULT((pinax_err)r);                                                                   \
+        NEXT();                                                                                    \
+    }
 #define RUNF(name)                                                                                 \
     CASE(name) {                                                                                   \
         const int r = pnx_op_##name(st, R, S, w, 0);                                               \
@@ -321,9 +354,9 @@ pinax_err pnx_execute(pinax_state *st) {
         CASE(JMP) { pc += OP_SAX(w); NEXT(); }
         RUN(GETG)
         RUN(SETG)
-        RUN(AGET)
-        RUN(ASET)
-        RUN(ROW)
+        RUNG(AGET)
+        RUNG(ASET)
+        RUNG(ROW)
         RUN2(FGET)
         RUN2(FSET)
         RUN2(FGETS)
@@ -335,8 +368,8 @@ pinax_err pnx_execute(pinax_state *st) {
         RUN(SCUT)
         RUNF(TOINT)
         RUN(BCLEAR)
-        RUNF(BPUT)
-        RUNF(BPUTS)
+        RUNFG(BPUT)
+        RUNFG(BPUTS)
         RUN(BVIEW)
         RUNF(SGET)
         RUNF(SGETS)
@@ -363,8 +396,8 @@ pinax_err pnx_execute(pinax_state *st) {
         RUN(SPRE)
         RUN(SSUF)
         RUN(SHAS)
-        RUNF(IXGET)
-        RUNF(IXGETS)
+        RUNFG(IXGET)
+        RUNFG(IXGETS)
         RUNF(IXPUT)
         RUN(IXDEL)
         RUN2(SREPL)
@@ -373,7 +406,7 @@ pinax_err pnx_execute(pinax_state *st) {
         RUNF(QPEEK)
         RUNF(PALLOC)
         RUN(PFREE)
-        RUN(PALIVE)
+        RUNG(PALIVE)
         RUN(SETFAIL)
         RUN(RTOP)
         RUN(RCUT)
@@ -573,8 +606,14 @@ pinax_err pnx_execute(pinax_state *st) {
             NEXT();
         }
 
+        CASE(TSPAWNW) {
+            gl = *pc++;
+            goto spawn;
+        }
         CASE(TSPAWN) { // the next word runs when no slot is free
-            const pnx_global *g = &st->globals[OP_C(w)];
+            gl = OP_C(w);
+        spawn:;
+            const pnx_global *g = &st->globals[gl];
             const uint64_t number = (uint64_t)R[OP_B(w)];
             if (number >= st->head->n_words)
                 FAULT(PINAX_ERR_RANGE);
@@ -607,8 +646,14 @@ pinax_err pnx_execute(pinax_state *st) {
             ++pc;
             NEXT();
         }
+        CASE(TRESUMEW) {
+            gl = *pc++;
+            goto resume;
+        }
         CASE(TRESUME) {
-            pnx_task *t = task_of(&st->globals[OP_C(w)], R[OP_B(w)]);
+            gl = OP_C(w);
+        resume:;
+            pnx_task *t = task_of(&st->globals[gl], R[OP_B(w)]);
             if (!t || t->state == PNX_TASK_WAITING) { // it has ended; or it waits for the host and cannot go on
                 R[OP_A(w)] = !t;
                 NEXT();
@@ -648,6 +693,10 @@ pinax_err pnx_execute(pinax_state *st) {
         }
         CASE(TDONE) {
             R[OP_A(w)] = task_of(&st->globals[OP_C(w)], R[OP_B(w)]) == NULL;
+            NEXT();
+        }
+        CASE(TDONEW) {
+            R[OP_A(w)] = task_of(&st->globals[*pc++], R[OP_B(w)]) == NULL;
             NEXT();
         }
         CASE(TCANCEL) {

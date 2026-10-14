@@ -734,6 +734,35 @@ static uint32_t emit_def(comp *c, uint32_t word, int bank) {
     return at;
 }
 
+// An instruction that names a global in C (AGET, ROW, BPUT, IXGET, TSPAWN, ...). A global
+// numbered above 255 does not fit there: the wide form carries it in a second word.
+static uint32_t wide_of(uint32_t op) {
+    switch (op) {
+    case PNX_AGET: return PNX_AGETW;
+    case PNX_ASET: return PNX_ASETW;
+    case PNX_ROW: return PNX_ROWW;
+    case PNX_PALIVE: return PNX_PALIVEW;
+    case PNX_IXGET: return PNX_IXGETW;
+    case PNX_IXGETS: return PNX_IXGETSW;
+    case PNX_BPUT: return PNX_BPUTW;
+    case PNX_BPUTS: return PNX_BPUTSW;
+    case PNX_TSPAWN: return PNX_TSPAWNW;
+    case PNX_TRESUME: return PNX_TRESUMEW;
+    default: return PNX_TDONEW;
+    }
+}
+static uint32_t emit_g(comp *c, uint32_t op, uint32_t a, uint32_t b, uint32_t global) {
+    if (global <= 255)
+        return emit(c, PNX_ABC(op, a, b, global));
+    const uint32_t at = emit(c, PNX_ABC(wide_of(op), a, b, 0));
+    return at == NONE || emit(c, global) == NONE ? NONE : at;
+}
+// The same for an instruction whose result a store may retarget (emit_def); the wide form is
+// not retargeted.
+static uint32_t emit_g_def(comp *c, uint32_t op, uint32_t a, uint32_t b, uint32_t global, int bank) {
+    return global <= 255 ? emit_def(c, PNX_ABC(op, a, b, global), bank) : emit_g(c, op, a, b, global);
+}
+
 // A forward jump whose target is not known yet. `chain` links the jumps to the same place.
 static bool jump_later(comp *c, uint32_t *chain) {
     const uint32_t at = emit(c, PNX_AX(PNX_JMP, *chain == NONE ? 0xffffffu : *chain));
@@ -931,8 +960,6 @@ static bool need_coll(comp *c, const globalsym **out, uint32_t *index) {
         return type_error(c, "this word takes the name of an array or list last: i names idx");
     *index = (uint32_t)f->stack[f->depth - 1].value;
     *out = (const globalsym *)c->globals.ptr + *index;
-    if (*index > 255)
-        return syntax(c, "only the first 256 globals can be arrays or lists for now");
     --f->depth;
     return true;
 }
@@ -1778,16 +1805,14 @@ static bool store_local(comp *c, name n) {
             return type_error(c, "a table of records is written field by field: value row to record.field");
         if (f->stack[top].type != TY_INT || f->stack[top - 1].type != sym->type)
             return type_error(c, "a cell is stored as: value index to names, with the value of the cell's type");
-        if (g > 255)
-            return syntax(c, "only the first 256 globals can be arrays or lists for now");
         if (!reg_of(c, top - 1, &rv) || !reg_of(c, top, &ri))
             return false;
         if (sym->strcap) { // the bytes are copied into the cell
             const uint32_t row = top_slot(c, BANK_I, 1);
-            if (emit(c, PNX_ABC(PNX_ROW, row, ri, g)) == NONE || emit(c, PNX_ABC(PNX_FSETS, rv, row, 0)) == NONE ||
+            if (emit_g(c, PNX_ROW, row, ri, g) == NONE || emit(c, PNX_ABC(PNX_FSETS, rv, row, 0)) == NONE ||
                 emit(c, PNX_FIELD(g, 0, sym->strcap)) == NONE)
                 return false;
-        } else if (emit(c, PNX_ABC(PNX_ASET, rv, ri, g)) == NONE) {
+        } else if (emit_g(c, PNX_ASET, rv, ri, g) == NONE) {
             return false;
         }
         f->depth -= 2;
@@ -2611,7 +2636,7 @@ static bool scan_user(comp *c, name *out, name *dst) {
 static bool guard_op(comp *c, tid out);
 static bool found_or_fail(comp *c, tid type, uint32_t value, uint32_t flag);
 
-static bool stem_begin(comp *c, uint8_t *kind, uint8_t *cur, uint8_t *lim, uint8_t *src, uint8_t *count,
+static bool stem_begin(comp *c, uint8_t *kind, uint8_t *cur, uint8_t *lim, uint16_t *src, uint8_t *count,
                        tid *element) {
     fn *f = c->f;
     const entry stem = f->stack[--f->depth];
@@ -2622,13 +2647,11 @@ static bool stem_begin(comp *c, uint8_t *kind, uint8_t *cur, uint8_t *lim, uint8
         const globalsym *g = (const globalsym *)c->globals.ptr + stem.value;
         if (g->kind != GK_ARRAY && g->kind != GK_LIST)
             return type_error(c, "a buffer or an index is not a stem; each goes over an array or a list");
-        if (stem.value > 255)
-            return syntax(c, "only the first 256 globals can be arrays or lists for now");
         if (!push_slot(c, TY_INT) || !push_slot(c, TY_INT))
             return false;
         f->stack[f->depth - 2].hidden = f->stack[f->depth - 1].hidden = true;
         *kind = g->record != NONE ? STEM_ROWS : g->strcap ? STEM_STRS : STEM_COLL;
-        *src = (uint8_t)stem.value;
+        *src = (uint16_t)stem.value;
         *cur = (uint8_t)slot_of(c, f->depth - 2);
         *lim = (uint8_t)slot_of(c, f->depth - 1);
         *count = 2;
@@ -2638,7 +2661,7 @@ static bool stem_begin(comp *c, uint8_t *kind, uint8_t *cur, uint8_t *lim, uint8
     if (stem.op == STEM_WORDS || stem.op == STEM_LINES || stem.op == STEM_SPLIT_BYTE) {
         // the string itself is the rest still to read; for a byte separator, `cur` is the byte
         f->stack[f->depth - 1].hidden = true;
-        *src = (uint8_t)slot_of(c, f->depth - 1);
+        *src = (uint16_t)slot_of(c, f->depth - 1);
         *cur = (uint8_t)stem.value;
         *lim = 0;
         *count = 1;
@@ -2663,7 +2686,7 @@ static bool stem_begin(comp *c, uint8_t *kind, uint8_t *cur, uint8_t *lim, uint8
     }
     // bytes of a string: an index and the length above the string
     f->stack[f->depth - 1].hidden = true;
-    *src = (uint8_t)slot_of(c, f->depth - 1);
+    *src = (uint16_t)slot_of(c, f->depth - 1);
     if (!push_slot(c, TY_INT) || !push_slot(c, TY_INT))
         return false;
     f->stack[f->depth - 2].hidden = f->stack[f->depth - 1].hidden = true;
@@ -2694,8 +2717,9 @@ static bool stem_element(comp *c, uint8_t kind, uint32_t reg, uint32_t cur, uint
         return emit(c, PNX_ABC(PNX_ADDI, row, cur, 1)) != NONE && emit(c, PNX_ABC(PNX_FGETS, reg, row, 0)) != NONE &&
                emit(c, PNX_FIELD(src, 0, g->strcap)) != NONE;
     }
+    if (kind == STEM_COLL)
+        return emit_g(c, PNX_AGET, reg, cur, src) != NONE;
     return emit(c, kind == STEM_RANGE  ? PNX_ABC(PNX_MOVI, reg, cur, 0)
-                   : kind == STEM_COLL ? PNX_ABC(PNX_AGET, reg, cur, src)
                    : kind == STEM_ROWS ? PNX_ABC(PNX_ADDI, reg, cur, 1) // the row of index cur
                                        : PNX_ABC(PNX_SBYTE, reg, src, cur)) != NONE;
 }
@@ -2755,7 +2779,8 @@ static bool do_block(comp *c) {
     if (bs.fails)
         return error_at(c, PINAX_ERR_SYNTAX, at.line, at.column, "a block that can fail is not supported yet");
     const bool has_stem = f->depth > f->floor && bank_of(f->stack[f->depth - 1].type) == BANK_NONE;
-    uint8_t use, kind = STEM_TIMES, cur = 0, lim = 0, src = 0, hidden = 0;
+    uint8_t  use, kind = STEM_TIMES, cur = 0, lim = 0, hidden = 0;
+    uint16_t src = 0;
     tid     element = TY_INT;
     if (name_is(user, "times")) {
         use = USE_TIMES;
@@ -3025,7 +3050,8 @@ static bool do_extreme(comp *c, bool largest) {
     fn *f = c->f;
     if (f->depth == f->floor || bank_of(f->stack[f->depth - 1].type) != BANK_NONE)
         return type_error(c, "this word takes a stem of int values");
-    uint8_t kind, cur, lim, src, hidden;
+    uint8_t  kind, cur, lim, hidden;
+    uint16_t src;
     tid     element_type;
     if (!stem_begin(c, &kind, &cur, &lim, &src, &hidden, &element_type))
         return false;
@@ -3060,7 +3086,8 @@ static bool do_sum(comp *c) {
     fn *f = c->f;
     if (f->depth == f->floor || bank_of(f->stack[f->depth - 1].type) != BANK_NONE)
         return type_error(c, "sum takes a stem (for example lo hi range sum)");
-    uint8_t kind, cur, lim, src, hidden;
+    uint8_t  kind, cur, lim, hidden;
+    uint16_t src;
     tid     element_type;
     if (!stem_begin(c, &kind, &cur, &lim, &src, &hidden, &element_type))
         return false;
@@ -3405,13 +3432,13 @@ static bool builtin(comp *c, const struct builtin *w) {
         --f->depth;
         if (g->strcap) { // a view of the cell's text
             const uint32_t row = top_slot(c, BANK_I, 1);
-            if (emit(c, PNX_ABC(PNX_ROW, row, ra, gi)) == NONE || !push_slot(c, TY_STR))
+            if (emit_g(c, PNX_ROW, row, ra, gi) == NONE || !push_slot(c, TY_STR))
                 return false;
             return emit_def(c, PNX_ABC(PNX_FGETS, slot_of(c, f->depth - 1), row, 0), BANK_S) != NONE &&
                    emit(c, PNX_FIELD(gi, 0, g->strcap)) != NONE && advance(c);
         }
         const uint32_t dst = top_slot(c, BANK_I, 1);
-        return emit_def(c, PNX_ABC(g->record != NONE ? PNX_ROW : PNX_AGET, dst, ra, gi), BANK_I) != NONE &&
+        return emit_g_def(c, g->record != NONE ? PNX_ROW : PNX_AGET, dst, ra, gi, BANK_I) != NONE &&
                push_slot(c, g->type) && advance(c);
     }
     case BW_ADD_ROW: { // names add_row : a new zeroed row at the end of a list of records
@@ -3504,9 +3531,10 @@ static bool builtin(comp *c, const struct builtin *w) {
         --f->depth;
         if (!settle_all(c))
             return false;
-        const uint32_t op = w->id == BW_APPEND ? PNX_ABX(PNX_BCAT, ra, gi)
-                          : w->id == BW_APPEND_INT ? PNX_ABX(PNX_BCATI, ra, gi) : PNX_ABC(PNX_BPUT, ra, PNX_W_U8, gi);
-        return emit(c, op) != NONE && guard_op(c, TY_NONE);
+        if (w->id != BW_APPEND && w->id != BW_APPEND_INT)
+            return emit_g(c, PNX_BPUT, ra, PNX_W_U8, gi) != NONE && guard_op(c, TY_NONE);
+        return emit(c, w->id == BW_APPEND ? PNX_ABX(PNX_BCAT, ra, gi) : PNX_ABX(PNX_BCATI, ra, gi)) != NONE &&
+               guard_op(c, TY_NONE);
     }
     case BW_CONTENTS: // buf contents : a view of what the buffer holds now
         if (!need_coll(c, &g, &gi))
@@ -3549,7 +3577,7 @@ static bool builtin(comp *c, const struct builtin *w) {
         }
         --f->depth;
         const uint32_t dst = top_slot(c, BANK_I, 1);
-        return emit_def(c, PNX_ABC(PNX_PALIVE, dst, ra, gi), BANK_I) != NONE && push_slot(c, TY_BOOL) && advance(c);
+        return emit_g_def(c, PNX_PALIVE, dst, ra, gi, BANK_I) != NONE && push_slot(c, TY_BOOL) && advance(c);
     }
     case BW_PUT: { // v jobs put : fails when the queue is full
         if (!need_coll(c, &g, &gi) || !need(c, 1))
@@ -3638,7 +3666,7 @@ static bool builtin(comp *c, const struct builtin *w) {
         if (!settle_all(c))
             return false;
         const tid row = ((const globalsym *)c->globals.ptr + g->table)->type;
-        return emit(c, PNX_ABC(key->is_str ? PNX_IXGETS : PNX_IXGET, top_slot(c, BANK_I, 1), ra, gi)) != NONE &&
+        return emit_g(c, key->is_str ? PNX_IXGETS : PNX_IXGET, top_slot(c, BANK_I, 1), ra, gi) != NONE &&
                guard_op(c, row);
     }
     case BW_INSERT:
@@ -3684,7 +3712,7 @@ static bool builtin(comp *c, const struct builtin *w) {
             return false;
         ra = slot_of(c, f->depth - 1);
         --f->depth;
-        return settle_all(c) && emit(c, PNX_ABC(PNX_TSPAWN, top_slot(c, BANK_I, 1), ra, gi)) != NONE &&
+        return settle_all(c) && emit_g(c, PNX_TSPAWN, top_slot(c, BANK_I, 1), ra, gi) != NONE &&
                guard_op(c, row_type(gi));
     }
     case BW_YIELD: // gives the run to whoever resumed this task; fails once the task was cancelled
@@ -3698,8 +3726,6 @@ static bool builtin(comp *c, const struct builtin *w) {
         gi = is_row(type) ? (uint32_t)(type - TY_FIRST_DECLARED) : NONE;
         if (gi == NONE || ((const globalsym *)c->globals.ptr + gi)->kind != GK_TASKS)
             return type_error(c, "this word takes a task");
-        if (gi > 255)
-            return syntax(c, "only the first 256 globals can be sets of tasks for now");
         if (w->id == BW_RESUME && !settle_all(c))
             return false;
         if (!reg_of(c, f->depth - 1, &ra))
@@ -3708,7 +3734,7 @@ static bool builtin(comp *c, const struct builtin *w) {
         if (w->id == BW_CANCEL)
             return emit(c, PNX_ABX(PNX_TCANCEL, ra, gi)) != NONE && advance(c);
         const uint32_t dst = top_slot(c, BANK_I, 1);
-        return emit_def(c, PNX_ABC(w->id == BW_RESUME ? PNX_TRESUME : PNX_TDONE, dst, ra, gi), BANK_I) != NONE &&
+        return emit_g_def(c, w->id == BW_RESUME ? PNX_TRESUME : PNX_TDONE, dst, ra, gi, BANK_I) != NONE &&
                push_slot(c, TY_BOOL) && advance(c);
     }
     case BW_RUN_ALL: { // workers run_all : resumes the tasks of the set in turn until all have ended
@@ -5026,8 +5052,6 @@ static bool row_item(comp *c) {
     globalsym *g = gi == NONE ? NULL : (globalsym *)c->globals.ptr + gi;
     if (!g || g->kind != GK_LIST || g->forward)
         return type_error(c, "row adds to a declared list: row name (values)");
-    if (gi > 255)
-        return syntax(c, "only the first 256 globals can be arrays or lists for now");
     if (!advance(c))
         return false;
     name row_name = {0};
@@ -5133,8 +5157,6 @@ static bool assign_item(comp *c) {
     const globalsym *g = gi == NONE ? NULL : (const globalsym *)c->globals.ptr + gi;
     if (!g || g->kind != GK_ARRAY || g->forward)
         return type_error(c, "assign fills a declared array: assign name (values)");
-    if (gi > 255)
-        return syntax(c, "only the first 256 globals can be arrays or lists for now");
     if (!advance(c))
         return false;
     if (c->tok.kind != PNX_T_LPAREN)
@@ -5187,7 +5209,7 @@ static bool assign_item(comp *c) {
             if (emit(c, PNX_ABX(PNX_LOADKS, text, (uint32_t)v)) == NONE || !load_int(c, index, (int64_t)k + 1) ||
                 emit(c, PNX_ABC(PNX_FSETS, text, index, 0)) == NONE || emit(c, PNX_FIELD(gi, 0, g->strcap)) == NONE)
                 return false;
-        } else if (!load_int(c, value, v) || !load_int(c, index, k) || emit(c, PNX_ABC(PNX_ASET, value, index, gi)) == NONE) {
+        } else if (!load_int(c, value, v) || !load_int(c, index, k) || emit_g(c, PNX_ASET, value, index, gi) == NONE) {
             return false;
         }
         if (!advance(c))

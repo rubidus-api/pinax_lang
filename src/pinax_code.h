@@ -46,6 +46,7 @@ enum {
     PNX_X_COUNTS, // what a call through a register expects of the word: int args | str args << 8 |
                   // int results << 16 | str results << 24, and bit 31 when the word can fail
     PNX_X_SREG,   // a register of the S bank that the instruction reads
+    PNX_X_GLOBAL, // global index: the wide form of an instruction whose C names a global
 };
 
 // "fails": the next word is not skipped when the operation fails (or, for SNEXT, when the
@@ -202,6 +203,13 @@ enum {
     X(IXGETS, 0x85, PNX_K_I, PNX_K_S, PNX_K_G, PNX_F_ABC, PNX_X_NONE, 1, "wr-") \
     X(IXPUT, 0x86, PNX_K_I, PNX_K_NONE, PNX_K_NONE, PNX_F_GLOBAL, PNX_X_NONE, 1, "r--") \
     X(IXDEL, 0x87, PNX_K_I, PNX_K_NONE, PNX_K_NONE, PNX_F_GLOBAL, PNX_X_NONE, 0, "r--") \
+    /* wide forms: the global in a second word */ \
+    X(AGETW, 0x88, PNX_K_I, PNX_K_I, PNX_K_NONE, PNX_F_ABC, PNX_X_GLOBAL, 0, "wr-") \
+    X(ASETW, 0x89, PNX_K_I, PNX_K_I, PNX_K_NONE, PNX_F_ABC, PNX_X_GLOBAL, 0, "rr-") \
+    X(ROWW, 0x8a, PNX_K_I, PNX_K_I, PNX_K_NONE, PNX_F_ABC, PNX_X_GLOBAL, 0, "wr-") \
+    X(PALIVEW, 0x8b, PNX_K_I, PNX_K_I, PNX_K_NONE, PNX_F_ABC, PNX_X_GLOBAL, 0, "wr-") \
+    X(IXGETW, 0x8c, PNX_K_I, PNX_K_I, PNX_K_NONE, PNX_F_ABC, PNX_X_GLOBAL, 1, "wr-") \
+    X(IXGETSW, 0x8d, PNX_K_I, PNX_K_S, PNX_K_NONE, PNX_F_ABC, PNX_X_GLOBAL, 1, "wr-") \
     /* strings */ \
     X(SLEN, 0x90, PNX_K_I, PNX_K_S, PNX_K_NONE, PNX_F_ABC, PNX_X_NONE, 0, "wr-") \
     X(SBYTE, 0x91, PNX_K_I, PNX_K_S, PNX_K_I, PNX_F_ABC, PNX_X_NONE, 0, "wrr") \
@@ -248,13 +256,18 @@ enum {
     X(BVIEW, 0xcb, PNX_K_S, PNX_K_NONE, PNX_K_NONE, PNX_F_GLOBAL, PNX_X_NONE, 0, "w--") \
     X(BCAT, 0xcc, PNX_K_S, PNX_K_NONE, PNX_K_NONE, PNX_F_GLOBAL, PNX_X_NONE, 1, "r--") \
     X(BCATI, 0xcd, PNX_K_I, PNX_K_NONE, PNX_K_NONE, PNX_F_GLOBAL, PNX_X_NONE, 1, "r--") \
+    X(BPUTW, 0xce, PNX_K_I, PNX_K_IMM, PNX_K_NONE, PNX_F_ABC, PNX_X_GLOBAL, 1, "r--") \
+    X(BPUTSW, 0xcf, PNX_K_S, PNX_K_NONE, PNX_K_NONE, PNX_F_ABC, PNX_X_GLOBAL, 1, "r--") \
     /* tasks */ \
     X(TSPAWN, 0xd0, PNX_K_I, PNX_K_I, PNX_K_G, PNX_F_ABC, PNX_X_NONE, 1, "wr-") \
     X(TRESUME, 0xd1, PNX_K_I, PNX_K_I, PNX_K_G, PNX_F_ABC, PNX_X_NONE, 0, "wr-") \
     X(TYIELD, 0xd2, PNX_K_NONE, PNX_K_NONE, PNX_K_NONE, PNX_F_IMM, PNX_X_NONE, 1, "---") \
     X(TDONE, 0xd3, PNX_K_I, PNX_K_I, PNX_K_G, PNX_F_ABC, PNX_X_NONE, 0, "wr-") \
     X(TCANCEL, 0xd4, PNX_K_I, PNX_K_NONE, PNX_K_NONE, PNX_F_GLOBAL, PNX_X_NONE, 0, "r--") \
-    X(TRUNALL, 0xd5, PNX_K_NONE, PNX_K_NONE, PNX_K_NONE, PNX_F_GLOBAL, PNX_X_NONE, 0, "---")
+    X(TRUNALL, 0xd5, PNX_K_NONE, PNX_K_NONE, PNX_K_NONE, PNX_F_GLOBAL, PNX_X_NONE, 0, "---") \
+    X(TSPAWNW, 0xd6, PNX_K_I, PNX_K_I, PNX_K_NONE, PNX_F_ABC, PNX_X_GLOBAL, 1, "wr-") \
+    X(TRESUMEW, 0xd7, PNX_K_I, PNX_K_I, PNX_K_NONE, PNX_F_ABC, PNX_X_GLOBAL, 0, "wr-") \
+    X(TDONEW, 0xd8, PNX_K_I, PNX_K_I, PNX_K_NONE, PNX_F_ABC, PNX_X_GLOBAL, 0, "wr-")
 
 enum {
 #define PNX_ENUM(name, number, a, b, c, shape, second, fails, roles) PNX_##name = number,

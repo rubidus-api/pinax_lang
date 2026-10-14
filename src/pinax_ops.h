@@ -38,6 +38,8 @@
 #define PNX_INLINE static inline
 #endif
 
+// The instructions that name a global in C (AGET, ROW, BPUT, IXGET, ...) read its number from
+// `x`: the dispatch gives C for the narrow form and the second word for the wide one (AGETW).
 #define PNX_OP(name)                                                                               \
     PNX_INLINE int pnx_op_##name([[maybe_unused]] pinax_state *st, [[maybe_unused]] int64_t *R, \
                                     [[maybe_unused]] pnx_scell *S, [[maybe_unused]] uint32_t w,    \
@@ -176,7 +178,7 @@ PNX_COND(JSEQ) {
 PNX_OP(GETG) { __builtin_memcpy(&R[OP_A(w)], st->globals[OP_BX(w)].ptr, 8); return PNX_R_OK; }
 PNX_OP(SETG) { __builtin_memcpy(st->globals[OP_BX(w)].ptr, &R[OP_A(w)], 8); return PNX_R_OK; }
 PNX_OP(AGET) {
-    const pnx_global *g = &st->globals[OP_C(w)];
+    const pnx_global *g = &st->globals[x];
     const uint64_t index = (uint64_t)R[OP_B(w)];
     if (index >= g->length)
         return PINAX_ERR_RANGE;
@@ -184,7 +186,7 @@ PNX_OP(AGET) {
     return PNX_R_OK;
 }
 PNX_OP(ASET) {
-    const pnx_global *g = &st->globals[OP_C(w)];
+    const pnx_global *g = &st->globals[x];
     const uint64_t index = (uint64_t)R[OP_B(w)];
     if (index >= g->length)
         return PINAX_ERR_RANGE;
@@ -193,7 +195,7 @@ PNX_OP(ASET) {
 }
 PNX_OP(ROW) {
     const uint64_t index = (uint64_t)R[OP_B(w)];
-    if (index >= st->globals[OP_C(w)].length)
+    if (index >= st->globals[x].length)
         return PINAX_ERR_RANGE;
     R[OP_A(w)] = (int64_t)index + 1;
     return PNX_R_OK;
@@ -299,7 +301,7 @@ PNX_OP(BCLEAR) {
     return PNX_R_OK;
 }
 PNX_OP(BPUT) {
-    const pnx_global *g = &st->globals[OP_C(w)];
+    const pnx_global *g = &st->globals[x];
     const uint32_t n = pnx_width_bytes[OP_B(w)];
     const int64_t value = R[OP_A(w)];
     uint64_t len = pnx_buffer_len(g);
@@ -315,7 +317,7 @@ PNX_OP(BPUT) {
     return PNX_R_OK;
 }
 PNX_OP(BPUTS) { // one length byte, then the bytes
-    const pnx_global *g = &st->globals[OP_C(w)];
+    const pnx_global *g = &st->globals[x];
     const pnx_scell s = S[OP_A(w)];
     uint64_t len = pnx_buffer_len(g);
     if (s.length > 255)
@@ -627,7 +629,7 @@ PNX_OP(PFREE) {
 }
 PNX_OP(PALIVE) {
     uint64_t row;
-    R[OP_A(w)] = pnx_row_of(&st->globals[OP_C(w)], R[OP_B(w)], &row) == PNX_R_OK;
+    R[OP_A(w)] = pnx_row_of(&st->globals[x], R[OP_B(w)], &row) == PNX_R_OK;
     return PNX_R_OK;
 }
 
@@ -965,11 +967,11 @@ PNX_INLINE int pnx_index_get(pinax_state *st, const pnx_global *x, const uint8_t
 PNX_OP(IXGET) {
     uint8_t key[8];
     __builtin_memcpy(key, &R[OP_B(w)], 8);
-    return pnx_index_get(st, &st->globals[OP_C(w)], key, 8, &R[OP_A(w)]);
+    return pnx_index_get(st, &st->globals[x], key, 8, &R[OP_A(w)]);
 }
 PNX_OP(IXGETS) {
     const pnx_scell s = S[OP_B(w)];
-    return pnx_index_get(st, &st->globals[OP_C(w)], pnx_view_bytes(st, s), s.length, &R[OP_A(w)]);
+    return pnx_index_get(st, &st->globals[x], pnx_view_bytes(st, s), s.length, &R[OP_A(w)]);
 }
 PNX_OP(IXPUT) {
     const pnx_global *ix = &st->globals[OP_BX(w)];

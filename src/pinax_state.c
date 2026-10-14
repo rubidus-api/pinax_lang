@@ -430,18 +430,29 @@ static const char *check_word(const pinax_state *st, uint32_t index, span range,
         case PNX_FGET: case PNX_FSET: case PNX_FGETS: case PNX_FSETS: want = PNX_G_TABLE; global = x & 0xfffu; break;
         default: break;
         }
+        if (info.second == PNX_X_GLOBAL) { // a wide form: what its narrow form needs, of the global in x
+            switch (op) {
+            case PNX_AGETW: case PNX_ASETW: want = PNX_G_ARRAY; break;
+            case PNX_ROWW: want = PNX_G_TABLE; break;
+            case PNX_PALIVEW: want = PNX_G_POOL; break;
+            case PNX_IXGETW: case PNX_IXGETSW: want = PNX_G_INDEX; break;
+            case PNX_BPUTW: case PNX_BPUTSW: want = PNX_G_BUFFER; break;
+            default: want = PNX_G_TASKS; break; // TSPAWNW TRESUMEW TDONEW
+            }
+            global = x;
+        }
         if (want != PNX_G_COUNT) {
             if (global >= head->n_globals)
                 return "code: global outside its table";
             const uint32_t kind = st->globals[global].kind;
             const bool ok = kind == want || (want == PNX_G_ARRAY && kind == PNX_G_LIST) ||
-                            (want == PNX_G_TABLE && (kind == PNX_G_ROWS || (kind == PNX_G_POOL && op != PNX_ROW))) ||
+                            (want == PNX_G_TABLE && (kind == PNX_G_ROWS || (kind == PNX_G_POOL && op != PNX_ROW && op != PNX_ROWW))) ||
                             (want == PNX_G_COUNT + 1 && kind != PNX_G_INT && kind != PNX_G_BUFFER &&
                              kind != PNX_G_INDEX && kind != PNX_G_TASKS);
             if (!ok)
                 return "code: global of the wrong kind";
-            if ((op == PNX_IXGET && st->globals[global].key_is_str) ||
-                (op == PNX_IXGETS && !st->globals[global].key_is_str))
+            if (((op == PNX_IXGET || op == PNX_IXGETW) && st->globals[global].key_is_str) ||
+                ((op == PNX_IXGETS || op == PNX_IXGETSW) && !st->globals[global].key_is_str))
                 return "code: key of the wrong kind for this index";
         }
         if (info.second == PNX_X_FIELD) {
@@ -452,7 +463,7 @@ static const char *check_word(const pinax_state *st, uint32_t index, span range,
             if (offset + (is_text ? 1u + extra : width_bytes[extra]) > st->globals[global].elem_bytes)
                 return "code: field outside its record";
         }
-        if ((op == PNX_BPUT && b >= PNX_W_COUNT) || (op == PNX_SGET && c >= PNX_W_COUNT))
+        if (((op == PNX_BPUT || op == PNX_BPUTW) && b >= PNX_W_COUNT) || (op == PNX_SGET && c >= PNX_W_COUNT))
             return "code: unknown width";
         if (info.second == PNX_X_SREG && x >= word->str_cells)
             return "code: register outside the window";
