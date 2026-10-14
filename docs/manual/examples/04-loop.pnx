@@ -1,0 +1,12 @@
+rem run
+use io
+word collatz (n int gives int)              rem steps to reach 1
+  0 to steps
+  loop
+    n 1 eq until
+    n 2 mod 0 eq if n 2 div else n 3 mul 1 add end to n
+    steps 1 add to steps
+  end
+  steps
+end
+cat ("27 takes ", 27 collatz, " steps") io.println

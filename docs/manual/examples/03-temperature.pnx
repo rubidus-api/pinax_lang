@@ -1,0 +1,13 @@
+rem run
+use io
+use str
+rem Celsius and Fahrenheit, in tenths of a degree so that everything stays an int.
+word c_to_f (tenths int gives int) tenths 9 mul 5 div 320 add end
+word f_to_c (tenths int gives int) tenths 320 sub 5 mul 9 div end
+word show (tenths int gives str)                  rem 365 -> "36.5"
+  tenths 10 div to whole
+  tenths 10 mod abs to part
+  cat (whole, ".", part)
+end
+cat ("36.5 C = ", 365 c_to_f show, " F") io.println
+cat ("98.6 F = ", 986 f_to_c show, " C") io.println

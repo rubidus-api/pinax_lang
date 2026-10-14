@@ -1,0 +1,7 @@
+rem run
+use io
+word divmod (a int, b int gives q int, r int) a b div a b mod end   rem two results
+word bare_square (int gives int) dup mul end                          rem a bare input stays on the stack
+word show () 17 5 divmod to (q, r) cat ("17 = 5 * ", q, " + ", r) io.println end
+show
+cat ("7 squared is ", 7 bare_square) io.println

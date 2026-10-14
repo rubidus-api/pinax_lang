@@ -1,0 +1,4 @@
+rem refused
+use io
+word greet (name str) cat ("Hi ", name) io.println end
+42 greet

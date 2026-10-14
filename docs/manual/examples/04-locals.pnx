@@ -1,0 +1,9 @@
+rem run
+use io
+word describe (a int, b int, c int gives str)
+  a b add c add to total
+  total 3 div to mean
+  a b max c max to top
+  cat ("total ", total, ", mean ", mean, ", largest ", top)
+end
+3 9 6 describe io.println

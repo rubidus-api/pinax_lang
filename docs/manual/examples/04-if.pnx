@@ -1,0 +1,10 @@
+rem run
+use io
+word grade (score int gives str)
+  score 90 ge if "A" return end
+  score 80 ge if "B" return end
+  score 70 ge if "C" else "F" end
+end
+95 grade io.println
+82 grade io.println
+40 grade io.println

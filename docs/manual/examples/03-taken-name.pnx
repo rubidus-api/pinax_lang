@@ -1,0 +1,2 @@
+rem refused
+word average (sum int, count int gives int) sum count div end

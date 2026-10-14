@@ -1,0 +1,12 @@
+rem run
+use io
+word day_kind (day str gives str)
+  day case
+    ("sat", "sun") of "weekend" end
+    ("mon", "tue", "wed", "thu", "fri") of "weekday" end
+    otherwise "not a day" end
+  end
+end
+"sun" day_kind io.println
+"wed" day_kind io.println
+"xyz" day_kind io.println

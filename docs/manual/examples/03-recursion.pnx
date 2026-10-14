@@ -1,0 +1,6 @@
+rem run
+use io
+word gcd (a int, b int gives int) b 0 eq if a else b a b mod gcd end end   rem a tail call
+word fib (n int gives int) n 2 lt if n else n 1 sub fib n 2 sub fib add end end
+cat ("gcd(1071, 462) = ", 1071 462 gcd) io.println
+cat ("fib(20) = ", 20 fib) io.println

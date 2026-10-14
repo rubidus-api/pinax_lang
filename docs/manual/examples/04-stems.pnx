@@ -1,0 +1,10 @@
+rem run
+use io
+use str
+array temps int 7
+assign temps (12, 15, 9, 21, 18, 7, 14)
+cat ("sum ", temps sum, ", above 13: ", temps do (t int gives bool) t 13 gt end count) io.println
+cat ("max ", temps maximum or_else (e) 0 end, ", min ", temps minimum or_else (e) 0 end) io.println
+temps do (t int, i int) cat ("day ", i, ": ", t) io.println end each_index
+word spread (gives int) 0 temps do (acc int, t int gives int) acc t 10 sub abs add end fold end
+cat ("distance from 10, added up: ", spread) io.println

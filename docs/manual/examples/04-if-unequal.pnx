@@ -1,0 +1,3 @@
+rem refused
+use io
+word label (n int gives str) n 0 lt if "negative" end end

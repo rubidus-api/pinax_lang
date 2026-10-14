@@ -1,0 +1,27 @@
+rem run
+use io
+word is_prime (n int gives bool)
+  n 2 lt if false return end
+  2 to d
+  loop
+    d d mul n gt if true return end
+    n d mod 0 eq if false return end
+    d 1 add to d
+  end
+end
+word first_pair (target int gives str)       rem the first a < b <= 20, both prime, with a + b = target
+  2 to a
+  0 to b
+  loop (outer)
+    a 1 add to b
+    loop
+      b 20 gt until
+      a is_prime b is_prime and a b add target eq and until (outer)
+      b 1 add to b
+    end
+    a 1 add to a
+    a 20 gt if "none" return end
+  end
+  cat (a, " + ", b)
+end
+26 first_pair io.println

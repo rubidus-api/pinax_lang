@@ -1,0 +1,2 @@
+rem refused
+word area (w int, h int gives int) w h mul w end

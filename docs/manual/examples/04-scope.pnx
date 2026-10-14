@@ -1,0 +1,6 @@
+rem refused
+use io
+word f (n int gives int)
+  n 0 gt if n 2 mul to doubled end
+  doubled
+end

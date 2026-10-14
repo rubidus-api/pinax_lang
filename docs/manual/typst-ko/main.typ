@@ -8,3 +8,5 @@
 #include "chapters/00-preface.typ"
 #include "chapters/01-first.typ"
 #include "chapters/02-values.typ"
+#include "chapters/03-words.typ"
+#include "chapters/04-control.typ"
