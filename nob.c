@@ -212,7 +212,7 @@ static int build_lib(const target_t *t, char *lib, size_t lib_cap, char *hosted_
         return 1;
     snprintf(pnx, sizeof pnx, "%s/pnx%s", dir, t->exe);
     snprintf(cmd, sizeof cmd, "%s %s -o %s%s %s%s %s %s", t->cc, t->sanitize ? "-fsanitize=address,undefined" : "", pnx,
-             pnx_objs, host_lib, hosted_objs, lib, strcmp(t->exe, ".exe") == 0 ? "-static -lbcrypt" : "-lm");
+             pnx_objs, host_lib, hosted_objs, lib, strcmp(t->exe, ".exe") == 0 ? "-static -lbcrypt" : "-lm -ldl");
     if (run(cmd))
         return 1;
     printf("nob: built %s\n", pnx);

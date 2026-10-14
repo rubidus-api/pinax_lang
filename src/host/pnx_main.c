@@ -10,7 +10,18 @@
 // A module the file uses that is no host module is looked for beside it: `use shapes` loads
 // shapes.pnx from the directory of the file first.
 //
+// Options, before the command: --lib NAME=PATH opens the shared library at PATH, and a script's
+// `extern f (...) from "NAME"` may then name a function of it (RFC-0015 section 4.3). Only the
+// libraries given this way are opened, and only functions they define themselves are found, not
+// those of the libraries they depend on (the C library's `system`); with no --lib a
+// script that names a C function does not load. Calling C is outside the type checks: give
+// --lib only to scripts you trust.
+//
 // Environment: PNX_BLOCK_KB sets the size of the state's memory block (default 16384).
+#if defined(__linux__)
+#define _GNU_SOURCE // dladdr
+#endif
+
 #include "pinax.h"
 #include "pinax_host.h"
 #include "pnx_fmt.h"
@@ -18,6 +29,12 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+
+#if defined(_WIN32)
+#include <windows.h>
+#else
+#include <dlfcn.h>
+#endif
 
 static const char *err_name(pinax_err err) {
     switch (err) {
@@ -60,6 +77,89 @@ static char *read_file(const char *path, size_t *length) {
     fclose(f);
     *length = n;
     return text;
+}
+
+// ---- --lib: the libraries a script may name ----------------------------------------------
+
+enum { MAX_LIBS = 16 };
+static struct {
+    const char *name; // as the script writes it after `from`
+    void       *handle;
+} libs[MAX_LIBS];
+static int n_libs;
+
+// NAME=PATH: opens PATH now, so that a wrong path is told before the script runs.
+static bool open_lib(const char *option) {
+    const char *eq = strchr(option, '=');
+    if (!eq || eq == option || eq - option > 14 || !eq[1]) {
+        fprintf(stderr, "pnx: --lib takes NAME=PATH, NAME being 1 to 14 bytes\n");
+        return false;
+    }
+    if (n_libs == MAX_LIBS) {
+        fprintf(stderr, "pnx: at most %d libraries\n", MAX_LIBS);
+        return false;
+    }
+#if defined(_WIN32)
+    void *handle = (void *)LoadLibraryA(eq + 1);
+#else
+    void *handle = dlopen(eq + 1, RTLD_NOW | RTLD_LOCAL);
+#endif
+    if (!handle) {
+        fprintf(stderr, "pnx: cannot open the library %s\n", eq + 1);
+        return false;
+    }
+    char *name = malloc((size_t)(eq - option) + 1);
+    if (!name)
+        return false;
+    memcpy(name, option, (size_t)(eq - option));
+    name[eq - option] = 0;
+    libs[n_libs].name = name;
+    libs[n_libs++].handle = handle;
+    return true;
+}
+
+static pinax_extern_fn resolve(void *user, pinax_str library, pinax_str symbol) {
+    (void)user;
+    char wanted[32];
+    if (symbol.len >= sizeof wanted)
+        return NULL;
+    memcpy(wanted, symbol.ptr, symbol.len);
+    wanted[symbol.len] = 0;
+    for (int k = 0; k < n_libs; ++k) {
+        if (strlen(libs[k].name) != library.len || memcmp(libs[k].name, library.ptr, library.len) != 0)
+            continue;
+#if defined(_WIN32)
+        return (pinax_extern_fn)GetProcAddress((HMODULE)libs[k].handle, wanted);
+#else
+        // dlsym also finds what the library's own dependencies define (the C library's
+        // `system`, say): keep only a function of the library itself
+        void   *found = dlsym(libs[k].handle, wanted);
+        Dl_info info;
+        if (!found || !dladdr(found, &info) || !info.dli_fname)
+            return NULL;
+        void *owner = dlopen(info.dli_fname, RTLD_LAZY | RTLD_NOLOAD);
+        if (owner)
+            dlclose(owner);
+        if (owner != libs[k].handle)
+            return NULL;
+        pinax_extern_fn fn = NULL;
+        memcpy(&fn, &found, sizeof fn); // an object pointer to a function pointer, as POSIX allows
+        return fn;
+#endif
+    }
+    return NULL;
+}
+
+static void close_libs(void) {
+    for (int k = 0; k < n_libs; ++k) {
+#if defined(_WIN32)
+        FreeLibrary((HMODULE)libs[k].handle);
+#else
+        dlclose(libs[k].handle);
+#endif
+        free((void *)libs[k].name);
+    }
+    n_libs = 0;
 }
 
 static bool is_name_byte(char c) {
@@ -296,6 +396,8 @@ static bool report_fault(pinax_state *state, pinax_err err) {
 }
 
 // Runs every test of the file given on the command line: the words test.NAME of its module.
+static int run(int argc, char **argv);
+
 static int run_tests(pinax_state *state, const char *module) {
     int ran = 0, failed = 0;
     pinax_word_info info;
@@ -319,14 +421,34 @@ static int run_tests(pinax_state *state, const char *module) {
 }
 
 int main(int argc, char **argv) {
+    // options before the command; what follows is read as if they were not there
+    int options = 0;
+    while (options + 2 < argc && strcmp(argv[1 + options], "--lib") == 0) {
+        if (!open_lib(argv[2 + options])) {
+            close_libs();
+            return 2;
+        }
+        options += 2;
+    }
+    if (options) {
+        argv[options] = argv[0];
+        argv += options;
+        argc -= options;
+    }
+    const int status = run(argc, argv);
+    close_libs();
+    return status;
+}
+
+static int run(int argc, char **argv) {
     const bool testing = argc > 1 && strcmp(argv[1], "test") == 0;
     const bool seeing = argc > 1 && strcmp(argv[1], "see") == 0;
     const bool formatting = argc > 1 && strcmp(argv[1], "fmt") == 0;
     const bool talking = argc == 2 && strcmp(argv[1], "repl") == 0;
     const int  at = testing || seeing || formatting ? 2 : 1;
     if (argc <= at) {
-        fprintf(stderr, "usage: pnx file.pnx [arguments]\n       pnx test file.pnx\n       pnx repl\n"
-                        "       pnx see file.pnx\n       pnx fmt file.pnx\n");
+        fprintf(stderr, "usage: pnx [--lib NAME=PATH]... file.pnx [arguments]\n       pnx test file.pnx\n"
+                        "       pnx repl\n       pnx see file.pnx\n       pnx fmt file.pnx\n");
         return 2;
     }
     if (formatting) {
@@ -355,6 +477,8 @@ int main(int argc, char **argv) {
     pinax_err err = pinax_open((pinax_mem){block, block_bytes}, &config, &state);
     if (err == PINAX_OK)
         err = pinax_host_register_all(state);
+    if (err == PINAX_OK && n_libs)
+        pinax_set_resolver(state, resolve, NULL);
     if (err != PINAX_OK) {
         fprintf(stderr, "pnx: cannot start (%s)\n", err_name(err));
         return 2;
