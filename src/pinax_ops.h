@@ -852,6 +852,138 @@ PNX_OP(RPADR) {
     return pnx_append_padded(st, &S[OP_A(w)], pnx_view_bytes(st, s), s.length, R[OP_C(w)], ' ', true);
 }
 
+// ---- the rest of the str module (RFC-0016 S0) ------------------------------------------------
+
+// The length of the UTF-8 sequence that starts at bytes[0] (of n), or 0 when it is not a valid
+// one: overlong forms, surrogates and values past U+10FFFF are not valid.
+PNX_INLINE uint32_t pnx_utf8_len(const uint8_t *b, uint32_t n) {
+    const uint8_t c = b[0];
+    if (c < 0x80)
+        return 1;
+    const uint32_t len = c >= 0xc2 && c <= 0xdf ? 2 : c >= 0xe0 && c <= 0xef ? 3 : c >= 0xf0 && c <= 0xf4 ? 4 : 0;
+    if (!len || len > n)
+        return 0;
+    for (uint32_t k = 1; k < len; ++k) {
+        if ((b[k] & 0xc0) != 0x80)
+            return 0;
+    }
+    if ((c == 0xe0 && b[1] < 0xa0) || (c == 0xed && b[1] > 0x9f) || (c == 0xf0 && b[1] < 0x90) || (c == 0xf4 && b[1] > 0x8f))
+        return 0;
+    return len;
+}
+// C 0: whether the str is valid UTF-8; C 1: its characters, a byte that starts no valid
+// sequence counting as one
+PNX_OP(SUTF) {
+    const pnx_scell s = S[OP_B(w)];
+    const uint8_t *b = pnx_view_bytes(st, s);
+    int64_t count = 0, valid = 1;
+    for (uint32_t at = 0; at < s.length; ++count) {
+        const uint32_t n = pnx_utf8_len(b + at, s.length - at);
+        valid &= n != 0;
+        at += n ? n : 1;
+    }
+    st->charge += s.length;
+    R[OP_A(w)] = OP_C(w) ? count : valid;
+    return PNX_R_OK;
+}
+// The integer written in base R[C] (2 to 36; another base is a fault), with an optional '-'.
+// PNX_R_FAILED: no digits, a byte that is no digit of the base, or too large.
+PNX_OP(TOINTB) {
+    const pnx_scell s = S[OP_B(w)];
+    const int64_t base = R[OP_C(w)];
+    if (base < 2 || base > 36)
+        return PINAX_ERR_RANGE;
+    const uint8_t *b = pnx_view_bytes(st, s);
+    const bool minus = s.length && b[0] == '-';
+    uint64_t value = 0;
+    const uint64_t limit = minus ? (uint64_t)INT64_MAX + 1u : (uint64_t)INT64_MAX;
+    st->charge += s.length;
+    st->fail = PINAX_ERR_FORMAT;
+    if (s.length == (uint32_t)minus)
+        return PNX_R_FAILED;
+    for (uint32_t k = minus; k < s.length; ++k) {
+        const uint8_t c = b[k];
+        const int64_t d = c >= '0' && c <= '9' ? c - '0' : c >= 'a' && c <= 'z' ? c - 'a' + 10
+                        : c >= 'A' && c <= 'Z' ? c - 'A' + 10 : 99;
+        if (d >= base || value > (limit - (uint64_t)d) / (uint64_t)base)
+            return PNX_R_FAILED;
+        value = value * (uint64_t)base + (uint64_t)d;
+    }
+    R[OP_A(w)] = minus ? (int64_t)(0u - value) : (int64_t)value;
+    return PNX_R_OK;
+}
+// Byte classes of str.span, numbered as the constants str.digit ... str.punct are.
+PNX_INLINE bool pnx_in_class(uint8_t c, uint32_t class) {
+    switch (class) {
+    case 1: return c >= '0' && c <= '9';
+    case 2: return (c | 0x20) >= 'a' && (c | 0x20) <= 'z';
+    case 3: return (c >= '0' && c <= '9') || ((c | 0x20) >= 'a' && (c | 0x20) <= 'z');
+    case 4: return c == ' ' || (c >= '\t' && c <= '\r');
+    case 5: return c >= 'A' && c <= 'Z';
+    case 6: return c >= 'a' && c <= 'z';
+    case 7: return (c >= '0' && c <= '9') || ((c | 0x20) >= 'a' && (c | 0x20) <= 'f');
+    case 8: return (c >= '!' && c <= '/') || (c >= ':' && c <= '@') || (c >= '[' && c <= '`') || (c >= '{' && c <= '~');
+    default: return false;
+    }
+}
+// A: the str in, its longest head of bytes of class C out; B: the rest
+PNX_OP(SSPAN) {
+    pnx_scell *head = &S[OP_A(w)];
+    const uint8_t *b = pnx_view_bytes(st, *head);
+    uint32_t n = 0;
+    while (n < head->length && pnx_in_class(b[n], OP_C(w)))
+        ++n;
+    st->charge += n;
+    S[OP_B(w)] = (pnx_scell){head->segment, head->length - n, head->offset + n};
+    head->length = n;
+    return PNX_R_OK;
+}
+// A: the rest of the str; B: its next character (a byte that starts no valid sequence is one).
+// PNX_R_FAILED: none is left.
+PNX_OP(SCHAR) {
+    pnx_scell *rest = &S[OP_A(w)];
+    if (rest->length == 0)
+        return PNX_R_FAILED;
+    const uint32_t valid = pnx_utf8_len(pnx_view_bytes(st, *rest), rest->length), n = valid ? valid : 1;
+    S[OP_B(w)] = (pnx_scell){rest->segment, n, rest->offset};
+    rest->offset += n;
+    rest->length -= n;
+    st->charge += n;
+    return PNX_R_OK;
+}
+// A new str in the region: B in upper case (C 0) or lower case (C 1), ASCII letters only.
+PNX_OP(RCASE) {
+    const pnx_scell s = S[OP_B(w)];
+    pnx_scell out = {PNX_SEG_REGION, 0, st->region_used};
+    const int r = pnx_region_append(st, &out, pnx_view_bytes(st, s), s.length);
+    if (r != PNX_R_OK)
+        return r;
+    uint8_t *b = st->region + out.offset;
+    for (uint32_t k = 0; k < out.length; ++k) {
+        if (OP_C(w) ? (b[k] >= 'A' && b[k] <= 'Z') : (b[k] >= 'a' && b[k] <= 'z'))
+            b[k] ^= 0x20;
+    }
+    st->charge += s.length;
+    S[OP_A(w)] = out;
+    return PNX_R_OK;
+}
+// A new str in the region: B written R[C] times (a negative count is a fault).
+PNX_OP(RREP) {
+    const pnx_scell s = S[OP_B(w)];
+    const int64_t times = R[OP_C(w)];
+    if (times < 0)
+        return PINAX_ERR_RANGE;
+    pnx_scell out = {PNX_SEG_REGION, 0, st->region_used};
+    for (int64_t k = 0; k < times && s.length; ++k) {
+        const int r = pnx_region_append(st, &out, pnx_view_bytes(st, s), s.length);
+        if (r != PNX_R_OK)
+            return r;
+    }
+    st->charge += out.length;
+    S[OP_A(w)] = out;
+    return PNX_R_OK;
+}
+
 PNX_OP(RTOP) { R[OP_A(w)] = st->region_used; return PNX_R_OK; }
 PNX_OP(RCUT) {
     const uint64_t top = (uint64_t)R[OP_A(w)];

@@ -33,7 +33,8 @@ enum { E_SLOT, E_LOCAL, E_CONST, E_COND };
 enum { B_IF, B_LOOP, B_ORELSE, B_CASE, B_OF, B_DO };
 enum {
     STEM_RANGE, STEM_BYTES, STEM_TIMES, STEM_COLL, STEM_WORDS, STEM_ROWS, STEM_STRS,
-    STEM_LINES, STEM_SPLIT, STEM_SPLIT_BYTE // like STEM_WORDS, these take their next piece off the string
+    STEM_LINES, STEM_SPLIT, STEM_SPLIT_BYTE, // like STEM_WORDS, these take their next piece off the string
+    STEM_CHARS
 };
 enum { GK_SCALAR, GK_ARRAY, GK_LIST, GK_BUFFER, GK_INDEX, GK_QUEUE, GK_POOL, GK_TASKS };
 enum { L_PLAIN, L_OWNS, L_MOVED }; // what a local holds of a value that must be given exactly once
@@ -1239,7 +1240,9 @@ enum {
     BW_ALLOC, BW_FREE, BW_IS_ALIVE, BW_COUNT, BW_ANY, BW_ALL, BW_FIRST, BW_EACH_INDEX, BW_MAP_INTO, BW_FILTER_INTO, BW_MINIMUM, BW_MAXIMUM,
     BW_SPAWN, BW_YIELD, BW_RESUME, BW_IS_DONE, BW_CANCEL, BW_RUN_ALL,
     BW_SLICE, BW_CUT, BW_TRY_CUT, BW_TRIM, BW_TRIM_LEFT, BW_TRIM_RIGHT, BW_LINES, BW_SPLIT, BW_FIND_LAST, BW_COMPARE,
-    BW_HEX, BW_BIN, BW_HEX_PAD, BW_ZERO_PAD, BW_PAD_LEFT, BW_PAD_RIGHT, BW_CALL, BW_MARK, BW_RELEASE, BW_REGION_FREE
+    BW_HEX, BW_BIN, BW_HEX_PAD, BW_ZERO_PAD, BW_PAD_LEFT, BW_PAD_RIGHT, BW_CALL, BW_MARK, BW_RELEASE, BW_REGION_FREE,
+    BW_SPAN, BW_CHARS, BW_JOIN_INTO, BW_UPPER, BW_LOWER, BW_REPEAT, BW_TO_INT_BASE, BW_IS_UTF8, BW_CHAR_COUNT,
+    BW_REPLACE_INTO, BW_APPEND_HEX
 };
 static const struct builtin {
     const char *name;
@@ -1275,6 +1278,10 @@ static const struct builtin {
     {"hex", BW_HEX, 2},             {"bin", BW_BIN, 2},            {"hex_pad", BW_HEX_PAD, 2},
     {"zero_pad", BW_ZERO_PAD, 2},   {"call", BW_CALL, 0},          {"mark", BW_MARK, 0},
     {"release", BW_RELEASE, 0},     {"region_free", BW_REGION_FREE, 0},
+    {"span", BW_SPAN, 1},           {"chars", BW_CHARS, 1},        {"join_into", BW_JOIN_INTO, 1},
+    {"upper", BW_UPPER, 1},         {"lower", BW_LOWER, 1},        {"repeat", BW_REPEAT, 1},
+    {"to_int_base", BW_TO_INT_BASE, 1}, {"is_utf8", BW_IS_UTF8, 1}, {"char_count", BW_CHAR_COUNT, 1},
+    {"replace_into", BW_REPLACE_INTO, 1}, {"append_hex", BW_APPEND_HEX, 2},
     {"len", BW_LEN, 1},             {"is_empty", BW_IS_EMPTY, 1},  {"take", BW_TAKE, 1},
 };
 
@@ -2803,7 +2810,7 @@ static bool stem_begin(comp *c, uint8_t *kind, uint8_t *cur, uint8_t *lim, uint1
         *element = g->type;
         return emit(c, PNX_ABX(PNX_LOADI, *cur, 0)) != NONE && emit(c, PNX_ABX(PNX_GLEN, *lim, (uint32_t)stem.value)) != NONE;
     }
-    if (stem.op == STEM_WORDS || stem.op == STEM_LINES || stem.op == STEM_SPLIT_BYTE) {
+    if (stem.op == STEM_WORDS || stem.op == STEM_LINES || stem.op == STEM_SPLIT_BYTE || stem.op == STEM_CHARS) {
         // the string itself is the rest still to read; for a byte separator, `cur` is the byte
         f->stack[f->depth - 1].hidden = true;
         *src = (uint16_t)slot_of(c, f->depth - 1);
@@ -2843,12 +2850,14 @@ static bool stem_begin(comp *c, uint8_t *kind, uint8_t *cur, uint8_t *lim, uint1
 
 // Stems that hand out pieces of a string until none is left.
 static bool stem_takes(uint8_t kind) {
-    return kind == STEM_WORDS || kind == STEM_LINES || kind == STEM_SPLIT || kind == STEM_SPLIT_BYTE;
+    return kind == STEM_WORDS || kind == STEM_LINES || kind == STEM_SPLIT || kind == STEM_SPLIT_BYTE ||
+           kind == STEM_CHARS;
 }
 
 // Takes the next piece into `reg`; the instruction after it runs when there is none.
 static bool stem_take(comp *c, uint8_t kind, uint32_t reg, uint32_t src, uint32_t cur, uint32_t lim) {
     return emit(c, kind == STEM_WORDS   ? PNX_ABC(PNX_SWORD, src, reg, 0)
+                   : kind == STEM_CHARS ? PNX_ABC(PNX_SCHAR, src, reg, 0)
                    : kind == STEM_LINES ? PNX_ABC(PNX_SLINE, src, reg, 0)
                    : kind == STEM_SPLIT ? PNX_ABC(PNX_SNEXTS, src, reg, lim)
                                         : PNX_ABC(PNX_SNEXT, src, reg, cur)) != NONE;
@@ -3325,6 +3334,120 @@ static bool do_extreme(comp *c, bool largest) {
     return found_or_fail(c, TY_INT, best, flag);
 }
 
+// A path that names `word` of some module: "str.join_into", or the same under another name.
+static bool ends_with_word(name n, const char *word) {
+    const size_t len = __builtin_strlen(word);
+    return n.length > len && n.text[n.length - len - 1] == '.' && __builtin_memcmp(n.text + n.length - len, word, len) == 0;
+}
+
+// sep buf stem join_into : the str values of the stem appended to the buffer, sep between two;
+// fails with full when the buffer is (what was appended stays). Like the first value of fold,
+// the separator and the buffer come before the stem, which its word takes at once.
+static bool do_join(comp *c) {
+    fn *f = c->f;
+    uint8_t  kind, cur, lim, hidden;
+    uint16_t src;
+    tid      element;
+    if (f->depth == f->floor || f->stack[f->depth - 1].type != TY_STEM)
+        return type_error(c, "join_into takes a separator, a buffer and a stem of str: \",\" out s str.words str.join_into");
+    if (!stem_begin(c, &kind, &cur, &lim, &src, &hidden, &element))
+        return false;
+    const uint32_t base = f->depth - hidden; // the operands of the stem begin here
+    if (element != TY_STR || base < f->floor + 2 || f->stack[base - 1].type != TY_COLL ||
+        ((const globalsym *)c->globals.ptr + f->stack[base - 1].value)->kind != GK_BUFFER ||
+        f->stack[base - 2].type != TY_STR)
+        return type_error(c, "join_into takes a separator, a buffer and a stem of str: \",\" out s str.words str.join_into");
+    const uint32_t gi = (uint32_t)f->stack[base - 1].value;
+    // the name of the buffer is no value: out of the stack; the registers of the others stay
+    for (uint32_t k = base - 1; k + 1 < f->depth; ++k)
+        f->stack[k] = f->stack[k + 1];
+    --f->depth;
+    if (!settle(c, base - 2))
+        return false;
+    const uint32_t sep = slot_of(c, base - 2);
+    f->stack[base - 2].hidden = true;
+    if (!push_slot(c, TY_INT) || !push_slot(c, TY_INT))
+        return false;
+    const uint32_t first = slot_of(c, f->depth - 2), ok = slot_of(c, f->depth - 1);
+    f->stack[f->depth - 2].hidden = f->stack[f->depth - 1].hidden = true;
+    const uint32_t piece = top_slot(c, BANK_S, 1);
+    uint32_t       exits = NONE, full = NONE;
+    if (emit(c, PNX_ABX(PNX_LOADI, first, 1)) == NONE || emit(c, PNX_ABX(PNX_LOADI, ok, 1)) == NONE || !settle_all(c))
+        return false;
+    const uint32_t head = f->code.n;
+    if (stem_takes(kind)) {
+        if (!stem_take(c, kind, piece, src, cur, lim) || !jump_later(c, &exits))
+            return false;
+    } else if (emit(c, PNX_ABC(PNX_JLT, cur, lim, 1)) == NONE || !jump_later(c, &exits) ||
+               !stem_element(c, kind, piece, cur, src)) {
+        return false;
+    }
+    if (emit(c, PNX_ABC(PNX_JEQI, first, 1, 2)) == NONE || emit(c, PNX_ABX(PNX_BCAT, sep, gi)) == NONE ||
+        !jump_later(c, &full) || emit(c, PNX_ABX(PNX_LOADI, first, 0)) == NONE ||
+        emit(c, PNX_ABX(PNX_BCAT, piece, gi)) == NONE || !jump_later(c, &full) ||
+        !loop_back(c, head, cur, stem_takes(kind) ? 0 : 1))
+        return false;
+    land(c, &full);
+    if (emit(c, PNX_ABX(PNX_LOADI, ok, 0)) == NONE)
+        return false;
+    land(c, &exits);
+    f->depth -= (uint32_t)hidden + 3;
+    if (!settle_all(c) || emit(c, PNX_ABX(PNX_SETFAIL, 0, PINAX_ERR_FULL)) == NONE ||
+        emit(c, PNX_ABC(PNX_JNEI, ok, 0, 1)) == NONE)
+        return false;
+    f->def_at = NONE;
+    return guard_op(c, TY_NONE);
+}
+
+// s old new buf replace_into : s with every old replaced by new, appended to the buffer; gives
+// the number replaced, fails with full when the buffer is (what was appended stays). An empty
+// old replaces nothing.
+static bool do_replace_into(comp *c) {
+    fn *f = c->f;
+    const globalsym *g;
+    uint32_t         gi;
+    if (!need_coll(c, &g, &gi) || !need(c, 3))
+        return false;
+    for (uint32_t k = 1; k <= 3; ++k) {
+        if (f->stack[f->depth - k].type != TY_STR || g->kind != GK_BUFFER)
+            return type_error(c, "replace_into takes three str values and a buffer: s old new buf str.replace_into");
+        if (!settle(c, f->depth - k))
+            return false;
+    }
+    const uint32_t s = slot_of(c, f->depth - 3), old = slot_of(c, f->depth - 2), with = slot_of(c, f->depth - 1);
+    if (!push_slot(c, TY_INT) || !push_slot(c, TY_INT) || !push_slot(c, TY_INT) || !push_slot(c, TY_INT))
+        return false;
+    const uint32_t count = slot_of(c, f->depth - 4), ok = slot_of(c, f->depth - 3), at = slot_of(c, f->depth - 2),
+                   size = slot_of(c, f->depth - 1);
+    const uint32_t piece = top_slot(c, BANK_S, 1);
+    uint32_t       tail = NONE, full = NONE, over = NONE;
+    if (!settle_all(c) || emit(c, PNX_ABX(PNX_LOADI, count, 0)) == NONE || emit(c, PNX_ABX(PNX_LOADI, ok, 1)) == NONE ||
+        emit(c, PNX_ABC(PNX_SLEN, size, old, 0)) == NONE || emit(c, PNX_ABC(PNX_JNEI, size, 0, 1)) == NONE ||
+        !jump_later(c, &tail))
+        return false;
+    const uint32_t head = f->code.n;
+    if (emit(c, PNX_ABC(PNX_SFIND, at, s, old)) == NONE || !jump_later(c, &tail) ||
+        emit(c, PNX_ABC(PNX_STAKE, piece, s, at)) == NONE || emit(c, PNX_ABX(PNX_BCAT, piece, gi)) == NONE ||
+        !jump_later(c, &full) || emit(c, PNX_ABX(PNX_BCAT, with, gi)) == NONE || !jump_later(c, &full) ||
+        emit(c, PNX_ABC(PNX_ADD, at, at, size)) == NONE || emit(c, PNX_ABC(PNX_SSKIP, s, s, at)) == NONE ||
+        emit(c, PNX_ABC(PNX_ADDI, count, count, 1)) == NONE || !loop_back(c, head, count, 0))
+        return false;
+    land(c, &tail);
+    if (emit(c, PNX_ABX(PNX_BCAT, s, gi)) == NONE || !jump_later(c, &full) || !jump_later(c, &over))
+        return false;
+    land(c, &full);
+    if (emit(c, PNX_ABX(PNX_LOADI, ok, 0)) == NONE)
+        return false;
+    land(c, &over);
+    f->depth -= 7;
+    const uint32_t to = top_slot(c, BANK_I, 1);
+    if (!settle_all(c) || !move_slot(c, TY_INT, to, count) || emit(c, PNX_ABX(PNX_SETFAIL, 0, PINAX_ERR_FULL)) == NONE ||
+        emit(c, PNX_ABC(PNX_JNEI, ok, 0, 1)) == NONE)
+        return false;
+    f->def_at = NONE;
+    return guard_op(c, TY_INT);
+}
+
 // stem sum
 static bool do_sum(comp *c) {
     fn *f = c->f;
@@ -3395,12 +3518,92 @@ static bool builtin(comp *c, const struct builtin *w) {
         return settle(c, f->depth - 1) && push(c, (entry){.type = TY_STEM, .kind = E_SLOT, .op = STEM_BYTES}) &&
                advance(c);
     case BW_WORDS:
+    case BW_CHARS:
         if (!need(c, 1))
             return false;
         if (f->stack[f->depth - 1].type != TY_STR)
-            return type_error(c, "words takes a str");
-        return settle(c, f->depth - 1) && push(c, (entry){.type = TY_STEM, .kind = E_SLOT, .op = STEM_WORDS}) &&
+            return type_error(c, "this word takes a str");
+        return settle(c, f->depth - 1) &&
+               push(c, (entry){.type = TY_STEM, .kind = E_SLOT, .op = w->id == BW_CHARS ? STEM_CHARS : STEM_WORDS}) &&
                advance(c);
+    case BW_JOIN_INTO:
+        return do_join(c);
+    case BW_REPLACE_INTO:
+        return do_replace_into(c);
+    case BW_UPPER:
+    case BW_LOWER:
+    case BW_IS_UTF8:
+    case BW_CHAR_COUNT: { // one str in; a new str in the region, or a bool or a count
+        if (!need(c, 1))
+            return false;
+        if (f->stack[f->depth - 1].type != TY_STR)
+            return type_error(c, "this word takes a str");
+        if (!reg_of(c, f->depth - 1, &ra))
+            return false;
+        --f->depth;
+        const bool text = w->id == BW_UPPER || w->id == BW_LOWER;
+        if (!push_slot(c, text ? TY_STR : w->id == BW_IS_UTF8 ? TY_BOOL : TY_INT))
+            return false;
+        const uint32_t dst = slot_of(c, f->depth - 1);
+        return emit_def(c, text ? PNX_ABC(PNX_RCASE, dst, ra, w->id == BW_LOWER)
+                                : PNX_ABC(PNX_SUTF, dst, ra, w->id == BW_CHAR_COUNT),
+                        text ? BANK_S : BANK_I) != NONE &&
+               advance(c);
+    }
+    case BW_REPEAT: { // s n repeat : a new str in the region
+        if (!need(c, 2))
+            return false;
+        if (f->stack[f->depth - 2].type != TY_STR || f->stack[f->depth - 1].type != TY_INT)
+            return type_error(c, "repeat takes a str and a count: s n str.repeat");
+        if (!reg_of(c, f->depth - 2, &ra) || !reg_of(c, f->depth - 1, &rb))
+            return false;
+        f->depth -= 2;
+        if (!push_slot(c, TY_STR))
+            return false;
+        return emit_def(c, PNX_ABC(PNX_RREP, slot_of(c, f->depth - 1), ra, rb), BANK_S) != NONE && advance(c);
+    }
+    case BW_TO_INT_BASE: { // s base to_int_base : fails when s is not a number of that base
+        if (!need(c, 2))
+            return false;
+        if (f->stack[f->depth - 2].type != TY_STR || f->stack[f->depth - 1].type != TY_INT)
+            return type_error(c, "to_int_base takes a str and a base: s 16 str.to_int_base");
+        if (!settle(c, f->depth - 2) || !settle(c, f->depth - 1))
+            return false;
+        ra = slot_of(c, f->depth - 2);
+        rb = slot_of(c, f->depth - 1);
+        f->depth -= 2;
+        return settle_all(c) && emit(c, PNX_ABC(PNX_TOINTB, top_slot(c, BANK_I, 1), ra, rb)) != NONE &&
+               guard_op(c, TY_INT);
+    }
+    case BW_SPAN: { // s class span : the longest head of bytes of the class, and the rest
+        if (!need(c, 2))
+            return false;
+        const entry class = f->stack[f->depth - 1];
+        if (f->stack[f->depth - 2].type != TY_STR || class.type != TY_INT || class.kind != E_CONST ||
+            class.value < 1 || class.value > 8)
+            return type_error(c, "span takes a str and a class constant: s str.digit str.span");
+        --f->depth;
+        if (!settle(c, f->depth - 1))
+            return false;
+        ra = slot_of(c, f->depth - 1);
+        f->def_at = NONE;
+        return push_slot(c, TY_STR) &&
+               emit(c, PNX_ABC(PNX_SSPAN, ra, slot_of(c, f->depth - 1), (uint32_t)class.value)) != NONE && advance(c);
+    }
+    case BW_APPEND_HEX: { // n buf append_hex : fails when the buffer is full
+        if (!need_coll(c, &g, &gi) || !need(c, 1))
+            return false;
+        if (g->kind != GK_BUFFER || f->stack[f->depth - 1].type != TY_INT)
+            return type_error(c, "append_hex takes an int and a buffer: n buf fmt.append_hex");
+        if (!reg_of(c, f->depth - 1, &ra))
+            return false;
+        --f->depth;
+        if (!settle_all(c))
+            return false;
+        const uint32_t scratch = top_slot(c, BANK_S, 2) + 1;
+        return emit(c, PNX_ABC(PNX_RMARK, scratch, 0, 0)) != NONE && emit(c, PNX_ABC(PNX_RCATX, scratch, ra, 0)) != NONE &&
+               emit(c, PNX_ABX(PNX_BCAT, scratch, gi)) != NONE && guard_op(c, TY_NONE);
+    }
     case BW_ERR_TEXT: {
         if (!need(c, 1))
             return false;
@@ -4185,6 +4388,14 @@ static bool body_name(comp *c) {
         if (source != NONE)
             return module_symbol(c, (uint16_t)source, n);
         const uint8_t standard = name_is(module, "str") ? 1 : name_is(module, "fmt") ? 2 : 0;
+        if (standard == 1) { // the byte classes of str.span
+            static const char *const classes[] = {"digit",      "alpha",      "alnum",     "space",
+                                                "upper_case", "lower_case", "hex_digit", "punct"};
+            for (uint32_t k = 0; k < sizeof classes / sizeof classes[0]; ++k) {
+                if (name_is(n, classes[k]))
+                    return push(c, (entry){.type = TY_INT, .kind = E_CONST, .value = k + 1}) && advance(c);
+            }
+        }
         if (standard) { // a word of a standard module
             if (c->data_only)
                 return syntax(c, "a data source calls no words; only literals, const names and stores");
@@ -4316,7 +4527,8 @@ static bool body_token(comp *c) {
     if (f->depth > f->floor && f->stack[f->depth - 1].type == TY_STEM &&
         !(t.kind == PNX_T_RESERVED && t.word == PNX_KW_do) &&
         !(t.kind == PNX_T_NAME && (name_is(tok_name(c), "sum") || name_is(tok_name(c), "minimum") ||
-                                   name_is(tok_name(c), "maximum"))))
+                                   name_is(tok_name(c), "maximum"))) &&
+        !(t.kind == PNX_T_PATH && ends_with_word(tok_name(c), "join_into")))
         return type_error(c, "a stem is not a value: a block or a combining word takes it at once");
     // a pending condition survives only into the word that consumes it
     if (f->depth && f->stack[f->depth - 1].kind == E_COND) {
