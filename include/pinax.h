@@ -276,6 +276,13 @@ typedef struct pinax_value {
 PINAX_API uint32_t  pinax_eval_count(const pinax_state *state);
 PINAX_API pinax_err pinax_eval_value(const pinax_state *state, uint32_t index, pinax_value *out);
 
+/* After a run that ended with a fault: the locals of the word the fault happened in, as they
+ * were then, with their names (code compiled from source carries them; a container without
+ * local records gives none). `index` counts from 0; past the last, PINAX_ERR_NOT_FOUND. At
+ * most 16 locals are kept, while their names, types and str bytes fit in 1 KB; a str value is
+ * cut to its first 32 bytes. Valid until the next run that ends, with a fault or without. */
+PINAX_API pinax_err pinax_fault_local(const pinax_state *state, uint32_t index, pinax_str *name, pinax_value *out);
+
 /* ---- running ----------------------------------------------------------------------- */
 
 enum {

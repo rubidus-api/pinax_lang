@@ -330,10 +330,10 @@ enum {
 };
 
 // The container pinax_load_bytecode() accepts: head, word records, global records, import
-// records, integer constants, string constant records, code, string bytes, line records; in
-// this order, native byte order.
+// records, integer constants, string constant records, code, string bytes, line records, local
+// records; in this order, native byte order.
 #define PNX_MAGIC "PNXB"
-#define PNX_CONTAINER_VERSION 1
+#define PNX_CONTAINER_VERSION 2
 #define PNX_ORDER_MARK 0x0102
 
 typedef struct pnx_head {
@@ -342,6 +342,8 @@ typedef struct pnx_head {
     uint16_t order;
     uint32_t n_words, n_globals, n_imports, n_iconst, n_sconst, n_code, n_strbytes;
     uint32_t n_lines; // line records after the string bytes; a loader that wants none may skip them
+    uint32_t n_locals; // local records after the line records; may be 0
+    uint32_t reserved; // 0: keeps the records after the head 8-byte aligned
 } pnx_head;
 
 // Debug information: from code word `pc` on, the code came from source line `line` (of the
@@ -349,6 +351,16 @@ typedef struct pnx_head {
 typedef struct pnx_linerec {
     uint32_t pc, line;
 } pnx_linerec;
+
+// Debug information: while code words `from` up to (not including) `to` of word `word` run
+// (counted from the word's first instruction), register `reg` of bank `bank` (0 int, 1 str)
+// holds the local `name`, of the type written in `type`. Only what a fault report reads.
+typedef struct pnx_localrec {
+    uint32_t word, from, to;
+    uint8_t  bank, reg, kind, reserved; // kind: PINAX_VALUE_... of pinax.h (a str is in bank 1)
+    char     name[32];
+    char     type[32];
+} pnx_localrec;
 
 typedef struct pnx_wordrec {
     char     name[32];

@@ -815,6 +815,8 @@ suspended:
 finished:
     if (result != PINAX_OK) {
         st->fault_pc = (uint32_t)(pc - code);
+        st->fault_ibase = ibase;
+        st->fault_sbase = sbase;
         if (st->task && st->nest == 0) // a fault inside a task ends the run and every task
             pnx_tasks_abort(st);
     }

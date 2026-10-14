@@ -136,7 +136,7 @@ typedef struct pnx_program {
     void                *symbols;
     size_t               used;
     uint32_t             n_hosts;
-    const uint8_t       *lines;
+    const uint8_t       *lines, *localrecs;
 } pnx_program;
 
 struct pinax_state {
@@ -171,6 +171,17 @@ struct pinax_state {
     uint32_t fault_pc;             // where the last run ended with a fault: the code word after the instruction
     const uint8_t *lines;          // pnx_linerec records, head->n_lines of them (not aligned)
     char     where[112];           // "module:line: error" of the last fault, for pinax_error_text()
+    uint32_t fault_ibase, fault_sbase; // the register windows of the word that faulted
+    const uint8_t *localrecs;      // pnx_localrec records, head->n_locals of them (not aligned)
+    // the locals of the word of the last fault, copied when it happened: names, types and the
+    // bytes of str values lie in fault_pool
+    struct pnx_faultlocal {
+        uint16_t name, type, text, text_len;
+        uint8_t  name_len, type_len, kind;
+        int64_t  i;
+    } fault_locals[16];
+    uint32_t fault_n, fault_used;
+    uint8_t  fault_pool[1024];
     uint32_t depth_floor;          // the depth at which the running word returns to the host
     // tasks: the one running (NULL: the main run), and where the main run stands meanwhile
     pnx_task   *task;

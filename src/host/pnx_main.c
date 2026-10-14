@@ -373,6 +373,23 @@ static pinax_err load_file(pinax_state *state, const char *path, const char *nam
     return finish(state, pinax_load(state, name, (pinax_str){(const unsigned char *)text, length}, PINAX_LOAD_CODE));
 }
 
+// Prints the locals of the word a fault happened in, one a line: "  twice int = 10".
+static void show_fault_locals(const pinax_state *state, FILE *out) {
+    pinax_str   name;
+    pinax_value v;
+    for (uint32_t k = 0; pinax_fault_local(state, k, &name, &v) == PINAX_OK; ++k) {
+        fprintf(out, "  %.*s %.*s = ", (int)name.len, (const char *)name.ptr, (int)v.type.len, (const char *)v.type.ptr);
+        if (v.kind == PINAX_VALUE_STR)
+            fprintf(out, "\"%.*s\"\n", (int)v.s.len, (const char *)v.s.ptr);
+        else if (v.kind == PINAX_VALUE_ERR)
+            fprintf(out, "err.%.*s\n", (int)v.s.len, (const char *)v.s.ptr);
+        else if (v.kind == PINAX_VALUE_BOOL)
+            fprintf(out, "%s\n", v.i ? "true" : "false");
+        else
+            fprintf(out, "%lld\n", (long long)v.i);
+    }
+}
+
 // Reads lines from standard input and runs each as a line of one session. A definition or a
 // block may go over several lines: the text is run when it is complete.
 static int repl(pinax_state *state) {
@@ -397,8 +414,10 @@ static int repl(pinax_state *state) {
             n + 1 < sizeof text)
             continue; // more lines are to come
         fwrite(held, 1, held_n, stdout);
-        if (err != PINAX_OK && !refused) // a fault of the line, or an error without a place
+        if (err != PINAX_OK && !refused) { // a fault of the line, or an error without a place
             printf("error: %.*s\n", (int)why.len, (const char *)why.ptr);
+            show_fault_locals(state, stdout);
+        }
         fflush(stdout);
         n = 0;
     }
@@ -549,6 +568,7 @@ static int run(int argc, char **argv) {
             said = report_fault(state, err); // a fault of the script: with its line when the state knows it
         if (!said && err != PINAX_ERR_SYNTAX && err != PINAX_ERR_TYPE) // those two were reported with their place
             fprintf(stderr, "%s: %s\n", file_name, err_name(err));
+        show_fault_locals(state, stderr); // and the locals of the word it happened in
         status = 1;
     } else if (testing) {
         status = run_tests(state, plain ? module : "");

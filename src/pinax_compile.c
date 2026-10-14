@@ -106,7 +106,16 @@ typedef struct local {
     bool    stored; // `to` stored into it after it was made (a loop's element, see end_do)
     uint8_t born;   // as entry.born, for the value it holds
     bool    stale;  // a str made after a mark that was released since: it is not read
+    uint32_t drec;  // its debug record in fn.dlocals, or NONE
 } local;
+
+// Debug information of a local: the code words of its body where its register holds it.
+typedef struct dlocal {
+    uint32_t from, to; // `to` is NONE while its scope is open
+    uint8_t  reg;
+    tid      type;
+    name     name;
+} dlocal;
 
 // What must agree, or is merged, where paths meet: what a local owns, and when its value was
 // made (RFC-0009 section 3.5: a str made after a mark is not used after its release).
@@ -177,6 +186,7 @@ typedef struct fn {
     sig      own_sig; // a value block keeps its effect here
     vec      code; // of uint32_t
     vec      lines; // of uint32_t: the source line of each code word
+    vec      dlocals; // of dlocal
     uint32_t start, last_check;
     // The call just emitted, when what it gives is what this word gives: a return right after
     // it becomes a tail call, which reuses the window (RFC-0001 section 5.1).
@@ -309,6 +319,7 @@ typedef struct comp {
     bool         exporting; // `export` stands before the item being compiled
     uint32_t     path_global; // to module.name : the global the path names, for store_local
     vec          dtypes;   // dtype
+    vec          localrecs; // pnx_localrec: the locals of the words of this load
     bool         data_only; // PINAX_LOAD_DATA: declarations, literals, stores and rows only
     bool         sink;      // the word being compiled may take an owned value off the stack
     name         modules[MAX_MODULES]; // the names the source writes: `use rex as rx` opens rx
@@ -854,6 +865,19 @@ static uint32_t top_slot(comp *c, int bank, uint32_t extra) {
     if (pos + extra > f->maxslot[bank])
         f->maxslot[bank] = (uint8_t)(pos + extra);
     return SLOT0 + pos;
+}
+
+// Opens the debug record of a named local: from code word `from` on, its register holds it.
+static bool debug_local(comp *c, local *l, uint32_t from) {
+    l->drec = NONE;
+    if (!l->name.length)
+        return true;
+    dlocal *d = vec_push(c, &c->f->dlocals, sizeof(dlocal));
+    if (!d)
+        return false;
+    *d = (dlocal){.from = from, .to = NONE, .reg = l->reg, .type = l->type, .name = l->name};
+    l->drec = c->f->dlocals.n - 1;
+    return true;
 }
 
 // A value pushed is new: made after every mark so far. Copies of a value keep its own `born`.
@@ -1730,7 +1754,7 @@ static bool guard(comp *c, const sig *s, const uint32_t base[2], const uint32_t 
         *l = (local){.name = n, .type = TY_ERR, .reg = f->nloc[BANK_I]++};
         if (f->nloc[BANK_I] > f->maxloc[BANK_I])
             f->maxloc[BANK_I] = f->nloc[BANK_I];
-        if (emit(c, PNX_ABX(PNX_GETFAIL, l->reg, 0)) == NONE || !advance(c))
+        if (emit(c, PNX_ABX(PNX_GETFAIL, l->reg, 0)) == NONE || !debug_local(c, l, f->code.n) || !advance(c))
             return false;
         if (c->tok.kind != PNX_T_RPAREN)
             return syntax(c, "the error name is one name in parentheses");
@@ -1895,7 +1919,7 @@ static bool store_local(comp *c, name n) {
         if (f->n_locals == MAX_LOCALS || f->nloc[bank] >= SLOT0 - 1)
             return syntax(c, "too many local variables in this word");
         l = &f->locals[f->n_locals++];
-        *l = (local){.name = n, .type = e.type, .reg = f->nloc[bank]++};
+        *l = (local){.name = n, .type = e.type, .reg = f->nloc[bank]++, .drec = NONE};
         if (f->nloc[bank] > f->maxloc[bank])
             f->maxloc[bank] = f->nloc[bank];
         l->state = give(c, top) ? L_OWNS : L_PLAIN;
@@ -1918,7 +1942,9 @@ static bool store_local(comp *c, name n) {
     }
     l->born = e.born;
     l->stale = false;
-    return write_reg(c, l->reg);
+    if (!write_reg(c, l->reg))
+        return false;
+    return l->drec != NONE || debug_local(c, l, f->code.n); // a new local holds its value from here
 }
 
 // record.field : reads the field of the row on top of the stack, or (after `to`) stores the
@@ -2155,6 +2181,10 @@ static block *open_block(comp *c, uint8_t kind) {
 
 // Locals made inside a block end with it.
 static void close_scope(fn *f, const block *b) {
+    for (uint32_t k = b->locals_mark; k < f->n_locals; ++k) {
+        if (f->locals[k].drec != NONE)
+            ((dlocal *)f->dlocals.ptr)[f->locals[k].drec].to = f->code.n;
+    }
     f->n_locals = b->locals_mark;
     f->nloc[0] = b->nloc_mark[0];
     f->nloc[1] = b->nloc_mark[1];
@@ -2870,10 +2900,10 @@ static local *new_local(comp *c, name n, tid type) {
         return NULL;
     }
     local *l = &f->locals[f->n_locals++];
-    *l = (local){.name = n, .type = type, .reg = f->nloc[bank]++};
+    *l = (local){.name = n, .type = type, .reg = f->nloc[bank]++, .born = f->marks};
     if (f->nloc[bank] > f->maxloc[bank])
         f->maxloc[bank] = f->nloc[bank];
-    return l;
+    return debug_local(c, l, f->code.n) ? l : NULL;
 }
 
 // stem do [ ( params ) ] body end each | fold      count do body end times
@@ -3075,6 +3105,10 @@ static bool do_block(comp *c) {
     }
     if ((use == USE_FIRST || use == USE_FILTER) && !move_slot(c, element, val, reg))
         return false; // kept, in case this is the one
+    for (uint32_t k = b->locals_mark; k < f->n_locals; ++k) { // they hold their values from here
+        if (f->locals[k].drec != NONE)
+            ((dlocal *)f->dlocals.ptr)[f->locals[k].drec].from = f->code.n;
+    }
     f->def_at = NONE;
     return true;
 }
@@ -4454,6 +4488,8 @@ static bool bind_inputs(comp *c, const sig *s) {
         local *l = &f->locals[f->n_locals++];
         *l = (local){.name = sig_in_name(s, k), .type = s->in[k], .reg = f->nloc[bank]++,
                      .state = s->in_owned[k] ? L_OWNS : L_PLAIN, .born = f->marks};
+        if (!debug_local(c, l, 0))
+            return false;
         if (l->name.length) {
             for (uint32_t j = 0; j + 1 < f->n_locals; ++j) {
                 if (f->locals[j].name.length && name_eq(f->locals[j].name, l->name))
@@ -4475,7 +4511,25 @@ static bool bind_inputs(comp *c, const sig *s) {
 }
 
 // The registers of the finished body in `f` and the size of its window, into word `index`.
+static void put_text(char *out, size_t cap, name n);
+
 static bool finish_word(comp *c, fn *f, uint32_t index) {
+    for (uint32_t k = 0; k < f->dlocals.n; ++k) { // the debug records of its locals
+        const dlocal *d = (const dlocal *)f->dlocals.ptr + k;
+        const uint32_t to = d->to == NONE || d->to > f->code.n ? f->code.n : d->to;
+        if (d->from >= to)
+            continue;
+        pnx_localrec *rec = vec_push(c, &c->localrecs, sizeof(pnx_localrec));
+        if (!rec)
+            return false;
+        const tid base = base_of(c, d->type);
+        *rec = (pnx_localrec){.word = index, .from = d->from, .to = to, .bank = (uint8_t)(bank_of(d->type) == BANK_S),
+                              .reg = d->reg,
+                              .kind = bank_of(d->type) == BANK_S ? PINAX_VALUE_STR : base == TY_BOOL ? PINAX_VALUE_BOOL
+                                    : base == TY_ERR ? PINAX_VALUE_ERR : PINAX_VALUE_INT};
+        put_text(rec->name, sizeof rec->name, d->name);
+        put_text(rec->type, sizeof rec->type, type_name(c, d->type));
+    }
     wordsym *w = (wordsym *)c->words.ptr + index;
     uint32_t in[2], out[2];
     count_sig(&w->sig, in, out);
@@ -5830,12 +5884,13 @@ static bool serialize(comp *c, const image *im, uint8_t **out, size_t *out_len) 
         .n_code = im->code.n,
         .n_strbytes = c->strbytes.n,
         .n_lines = runs.n,
+        .n_locals = (st->head ? st->head->n_locals : 0) + c->localrecs.n,
     };
     const size_t len = sizeof head + (size_t)head.n_words * sizeof(pnx_wordrec) +
                        (size_t)head.n_globals * sizeof(pnx_globalrec) +
                        (size_t)head.n_imports * sizeof(pnx_importrec) + (size_t)head.n_iconst * 8 +
                        (size_t)head.n_sconst * sizeof(pnx_sconst) + (size_t)head.n_code * 4 + head.n_strbytes +
-                       (size_t)head.n_lines * sizeof(pnx_linerec);
+                       (size_t)head.n_lines * sizeof(pnx_linerec) + (size_t)head.n_locals * sizeof(pnx_localrec);
     uint8_t *p = arena_alloc(c, len);
     if (!p)
         return false;
@@ -5943,6 +5998,22 @@ static bool serialize(comp *c, const image *im, uint8_t **out, size_t *out_len) 
     p += head.n_strbytes;
     if (head.n_lines)
         __builtin_memcpy(p, runs.ptr, (size_t)head.n_lines * sizeof(pnx_linerec));
+    p += (size_t)head.n_lines * sizeof(pnx_linerec);
+    // local records: those of the earlier loads, then this one's; after a redefinition the two
+    // words that changed code trade their records too
+    for (uint32_t k = 0; k < head.n_locals; ++k, p += sizeof(pnx_localrec)) {
+        const uint32_t before = head.n_locals - c->localrecs.n;
+        pnx_localrec rec;
+        if (k < before)
+            __builtin_memcpy(&rec, st->localrecs + (size_t)k * sizeof rec, sizeof rec);
+        else
+            rec = ((const pnx_localrec *)c->localrecs.ptr)[k - before];
+        if (moved && k < before && rec.word == c->redefine_old)
+            rec.word = c->redefine_new;
+        else if (moved && k >= before && rec.word == c->redefine_new)
+            rec.word = c->redefine_old;
+        __builtin_memcpy(p, &rec, sizeof rec);
+    }
     return true;
 }
 
