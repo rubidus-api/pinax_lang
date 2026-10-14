@@ -1,0 +1,8 @@
+rem run
+use io
+use str
+word show (a int, b int) cat (a, " ", b) io.println end
+1 2 swap show            rem 2 1
+1 2 over drop show       rem over copies the second: 1 2 1, drop gives 1 2
+1 2 3 nip show           rem nip drops the second: 1 3
+4 dup show               rem 4 4

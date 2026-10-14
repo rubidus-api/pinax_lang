@@ -1,0 +1,6 @@
+rem refused
+word f (gives s str)
+  5 to v
+  "five" to v
+  v
+end

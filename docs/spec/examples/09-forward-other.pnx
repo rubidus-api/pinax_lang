@@ -1,0 +1,3 @@
+rem refused
+forward word f (n int gives int)
+word f (n int gives bool) n 0 eq end

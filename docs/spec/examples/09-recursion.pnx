@@ -1,0 +1,10 @@
+rem run
+use io
+use str
+word fact (n int gives int) n 1 le if 1 else n n 1 sub fact mul end end
+word count_down (n int, acc int gives int)            rem a call in tail place reuses the frame
+  n 0 eq if acc return end
+  n 1 sub acc 1 add count_down
+end
+20 fact str.to_str io.println
+1000000 0 count_down str.to_str io.println

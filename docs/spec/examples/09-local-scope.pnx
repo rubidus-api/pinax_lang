@@ -1,0 +1,5 @@
+rem refused
+word f (flag bool gives int)
+  flag if 1 to v end
+  v
+end

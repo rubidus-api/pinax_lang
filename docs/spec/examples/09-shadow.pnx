@@ -1,0 +1,3 @@
+rem refused
+global limit int
+word clip (n int, limit int gives int) n limit min end

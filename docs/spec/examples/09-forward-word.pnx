@@ -1,0 +1,6 @@
+rem run
+use io
+forward word is_odd (n int gives bool)
+word is_even (n int gives bool) n 0 eq if true else n 1 sub is_odd end end
+word is_odd (n int gives bool) n 0 eq if false else n 1 sub is_even end end
+7 is_even if "7 is even" else "7 is odd" end io.println

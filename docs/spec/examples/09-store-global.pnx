@@ -1,0 +1,7 @@
+rem run
+use io
+use str
+global calls int
+word tick () calls 1 add to calls end      rem `to` with a global's name stores into the global
+tick tick tick
+calls str.to_str io.println

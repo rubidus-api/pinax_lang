@@ -1,0 +1,2 @@
+rem refused
+word half (n int gives r int) n 2 div drop end

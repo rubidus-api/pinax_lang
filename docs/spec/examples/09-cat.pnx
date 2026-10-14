@@ -1,0 +1,5 @@
+rem run
+use io
+use fmt
+word show (id int, name str, ok bool) cat ("id=", id, " name=", name, " ok=", ok, " hex=", id fmt.hex) io.println end
+255 "kim" true show

@@ -1,0 +1,10 @@
+rem run
+use io
+use str
+word area (w int, h int gives a int) w h mul end      rem named inputs become locals
+word square (int gives int) dup mul end               rem a bare type: the value stays on the stack
+global total int
+word reset () 0 to total end                          rem neither inputs nor results
+3 4 area str.to_str io.println
+5 square str.to_str io.println
+reset

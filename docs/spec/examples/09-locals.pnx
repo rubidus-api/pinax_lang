@@ -1,0 +1,13 @@
+rem run
+use io
+use str
+word stats (a int, b int, c int gives s str)
+  a b add c add to total                rem the first `to` makes a local of that type
+  total 3 div to mean
+  a b max c max to top
+  cat ("total ", total, ", mean ", mean, ", max ", top)
+end
+word split3 (gives int, int, int) 1 2 3 end
+3 9 6 stats io.println
+word show3 () split3 to (x, y, z) cat (x, y, z) io.println end   rem the rightmost is the top
+show3
