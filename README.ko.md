@@ -1,4 +1,4 @@
-**한국어** | [English](README.md) — **Pinax**
+**한국어** | [English](README.md) — **Pinax v0.1.0** — [Spec PDF(ko)](https://github.com/rubidus-api/pinax_lang/releases/download/v0.1.0/pinax-spec-ko.pdf) · [Spec PDF(en)](https://github.com/rubidus-api/pinax_lang/releases/download/v0.1.0/pinax-spec-en.pdf) · [Manual PDF(ko)](https://github.com/rubidus-api/pinax_lang/releases/download/v0.1.0/pinax-manual-ko.pdf) · [Manual PDF(en)](https://github.com/rubidus-api/pinax_lang/releases/download/v0.1.0/pinax-manual-en.pdf) · [pinax.h](https://github.com/rubidus-api/pinax_lang/releases/download/v0.1.0/pinax.h) · [pinax.c](https://github.com/rubidus-api/pinax_lang/releases/download/v0.1.0/pinax.c)
 
 # Pinax
 

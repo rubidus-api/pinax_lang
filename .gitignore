@@ -16,6 +16,8 @@
 !/docs/spec/
 !/docs/manual/
 !/docs/tools/
+!/docs/index.html
+!/docs/.nojekyll
 
 # The blocks below come from the bootstrap kit. With the whitelist above they
 # are a second line of defence: they also apply inside the public directories.

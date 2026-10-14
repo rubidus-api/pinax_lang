@@ -76,6 +76,7 @@ static const char *const test_sources[] = {"tests/test_main.c"};
 static const char *const public_paths[] = {
     ".gitignore", "README.md", "README.ko.md", "LICENSE", "nob.c", "include/", "src/", "vendor/",
     "docs/spec/", "docs/manual/", "docs/tools/", // the standard and the manual (Korean and English)
+    "docs/index.html", "docs/.nojekyll", // the Pages front page
 };
 
 typedef struct {
