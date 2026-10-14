@@ -1,0 +1,15 @@
+rem run
+use io
+use str
+list stack int 4                            rem grows from 0 to 4
+word balanced (s str gives bool)            rem are the brackets of s balanced?
+  stack clear
+  s str.bytes do (b int)
+    b '(' eq if b stack push or_else (e) end end
+    b ')' eq if stack pop or_else (e) 0 end drop end
+  end each
+  stack is_empty
+end
+word check (s str) cat (s, " ", s balanced) io.println end
+"(a(b)c)" check
+"(a(b c)" check

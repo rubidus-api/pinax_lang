@@ -1,0 +1,14 @@
+rem run
+use io
+use str
+array prices int 6
+assign prices (1200, 450, 3000, 780, 99, 2500)
+list cheap int 6
+array with_tax int 6
+word go (or fail)
+  prices do (p int gives bool) p 1000 lt end cheap filter_into or_fail
+  prices do (p int gives int) p 11 mul 10 div end with_tax map_into or_fail to n
+  cat ("cheap: ", cheap len, " items, the first ", 0 cheap idx) io.println
+  cat ("with tax, ", n, " cells written, the first ", 0 with_tax idx) io.println
+end
+go or_else (e) e err_text io.println end

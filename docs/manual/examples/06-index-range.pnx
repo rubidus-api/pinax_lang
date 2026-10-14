@@ -1,0 +1,7 @@
+rem fault
+use io
+array week int 7
+word day (i int gives int) i week idx end
+3 day drop
+"day 3 is fine" io.println
+7 day drop

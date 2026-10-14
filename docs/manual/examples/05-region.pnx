@@ -1,0 +1,14 @@
+rem run
+use io
+use str
+word line (i int gives str) cat ("line ", i) end
+word lots ()
+  region_free to before
+  1 10001 range do (i int)
+    mark to m                               rem every turn gives its bytes back
+    i line drop
+    m release
+  end each
+  cat ("bytes still taken after 10000 lines: ", before region_free sub) io.println
+end
+lots

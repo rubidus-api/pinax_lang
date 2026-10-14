@@ -1,0 +1,4 @@
+rem refused
+use io
+queue q int 4
+q do (x int) end each

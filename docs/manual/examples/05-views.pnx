@@ -1,0 +1,18 @@
+rem run
+use io
+use str
+rem Parse "key = value" lines without copying a byte.
+word parse (line str)
+  line str.trim to t
+  t str.is_empty t "#" str.starts_with or if return end      rem blank lines and remarks
+  t "=" str.try_cut or_else (e) cat ("no '=' in: ", t) io.println return end to (key, value)
+  cat ("[", key str.trim, "] = [", value str.trim, "]") io.println
+end
+text END
+# settings
+name = Pinax
+  version= 1
+
+broken line
+END
+str.lines do (l str) l parse end each

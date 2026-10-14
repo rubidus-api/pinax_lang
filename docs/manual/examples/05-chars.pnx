@@ -1,0 +1,10 @@
+rem run
+use io
+use str
+word show ()
+  "한글 ok" to s
+  cat ("bytes ", s str.len, ", characters ", s str.char_count) io.println
+  s str.chars do (c str) cat ("<", c, ">") io.print end each
+  "" io.println
+end
+show

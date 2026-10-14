@@ -1,0 +1,6 @@
+rem fault
+use io
+global name str(8)
+"Pinax" to name
+cat ("stored: ", name) io.println
+"an embeddable language" to name

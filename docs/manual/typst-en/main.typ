@@ -10,3 +10,5 @@
 #include "chapters/02-values.typ"
 #include "chapters/03-words.typ"
 #include "chapters/04-control.typ"
+#include "chapters/05-strings.typ"
+#include "chapters/06-collections.typ"

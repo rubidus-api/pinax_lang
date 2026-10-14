@@ -1,0 +1,15 @@
+rem run
+use io
+use str
+use fmt
+buffer out 64
+word report (or fail)
+  "id: " out append or_fail
+  42 out append_int or_fail
+  ", hex: 0x" out append or_fail
+  255 out fmt.append_hex or_fail
+  '!' out append_byte or_fail
+end
+report or_else (e) cat ("buffer full: ", e err_text) io.println end
+out contents io.println
+cat ("upper: ", "pinax" str.upper, ", repeat: ", "ab" 3 str.repeat, ", padded: [", "7" 4 str.pad_left, "]") io.println

@@ -1,0 +1,7 @@
+rem run
+use io
+use str
+global longest str(16)                     rem stored text: 16 bytes, copied in
+word keep_longest (w str) w str.len longest str.len gt if w to longest end end
+"the quick brown fox jumps over the lazy dog" str.words do (w str) w keep_longest end each
+cat ("longest word: ", longest) io.println

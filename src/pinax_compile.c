@@ -2848,7 +2848,7 @@ static bool stem_begin(comp *c, uint8_t *kind, uint8_t *cur, uint8_t *lim, uint1
     if (stem.type == TY_COLL) { // an array or list: an index and the length
         const globalsym *g = (const globalsym *)c->globals.ptr + stem.value;
         if (g->kind != GK_ARRAY && g->kind != GK_LIST)
-            return type_error(c, "a buffer or an index is not a stem; each goes over an array or a list");
+            return type_error(c, "only an array or a list is a stem (not a queue, a pool, a buffer or an index)");
         if (!push_slot(c, TY_INT) || !push_slot(c, TY_INT))
             return false;
         f->stack[f->depth - 2].hidden = f->stack[f->depth - 1].hidden = true;

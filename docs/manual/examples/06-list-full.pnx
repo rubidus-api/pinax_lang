@@ -1,0 +1,6 @@
+rem run
+use io
+list two int 2
+word fill (or fail) 1 two push or_fail 2 two push or_fail 3 two push or_fail end
+fill or_else (e) cat ("the third push failed: ", e err_text) io.println end
+cat ("the list holds ", two len) io.println

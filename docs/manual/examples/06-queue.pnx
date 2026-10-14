@@ -1,0 +1,10 @@
+rem run
+use io
+use str
+queue line int 3
+word arrive (n int) n line put or_else (e) cat ("turned away: ", n) io.println end end
+word serve () line take or_else (e) cat ("nobody waits: ", e err_text) io.println return end to n  cat ("served ", n) io.println end
+1 arrive 2 arrive 3 arrive 4 arrive
+serve serve
+5 arrive
+serve serve serve

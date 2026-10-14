@@ -175,5 +175,5 @@ fail`). 목적지가 차면 `err.full` 로 실패하고, 그때까지 쓴 것은
   ([펼쳐지는 블록이 스택을 바꿈], "this block must leave the stack as it found it"),
   ([정의 밖의 `return`], "return belongs inside a definition"),
   ([상수가 아닌 가지의 값], "a case value is a literal or the name of a const"),
-  ([줄기가 아닌 것에 조합 낱말], "a buffer or an index is not a stem; each goes over an array or a list"),
+  ([줄기가 아닌 것에 조합 낱말], "only an array or a list is a stem (not a queue, a pool, a buffer or an index)"),
 )
