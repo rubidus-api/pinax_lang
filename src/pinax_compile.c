@@ -2125,19 +2125,20 @@ static bool same_owns(comp *c, const block *b, lstate *as) {
 
 // The end of one turn of a loop that has a release inside it: a str kept from turn to turn
 // must not be made anew in the turn, since the next turn's release was checked against the
-// value from before the loop.
+// value from before the loop. The head's state is in `out` and `owns_out`, which a loop does
+// not use otherwise (`in` has taken in the states of the exits by now).
 static bool same_turn(comp *c, const block *b) {
     const fn *f = c->f;
     if (f->releases == b->releases)
         return true;
-    for (uint32_t k = 0; k < b->in.depth; ++k) {
-        if (bank_of(b->in.types[k]) == BANK_S && f->stack[k].born != b->in.born[k])
+    for (uint32_t k = 0; k < b->out.depth; ++k) {
+        if (bank_of(b->out.types[k]) == BANK_S && f->stack[k].born != b->out.born[k])
             return type_error(c, "a str kept from turn to turn of this loop is made anew after a release in it; "
                                  "the next turn could read bytes the release gave back");
     }
     for (uint32_t k = 0; k < b->locals_mark && k < f->n_locals; ++k) {
         const local *l = &f->locals[k];
-        if (bank_of(l->type) == BANK_S && (l->born != b->owns_in[k].born || l->stale != b->owns_in[k].stale))
+        if (bank_of(l->type) == BANK_S && (l->born != b->owns_out[k].born || l->stale != b->owns_out[k].stale))
             return type_error(c, "a str local kept from turn to turn of this loop is made anew after a release in "
                                  "it; the next turn could read bytes the release gave back");
     }
@@ -2176,6 +2177,10 @@ static block *open_block(comp *c, uint8_t kind) {
     snapshot(f, &b->in);
     save_owns(f, b->owns_in);
     b->releases = f->releases;
+    if (kind == B_LOOP || kind == B_DO) { // the head as it was: `in` takes in what leaves the loop
+        b->out = b->in;
+        __builtin_memcpy(b->owns_out, b->owns_in, sizeof b->owns_out);
+    }
     return b;
 }
 
@@ -2369,7 +2374,7 @@ static bool end_loop(comp *c, block *b) {
     if (!f->dead) {
         if (!settle_all(c))
             return false;
-        if (f->depth == b->in.depth && !same_turn(c, b))
+        if (f->depth == b->out.depth && !same_turn(c, b))
             return false;
         if (!same_stack(f, &b->in))
             return type_error(c, "one turn of a loop must leave the stack as it found it");
@@ -3160,7 +3165,7 @@ static bool end_do(comp *c, block *b) {
         }
         if (!settle_all(c))
             return false;
-        if (f->depth == b->in.depth && !same_turn(c, b))
+        if (f->depth == b->out.depth && !same_turn(c, b))
             return false;
         if (!same_stack(f, &b->in))
             return type_error(c, "this block must leave the stack as it found it");
