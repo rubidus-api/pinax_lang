@@ -1,0 +1,4 @@
+rem refused
+use bytes
+buffer b 8
+5 b bytes.pack or_else (e) end

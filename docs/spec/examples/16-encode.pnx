@@ -1,0 +1,13 @@
+rem run
+use io
+use encode
+buffer out 64
+word show (label str) cat (label, " ", out contents) io.println  out clear end
+word demo (or fail)
+  "Pinax!" out encode.base64_encode or_fail  "base64" show
+  "UGluYXgh" out encode.base64_decode or_fail  "decoded" show
+  "\x00\xff" out encode.hex_encode or_fail  "hex" show
+  "a b&c=d/é" out encode.url_encode or_fail  "url" show
+  "a%20b" out encode.url_decode or_fail  "url decoded" show
+end
+demo or_else (e) cat ("failed: ", e err_text) io.println end

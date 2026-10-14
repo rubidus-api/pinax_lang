@@ -1,0 +1,3 @@
+rem refused
+use hash
+42 hash.crc32 drop

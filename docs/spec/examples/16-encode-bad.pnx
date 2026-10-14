@@ -1,0 +1,6 @@
+rem run
+use io
+use encode
+buffer out 16
+"zz" out encode.hex_decode or_else (e) cat ("hex_decode: ", e err_text) io.println end
+"ab*c" out encode.base64_decode or_else (e) cat ("base64_decode: ", e err_text) io.println end

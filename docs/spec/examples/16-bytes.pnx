@@ -1,0 +1,22 @@
+rem run
+use io
+use bytes
+use encode
+use str
+buffer out 64
+buffer hex 128
+word dump () out contents hex encode.hex_encode or_else (e) end  hex contents io.println  hex clear end
+word demo (or fail)
+  258 out bytes.put_u16 or_fail            rem little end first: 02 01
+  258 out bytes.put_u16_be or_fail         rem big end first: 01 02
+  300 out bytes.put_varint or_fail         rem LEB128: ac 02
+  "hi" out bytes.put_str or_fail           rem a varint length, then the bytes
+  dump
+  out contents to s
+  s bytes.get_u16 or_fail to (a, s1)       rem the value and the rest
+  s1 bytes.get_u16_be or_fail to (b, s2)
+  s2 bytes.get_varint or_fail to (c, s3)
+  s3 bytes.get_str or_fail to (d, s4)
+  cat (a, " ", b, " ", c, " ", d, ", left ", s4 str.len) io.println
+end
+demo or_else (e) e err_text io.println end

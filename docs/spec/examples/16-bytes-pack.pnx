@@ -1,0 +1,38 @@
+rem run
+use io
+use bytes
+use encode
+use str
+record item
+  id u16
+  name str(8)
+  delta varint
+end
+record wire
+  big_endian
+  id u16
+  count u32
+end
+array items item 2
+array wires wire 1
+buffer out 64
+buffer hex 128
+word dump () out contents hex encode.hex_encode or_else (e) end  hex contents io.println  hex clear end
+word demo (or fail)
+  0 items idx to a
+  513 a to item.id  "pinax" a to item.name  -3 a to item.delta
+  a out bytes.pack or_fail
+  dump
+  cat ("packed_size ", a bytes.packed_size, ", written ", out contents str.len) io.println
+  1 items idx to b
+  out contents b bytes.unpack or_fail to rest
+  cat (b item.id, " ", b item.name, " ", b item.delta, ", rest ", rest str.len) io.println
+  "\x01\x02\x05" b bytes.unpack or_else (e) cat ("short input: ", e err_text) io.println "" end drop
+  cat ("the row is unchanged: ", b item.name) io.println
+  out clear
+  0 wires idx to w
+  258 w to wire.id  7 w to wire.count
+  w out bytes.pack or_fail
+  dump
+end
+demo or_else (e) e err_text io.println end

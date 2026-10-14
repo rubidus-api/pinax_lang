@@ -1,0 +1,7 @@
+rem run
+use io
+use hash
+use fmt
+"hello" hash.crc32 fmt.hex io.println
+"hello" hash.fnv1a fmt.hex io.println
+"hello" hash.hash64 fmt.hex io.println

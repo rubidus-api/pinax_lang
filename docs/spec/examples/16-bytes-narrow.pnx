@@ -1,0 +1,4 @@
+rem fault
+use bytes
+buffer b 8
+300 b bytes.put_u8 or_else (e) end
