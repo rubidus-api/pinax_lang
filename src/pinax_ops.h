@@ -142,6 +142,30 @@ PNX_OP(NEG) { return ckd_sub(&R[OP_A(w)], (int64_t)0, R[OP_B(w)]) ? PINAX_ERR_OV
 PNX_OP(ADDI) {
     return ckd_add(&R[OP_A(w)], R[OP_B(w)], (int64_t)OP_SC(w)) ? PINAX_ERR_OVERFLOW : PNX_R_OK;
 }
+PNX_OP(MULI) { return ckd_mul(&R[OP_A(w)], R[OP_B(w)], (int64_t)OP_SC(w)) ? PINAX_ERR_OVERFLOW : PNX_R_OK; }
+PNX_OP(DIVI) { // the compiler gives no 0; -1 would overflow at INT64_MIN
+    const int64_t a = R[OP_B(w)], b = OP_SC(w);
+    if (b == 0)
+        return PINAX_ERR_DIV_ZERO;
+    if (a == INT64_MIN && b == -1)
+        return PINAX_ERR_OVERFLOW;
+    R[OP_A(w)] = a / b;
+    return PNX_R_OK;
+}
+PNX_OP(MODI) {
+    const int64_t a = R[OP_B(w)], b = OP_SC(w);
+    if (b == 0)
+        return PINAX_ERR_DIV_ZERO;
+    R[OP_A(w)] = b == -1 ? 0 : a % b;
+    return PNX_R_OK;
+}
+PNX_OP(ANDI) { R[OP_A(w)] = R[OP_B(w)] & (int64_t)OP_SC(w); return PNX_R_OK; }
+PNX_OP(ORI) { R[OP_A(w)] = R[OP_B(w)] | (int64_t)OP_SC(w); return PNX_R_OK; }
+PNX_OP(XORI) { R[OP_A(w)] = R[OP_B(w)] ^ (int64_t)OP_SC(w); return PNX_R_OK; }
+PNX_OP(SHLI) { R[OP_A(w)] = (int64_t)((uint64_t)R[OP_B(w)] << (OP_SC(w) & 63)); return PNX_R_OK; }
+PNX_OP(SHRI) { R[OP_A(w)] = R[OP_B(w)] >> (OP_SC(w) & 63); return PNX_R_OK; }
+PNX_OP(USHRI) { R[OP_A(w)] = (int64_t)((uint64_t)R[OP_B(w)] >> (OP_SC(w) & 63)); return PNX_R_OK; }
+PNX_OP(WMULI) { R[OP_A(w)] = (int64_t)((uint64_t)R[OP_B(w)] * (uint64_t)(int64_t)OP_SC(w)); return PNX_R_OK; }
 PNX_OP(WADD) { R[OP_A(w)] = (int64_t)((uint64_t)R[OP_B(w)] + (uint64_t)R[OP_C(w)]); return PNX_R_OK; }
 PNX_OP(WSUB) { R[OP_A(w)] = (int64_t)((uint64_t)R[OP_B(w)] - (uint64_t)R[OP_C(w)]); return PNX_R_OK; }
 PNX_OP(WMUL) { R[OP_A(w)] = (int64_t)((uint64_t)R[OP_B(w)] * (uint64_t)R[OP_C(w)]); return PNX_R_OK; }

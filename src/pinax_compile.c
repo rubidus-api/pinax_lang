@@ -102,6 +102,7 @@ typedef struct local {
     tid     type;
     uint8_t reg;
     uint8_t state; // L_PLAIN, L_OWNS, L_MOVED
+    bool    stored; // `to` stored into it after it was made (a loop's element, see end_do)
 } local;
 
 // The types of the stack at one moment; `hidden` marks the entries that belong to a running
@@ -135,6 +136,7 @@ typedef struct block {
     uint32_t dst, full;  // map_into, filter_into: the list filled, and the jumps taken when it is full
     name     dst_name;
     uint8_t  val, idx;   // first: the register of the element found; each_index: the counter
+    uint32_t elem_local; // the named local the element of a range goes to, or NONE
     tid      element;
     tid      acc_type;
     uint32_t floor_mark;
@@ -1324,6 +1326,8 @@ static bool stack_word(comp *c, int which) {
     }
 }
 
+#define OP_SC_OF(w) ((int32_t)(int8_t)((w) >> 24))
+
 static bool fits8(int64_t v) {
     return v >= INT8_MIN && v <= INT8_MAX;
 }
@@ -1341,9 +1345,19 @@ static bool arith_word(comp *c, uint32_t op) {
                                  : "this word takes two int values, or two of the same declared type");
     const uint32_t dst = slot_of(c, f->depth - 2);
     uint32_t ra, rb;
+    // a small constant on top goes into the instruction (C, a signed byte)
+    const uint32_t with_imm = op == PNX_MUL ? PNX_MULI : op == PNX_DIV ? PNX_DIVI : op == PNX_MOD ? PNX_MODI
+                            : op == PNX_AND ? PNX_ANDI : op == PNX_OR  ? PNX_ORI  : op == PNX_XOR ? PNX_XORI
+                            : op == PNX_SHL ? PNX_SHLI : op == PNX_SHR ? PNX_SHRI : op == PNX_USHR ? PNX_USHRI
+                            : op == PNX_WMUL ? PNX_WMULI : NONE;
     if ((op == PNX_ADD || op == PNX_SUB) && b->kind == E_CONST && fits8(op == PNX_ADD ? b->value : -b->value)) {
         const int64_t imm = op == PNX_ADD ? b->value : -b->value;
         if (!reg_of(c, f->depth - 2, &ra) || emit_def(c, PNX_ABC(PNX_ADDI, dst, ra, (uint8_t)(int8_t)imm), BANK_I) == NONE)
+            return false;
+    } else if (with_imm != NONE && b->kind == E_CONST && fits8(b->value) &&
+               !((op == PNX_DIV || op == PNX_MOD) && b->value == 0)) { // a zero divisor keeps its fault at run time
+        if (!reg_of(c, f->depth - 2, &ra) ||
+            emit_def(c, PNX_ABC(with_imm, dst, ra, (uint8_t)(int8_t)b->value), BANK_I) == NONE)
             return false;
     } else {
         if (!reg_of(c, f->depth - 2, &ra) || !reg_of(c, f->depth - 1, &rb) ||
@@ -1859,6 +1873,7 @@ static bool store_local(comp *c, name n) {
                 return type_error(c, "this local still holds an owned value; give that on first");
             l->state = give(c, top) ? L_OWNS : L_PLAIN;
         }
+        l->stored = true;
         // values on the stack that were read from this local must keep the old value
         for (uint32_t k = 0; k < top; ++k) {
             if (f->stack[k].kind == E_LOCAL && bank_of(f->stack[k].type) == bank && f->stack[k].reg == l->reg &&
@@ -2737,7 +2752,16 @@ static bool loop_back(comp *c, uint32_t head, uint32_t cur, int step) {
     const uint32_t at = emit(c, 0);
     if (at == NONE)
         return false;
-    *code_at(f, at) = PNX_AX(PNX_JMP, (uint32_t)((int32_t)head - (int32_t)(at + 1)));
+    // Every caller begins its loop with a test that skips one word (JLT cur lim, JGEI cur 1),
+    // then a jump out to the place right after this one. Instead of jumping back to that test,
+    // test here and go on past it: one instruction less a turn (the loop is rotated).
+    const uint32_t first = *code_at(f, head), op = first & 0xffu;
+    const int32_t  back = (int32_t)(head + 2) - (int32_t)(at + 1);
+    if ((op == PNX_JLT || op == PNX_JGEI) && first >> 24 == 1 && back >= INT8_MIN &&
+        (*code_at(f, head + 1) & 0xffu) == PNX_JMP)
+        *code_at(f, at) = PNX_ABC(op, (first >> 8) & 0xffu, (first >> 16) & 0xffu, (uint8_t)(int8_t)back);
+    else
+        *code_at(f, at) = PNX_AX(PNX_JMP, (uint32_t)((int32_t)head - (int32_t)(at + 1)));
     return true;
 }
 
@@ -2892,6 +2916,7 @@ static bool do_block(comp *c) {
         b->acc_type = acc->type;
     }
     b->head = f->code.n;
+    b->elem_local = NONE;
     f->def_at = NONE;
     // where the element goes: a named parameter, or the stack
     uint32_t reg = 0;
@@ -2902,6 +2927,8 @@ static bool do_block(comp *c) {
             if (!l)
                 return false;
             reg = l->reg;
+            if (kind == STEM_RANGE)
+                b->elem_local = (uint32_t)(l - f->locals);
         } else {
             if (!push_slot(c, element))
                 return false;
@@ -2987,6 +3014,17 @@ static bool end_do(comp *c, block *b) {
             return false;
         if (!loop_back(c, b->head, b->cur, b->use == USE_TIMES ? -1 : stem_takes(b->stem) ? 0 : 1))
             return false;
+        // A range whose element is a named local the body never stores into: after the first
+        // turn the local itself counts (the copy at the top runs once). The rotated loop ends
+        // ADDI cur, CHECK, JLT cur lim; those name the local instead and jump past the copy.
+        const uint32_t end = f->code.n;
+        if (b->elem_local != NONE && !f->locals[b->elem_local].stored && end >= 3 &&
+            (*code_at(f, end - 1) & 0xffu) == PNX_JLT && (*code_at(f, end - 3) & 0xffu) == PNX_ADDI &&
+            (*code_at(f, b->head + 2) & 0xffu) == PNX_MOVI) {
+            const uint32_t reg = f->locals[b->elem_local].reg, back = *code_at(f, end - 1);
+            *code_at(f, end - 3) = PNX_ABC(PNX_ADDI, reg, reg, 1);
+            *code_at(f, end - 1) = PNX_ABC(PNX_JLT, reg, b->lim, (uint8_t)(int8_t)(OP_SC_OF(back) + 1));
+        }
     }
     land(c, &b->exits);
     if (b->full != NONE) { // the list was full: the word fails
