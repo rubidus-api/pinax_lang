@@ -25,6 +25,24 @@ typedef struct pnx_scell {
 
 #define PNX_SNEXT_DONE UINT64_MAX // offset of a sequence that is used up
 
+// The pattern matcher of the module ptn (pinax_ptn.c). pnx_ptn_find looks for the first match
+// at or after `from`: 1 found (caps set), 0 none, -1 a malformed pattern, -2 too many steps.
+#define PNX_PTN_CAPS 9
+#define PNX_PTN_MAX 255
+typedef struct pnx_ptn_caps {
+    uint32_t n, at, len;
+    uint32_t start[PNX_PTN_CAPS], clen[PNX_PTN_CAPS];
+} pnx_ptn_caps;
+int  pnx_ptn_find(const uint8_t *s, uint32_t length, uint32_t from, const uint8_t *pat, uint32_t plen, pnx_ptn_caps *caps,
+                  uint64_t *steps);
+bool pnx_ptn_check(const uint8_t *pat, uint32_t plen, const char **why);
+
+// What the last ptn.match of a run found, for ptn.capture: the whole match and the captures.
+typedef struct pnx_ptn_found {
+    pnx_scell cap[1 + PNX_PTN_CAPS];
+    uint32_t  n; // 0: no match yet; else 1 + the captures
+} pnx_ptn_found;
+
 typedef struct pnx_frame {
     uint32_t pc, int_base, str_base, reserved;
 } pnx_frame;
@@ -120,6 +138,7 @@ typedef struct pnx_task {
     pnx_scell *sbank;
     pnx_frame *ctrl;
     uint32_t   int_slots, str_slots, depth_max, region_base, region_bytes;
+    pnx_ptn_found ptn; // its last ptn.match
 } pnx_task;
 
 // What a load replaces, kept so that a failed load can put it back.
@@ -223,6 +242,7 @@ struct pinax_state {
     pnx_handle_slot *handles;
     uint32_t         n_handle_types, handle_slots, handle_free, handles_open, handles_peak;
     uint32_t         run_serial; // counts runs; see pnx_handle_slot.run
+    pnx_ptn_found    ptn;        // the main run's last ptn.match
 };
 
 // The instruction table as data: operand kinds, shape, second word (pinax_code.h).
@@ -253,6 +273,7 @@ uint64_t pnx_hash(const uint8_t key[16], const uint8_t *bytes, uint32_t length);
 uint64_t pnx_hash_kind(uint32_t kind, const uint8_t *bytes, uint32_t length);
 int      pnx_encode(uint32_t kind, const uint8_t *in, uint32_t length, uint8_t *out, uint64_t cap, uint64_t *written);
 // The name of an error number as a view into the interpreter's static text.
+
 extern const char pnx_static_text[];
 extern const uint32_t pnx_static_len; // bytes of pnx_static_text
 

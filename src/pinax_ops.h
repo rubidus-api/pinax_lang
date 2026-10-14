@@ -919,6 +919,119 @@ PNX_OP(RPADR) {
     return pnx_append_padded(st, &S[OP_A(w)], pnx_view_bytes(st, s), s.length, R[OP_C(w)], ' ', true);
 }
 
+// ---- the module ptn (RFC-0016 S3) ------------------------------------------------------------
+
+PNX_INLINE pnx_ptn_found *pnx_ptn_now(pinax_state *st) {
+    return st->task ? &st->task->ptn : &st->ptn;
+}
+// The first match in `s` at or after `from`, its captures kept for ptn.capture as views of s.
+// PNX_R_OK found, PNX_R_FAILED none, or a fault: a malformed pattern, or one that went back
+// too often.
+PNX_INLINE int pnx_ptn_run(pinax_state *st, pnx_scell s, uint32_t from, pnx_scell pat, pnx_ptn_caps *caps) {
+    uint64_t  steps = 0;
+    const int r = pnx_ptn_find(pnx_view_bytes(st, s), s.length, from, pnx_view_bytes(st, pat), pat.length, caps, &steps);
+    st->charge += steps;
+    if (r < 0)
+        return r == -1 ? PINAX_ERR_FORMAT : PINAX_ERR_DEPTH;
+    if (!r)
+        return PNX_R_FAILED;
+    pnx_ptn_found *f = pnx_ptn_now(st);
+    f->cap[0] = (pnx_scell){s.segment, caps->len, s.offset + caps->at};
+    for (uint32_t k = 0; k < caps->n; ++k)
+        f->cap[k + 1] = (pnx_scell){s.segment, caps->clen[k], s.offset + caps->start[k]};
+    f->n = 1 + caps->n;
+    return PNX_R_OK;
+}
+PNX_OP(PMATCH) {
+    pnx_ptn_caps caps;
+    const int    r = pnx_ptn_run(st, S[OP_B(w)], 0, S[OP_C(w)], &caps);
+    if (r == PNX_R_OK)
+        S[OP_A(w)] = pnx_ptn_now(st)->cap[0];
+    else if (r == PNX_R_FAILED)
+        st->fail = PINAX_ERR_NOT_FOUND;
+    return r;
+}
+// Capture R[B] of the last match (0: the whole match); none such is a fault.
+PNX_OP(PCAP) {
+    const pnx_ptn_found *f = pnx_ptn_now(st);
+    const int64_t        k = R[OP_B(w)];
+    if (k < 0 || (uint64_t)k >= f->n)
+        return PINAX_ERR_RANGE;
+    S[OP_A(w)] = f->cap[k];
+    return PNX_R_OK;
+}
+// A: what is left to search; B: the next match. An empty match moves on by a byte.
+PNX_OP(PNEXT) {
+    pnx_scell *rest = &S[OP_A(w)];
+    if (rest->offset == PNX_SNEXT_DONE)
+        return PNX_R_FAILED;
+    pnx_ptn_caps caps;
+    const int    r = pnx_ptn_run(st, *rest, 0, S[OP_C(w)], &caps);
+    if (r != PNX_R_OK) {
+        if (r == PNX_R_FAILED)
+            *rest = (pnx_scell){PNX_SEG_EMPTY, 0, PNX_SNEXT_DONE};
+        return r;
+    }
+    S[OP_B(w)] = pnx_ptn_now(st)->cap[0];
+    uint32_t past = caps.at + caps.len;
+    if (caps.len == 0 && past == rest->length) { // nothing after an empty match at the end
+        *rest = (pnx_scell){PNX_SEG_EMPTY, 0, PNX_SNEXT_DONE};
+        return PNX_R_OK;
+    }
+    if (caps.len == 0)
+        ++past;
+    rest->offset += past;
+    rest->length -= past;
+    return PNX_R_OK;
+}
+// A new str in the region: B with every match of pattern C replaced by the str in register x,
+// where %0 is the match, %1 to %9 its captures and %% a %.
+PNX_OP(PREPL) {
+    const pnx_scell s = S[OP_B(w)], pat = S[OP_C(w)], with = S[x];
+    const uint8_t  *bytes = pnx_view_bytes(st, s), *to = pnx_view_bytes(st, with);
+    pnx_scell       out = {PNX_SEG_REGION, 0, st->region_used};
+    uint32_t        at = 0;
+    while (at <= s.length) {
+        pnx_ptn_caps caps;
+        const int    r = pnx_ptn_run(st, s, at, pat, &caps);
+        if (r == PNX_R_FAILED)
+            break;
+        if (r != PNX_R_OK)
+            return r;
+        int e = pnx_region_append(st, &out, bytes + at, caps.at - at);
+        for (uint32_t k = 0; e == PNX_R_OK && k < with.length; ++k) {
+            if (to[k] != '%' || k + 1 == with.length) {
+                e = pnx_region_append(st, &out, to + k, 1);
+                continue;
+            }
+            const uint8_t d = to[++k];
+            if (d >= '0' && d <= '9' && (uint32_t)(d - '0') <= caps.n) {
+                const uint32_t from = d == '0' ? caps.at : caps.start[d - '1'], n = d == '0' ? caps.len : caps.clen[d - '1'];
+                e = pnx_region_append(st, &out, bytes + from, n);
+            } else if (d == '%') {
+                e = pnx_region_append(st, &out, to + k, 1);
+            } else {
+                e = pnx_region_append(st, &out, to + k - 1, 2);
+            }
+        }
+        if (e != PNX_R_OK)
+            return e;
+        at = caps.at + caps.len;
+        if (caps.len == 0) { // an empty match: the byte after it is kept and the search moves on
+            if (at < s.length && (e = pnx_region_append(st, &out, bytes + at, 1)) != PNX_R_OK)
+                return e;
+            ++at;
+        }
+    }
+    if (at < s.length) {
+        const int e = pnx_region_append(st, &out, bytes + at, s.length - at);
+        if (e != PNX_R_OK)
+            return e;
+    }
+    S[OP_A(w)] = out;
+    return PNX_R_OK;
+}
+
 // ---- the modules hash and encode (RFC-0016 S1) ---------------------------------------------
 
 PNX_OP(SHASH) {

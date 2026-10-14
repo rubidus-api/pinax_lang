@@ -34,7 +34,7 @@ enum { B_IF, B_LOOP, B_ORELSE, B_CASE, B_OF, B_DO };
 enum {
     STEM_RANGE, STEM_BYTES, STEM_TIMES, STEM_COLL, STEM_WORDS, STEM_ROWS, STEM_STRS,
     STEM_LINES, STEM_SPLIT, STEM_SPLIT_BYTE, // like STEM_WORDS, these take their next piece off the string
-    STEM_CHARS
+    STEM_CHARS, STEM_PTN // ptn.matches: the string and its pattern, like STEM_SPLIT
 };
 enum { GK_SCALAR, GK_ARRAY, GK_LIST, GK_BUFFER, GK_INDEX, GK_QUEUE, GK_POOL, GK_TASKS };
 enum { L_PLAIN, L_OWNS, L_MOVED }; // what a local holds of a value that must be given exactly once
@@ -69,6 +69,7 @@ typedef struct entry {
     bool    owned;   // a value that must be given on (RFC-0008 section 5.3), fresh on the stack
     uint8_t src;     // read from this local (its number plus one): lent, or given when it reaches a taker
     uint8_t born;    // a str: the marks made before it (fn.marks then); a mark: its own number
+    uint16_t lit;    // pushed by a string literal or const: its constant number plus one
     int64_t value;   // E_CONST
 } entry;
 
@@ -1246,7 +1247,8 @@ enum {
     BW_HEX, BW_BIN, BW_HEX_PAD, BW_ZERO_PAD, BW_PAD_LEFT, BW_PAD_RIGHT, BW_CALL, BW_MARK, BW_RELEASE, BW_REGION_FREE,
     BW_SPAN, BW_CHARS, BW_JOIN_INTO, BW_UPPER, BW_LOWER, BW_REPEAT, BW_TO_INT_BASE, BW_IS_UTF8, BW_CHAR_COUNT,
     BW_REPLACE_INTO, BW_APPEND_HEX, BW_CRC32, BW_FNV1A, BW_HASH64, BW_BASE64_ENCODE, BW_BASE64_DECODE,
-    BW_HEX_ENCODE, BW_HEX_DECODE, BW_URL_ENCODE, BW_URL_DECODE, BW_TRUNCATE
+    BW_HEX_ENCODE, BW_HEX_DECODE, BW_URL_ENCODE, BW_URL_DECODE, BW_TRUNCATE, BW_PTN_IS_MATCH, BW_PTN_MATCH,
+    BW_PTN_CAPTURE, BW_PTN_MATCHES, BW_PTN_REPLACE
 };
 static const struct builtin {
     const char *name;
@@ -1291,6 +1293,8 @@ static const struct builtin {
     {"hex_encode", BW_HEX_ENCODE, 4}, {"hex_decode", BW_HEX_DECODE, 4},
     {"url_encode", BW_URL_ENCODE, 4}, {"url_decode", BW_URL_DECODE, 4},
     {"truncate", BW_TRUNCATE, 0},
+    {"is_match", BW_PTN_IS_MATCH, 6}, {"match", BW_PTN_MATCH, 6},   {"capture", BW_PTN_CAPTURE, 6},
+    {"matches", BW_PTN_MATCHES, 6}, {"replace", BW_PTN_REPLACE, 6},
     {"len", BW_LEN, 1},             {"is_empty", BW_IS_EMPTY, 1},  {"take", BW_TAKE, 1},
 };
 
@@ -1300,7 +1304,7 @@ static const struct builtin {
 // The standard modules, part of the language: their number in the builtin table, or 0.
 static uint8_t standard_module(name n) {
     return name_is(n, "str") ? 1 : name_is(n, "fmt") ? 2 : name_is(n, "hash") ? 3 : name_is(n, "encode") ? 4
-         : name_is(n, "bytes") ? 5 : 0;
+         : name_is(n, "bytes") ? 5 : name_is(n, "ptn") ? 6 : 0;
 }
 
 static const struct builtin *find_builtin(name n, uint8_t module) {
@@ -2835,7 +2839,7 @@ static bool stem_begin(comp *c, uint8_t *kind, uint8_t *cur, uint8_t *lim, uint1
         *element = TY_STR;
         return true;
     }
-    if (stem.op == STEM_SPLIT) { // the string and, above it, the separator
+    if (stem.op == STEM_SPLIT || stem.op == STEM_PTN) { // the string and, above it, the separator
         f->stack[f->depth - 2].hidden = f->stack[f->depth - 1].hidden = true;
         *src = (uint8_t)slot_of(c, f->depth - 2);
         *lim = (uint8_t)slot_of(c, f->depth - 1);
@@ -2866,13 +2870,14 @@ static bool stem_begin(comp *c, uint8_t *kind, uint8_t *cur, uint8_t *lim, uint1
 // Stems that hand out pieces of a string until none is left.
 static bool stem_takes(uint8_t kind) {
     return kind == STEM_WORDS || kind == STEM_LINES || kind == STEM_SPLIT || kind == STEM_SPLIT_BYTE ||
-           kind == STEM_CHARS;
+           kind == STEM_CHARS || kind == STEM_PTN;
 }
 
 // Takes the next piece into `reg`; the instruction after it runs when there is none.
 static bool stem_take(comp *c, uint8_t kind, uint32_t reg, uint32_t src, uint32_t cur, uint32_t lim) {
     return emit(c, kind == STEM_WORDS   ? PNX_ABC(PNX_SWORD, src, reg, 0)
                    : kind == STEM_CHARS ? PNX_ABC(PNX_SCHAR, src, reg, 0)
+                   : kind == STEM_PTN   ? PNX_ABC(PNX_PNEXT, src, reg, lim)
                    : kind == STEM_LINES ? PNX_ABC(PNX_SLINE, src, reg, 0)
                    : kind == STEM_SPLIT ? PNX_ABC(PNX_SNEXTS, src, reg, lim)
                                         : PNX_ABC(PNX_SNEXT, src, reg, cur)) != NONE;
@@ -3680,6 +3685,50 @@ static bool bytes_word(comp *c, name n) {
     return guard(c, &two, base, in, false);
 }
 
+// The words of ptn that take a pattern (RFC-0009 section 4.3). The pattern is a string
+// literal or a const name, checked here; the matcher checks it again when it runs.
+static bool ptn_word(comp *c, uint32_t id) {
+    fn *f = c->f;
+    const uint32_t args = id == BW_PTN_REPLACE ? 3 : 2;
+    if (!need(c, args))
+        return false;
+    for (uint32_t k = 1; k <= args; ++k) {
+        if (f->stack[f->depth - k].type != TY_STR)
+            return type_error(c, id == BW_PTN_REPLACE ? "replace takes a str, a pattern and the new text: s \"%d+\" \"#\" ptn.replace"
+                                                      : "this word takes a str and a pattern: s \"%d+\" ptn.match");
+    }
+    const entry pat = f->stack[f->depth - args + 1];
+    if (!pat.lit)
+        return type_error(c, "a pattern is a string literal or a const name, so that it is checked at load");
+    const pnx_sconst *k = (const pnx_sconst *)c->sconst.ptr + (pat.lit - 1);
+    const char       *why;
+    if (!pnx_ptn_check((const uint8_t *)c->strbytes.ptr + k->offset, k->length, &why))
+        return syntax(c, why);
+    for (uint32_t j = 1; j <= args; ++j) {
+        if (!settle(c, f->depth - j))
+            return false;
+    }
+    const uint32_t base = slot_of(c, f->depth - args);
+    (void)slot_of(c, f->depth - 1);
+    if (id == BW_PTN_MATCHES) // a stem over the string and the pattern
+        return push(c, (entry){.type = TY_STEM, .kind = E_SLOT, .op = STEM_PTN}) && advance(c);
+    f->depth -= args;
+    if (id == BW_PTN_REPLACE)
+        return emit(c, PNX_ABC(PNX_PREPL, base, base, base + 1)) != NONE && emit(c, base + 2) != NONE &&
+               push_slot(c, TY_STR) && advance(c);
+    if (!settle_all(c))
+        return false;
+    if (id == BW_PTN_MATCH)
+        return emit(c, PNX_ABC(PNX_PMATCH, top_slot(c, BANK_S, 1), base, base + 1)) != NONE && guard_op(c, TY_STR);
+    // is_match: 0, then 1 when the match is found (the failure word jumps past it)
+    if (!push_slot(c, TY_BOOL))
+        return false;
+    const uint32_t r = slot_of(c, f->depth - 1);
+    f->def_at = NONE;
+    return emit(c, PNX_ABX(PNX_LOADI, r, 0)) != NONE && emit(c, PNX_ABC(PNX_PMATCH, base, base, base + 1)) != NONE &&
+           emit(c, PNX_AX(PNX_JMP, 1)) != NONE && emit(c, PNX_ABX(PNX_LOADI, r, 1)) != NONE && advance(c);
+}
+
 // stem sum
 static bool do_sum(comp *c) {
     fn *f = c->f;
@@ -3821,6 +3870,23 @@ static bool builtin(comp *c, const struct builtin *w) {
         f->def_at = NONE;
         return push_slot(c, TY_STR) &&
                emit(c, PNX_ABC(PNX_SSPAN, ra, slot_of(c, f->depth - 1), (uint32_t)class.value)) != NONE && advance(c);
+    }
+    case BW_PTN_IS_MATCH:
+    case BW_PTN_MATCH:
+    case BW_PTN_MATCHES:
+    case BW_PTN_REPLACE:
+        return ptn_word(c, w->id);
+    case BW_PTN_CAPTURE: { // n capture : capture n of the last match (0: the whole match)
+        if (!need(c, 1))
+            return false;
+        if (f->stack[f->depth - 1].type != TY_INT)
+            return type_error(c, "capture takes the number of a capture: 1 ptn.capture");
+        if (!reg_of(c, f->depth - 1, &ra))
+            return false;
+        --f->depth;
+        if (!push_slot(c, TY_STR))
+            return false;
+        return emit_def(c, PNX_ABC(PNX_PCAP, slot_of(c, f->depth - 1), ra, 0), BANK_S) != NONE && advance(c);
     }
     case BW_TRUNCATE: { // n buf truncate : the buffer cut back to n bytes; more than it holds is a fault
         if (!need_coll(c, &g, &gi) || !need(c, 1))
@@ -4561,6 +4627,7 @@ static bool push_string(comp *c, uint32_t index) {
     if (!push_slot(c, TY_STR))
         return false;
     c->f->stack[c->f->depth - 1].born = 0; // the text of a literal is not in the region
+    c->f->stack[c->f->depth - 1].lit = (uint16_t)(index + 1);
     return emit_def(c, PNX_ABX(PNX_LOADKS, slot_of(c, c->f->depth - 1), index), BANK_S) != NONE;
 }
 
@@ -4740,7 +4807,7 @@ static bool body_name(comp *c) {
         if (bw)
             return builtin(c, bw);
         // not a name of the core: say so when it is a word of a module, which is written with it
-        if (find_builtin(n, 1) || find_builtin(n, 2) || find_builtin(n, 3) || find_builtin(n, 4))
+        if (find_builtin(n, 1) || find_builtin(n, 2) || find_builtin(n, 3) || find_builtin(n, 4) || find_builtin(n, 6))
             return error(c, PINAX_ERR_NOT_FOUND, "a word of a module is written with the module: str.len, fmt.hex");
         for (uint32_t k = 0; k < c->st->n_hosts; ++k) {
             if (name_eq(cname(c->st->hosts[k].name), n) && module_used(c, cname(c->st->hosts[k].module)))
