@@ -19,3 +19,4 @@
 #include "clauses/12-memory.typ"
 #include "clauses/13-modules.typ"
 #include "clauses/14-tasks.typ"
+#include "clauses/15-core.typ"

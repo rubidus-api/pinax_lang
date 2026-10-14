@@ -1,0 +1,7 @@
+rem run
+use io
+word yes (b bool gives str) b if "true" else "false" end end
+"abc" "abc" eq yes io.println              rem strings compare by their bytes
+"abc" "abd" lt yes io.println
+-1 1 u_lt yes io.println                   rem as unsigned, -1 is the largest
+true false ne yes io.println

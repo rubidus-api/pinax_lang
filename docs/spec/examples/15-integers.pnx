@@ -1,0 +1,20 @@
+rem run
+use io
+word p (s str, n int) cat (s, " = ", n) io.println end
+"7 2 floor_div" 7 2 floor_div p
+"-7 2 floor_mod" -7 2 floor_mod p
+"-1 2 u_div" -1 2 u_div p
+"4611686018427387904 4 mul_hi" 4611686018427387904 4 mul_hi p
+"12 10 bit_xor" 12 10 bit_xor p
+"1 3 shl" 1 3 shl p
+"1 64 shl" 1 64 shl p                       rem the count is taken modulo 64
+"-16 2 shr" -16 2 shr p                     rem shr keeps the sign
+"-16 60 u_shr" -16 60 u_shr p               rem u_shr fills with zeros
+"1 1 rotr" 1 1 rotr p
+"255 count_ones" 255 count_ones p
+"0 leading_zeros" 0 leading_zeros p
+"1 byte_swap" 1 byte_swap p
+"15 0 10 clamp" 15 0 10 clamp p
+"false 1 2 select" false 1 2 select p
+"9223372036854775807 2 sat_mul" 9223372036854775807 2 sat_mul p
+"9223372036854775807 2 wrap_mul" 9223372036854775807 2 wrap_mul p
