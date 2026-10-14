@@ -1,0 +1,3 @@
+rem refused
+tasks workers 2
+word demo (n int) do n drop end workers spawn or_else return end drop end

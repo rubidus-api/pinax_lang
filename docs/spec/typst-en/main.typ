@@ -18,3 +18,4 @@
 #include "clauses/11-errors.typ"
 #include "clauses/12-memory.typ"
 #include "clauses/13-modules.typ"
+#include "clauses/14-tasks.typ"

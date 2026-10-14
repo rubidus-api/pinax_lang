@@ -1,0 +1,11 @@
+rem run
+use io
+use str
+tasks lone 1
+word demo ()
+  do "step 1" io.println yield or_return "step 2" io.println end lone spawn or_else return end to t
+  0 to turns
+  loop t resume until turns 1 add to turns end     rem resume gives true when the task has ended
+  cat ("resumed ", turns 1 add, " times, done: ", t is_done) io.println
+end
+demo

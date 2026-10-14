@@ -1,0 +1,16 @@
+rem run
+use io
+tasks workers 1
+word demo ()
+  do
+    loop
+      "working" io.println
+      yield or_else (e) cat ("stopped: ", e err_text) io.println return end
+    end
+  end workers spawn or_else return end to t
+  t resume drop
+  t resume drop
+  t cancel                                 rem the task's next yield fails with cancelled
+  t resume drop
+end
+demo

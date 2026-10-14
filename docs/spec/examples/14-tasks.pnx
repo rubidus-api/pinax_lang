@@ -1,0 +1,10 @@
+rem run
+use io
+tasks workers 3
+word say (s str) s io.println end
+word demo ()
+  do "a1" say yield or_return "a2" say yield or_return "a3" say end workers spawn or_else return end drop
+  do "b1" say yield or_return "b2" say end workers spawn or_else return end drop
+  workers run_all                          rem run every task of the group until all have ended
+end
+demo

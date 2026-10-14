@@ -1,0 +1,31 @@
+rem run
+use io
+use str
+tasks workers 2
+queue jobs int 2
+list done int 8
+word producer ()
+  1 to i
+  loop
+    i 5 gt until
+    true to ok
+    i jobs put or_else (e) false to ok end
+    ok if i 1 add to i else yield or_return end   rem a full queue: let the consumer run
+  end
+end
+word consumer ()
+  0 to got
+  loop
+    got 5 ge until
+    jobs take or_else (e) -1 end to v
+    v 0 lt if yield or_return else v done push or_else (e) end got 1 add to got end
+  end
+end
+word demo ()
+  do producer end workers spawn or_else return end drop
+  do consumer end workers spawn or_else return end drop
+  workers run_all
+end
+demo
+done do (v int) v str.to_str io.print " " io.print end each
+"" io.println
