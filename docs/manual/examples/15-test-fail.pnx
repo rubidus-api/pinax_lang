@@ -1,0 +1,5 @@
+rem test-fail
+word clamp_percent (n int gives int) n 0 100 clamp end
+test inside 50 clamp_percent 50 eq assert end
+test above 150 clamp_percent 100 eq assert end
+test wrong -5 clamp_percent -5 eq assert end

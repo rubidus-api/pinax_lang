@@ -1,0 +1,19 @@
+rem run
+use io
+tasks workers 2
+word count_to (name str, n int)
+  1 to i
+  loop
+    i n gt until
+    cat (name, " ", i) io.println
+    yield or_return                         rem give the other task a turn
+    i 1 add to i
+  end
+end
+global who int
+word demo ()
+  do "ping" 3 count_to end workers spawn or_else (e) return end drop
+  do "pong" 2 count_to end workers spawn or_else (e) return end drop
+  workers run_all
+end
+demo

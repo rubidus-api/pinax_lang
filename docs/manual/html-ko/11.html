@@ -1,0 +1,59 @@
+<!DOCTYPE html>
+<html lang="ko"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>10 모듈과 자료 파일 - Pinax 매뉴얼</title><link rel="stylesheet" href="style.css"></head><body><nav class="top"><a href="index.html">처음</a> · <a href="10.html">앞</a> · <a href="12.html">다음</a> · <a href="../html-en/11.html">English</a></nav><main><h2>10 모듈과 자료 파일</h2><div class="box opening"><p><strong>먼저 알아야 할 것</strong>: 1장(<code>use</code>), 3장(서명).</p><p><strong>이 장이 답하는 물음</strong></p><ul><li>프로그램을 여러 파일로 나누려면?</li><li>모듈은 무엇을 밖에 보이고 무엇을 숨기는가?</li><li>설정 파일을 코드 없이 읽으려면?</li></ul></div><h3>10.1 모듈 만들기</h3><p>파일 하나가 모듈 하나다. 모듈의 이름은 파일 이름에서 <code>.pnx</code> 를 뗀 것이다. 밖에 보일 것에는 <code>export</code> 를 붙인다.</p><div class="example module"><p class="ex-file"><code>money.pnx</code></p><pre><code data-lang="pinax"><span style="color: #74747c">rem A small module: amounts are cents, kept apart from plain numbers.</span>
+<span style="color: #d73948">export</span> <span style="color: #d73948">type</span> cents <span style="color: #d73948">int</span>
+<span style="color: #d73948">word</span> pad2 (n <span style="color: #d73948">int</span> <span style="color: #d73948">gives</span> <span style="color: #d73948">str</span>) n <span style="color: #b60157">10</span> lt <span style="color: #d73948">if</span> <span style="color: #d73948">cat</span> (<span style="color: #198810">"0"</span>, n) <span style="color: #d73948">else</span> <span style="color: #d73948">cat</span> (n) <span style="color: #d73948">end</span> <span style="color: #d73948">end</span>
+<span style="color: #d73948">export</span> <span style="color: #d73948">word</span> of_won (won <span style="color: #d73948">int</span> <span style="color: #d73948">gives</span> cents) won <span style="color: #b60157">100</span> mul cents <span style="color: #d73948">end</span>
+<span style="color: #d73948">export</span> <span style="color: #d73948">word</span> show (c cents <span style="color: #d73948">gives</span> <span style="color: #d73948">str</span>) <span style="color: #d73948">cat</span> (c raw <span style="color: #b60157">100</span> div, <span style="color: #198810">"."</span>, c raw <span style="color: #b60157">100</span> mod pad2) <span style="color: #d73948">end</span>
+</code></pre></div><p><code>cents</code> 는 <code>int</code> 위의 <strong>선언한 타입</strong>이다. 표현은 정수이지만 <code>int</code> 와 섞이지 않는다. <code>raw</code> 가 바탕의 정수를 꺼낸다.</p><h3>10.2 모듈 쓰기</h3><p><code>use money</code> 를 쓰면 <code>money.of_won</code> 처럼 경로로 쓴다. 내보낸 타입 <code>cents</code> 는 이름만으로 쓴다. <code>pnx</code> 는 <code>money</code> 가 등록된 모듈이 아니면 프로그램 옆의 <code>money.pnx</code> 를 먼저 적재한다.</p><div class="example run"><p class="ex-file"><code>10-use.pnx</code></p><pre><code data-lang="pinax"><span style="color: #d73948">use</span> io
+<span style="color: #d73948">use</span> money
+<span style="color: #d73948">word</span> total (a cents, b cents <span style="color: #d73948">gives</span> cents) a b add <span style="color: #d73948">end</span>
+<span style="color: #d73948">cat</span> (<span style="color: #198810">"total "</span>, <span style="color: #b60157">12</span> money.of_won <span style="color: #b60157">3</span> money.of_won total money.show) io.println
+</code></pre><p class="ex-label">출력</p><pre><code data-lang="text">$ pnx 10-use.pnx
+total 15.00
+</code></pre></div><div class="example run"><p class="ex-file"><code>10-use-as.pnx</code></p><pre><code data-lang="pinax"><span style="color: #d73948">use</span> io
+<span style="color: #d73948">use</span> money <span style="color: #d73948">as</span> m
+<span style="color: #d73948">cat</span> (<span style="color: #198810">"price "</span>, <span style="color: #b60157">7</span> m.of_won m.show) io.println
+</code></pre><p class="ex-label">출력</p><pre><code data-lang="text">$ pnx 10-use-as.pnx
+price 7.00
+</code></pre></div><p>내보내지 않은 <code>pad2</code> 는 밖에서 보이지 않는다.</p><div class="example refused"><p class="ex-file"><code>10-private.pnx</code></p><pre><code data-lang="pinax"><span style="color: #d73948">use</span> money
+<span style="color: #b60157">5</span> money.pad2 drop
+</code></pre><p class="ex-label">거절</p><pre><code data-lang="text">$ pnx 10-private.pnx
+10-private.pnx:2:3: the module exports nothing of this name
+</code></pre></div><div class="box mistake"><p class="box-title">흔한 오해: <code>cents</code> 도 결국 정수니까 더해도 된다</p><code>cents</code> 와 <code>int</code> 를 더하면 거절된다. 같은 선언한 타입끼리만 더하고 뺀다. 단위가 다른 수를 섞는 실수를 막으려고 타입을 나눈 것이다.<div class="example refused"><p class="ex-file"><code>10-mixed.pnx</code></p><pre><code data-lang="pinax"><span style="color: #d73948">use</span> money
+<span style="color: #b60157">12</span> money.of_won <span style="color: #b60157">3</span> add drop
+</code></pre><p class="ex-label">거절</p><pre><code data-lang="text">$ pnx 10-mixed.pnx
+10-mixed.pnx:2:19: this word takes two int values, or two of the same declared type
+</code></pre></div></div><h3>10.3 자료 파일</h3><p>호스트는 소스를 <strong>자료 적재</strong>로 읽을 수 있다. 자료 적재는 선언과 값만 받고, 낱말 정의와 부르기, 제어를 모두 거절한다. 그래서 믿지 못하는 설정 파일을 읽어도 그 파일이 코드를 돌릴 수 없다.</p><div class="example embed"><p class="ex-file"><code>10-data.c</code></p><pre><code data-lang="c"><span style="color: #d73948">#include</span> <span style="color: #198810">"</span><span style="color: #198810">pinax.h</span><span style="color: #198810">"</span>
+<span style="color: #d73948">#include</span> <span style="color: #198810">&lt;</span><span style="color: #198810">stdio.h</span><span style="color: #198810">&gt;</span>
+<span style="color: #d73948">#include</span> <span style="color: #198810">&lt;</span><span style="color: #198810">string.h</span><span style="color: #198810">&gt;</span>
+
+<span style="color: #74747c">/*</span><span style="color: #74747c"> A settings file the host reads as data: declarations and values, no code. </span><span style="color: #74747c">*/</span>
+<span style="color: #d73948">static</span> <span style="color: #d73948">const</span> <span style="color: #d73948">char</span> settings[] <span style="color: #d73948">=</span>
+    <span style="color: #198810">"</span><span style="color: #198810">global port int</span><span style="color: #1d6c76">\n</span><span style="color: #198810">"</span>
+    <span style="color: #198810">"</span><span style="color: #198810">global name str(16)</span><span style="color: #1d6c76">\n</span><span style="color: #198810">"</span>
+    <span style="color: #198810">"</span><span style="color: #198810">8080 to port</span><span style="color: #1d6c76">\n</span><span style="color: #198810">"</span>
+    <span style="color: #198810">"</span><span style="color: #1d6c76">\"</span><span style="color: #198810">edge</span><span style="color: #1d6c76">\"</span><span style="color: #198810"> to name</span><span style="color: #1d6c76">\n</span><span style="color: #198810">"</span>;
+<span style="color: #d73948">static</span> <span style="color: #d73948">const</span> <span style="color: #d73948">char</span> hostile[] <span style="color: #d73948">=</span> <span style="color: #198810">"</span><span style="color: #198810">word boom () end</span><span style="color: #1d6c76">\n</span><span style="color: #198810">"</span>;
+
+<span style="color: #d73948">int</span> <span style="color: #4b69c6">main</span>(<span style="color: #d73948">void</span>) {
+    <span style="color: #d73948">static</span> <span style="color: #d73948">unsigned</span> <span style="color: #d73948">char</span> block[<span style="color: #b60157">1</span> <span style="color: #d73948">&lt;&lt;</span> <span style="color: #b60157">20</span>];
+    pinax_config config <span style="color: #d73948">=</span> {.struct_size <span style="color: #d73948">=</span> <span style="color: #d73948">sizeof</span> config};
+    pinax_state <span style="color: #d73948">*</span>st;
+    <span style="color: #d73948">if</span> (<span style="color: #4b69c6">pinax_open</span>((pinax_mem){block, <span style="color: #d73948">sizeof</span> block}, <span style="color: #d73948">&amp;</span>config, <span style="color: #d73948">&amp;</span>st) <span style="color: #d73948">!=</span> PINAX_OK)
+        <span style="color: #d73948">return</span> <span style="color: #b60157">1</span>;
+    <span style="color: #d73948">if</span> (<span style="color: #4b69c6">pinax_load</span>(st, <span style="color: #198810">"</span><span style="color: #198810">settings</span><span style="color: #198810">"</span>, (pinax_str){(<span style="color: #d73948">const</span> <span style="color: #d73948">unsigned</span> <span style="color: #d73948">char</span> <span style="color: #d73948">*</span>)settings, <span style="color: #4b69c6">strlen</span>(settings)}, PINAX_LOAD_DATA) <span style="color: #d73948">!=</span> PINAX_OK)
+        <span style="color: #d73948">return</span> <span style="color: #b60157">1</span>;
+    pinax_global g;
+    <span style="color: #4b69c6">pinax_global_find</span>(st, <span style="color: #198810">"</span><span style="color: #198810">port</span><span style="color: #198810">"</span>, <span style="color: #d73948">&amp;</span>g);
+    <span style="color: #4b69c6">printf</span>(<span style="color: #198810">"</span><span style="color: #198810">port: </span><span style="color: #b60157">%lld</span><span style="color: #1d6c76">\n</span><span style="color: #198810">"</span>, (<span style="color: #d73948">long</span> <span style="color: #d73948">long</span>)<span style="color: #d73948">*</span>(<span style="color: #d73948">const</span> <span style="color: #4b69c6">int64_t</span> <span style="color: #d73948">*</span>)g.ptr);
+    <span style="color: #d73948">if</span> (<span style="color: #4b69c6">pinax_load</span>(st, <span style="color: #198810">"</span><span style="color: #198810">hostile</span><span style="color: #198810">"</span>, (pinax_str){(<span style="color: #d73948">const</span> <span style="color: #d73948">unsigned</span> <span style="color: #d73948">char</span> <span style="color: #d73948">*</span>)hostile, <span style="color: #4b69c6">strlen</span>(hostile)}, PINAX_LOAD_DATA) <span style="color: #d73948">!=</span> PINAX_OK) {
+        pinax_str why <span style="color: #d73948">=</span> <span style="color: #4b69c6">pinax_error_text</span>(st);
+        <span style="color: #4b69c6">printf</span>(<span style="color: #198810">"</span><span style="color: #198810">refused: </span><span style="color: #b60157">%.*s</span><span style="color: #1d6c76">\n</span><span style="color: #198810">"</span>, (<span style="color: #d73948">int</span>)why.len, (<span style="color: #d73948">const</span> <span style="color: #d73948">char</span> <span style="color: #d73948">*</span>)why.ptr);
+    }
+    <span style="color: #4b69c6">pinax_close</span>(st);
+    <span style="color: #d73948">return</span> <span style="color: #b60157">0</span>;
+}
+</code></pre><p class="ex-label">출력</p><pre><code data-lang="text">$ ./10-data
+port: 8080
+refused: a data source defines no words and uses no modules
+</code></pre></div><p><code>pnx</code> 는 자료 적재를 하지 않는다. 자료 적재는 호스트의 일이다(14장).</p><div class="box summary"><p class="box-title">정리</p><ul><li>파일 하나가 모듈이고, <code>export</code> 한 것만 밖에서 보인다(표준 13.1, 13.2).</li><li><code>use 모듈 [as 별명]</code> 뒤에 <code>모듈.이름</code> 으로 쓴다(13.1).</li><li>선언한 타입은 같은 타입끼리만 더하고 뺀다(7.4).</li><li>자료 적재는 선언과 값만 받는다(13.4).</li></ul></div></main><nav class="bottom"><a href="index.html">처음</a> · <a href="10.html">앞</a> · <a href="12.html">다음</a> · <a href="../html-en/11.html">English</a></nav></body></html>

@@ -1,0 +1,29 @@
+/* The web editions of the Pinax spec and manual. MIT (see ../manual/LICENSE-CODE). */
+:root { --ink: #1d1d1f; --mute: #666; --line: #d4d4d8; --code: #f6f6f7; --bad: #9c3b2e; --badbg: #fbf3f1; --link: #1a4f8a; }
+@media (prefers-color-scheme: dark) {
+  :root { --ink: #e6e6e6; --mute: #a0a0a0; --line: #3a3a3e; --code: #1e1e21; --bad: #e88a7c; --badbg: #2a1c1a; --link: #8ab4f8; }
+  body { background: #141416; }
+}
+body { color: var(--ink); font: 16px/1.7 "Noto Serif CJK KR", "Noto Serif", Georgia, serif; margin: 0; }
+main { max-width: 46rem; margin: 0 auto; padding: 1rem 16px 3rem; }
+nav { max-width: 46rem; margin: 0 auto; padding: 0.6rem 16px; font: 14px "Noto Sans CJK KR", "Noto Sans", sans-serif; color: var(--mute); }
+nav.top { border-bottom: 1px solid var(--line); }
+nav.bottom { border-top: 1px solid var(--line); }
+a { color: var(--link); }
+h1, h2, h3, h4, h5 { font-family: "Noto Sans CJK KR", "Noto Sans", sans-serif; line-height: 1.35; }
+h1.doc-title { font-size: 2rem; margin-top: 2rem; }
+p.doc-sub { color: var(--mute); }
+h5 { font-size: 0.95rem; color: var(--mute); margin-bottom: 0.2rem; }
+code, pre { font-family: "D2Coding", "Noto Sans Mono", ui-monospace, monospace; font-size: 0.92em; }
+pre { background: var(--code); border: 1px solid var(--line); border-radius: 3px; padding: 0.6rem 0.8rem; overflow-x: auto; line-height: 1.45; }
+p.para { padding-left: 2.4em; text-indent: -2.4em; }
+span.pn { display: inline-block; width: 2.4em; text-indent: 0; }
+div.box { border-left: 3px solid var(--line); background: var(--code); padding: 0.4rem 0.9rem; margin: 1rem 0; }
+div.box.mistake { border-left-color: var(--bad); background: var(--badbg); }
+p.box-title { font-family: "Noto Sans CJK KR", "Noto Sans", sans-serif; font-weight: bold; margin: 0.2rem 0; }
+div.example p.ex-file, div.example p.ex-label { font: 13px "Noto Sans CJK KR", "Noto Sans", sans-serif; color: var(--mute); margin: 0.6rem 0 0.2rem; }
+div.example.refused p.ex-label, div.example.fault p.ex-label { color: var(--bad); }
+div.example.refused pre:last-child, div.example.fault pre:last-child { background: var(--badbg); }
+table { border-collapse: collapse; margin: 1rem 0; display: block; overflow-x: auto; }
+td, th { border: 1px solid var(--line); padding: 0.3rem 0.6rem; vertical-align: top; }
+ol.toc li { margin: 0.2rem 0; }

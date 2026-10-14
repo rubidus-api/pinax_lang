@@ -1,0 +1,8 @@
+rem repl
+use str
+2 3 add
+word cube (n int gives int) n n mul n mul end
+4 cube
+"pinax" str.upper
+1 0 div
+cube cube

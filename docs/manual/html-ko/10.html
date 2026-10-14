@@ -1,0 +1,58 @@
+<!DOCTYPE html>
+<html lang="ko"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>9 한 번만 쓰는 값과 구역 - Pinax 매뉴얼</title><link rel="stylesheet" href="style.css"></head><body><nav class="top"><a href="index.html">처음</a> · <a href="09.html">앞</a> · <a href="11.html">다음</a> · <a href="../html-en/10.html">English</a></nav><main><h2>9 한 번만 쓰는 값과 구역</h2><div class="box opening"><p><strong>먼저 알아야 할 것</strong>: 5장(구역, <code>mark</code>/<code>release</code>), 7장(풀의 줄), 8장(실패).</p><p><strong>이 장이 답하는 물음</strong></p><ul><li>열린 파일처럼 꼭 닫아야 하는 것을 처리기는 어떻게 지켜 주는가?</li><li>실패하는 경로에서도 닫았는지 어떻게 아는가?</li><li>글을 많이 만드는 루프는 구역을 어떻게 아껴 쓰는가?</li></ul></div><h3>9.1 넘겨주어야 하는 값</h3><p><code>file.open_read</code> 의 서명은 <code>(path str gives owned file or fail)</code> 이다. <code>owned</code> 는 이 값이 <strong>한 번만 쓰는 값</strong>이라는 뜻이다. 받은 쪽은 그 값을 모든 경로에서 정확히 한 번 <strong>넘겨줘야</strong> 한다: <code>owned</code> 로 받는 낱말(<code>file.close</code>)에 주거나, 전역에 넣거나, <code>owned</code> 결과로 돌려준다. <code>owned</code> 없이 받는 낱말(<code>file.write</code>, <code>file.read_line</code>)에는 몇 번이든 <strong>빌려줄</strong> 수 있다.</p><div class="example run"><p class="ex-file"><code>09-copy-file.pnx</code></p><pre><code data-lang="pinax"><span style="color: #d73948">use</span> io
+<span style="color: #d73948">use</span> <span style="color: #d73948">file</span>
+<span style="color: #74747c">rem Copy a file line by line. Both files are owned: each must be closed on every path.</span>
+<span style="color: #d73948">word</span> copy_lines (source <span style="color: #d73948">str</span>, target <span style="color: #d73948">str</span> <span style="color: #d73948">gives</span> n <span style="color: #d73948">int</span> <span style="color: #d73948">or</span> <span style="color: #d73948">fail</span>)
+  source <span style="color: #d73948">file</span>.open_read <span style="color: #d73948">or_fail</span> <span style="color: #d73948">to</span> src
+  target <span style="color: #d73948">file</span>.open_write <span style="color: #d73948">or_else</span> (e) src <span style="color: #d73948">file</span>.close e <span style="color: #d73948">fail</span> <span style="color: #d73948">end</span> <span style="color: #d73948">to</span> dst
+  <span style="color: #b60157">0</span> <span style="color: #d73948">to</span> n
+  <span style="color: #d73948">loop</span>
+    src <span style="color: #d73948">file</span>.read_line <span style="color: #d73948">or_else</span> (e) <span style="color: #d73948">break</span> <span style="color: #d73948">end</span> <span style="color: #d73948">to</span> line
+    <span style="color: #d73948">cat</span> (line, <span style="color: #198810">"</span><span style="color: #1d6c76">\n</span><span style="color: #198810">"</span>) dst <span style="color: #d73948">file</span>.write <span style="color: #d73948">or_else</span> (e) src <span style="color: #d73948">file</span>.close dst <span style="color: #d73948">file</span>.close e <span style="color: #d73948">fail</span> <span style="color: #d73948">end</span>
+    n <span style="color: #b60157">1</span> add <span style="color: #d73948">to</span> n
+  <span style="color: #d73948">end</span>
+  src <span style="color: #d73948">file</span>.close
+  dst <span style="color: #d73948">file</span>.close
+  n
+<span style="color: #d73948">end</span>
+<span style="color: #d73948">word</span> setup (<span style="color: #d73948">or</span> <span style="color: #d73948">fail</span>)
+  <span style="color: #198810">"in.txt"</span> <span style="color: #d73948">file</span>.open_write <span style="color: #d73948">or_fail</span> <span style="color: #d73948">to</span> f
+  <span style="color: #198810">"one</span><span style="color: #1d6c76">\n</span><span style="color: #198810">two</span><span style="color: #1d6c76">\n</span><span style="color: #198810">three</span><span style="color: #1d6c76">\n</span><span style="color: #198810">"</span> f <span style="color: #d73948">file</span>.write <span style="color: #d73948">or_else</span> (e) f <span style="color: #d73948">file</span>.close e <span style="color: #d73948">fail</span> <span style="color: #d73948">end</span>
+  f <span style="color: #d73948">file</span>.close
+<span style="color: #d73948">end</span>
+setup <span style="color: #d73948">or_else</span> (e) <span style="color: #d73948">end</span>
+<span style="color: #d73948">word</span> main () <span style="color: #d73948">cat</span> (<span style="color: #198810">"copied "</span>, <span style="color: #198810">"in.txt"</span> <span style="color: #198810">"out.txt"</span> copy_lines <span style="color: #d73948">or_else</span> (e) <span style="color: #b60157">-1</span> <span style="color: #d73948">end</span>, <span style="color: #198810">" lines"</span>) io.println <span style="color: #d73948">end</span>
+main
+</code></pre><p class="ex-label">출력</p><pre><code data-lang="text">$ pnx 09-copy-file.pnx
+copied 3 lines
+</code></pre></div><p><code>copy_lines</code> 에는 파일이 둘이고, 떠나는 길이 넷이다. 둘째 파일을 못 열면 첫째를 닫고 실패한다. 쓰다 실패하면 둘 다 닫고 실패한다. 처리기는 이 모든 경로를 적재 때 따라가서, 어느 하나라도 닫지 않으면 거절한다.</p><div class="example refused"><p class="ex-file"><code>09-forgot-close.pnx</code></p><pre><code data-lang="pinax"><span style="color: #d73948">use</span> <span style="color: #d73948">file</span>
+<span style="color: #d73948">word</span> first_line (path <span style="color: #d73948">str</span> <span style="color: #d73948">gives</span> <span style="color: #d73948">str</span> <span style="color: #d73948">or</span> <span style="color: #d73948">fail</span>)
+  path <span style="color: #d73948">file</span>.open_read <span style="color: #d73948">or_fail</span> <span style="color: #d73948">to</span> f
+  f <span style="color: #d73948">file</span>.read_line <span style="color: #d73948">or_fail</span>
+<span style="color: #d73948">end</span>
+</code></pre><p class="ex-label">거절</p><pre><code data-lang="text">$ pnx 09-forgot-close.pnx
+09-forgot-close.pnx:4:20: an owned value in a local is not given on every path (close, free or store it)
+</code></pre></div><p>이 낱말은 <code>read_line</code> 이 실패하면 <code>or_fail</code> 로 떠나는데, 그 길에서 <code>f</code> 를 닫지 않는다. 성공하는 길에서도 닫지 않는다. 처리기는 <code>f</code> 를 만든 자리를 가리킨다.</p><div class="example refused"><p class="ex-file"><code>09-close-twice.pnx</code></p><pre><code data-lang="pinax"><span style="color: #d73948">use</span> <span style="color: #d73948">file</span>
+<span style="color: #d73948">word</span> f (path <span style="color: #d73948">str</span> <span style="color: #d73948">or</span> <span style="color: #d73948">fail</span>)
+  path <span style="color: #d73948">file</span>.open_read <span style="color: #d73948">or_fail</span> <span style="color: #d73948">to</span> h
+  h <span style="color: #d73948">file</span>.close
+  h <span style="color: #d73948">file</span>.close
+<span style="color: #d73948">end</span>
+</code></pre><p class="ex-label">거절</p><pre><code data-lang="text">$ pnx 09-close-twice.pnx
+09-close-twice.pnx:5:3: this local gave its owned value away; it holds nothing to read
+</code></pre></div><div class="box qa"><p class="box-title">문답</p><p><strong>물음. 결함이 나면 열린 파일은 어떻게 되는가?</strong></p><p>답. 결함으로 끝난 실행이 연 핸들은 처리기가 닫는다. 그래서 <code>owned</code> 검사는 결함이 아닌 경로들만 본다.</p></div><div class="box mistake"><p class="box-title">흔한 오해: <code>dup</code> 으로 하나 더 만들어 두면 편하다</p><code>owned</code> 값은 <code>dup</code> 으로 늘리거나 <code>drop</code> 으로 버리지 못한다. 늘리면 두 번 닫게 되고, 버리면 닫지 못한다. 지역 변수에 넣고 이름으로 빌려준다.</div><h3>9.2 구역을 아껴 쓰기</h3><p><code>cat</code> 은 새 글을 구역에 쓴다. 구역의 크기는 정해져 있으므로, 글을 계속 만드는 루프는 바퀴마다 <code>mark</code> 와 <code>release</code> 로 구역을 되돌린다. 실패해서 떠나는 길에서도 되돌린다 — <code>mark</code> 가 준 것도 한 번만 쓰는 값이기 때문이다.</p><div class="example run"><p class="ex-file"><code>09-region-loop.pnx</code></p><pre><code data-lang="pinax"><span style="color: #d73948">use</span> io
+<span style="color: #d73948">use</span> <span style="color: #d73948">str</span>
+<span style="color: #74747c">rem Make a long report in a small region: each turn gives its bytes back.</span>
+<span style="color: #d73948">buffer</span> report <span style="color: #b60157">4096</span>
+<span style="color: #d73948">word</span> build (<span style="color: #d73948">or</span> <span style="color: #d73948">fail</span>)
+  <span style="color: #b60157">1</span> <span style="color: #b60157">200</span> range <span style="color: #d73948">do</span> (i <span style="color: #d73948">int</span>)
+    <span style="color: #d73948">mark</span> <span style="color: #d73948">to</span> m
+    <span style="color: #d73948">cat</span> (<span style="color: #198810">"row "</span>, i, <span style="color: #198810">": "</span>, i i mul, <span style="color: #198810">"</span><span style="color: #1d6c76">\n</span><span style="color: #198810">"</span>) report append <span style="color: #d73948">or_else</span> (e) m release e <span style="color: #d73948">fail</span> <span style="color: #d73948">end</span>
+    m release
+  <span style="color: #d73948">end</span> each
+<span style="color: #d73948">end</span>
+build <span style="color: #d73948">or_else</span> (e) <span style="color: #d73948">cat</span> (<span style="color: #198810">"full: "</span>, e err_text) io.println <span style="color: #d73948">end</span>
+<span style="color: #d73948">cat</span> (<span style="color: #198810">"report: "</span>, report len, <span style="color: #198810">" bytes"</span>) io.println
+</code></pre><p class="ex-label">출력</p><pre><code data-lang="text">$ pnx 09-region-loop.pnx
+report: 2735 bytes
+</code></pre></div><p>버퍼에 붙인 바이트는 버퍼에 복사되므로 구역을 되돌려도 남는다.</p><div class="box summary"><p class="box-title">정리</p><ul><li><code>owned</code> 값은 모든 경로에서 정확히 한 번 넘겨준다. 빌려주기는 몇 번이든 된다(표준 12.4).</li><li>실패의 경로(<code>or_fail</code> <code>or_return</code>)와 <code>return</code> 에서도 넘겨줘야 한다(11.2).</li><li><code>owned</code> 값은 <code>dup</code> <code>drop</code> 하지 못한다(12.4).</li><li>결함이면 처리기가 핸들을 닫는다(11.3).</li><li>루프의 글은 <code>mark</code>/<code>release</code> 로 구역을 되돌린다(12.2).</li></ul></div></main><nav class="bottom"><a href="index.html">처음</a> · <a href="09.html">앞</a> · <a href="11.html">다음</a> · <a href="../html-en/10.html">English</a></nav></body></html>

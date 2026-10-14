@@ -1,0 +1,9 @@
+rem test
+use str
+word initials (name str gives str)
+  name str.trim " " str.cut to (given, family)
+  cat (given 1 str.take, family str.trim 1 str.take) str.upper
+end
+test two_names "grace hopper" initials "GH" eq assert end
+test spaces_around "  ada lovelace " initials "AL" eq assert end
+test one_name "plato" initials "P" eq assert end

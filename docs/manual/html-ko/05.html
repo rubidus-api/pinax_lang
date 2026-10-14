@@ -1,0 +1,120 @@
+<!DOCTYPE html>
+<html lang="ko"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>4 지역 변수와 흐름 - Pinax 매뉴얼</title><link rel="stylesheet" href="style.css"></head><body><nav class="top"><a href="index.html">처음</a> · <a href="04.html">앞</a> · <a href="06.html">다음</a> · <a href="../html-en/05.html">English</a></nav><main><h2>4 지역 변수와 흐름</h2><div class="box opening"><p><strong>먼저 알아야 할 것</strong>: 3장(서명, 이름 있는 입력).</p><p><strong>이 장이 답하는 물음</strong></p><ul><li>지역 변수는 언제 생기고 어디까지 보이는가?</li><li><code>if</code>, <code>loop</code>, <code>case</code> 는 어떻게 쓰고, 스택에 대해 무엇을 지켜야 하는가?</li><li>배열을 훑는 루프를 짧게 쓰는 길은?</li></ul></div><h3>4.1 지역 변수</h3><p>몸 안에서 <code>to 이름</code> 은 맨 위 값을 그 이름에 넣는다. 처음 쓰는 이름이면 그 값의 타입으로 지역 변수가 생긴다. 따로 선언하는 줄은 없다.</p><div class="example run"><p class="ex-file"><code>04-locals.pnx</code></p><pre><code data-lang="pinax"><span style="color: #d73948">use</span> io
+<span style="color: #d73948">word</span> describe (a <span style="color: #d73948">int</span>, b <span style="color: #d73948">int</span>, c <span style="color: #d73948">int</span> <span style="color: #d73948">gives</span> <span style="color: #d73948">str</span>)
+  a b add c add <span style="color: #d73948">to</span> total
+  total <span style="color: #b60157">3</span> div <span style="color: #d73948">to</span> mean
+  a b max c max <span style="color: #d73948">to</span> top
+  <span style="color: #d73948">cat</span> (<span style="color: #198810">"total "</span>, total, <span style="color: #198810">", mean "</span>, mean, <span style="color: #198810">", largest "</span>, top)
+<span style="color: #d73948">end</span>
+<span style="color: #b60157">3</span> <span style="color: #b60157">9</span> <span style="color: #b60157">6</span> describe io.println
+</code></pre><p class="ex-label">출력</p><pre><code data-lang="text">$ pnx 04-locals.pnx
+total 18, mean 6, largest 9
+</code></pre></div><p>지역 변수가 보이는 범위는 처음 넣은 자리부터 그것을 감싼 가지, 루프, 블록의 끝까지다. 가지 안에서 처음 만든 이름은 가지 밖에서 읽지 못한다. 다른 가지로 왔다면 값이 없기 때문이다.</p><div class="example refused"><p class="ex-file"><code>04-scope.pnx</code></p><pre><code data-lang="pinax"><span style="color: #d73948">use</span> io
+<span style="color: #d73948">word</span> f (n <span style="color: #d73948">int</span> <span style="color: #d73948">gives</span> <span style="color: #d73948">int</span>)
+  n <span style="color: #b60157">0</span> gt <span style="color: #d73948">if</span> n <span style="color: #b60157">2</span> mul <span style="color: #d73948">to</span> doubled <span style="color: #d73948">end</span>
+  doubled
+<span style="color: #d73948">end</span>
+</code></pre><p class="ex-label">거절</p><pre><code data-lang="text">$ pnx 04-scope.pnx
+04-scope.pnx:4:3: this name is not declared before this place
+</code></pre></div><div class="box mistake"><p class="box-title">흔한 오해: 전역과 같은 이름에 넣으면 지역 변수가 생긴다</p><code>to total</code> 의 <code>total</code> 이 전역이면 그 전역에 넣는다. 지역 변수가 생기지 않는다.<div class="example run"><p class="ex-file"><code>04-store-global.pnx</code></p><pre><code data-lang="pinax"><span style="color: #d73948">use</span> io
+<span style="color: #d73948">global</span> total <span style="color: #d73948">int</span>
+<span style="color: #d73948">word</span> add_to_total (n <span style="color: #d73948">int</span>) total n add <span style="color: #d73948">to</span> total <span style="color: #d73948">end</span>     <span style="color: #74747c">rem total is the global here</span>
+<span style="color: #b60157">3</span> add_to_total
+<span style="color: #b60157">4</span> add_to_total
+<span style="color: #d73948">cat</span> (<span style="color: #198810">"total "</span>, total) io.println
+</code></pre><p class="ex-label">출력</p><pre><code data-lang="text">$ pnx 04-store-global.pnx
+total 7
+</code></pre></div>그래서 전역의 이름과 지역 변수의 이름이 부딪칠 일은 없다. 다만 매개변수는 전역의 이름을 쓸 수 없다(3장의 가림 금지).</div><h3>4.2 갈림</h3><p><code>조건 if … else … end</code> 는 맨 위의 <code>bool</code> 을 보고 한쪽을 돈다. 두 갈래는 같은 스택을 남겨야 한다. <code>return</code> 으로 떠나는 갈래는 맞추지 않아도 된다.</p><div class="example run"><p class="ex-file"><code>04-if.pnx</code></p><pre><code data-lang="pinax"><span style="color: #d73948">use</span> io
+<span style="color: #d73948">word</span> grade (score <span style="color: #d73948">int</span> <span style="color: #d73948">gives</span> <span style="color: #d73948">str</span>)
+  score <span style="color: #b60157">90</span> ge <span style="color: #d73948">if</span> <span style="color: #198810">"A"</span> <span style="color: #d73948">return</span> <span style="color: #d73948">end</span>
+  score <span style="color: #b60157">80</span> ge <span style="color: #d73948">if</span> <span style="color: #198810">"B"</span> <span style="color: #d73948">return</span> <span style="color: #d73948">end</span>
+  score <span style="color: #b60157">70</span> ge <span style="color: #d73948">if</span> <span style="color: #198810">"C"</span> <span style="color: #d73948">else</span> <span style="color: #198810">"F"</span> <span style="color: #d73948">end</span>
+<span style="color: #d73948">end</span>
+<span style="color: #b60157">95</span> grade io.println
+<span style="color: #b60157">82</span> grade io.println
+<span style="color: #b60157">40</span> grade io.println
+</code></pre><p class="ex-label">출력</p><pre><code data-lang="text">$ pnx 04-if.pnx
+A
+B
+F
+</code></pre></div><p><code>else</code> 가 없는 <code>if</code> 는 스택을 그대로 둬야 한다. 값 하나를 남기는 <code>if</code> 에 <code>else</code> 를 빠뜨리면 거절된다.</p><div class="example refused"><p class="ex-file"><code>04-if-unequal.pnx</code></p><pre><code data-lang="pinax"><span style="color: #d73948">use</span> io
+<span style="color: #d73948">word</span> label (n <span style="color: #d73948">int</span> <span style="color: #d73948">gives</span> <span style="color: #d73948">str</span>) n <span style="color: #b60157">0</span> lt <span style="color: #d73948">if</span> <span style="color: #198810">"negative"</span> <span style="color: #d73948">end</span> <span style="color: #d73948">end</span>
+</code></pre><p class="ex-label">거절</p><pre><code data-lang="text">$ pnx 04-if-unequal.pnx
+04-if-unequal.pnx:2:51: an if without else must leave the stack as it found it
+</code></pre></div><h3>4.3 루프</h3><p><code>loop … end</code> 는 되풀이한다. 안의 <code>조건 until</code> 은 조건이 참일 때, <code>조건 while</code> 은 거짓일 때, <code>break</code> 는 조건 없이 루프를 떠난다. 한 바퀴는 스택을 그대로 둬야 한다 — 그래서 루프가 만드는 값은 지역 변수에 모은다.</p><div class="example run"><p class="ex-file"><code>04-loop.pnx</code></p><pre><code data-lang="pinax"><span style="color: #d73948">use</span> io
+<span style="color: #d73948">word</span> collatz (n <span style="color: #d73948">int</span> <span style="color: #d73948">gives</span> <span style="color: #d73948">int</span>)              <span style="color: #74747c">rem steps to reach 1</span>
+  <span style="color: #b60157">0</span> <span style="color: #d73948">to</span> steps
+  <span style="color: #d73948">loop</span>
+    n <span style="color: #b60157">1</span> eq <span style="color: #d73948">until</span>
+    n <span style="color: #b60157">2</span> mod <span style="color: #b60157">0</span> eq <span style="color: #d73948">if</span> n <span style="color: #b60157">2</span> div <span style="color: #d73948">else</span> n <span style="color: #b60157">3</span> mul <span style="color: #b60157">1</span> add <span style="color: #d73948">end</span> <span style="color: #d73948">to</span> n
+    steps <span style="color: #b60157">1</span> add <span style="color: #d73948">to</span> steps
+  <span style="color: #d73948">end</span>
+  steps
+<span style="color: #d73948">end</span>
+<span style="color: #d73948">cat</span> (<span style="color: #198810">"27 takes "</span>, <span style="color: #b60157">27</span> collatz, <span style="color: #198810">" steps"</span>) io.println
+</code></pre><p class="ex-label">출력</p><pre><code data-lang="text">$ pnx 04-loop.pnx
+27 takes 111 steps
+</code></pre></div><p>루프에 이름을 붙이면 안쪽 루프에서 바깥 루프까지 한 번에 떠날 수 있다.</p><div class="example run"><p class="ex-file"><code>04-named-loop.pnx</code></p><pre><code data-lang="pinax"><span style="color: #d73948">use</span> io
+<span style="color: #d73948">word</span> is_prime (n <span style="color: #d73948">int</span> <span style="color: #d73948">gives</span> <span style="color: #d73948">bool</span>)
+  n <span style="color: #b60157">2</span> lt <span style="color: #d73948">if</span> <span style="color: #d73948">false</span> <span style="color: #d73948">return</span> <span style="color: #d73948">end</span>
+  <span style="color: #b60157">2</span> <span style="color: #d73948">to</span> d
+  <span style="color: #d73948">loop</span>
+    d d mul n gt <span style="color: #d73948">if</span> <span style="color: #d73948">true</span> <span style="color: #d73948">return</span> <span style="color: #d73948">end</span>
+    n d mod <span style="color: #b60157">0</span> eq <span style="color: #d73948">if</span> <span style="color: #d73948">false</span> <span style="color: #d73948">return</span> <span style="color: #d73948">end</span>
+    d <span style="color: #b60157">1</span> add <span style="color: #d73948">to</span> d
+  <span style="color: #d73948">end</span>
+<span style="color: #d73948">end</span>
+<span style="color: #d73948">word</span> first_pair (target <span style="color: #d73948">int</span> <span style="color: #d73948">gives</span> <span style="color: #d73948">str</span>)       <span style="color: #74747c">rem the first a &lt; b &lt;= 20, both prime, with a + b = target</span>
+  <span style="color: #b60157">2</span> <span style="color: #d73948">to</span> a
+  <span style="color: #b60157">0</span> <span style="color: #d73948">to</span> b
+  <span style="color: #d73948">loop</span> (outer)
+    a <span style="color: #b60157">1</span> add <span style="color: #d73948">to</span> b
+    <span style="color: #d73948">loop</span>
+      b <span style="color: #b60157">20</span> gt <span style="color: #d73948">until</span>
+      a is_prime b is_prime and a b add target eq and <span style="color: #d73948">until</span> (outer)
+      b <span style="color: #b60157">1</span> add <span style="color: #d73948">to</span> b
+    <span style="color: #d73948">end</span>
+    a <span style="color: #b60157">1</span> add <span style="color: #d73948">to</span> a
+    a <span style="color: #b60157">20</span> gt <span style="color: #d73948">if</span> <span style="color: #198810">"none"</span> <span style="color: #d73948">return</span> <span style="color: #d73948">end</span>
+  <span style="color: #d73948">end</span>
+  <span style="color: #d73948">cat</span> (a, <span style="color: #198810">" + "</span>, b)
+<span style="color: #d73948">end</span>
+<span style="color: #b60157">26</span> first_pair io.println
+</code></pre><p class="ex-label">출력</p><pre><code data-lang="text">$ pnx 04-named-loop.pnx
+7 + 19
+</code></pre></div><div class="box qa"><p class="box-title">문답</p><p><strong>물음. 루프 몇 겹을 떠날지 수로 적을 수는 없는가?</strong></p><p>답. 없다. 수로 적으면 루프를 한 겹 더 감쌀 때 조용히 다른 루프를 떠나게 된다. 이름은 그런 일이 없다.</p></div><h3>4.4 고르기</h3><p><code>case</code> 는 <code>int</code> 나 <code>str</code> 를 가지의 값과 견준다. 가지 하나에 값이 여럿이면 괄호에 적는다. 맞는 가지가 없을 때 할 일은 <code>otherwise</code> 에 적는다. <code>otherwise</code> 없이 맞는 가지도 없으면 결함이다.</p><div class="example run"><p class="ex-file"><code>04-case.pnx</code></p><pre><code data-lang="pinax"><span style="color: #d73948">use</span> io
+<span style="color: #d73948">word</span> day_kind (day <span style="color: #d73948">str</span> <span style="color: #d73948">gives</span> <span style="color: #d73948">str</span>)
+  day <span style="color: #d73948">case</span>
+    (<span style="color: #198810">"sat"</span>, <span style="color: #198810">"sun"</span>) <span style="color: #d73948">of</span> <span style="color: #198810">"weekend"</span> <span style="color: #d73948">end</span>
+    (<span style="color: #198810">"mon"</span>, <span style="color: #198810">"tue"</span>, <span style="color: #198810">"wed"</span>, <span style="color: #198810">"thu"</span>, <span style="color: #198810">"fri"</span>) <span style="color: #d73948">of</span> <span style="color: #198810">"weekday"</span> <span style="color: #d73948">end</span>
+    <span style="color: #d73948">otherwise</span> <span style="color: #198810">"not a day"</span> <span style="color: #d73948">end</span>
+  <span style="color: #d73948">end</span>
+<span style="color: #d73948">end</span>
+<span style="color: #198810">"sun"</span> day_kind io.println
+<span style="color: #198810">"wed"</span> day_kind io.println
+<span style="color: #198810">"xyz"</span> day_kind io.println
+</code></pre><p class="ex-label">출력</p><pre><code data-lang="text">$ pnx 04-case.pnx
+weekend
+weekday
+not a day
+</code></pre></div><p>가지의 값은 리터럴이거나 이 소스의 <code>const</code> 여야 한다. <code>err.full</code> 이나 <code>json.key</code> 같은 모듈의 상수는 <code>case</code> 에 쓰지 못하고 <code>eq</code> 로 견준다.</p><h3>4.5 줄기와 블록</h3><p>배열이나 목록을 훑는 일은 루프 대신 <strong>줄기</strong>와 <strong>조합 낱말</strong>로 쓴다. 배열의 이름이 줄기이고, 뒤에 오는 <code>do … end</code> 블록과 <code>each</code> <code>count</code> <code>fold</code> 같은 낱말이 그것을 받는다. 블록은 그 자리에 펼쳐지므로 바깥의 지역 변수를 쓸 수 있다.</p><div class="example run"><p class="ex-file"><code>04-stems.pnx</code></p><pre><code data-lang="pinax"><span style="color: #d73948">use</span> io
+<span style="color: #d73948">use</span> <span style="color: #d73948">str</span>
+<span style="color: #d73948">array</span> temps <span style="color: #d73948">int</span> <span style="color: #b60157">7</span>
+<span style="color: #d73948">assign</span> temps (<span style="color: #b60157">12</span>, <span style="color: #b60157">15</span>, <span style="color: #b60157">9</span>, <span style="color: #b60157">21</span>, <span style="color: #b60157">18</span>, <span style="color: #b60157">7</span>, <span style="color: #b60157">14</span>)
+<span style="color: #d73948">cat</span> (<span style="color: #198810">"sum "</span>, temps sum, <span style="color: #198810">", above 13: "</span>, temps <span style="color: #d73948">do</span> (t <span style="color: #d73948">int</span> <span style="color: #d73948">gives</span> <span style="color: #d73948">bool</span>) t <span style="color: #b60157">13</span> gt <span style="color: #d73948">end</span> count) io.println
+<span style="color: #d73948">cat</span> (<span style="color: #198810">"max "</span>, temps maximum <span style="color: #d73948">or_else</span> (e) <span style="color: #b60157">0</span> <span style="color: #d73948">end</span>, <span style="color: #198810">", min "</span>, temps minimum <span style="color: #d73948">or_else</span> (e) <span style="color: #b60157">0</span> <span style="color: #d73948">end</span>) io.println
+temps <span style="color: #d73948">do</span> (t <span style="color: #d73948">int</span>, i <span style="color: #d73948">int</span>) <span style="color: #d73948">cat</span> (<span style="color: #198810">"day "</span>, i, <span style="color: #198810">": "</span>, t) io.println <span style="color: #d73948">end</span> each_index
+<span style="color: #d73948">word</span> spread (<span style="color: #d73948">gives</span> <span style="color: #d73948">int</span>) <span style="color: #b60157">0</span> temps <span style="color: #d73948">do</span> (acc <span style="color: #d73948">int</span>, t <span style="color: #d73948">int</span> <span style="color: #d73948">gives</span> <span style="color: #d73948">int</span>) acc t <span style="color: #b60157">10</span> sub abs add <span style="color: #d73948">end</span> fold <span style="color: #d73948">end</span>
+<span style="color: #d73948">cat</span> (<span style="color: #198810">"distance from 10, added up: "</span>, spread) io.println
+</code></pre><p class="ex-label">출력</p><pre><code data-lang="text">$ pnx 04-stems.pnx
+sum 96, above 13: 4
+max 21, min 7
+day 0: 12
+day 1: 15
+day 2: 9
+day 3: 21
+day 4: 18
+day 5: 7
+day 6: 14
+distance from 10, added up: 34
+</code></pre></div><p><code>lo hi range</code> 도 줄기다(<code>hi</code> 는 들지 않는다). <code>fold</code> 는 첫 값을 줄기 앞에 두고, 블록이 (지금까지의 값, 원소)를 받아 새 값을 준다.</p><div class="box summary"><p class="box-title">정리</p><ul><li><code>to 이름</code> 이 지역 변수를 만든다. 전역의 이름이면 전역에 넣는다(표준 9.4).</li><li>가지 안에서 만든 이름은 가지 밖에서 보이지 않는다(9.4).</li><li><code>if</code> 의 두 갈래와 <code>case</code> 의 가지는 같은 스택을, 루프의 한 바퀴는 들어올 때의 스택을 남긴다(10).</li><li>이름 붙은 루프는 <code>until (이름)</code> 으로 한 번에 떠난다(10.2).</li><li>배열과 목록은 줄기로 훑는다: <code>each</code> <code>each_index</code> <code>count</code> <code>fold</code> <code>sum</code> …(10.6).</li></ul></div></main><nav class="bottom"><a href="index.html">처음</a> · <a href="04.html">앞</a> · <a href="06.html">다음</a> · <a href="../html-en/05.html">English</a></nav></body></html>

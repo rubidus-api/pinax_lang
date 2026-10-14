@@ -1,0 +1,7 @@
+rem fmt
+use io
+word fizz (n int gives str)
+n 15 mod 0 eq if "FizzBuzz" return end
+   n 3 mod 0 eq if "Fizz" return end
+n 5 mod 0 eq if "Buzz" else cat (n) end
+end

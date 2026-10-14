@@ -1,0 +1,86 @@
+<!DOCTYPE html>
+<html lang="ko"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>6 컬렉션 - Pinax 매뉴얼</title><link rel="stylesheet" href="style.css"></head><body><nav class="top"><a href="index.html">처음</a> · <a href="06.html">앞</a> · <a href="08.html">다음</a> · <a href="../html-en/07.html">English</a></nav><main><h2>6 컬렉션</h2><div class="box opening"><p><strong>먼저 알아야 할 것</strong>: 4장(줄기와 블록), 5장(버퍼).</p><p><strong>이 장이 답하는 물음</strong></p><ul><li>여러 값을 담는 자리는 어떤 것들이 있고, 크기는 어떻게 정하는가?</li><li>찬 목록에 넣거나 빈 큐에서 꺼내면 무슨 일이 일어나는가?</li><li>배열을 거르거나 바꿔 다른 자리에 담으려면?</li></ul></div><p>모든 컬렉션은 선언할 때 용량이 정해지고, 상태의 덩이 안에 그 자리가 미리 잡힌다. 돌면서 자라는 저장소는 없다. 그래서 “얼마나 담을 수 있는가” 는 늘 소스에 적혀 있다.</p><h3>6.1 배열</h3><p><code>array 이름 타입 용량</code> 은 늘 가득 찬 칸의 열이다. 모든 칸이 0 으로 시작하고, <code>len</code> 은 언제나 용량이다. 칸을 읽는 것은 <code>i 배열 idx</code>, 넣는 것은 <code>값 i to 배열</code> 이다. <code>assign</code> 은 정의 밖에서 앞 칸부터 채운다.</p><div class="example run"><p class="ex-file"><code>06-array.pnx</code></p><pre><code data-lang="pinax"><span style="color: #d73948">use</span> io
+<span style="color: #d73948">use</span> <span style="color: #d73948">str</span>
+<span style="color: #d73948">const</span> days <span style="color: #b60157">7</span>
+<span style="color: #d73948">array</span> rain <span style="color: #d73948">int</span> days                         <span style="color: #74747c">rem always full: 7 cells, all 0 at first</span>
+<span style="color: #d73948">assign</span> rain (<span style="color: #b60157">0</span>, <span style="color: #b60157">5</span>, <span style="color: #b60157">12</span>, <span style="color: #b60157">0</span>, <span style="color: #b60157">3</span>)                <span style="color: #74747c">rem cells 5 and 6 stay 0</span>
+<span style="color: #b60157">8</span> <span style="color: #b60157">6</span> <span style="color: #d73948">to</span> rain                                 <span style="color: #74747c">rem value, index, to array</span>
+<span style="color: #d73948">word</span> show () rain <span style="color: #d73948">do</span> (r <span style="color: #d73948">int</span>) r <span style="color: #d73948">str</span>.to_str io.print <span style="color: #198810">" "</span> io.print <span style="color: #d73948">end</span> each <span style="color: #198810">""</span> io.println <span style="color: #d73948">end</span>
+show
+<span style="color: #d73948">cat</span> (<span style="color: #198810">"rainy days: "</span>, rain <span style="color: #d73948">do</span> (r <span style="color: #d73948">int</span> <span style="color: #d73948">gives</span> <span style="color: #d73948">bool</span>) r <span style="color: #b60157">0</span> gt <span style="color: #d73948">end</span> count, <span style="color: #198810">" of "</span>, rain len) io.println
+</code></pre><p class="ex-label">출력</p><pre><code data-lang="text">$ pnx 06-array.pnx
+0 5 12 0 3 0 8 
+rainy days: 4 of 7
+</code></pre></div><p>번호가 범위 밖이면 결함이다. 범위를 미리 알 수 없는 번호는 <code>len</code> 과 견주고 쓴다.</p><div class="example fault"><p class="ex-file"><code>06-index-range.pnx</code></p><pre><code data-lang="pinax"><span style="color: #d73948">use</span> io
+<span style="color: #d73948">array</span> week <span style="color: #d73948">int</span> <span style="color: #b60157">7</span>
+<span style="color: #d73948">word</span> day (i <span style="color: #d73948">int</span> <span style="color: #d73948">gives</span> <span style="color: #d73948">int</span>) i week idx <span style="color: #d73948">end</span>
+<span style="color: #b60157">3</span> day drop
+<span style="color: #198810">"day 3 is fine"</span> io.println
+<span style="color: #b60157">7</span> day drop
+</code></pre><p class="ex-label">결함으로 멈춤</p><pre><code data-lang="text">$ pnx 06-index-range.pnx
+day 3 is fine
+06-index-range.pnx:3: index out of range
+  i int = 7
+</code></pre></div><h3>6.2 목록</h3><p><code>list</code> 는 길이가 0 에서 용량까지 자라는 배열이다. <code>push</code> 로 끝에 넣고 <code>pop</code> 으로 끝에서 뺀다. 번호는 길이 안에서만 쓴다.</p><div class="example run"><p class="ex-file"><code>06-list.pnx</code></p><pre><code data-lang="pinax"><span style="color: #d73948">use</span> io
+<span style="color: #d73948">use</span> <span style="color: #d73948">str</span>
+<span style="color: #d73948">list</span> stack <span style="color: #d73948">int</span> <span style="color: #b60157">4</span>                            <span style="color: #74747c">rem grows from 0 to 4</span>
+<span style="color: #d73948">word</span> balanced (s <span style="color: #d73948">str</span> <span style="color: #d73948">gives</span> <span style="color: #d73948">bool</span>)            <span style="color: #74747c">rem are the brackets of s balanced?</span>
+  stack clear
+  s <span style="color: #d73948">str</span>.bytes <span style="color: #d73948">do</span> (b <span style="color: #d73948">int</span>)
+    b <span style="color: #b60157">'('</span> eq <span style="color: #d73948">if</span> b stack push <span style="color: #d73948">or_else</span> (e) <span style="color: #d73948">end</span> <span style="color: #d73948">end</span>
+    b <span style="color: #b60157">')'</span> eq <span style="color: #d73948">if</span> stack pop <span style="color: #d73948">or_else</span> (e) <span style="color: #b60157">0</span> <span style="color: #d73948">end</span> drop <span style="color: #d73948">end</span>
+  <span style="color: #d73948">end</span> each
+  stack is_empty
+<span style="color: #d73948">end</span>
+<span style="color: #d73948">word</span> check (s <span style="color: #d73948">str</span>) <span style="color: #d73948">cat</span> (s, <span style="color: #198810">" "</span>, s balanced) io.println <span style="color: #d73948">end</span>
+<span style="color: #198810">"(a(b)c)"</span> check
+<span style="color: #198810">"(a(b c)"</span> check
+</code></pre><p class="ex-label">출력</p><pre><code data-lang="text">$ pnx 06-list.pnx
+(a(b)c) true
+(a(b c) false
+</code></pre></div><p><code>push</code> 와 <code>pop</code> 은 실패할 수 있다. 찬 목록에 넣으면 <code>full</code> 로, 빈 목록에서 빼면 <code>range</code> 로 실패한다. 실패한 <code>push</code> 는 목록을 바꾸지 않는다.</p><div class="example run"><p class="ex-file"><code>06-list-full.pnx</code></p><pre><code data-lang="pinax"><span style="color: #d73948">use</span> io
+<span style="color: #d73948">list</span> two <span style="color: #d73948">int</span> <span style="color: #b60157">2</span>
+<span style="color: #d73948">word</span> fill (<span style="color: #d73948">or</span> <span style="color: #d73948">fail</span>) <span style="color: #b60157">1</span> two push <span style="color: #d73948">or_fail</span> <span style="color: #b60157">2</span> two push <span style="color: #d73948">or_fail</span> <span style="color: #b60157">3</span> two push <span style="color: #d73948">or_fail</span> <span style="color: #d73948">end</span>
+fill <span style="color: #d73948">or_else</span> (e) <span style="color: #d73948">cat</span> (<span style="color: #198810">"the third push failed: "</span>, e err_text) io.println <span style="color: #d73948">end</span>
+<span style="color: #d73948">cat</span> (<span style="color: #198810">"the list holds "</span>, two len) io.println
+</code></pre><p class="ex-label">출력</p><pre><code data-lang="text">$ pnx 06-list-full.pnx
+the third push failed: full
+the list holds 2
+</code></pre></div><div class="box qa"><p class="box-title">문답</p><p><strong>물음. 용량을 넉넉히 잡으면 메모리를 버리지 않는가?</strong></p><p>답. 버린다. 그러나 그 양이 소스에 보이고, 적재할 때 정해진다. 돌다가 메모리가 모자라 멈추는 일 대신 <code>push</code> 의 실패로 드러나고, 그 실패는 다뤄야만 적재된다.</p></div><h3>6.3 큐</h3><p><code>queue</code> 는 먼저 넣은 것이 먼저 나온다. <code>put</code> 으로 넣고, <code>take</code> 로 꺼내고, <code>peek</code> 으로 꺼내지 않고 본다.</p><div class="example run"><p class="ex-file"><code>06-queue.pnx</code></p><pre><code data-lang="pinax"><span style="color: #d73948">use</span> io
+<span style="color: #d73948">use</span> <span style="color: #d73948">str</span>
+<span style="color: #d73948">queue</span> line <span style="color: #d73948">int</span> <span style="color: #b60157">3</span>
+<span style="color: #d73948">word</span> arrive (n <span style="color: #d73948">int</span>) n line put <span style="color: #d73948">or_else</span> (e) <span style="color: #d73948">cat</span> (<span style="color: #198810">"turned away: "</span>, n) io.println <span style="color: #d73948">end</span> <span style="color: #d73948">end</span>
+<span style="color: #d73948">word</span> serve () line take <span style="color: #d73948">or_else</span> (e) <span style="color: #d73948">cat</span> (<span style="color: #198810">"nobody waits: "</span>, e err_text) io.println <span style="color: #d73948">return</span> <span style="color: #d73948">end</span> <span style="color: #d73948">to</span> n  <span style="color: #d73948">cat</span> (<span style="color: #198810">"served "</span>, n) io.println <span style="color: #d73948">end</span>
+<span style="color: #b60157">1</span> arrive <span style="color: #b60157">2</span> arrive <span style="color: #b60157">3</span> arrive <span style="color: #b60157">4</span> arrive
+serve serve
+<span style="color: #b60157">5</span> arrive
+serve serve serve
+</code></pre><p class="ex-label">출력</p><pre><code data-lang="text">$ pnx 06-queue.pnx
+turned away: 4
+served 1
+served 2
+served 3
+served 5
+nobody waits: range
+</code></pre></div><div class="box mistake"><p class="box-title">흔한 오해: 큐도 <code>each</code> 로 훑는다</p>줄기가 되는 것은 배열과 목록뿐이다. 큐, 풀, 버퍼, 찾아보기는 줄기가 아니다. 큐의 원소를 차례로 다루려면 <code>take</code> 를 루프에서 부른다.<div class="example refused"><p class="ex-file"><code>06-queue-stem.pnx</code></p><pre><code data-lang="pinax"><span style="color: #d73948">use</span> io
+<span style="color: #d73948">queue</span> q <span style="color: #d73948">int</span> <span style="color: #b60157">4</span>
+q <span style="color: #d73948">do</span> (x <span style="color: #d73948">int</span>) <span style="color: #d73948">end</span> each
+</code></pre><p class="ex-label">거절</p><pre><code data-lang="text">$ pnx 06-queue-stem.pnx
+06-queue-stem.pnx:3:14: only an array or a list is a stem (not a queue, a pool, a buffer or an index)
+</code></pre></div></div><h3>6.4 거르고 바꿔 담기</h3><p><code>map_into</code> 와 <code>filter_into</code> 는 줄기의 원소를 블록으로 바꾸거나 거른 결과를 <strong>이미 있는 자리</strong>에 담는다. 새 배열이 생기지 않는다. 목적지가 목록이면 끝에 넣고, 배열이면 0 번 칸부터 쓰고 쓴 칸의 수를 준다. 목적지가 차면 실패한다.</p><div class="example run"><p class="ex-file"><code>06-map-filter.pnx</code></p><pre><code data-lang="pinax"><span style="color: #d73948">use</span> io
+<span style="color: #d73948">use</span> <span style="color: #d73948">str</span>
+<span style="color: #d73948">array</span> prices <span style="color: #d73948">int</span> <span style="color: #b60157">6</span>
+<span style="color: #d73948">assign</span> prices (<span style="color: #b60157">1200</span>, <span style="color: #b60157">450</span>, <span style="color: #b60157">3000</span>, <span style="color: #b60157">780</span>, <span style="color: #b60157">99</span>, <span style="color: #b60157">2500</span>)
+<span style="color: #d73948">list</span> cheap <span style="color: #d73948">int</span> <span style="color: #b60157">6</span>
+<span style="color: #d73948">array</span> with_tax <span style="color: #d73948">int</span> <span style="color: #b60157">6</span>
+<span style="color: #d73948">word</span> go (<span style="color: #d73948">or</span> <span style="color: #d73948">fail</span>)
+  prices <span style="color: #d73948">do</span> (p <span style="color: #d73948">int</span> <span style="color: #d73948">gives</span> <span style="color: #d73948">bool</span>) p <span style="color: #b60157">1000</span> lt <span style="color: #d73948">end</span> cheap filter_into <span style="color: #d73948">or_fail</span>
+  prices <span style="color: #d73948">do</span> (p <span style="color: #d73948">int</span> <span style="color: #d73948">gives</span> <span style="color: #d73948">int</span>) p <span style="color: #b60157">11</span> mul <span style="color: #b60157">10</span> div <span style="color: #d73948">end</span> with_tax map_into <span style="color: #d73948">or_fail</span> <span style="color: #d73948">to</span> n
+  <span style="color: #d73948">cat</span> (<span style="color: #198810">"cheap: "</span>, cheap len, <span style="color: #198810">" items, the first "</span>, <span style="color: #b60157">0</span> cheap idx) io.println
+  <span style="color: #d73948">cat</span> (<span style="color: #198810">"with tax, "</span>, n, <span style="color: #198810">" cells written, the first "</span>, <span style="color: #b60157">0</span> with_tax idx) io.println
+<span style="color: #d73948">end</span>
+go <span style="color: #d73948">or_else</span> (e) e err_text io.println <span style="color: #d73948">end</span>
+</code></pre><p class="ex-label">출력</p><pre><code data-lang="text">$ pnx 06-map-filter.pnx
+cheap: 3 items, the first 450
+with tax, 6 cells written, the first 1320
+</code></pre></div><div class="box summary"><p class="box-title">정리</p><ul><li>컬렉션의 용량은 선언이 정한다. 돌면서 자라는 저장소는 없다(표준 8.1).</li><li>배열은 늘 가득 차 있고, 목록은 길이가 자란다. 범위 밖 번호는 결함이다(8.4, 8.5).</li><li><code>push</code> <code>pop</code> <code>put</code> <code>take</code> 는 실패할 수 있다: 차면 <code>full</code>, 비면 <code>range</code>(8.5, 8.6).</li><li>배열과 목록만 줄기다(10.6).</li><li><code>map_into</code> <code>filter_into</code> 는 주어진 목적지에 담는다(10.6).</li></ul></div></main><nav class="bottom"><a href="index.html">처음</a> · <a href="06.html">앞</a> · <a href="08.html">다음</a> · <a href="../html-en/07.html">English</a></nav></body></html>

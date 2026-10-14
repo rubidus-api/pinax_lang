@@ -1,0 +1,6 @@
+rem see
+word mean (a int, b int, c int gives int)
+  a b add
+  c add
+  3 div
+end

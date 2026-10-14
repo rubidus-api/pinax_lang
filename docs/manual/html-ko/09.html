@@ -1,0 +1,75 @@
+<!DOCTYPE html>
+<html lang="ko"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>8 실패와 결함 - Pinax 매뉴얼</title><link rel="stylesheet" href="style.css"></head><body><nav class="top"><a href="index.html">처음</a> · <a href="08.html">앞</a> · <a href="10.html">다음</a> · <a href="../html-en/09.html">English</a></nav><main><h2>8 실패와 결함</h2><div class="box opening"><p><strong>먼저 알아야 할 것</strong>: 3장(서명의 <code>or fail</code>), 6장(<code>push</code> 의 실패).</p><p><strong>이 장이 답하는 물음</strong></p><ul><li>일이 잘못될 때 Pinax 는 무엇을 하는가? 예외가 없는데 어떻게 다루는가?</li><li>실패를 다루지 않고 지나칠 수 있는가?</li><li>결함은 무엇이고, 실패와 어떻게 다른가?</li></ul></div><h3>8.1 두 가지 잘못</h3><p>Pinax 는 잘못을 둘로 가른다.</p><ul><li><strong>실패</strong>는 일어날 수 있다고 본 일이다. 수로 읽히지 않는 글, 찬 목록, 없는 키. 실패할 수 있는 낱말은 서명에 <code>or fail</code> 이 있고, 부른 쪽이 <strong>바로 그 자리에서</strong> 다룬다.</li><li><strong>결함</strong>은 프로그램이 틀렸다는 뜻이다. 넘침, 0 으로 나눔, 범위 밖의 번호. 실행이 그 자리에서 멈추고 호스트가 받는다. 스크립트 안에서 결함을 잡는 길은 없다.</li></ul><p>예외가 없으므로 잘못이 낱말을 몇 겹 건너뛰어 엉뚱한 곳에서 잡히는 일도 없다.</p><h3>8.2 실패를 다루는 세 낱말</h3><p>실패할 수 있는 낱말 바로 뒤에는 <strong>지킴 낱말</strong> 하나가 와야 한다.</p><ul><li><code>or_fail</code> — 같은 까닭으로 이 낱말도 실패한다. 이 낱말의 서명에도 <code>or fail</code> 이 있어야 한다.</li><li><code>or_return</code> — 이 낱말을 조용히 끝낸다.</li><li><code>or_else … end</code> — 대신할 값을 만든다. <code>or_else (e) … end</code> 로 까닭을 받는다.</li></ul><div class="example run"><p class="ex-file"><code>08-parse.pnx</code></p><pre><code data-lang="pinax"><span style="color: #d73948">use</span> io
+<span style="color: #d73948">use</span> <span style="color: #d73948">str</span>
+<span style="color: #74747c">rem Read "name,score" lines; a bad line is reported, not fatal.</span>
+<span style="color: #d73948">word</span> parse (line <span style="color: #d73948">str</span> <span style="color: #d73948">gives</span> name <span style="color: #d73948">str</span>, score <span style="color: #d73948">int</span> <span style="color: #d73948">or</span> <span style="color: #d73948">fail</span>)
+  line <span style="color: #198810">","</span> <span style="color: #d73948">str</span>.try_cut <span style="color: #d73948">or_fail</span> <span style="color: #d73948">to</span> (n, s)              <span style="color: #74747c">rem no comma: fail the same way</span>
+  s <span style="color: #d73948">str</span>.trim <span style="color: #d73948">str</span>.to_int <span style="color: #d73948">or_fail</span> <span style="color: #d73948">to</span> v                  <span style="color: #74747c">rem not a number: fail</span>
+  v <span style="color: #b60157">0</span> lt v <span style="color: #b60157">100</span> gt <span style="color: #d73948">or</span> <span style="color: #d73948">if</span> <span style="color: #d73948">err</span>.range <span style="color: #d73948">fail</span> <span style="color: #d73948">end</span>            <span style="color: #74747c">rem our own rule: 0..100</span>
+  n <span style="color: #d73948">str</span>.trim v
+<span style="color: #d73948">end</span>
+<span style="color: #d73948">word</span> report (line <span style="color: #d73948">str</span>)
+  line parse <span style="color: #d73948">or_else</span> (e) <span style="color: #d73948">cat</span> (<span style="color: #198810">"skipped </span><span style="color: #1d6c76">\"</span><span style="color: #198810">"</span>, line, <span style="color: #198810">"</span><span style="color: #1d6c76">\"</span><span style="color: #198810">: "</span>, e err_text) io.println <span style="color: #d73948">return</span> <span style="color: #d73948">end</span> <span style="color: #d73948">to</span> (name, score)
+  <span style="color: #d73948">cat</span> (name, <span style="color: #198810">" scored "</span>, score) io.println
+<span style="color: #d73948">end</span>
+<span style="color: #d73948">text</span><span style="color: #198810"> </span><span style="color: #4b69c6">END</span>
+<span style="color: #198810">kim, 91</span>
+<span style="color: #198810">lee 77</span>
+<span style="color: #198810">park, ninety</span>
+<span style="color: #198810">choi, 140</span>
+<span style="color: #4b69c6">END</span>
+<span style="color: #d73948">str</span>.lines <span style="color: #d73948">do</span> (l <span style="color: #d73948">str</span>) l report <span style="color: #d73948">end</span> each
+</code></pre><p class="ex-label">출력</p><pre><code data-lang="text">$ pnx 08-parse.pnx
+kim scored 91
+skipped "lee 77": not_found
+skipped "park, ninety": format
+skipped "choi, 140": range
+</code></pre></div><p><code>parse</code> 는 세 곳에서 실패할 수 있고, 모두 <code>or_fail</code> 로 넘긴다. 자기 규칙(0 부터 100)은 <code>err.range fail</code> 로 실패한다. <code>report</code> 는 실패를 <code>or_else (e)</code> 로 받아 까닭과 함께 알리고 그 줄을 건너뛴다.</p><div class="example run"><p class="ex-file"><code>08-or-return.pnx</code></p><pre><code data-lang="pinax"><span style="color: #d73948">use</span> io
+<span style="color: #d73948">list</span> seen <span style="color: #d73948">int</span> <span style="color: #b60157">3</span>
+<span style="color: #d73948">word</span> note_it (n <span style="color: #d73948">int</span>)
+  n seen push <span style="color: #d73948">or_return</span>                              <span style="color: #74747c">rem full: quietly do nothing</span>
+  <span style="color: #d73948">cat</span> (<span style="color: #198810">"noted "</span>, n) io.println
+<span style="color: #d73948">end</span>
+<span style="color: #b60157">1</span> note_it <span style="color: #b60157">2</span> note_it <span style="color: #b60157">3</span> note_it <span style="color: #b60157">4</span> note_it
+</code></pre><p class="ex-label">출력</p><pre><code data-lang="text">$ pnx 08-or-return.pnx
+noted 1
+noted 2
+noted 3
+</code></pre></div><div class="example refused"><p class="ex-file"><code>08-guard-missing.pnx</code></p><pre><code data-lang="pinax"><span style="color: #d73948">use</span> <span style="color: #d73948">str</span>
+<span style="color: #d73948">word</span> twice (s <span style="color: #d73948">str</span> <span style="color: #d73948">gives</span> <span style="color: #d73948">int</span>) s <span style="color: #d73948">str</span>.to_int <span style="color: #b60157">2</span> mul <span style="color: #d73948">end</span>
+</code></pre><p class="ex-label">거절</p><pre><code data-lang="text">$ pnx 08-guard-missing.pnx
+08-guard-missing.pnx:2:43: a word that can fail is followed by or_fail, or_return or or_else
+</code></pre></div><div class="box mistake"><p class="box-title">흔한 오해: 파일의 맨 바깥에서 <code>or_fail</code> 을 쓴다</p>정의 밖의 코드는 <code>or fail</code> 서명이 없는 것으로 친다. 그래서 거기서는 <code>or_fail</code> 도 <code>or_return</code> 도 <code>return</code> 도 쓰지 못한다. 일을 낱말로 묶고, 맨 바깥에서는 <code>or_else</code> 로 받는다.<div class="example refused"><p class="ex-file"><code>08-load-code-or-fail.pnx</code></p><pre><code data-lang="pinax"><span style="color: #d73948">use</span> io
+<span style="color: #d73948">use</span> <span style="color: #d73948">str</span>
+<span style="color: #198810">"42"</span> <span style="color: #d73948">str</span>.to_int <span style="color: #d73948">or_fail</span> <span style="color: #d73948">str</span>.to_str io.println
+</code></pre><p class="ex-label">거절</p><pre><code data-lang="text">$ pnx 08-load-code-or-fail.pnx
+08-load-code-or-fail.pnx:3:17: or_fail passes the failure on, so this word needs `or fail` in its signature
+</code></pre></div></div><h3>8.3 결함</h3><div class="example fault"><p class="ex-file"><code>08-fault.pnx</code></p><pre><code data-lang="pinax"><span style="color: #d73948">use</span> io
+<span style="color: #d73948">use</span> <span style="color: #d73948">str</span>
+<span style="color: #d73948">word</span> average (total <span style="color: #d73948">int</span>, n <span style="color: #d73948">int</span> <span style="color: #d73948">gives</span> <span style="color: #d73948">int</span>) total n div <span style="color: #d73948">end</span>
+<span style="color: #d73948">cat</span> (<span style="color: #198810">"average of 10 over 4: "</span>, <span style="color: #b60157">10</span> <span style="color: #b60157">4</span> average) io.println
+<span style="color: #d73948">cat</span> (<span style="color: #198810">"average of nothing: "</span>, <span style="color: #b60157">0</span> <span style="color: #b60157">0</span> average) io.println
+</code></pre><p class="ex-label">결함으로 멈춤</p><pre><code data-lang="text">$ pnx 08-fault.pnx
+average of 10 over 4: 2
+08-fault.pnx:3: division by zero
+  total int = 0
+  n int = 0
+</code></pre></div><p><code>pnx</code> 는 결함의 갈래, 줄, 그리고 그 낱말의 지역 변수를 보여 준다. 결함으로 끝난 실행이 구역에 만든 것은 되감기고, 연 파일 같은 핸들은 처리기가 닫는다.</p><p>결함이 날 수 있는 자리에서 그것을 실패로 받고 싶으면 <code>chk_</code> 낱말을 쓴다.</p><div class="example run"><p class="ex-file"><code>08-chk.pnx</code></p><pre><code data-lang="pinax"><span style="color: #d73948">use</span> io
+<span style="color: #d73948">word</span> safe_average (total <span style="color: #d73948">int</span>, n <span style="color: #d73948">int</span> <span style="color: #d73948">gives</span> <span style="color: #d73948">int</span> <span style="color: #d73948">or</span> <span style="color: #d73948">fail</span>) total n chk_div <span style="color: #d73948">or_fail</span> <span style="color: #d73948">end</span>
+<span style="color: #d73948">word</span> show () <span style="color: #d73948">cat</span> (<span style="color: #198810">"10/4: "</span>, <span style="color: #b60157">10</span> <span style="color: #b60157">4</span> safe_average <span style="color: #d73948">or_else</span> (e) <span style="color: #b60157">-1</span> <span style="color: #d73948">end</span>, <span style="color: #198810">", 0/0: "</span>, <span style="color: #b60157">0</span> <span style="color: #b60157">0</span> safe_average <span style="color: #d73948">or_else</span> (e) <span style="color: #b60157">-1</span> <span style="color: #d73948">end</span>) io.println <span style="color: #d73948">end</span>
+show
+</code></pre><p class="ex-label">출력</p><pre><code data-lang="text">$ pnx 08-chk.pnx
+10/4: 2, 0/0: -1
+</code></pre></div><p><code>assert</code> 는 거짓이면 결함을 낸다. 부르는 쪽이 지켜야 할 약속을 적을 때 쓴다.</p><div class="example fault"><p class="ex-file"><code>08-assert.pnx</code></p><pre><code data-lang="pinax"><span style="color: #d73948">use</span> io
+<span style="color: #d73948">word</span> percent (part <span style="color: #d73948">int</span>, whole <span style="color: #d73948">int</span> <span style="color: #d73948">gives</span> <span style="color: #d73948">int</span>)
+  whole <span style="color: #b60157">0</span> gt assert                                  <span style="color: #74747c">rem a promise the caller must keep</span>
+  part <span style="color: #b60157">100</span> mul whole div
+<span style="color: #d73948">end</span>
+<span style="color: #d73948">cat</span> (<span style="color: #198810">"3 of 4: "</span>, <span style="color: #b60157">3</span> <span style="color: #b60157">4</span> percent, <span style="color: #198810">"%"</span>) io.println
+<span style="color: #d73948">cat</span> (<span style="color: #198810">"3 of 0: "</span>, <span style="color: #b60157">3</span> <span style="color: #b60157">0</span> percent, <span style="color: #198810">"%"</span>) io.println
+</code></pre><p class="ex-label">결함으로 멈춤</p><pre><code data-lang="text">$ pnx 08-assert.pnx
+3 of 4: 75%
+08-assert.pnx:3: failed
+  part int = 3
+  whole int = 0
+</code></pre></div><div class="box qa"><p class="box-title">문답</p><p><strong>물음. 무엇을 실패로, 무엇을 결함으로 할지 어떻게 고르는가?</strong></p><p>답. 바깥에서 온 자료 때문에 일어나는 일(사용자의 입력, 파일, 네트워크)은 실패다. 프로그램을 고쳐야만 사라지는 일(잘못 계산한 번호, 지키지 않은 약속)은 결함이다.</p></div><div class="box summary"><p class="box-title">정리</p><ul><li>실패할 수 있는 낱말 뒤에는 <code>or_fail</code> <code>or_return</code> <code>or_else</code> 가 와야 한다(표준 11.2).</li><li><code>or_fail</code> 과 <code>fail</code> 은 <code>or fail</code> 서명 안에서만, 정의 밖에서는 <code>or_else</code> 만 쓴다(11.2).</li><li>결함은 실행을 멈추고, 실행이 연 핸들은 처리기가 닫는다(11.3).</li><li>넘침과 0 으로 나눔을 실패로 받으려면 <code>chk_</code> 낱말을 쓴다(15.1).</li></ul></div></main><nav class="bottom"><a href="index.html">처음</a> · <a href="08.html">앞</a> · <a href="10.html">다음</a> · <a href="../html-en/09.html">English</a></nav></body></html>

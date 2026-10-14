@@ -1,0 +1,99 @@
+<!DOCTYPE html>
+<html lang="ko"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>11 글과 바이트의 형식 - Pinax 매뉴얼</title><link rel="stylesheet" href="style.css"></head><body><nav class="top"><a href="index.html">처음</a> · <a href="11.html">앞</a> · <a href="13.html">다음</a> · <a href="../html-en/12.html">English</a></nav><main><h2>11 글과 바이트의 형식</h2><div class="box opening"><p><strong>먼저 알아야 할 것</strong>: 5장(뷰, 버퍼), 7장(레코드), 8장(실패).</p><p><strong>이 장이 답하는 물음</strong></p><ul><li>CSV 나 JSON 을 나무를 만들지 않고 어떻게 읽고 쓰는가?</li><li>레코드를 바이트로 보내고 다시 읽으려면?</li><li>해시와 Base64 같은 바꾸기는 어디에 있는가?</li></ul></div><p>Pinax 에는 힙이 없으므로 JSON 을 객체의 나무로 읽지 않는다. 대신 <strong>한 방향으로</strong> 읽는다: 토큰 하나, 필드 하나씩. 쓸 때는 버퍼에 바로 쓴다. 레코드와 맞추는 일은 레코드의 선언에서 만들어진 코드가 한다.</p><h3>11.1 CSV 와 JSON</h3><p><code>csv.unpack</code> 은 한 줄을 읽어 레코드의 필드에 차례로 넣고, <code>json.pack</code> 은 레코드를 필드 이름이 키인 객체로 쓴다.</p><div class="example run"><p class="ex-file"><code>11-csv-to-json.pnx</code></p><pre><code data-lang="pinax"><span style="color: #d73948">use</span> io
+<span style="color: #d73948">use</span> csv
+<span style="color: #d73948">use</span> json
+<span style="color: #d73948">use</span> <span style="color: #d73948">str</span>
+<span style="color: #74747c">rem Read CSV rows into records, write them out as JSON.</span>
+<span style="color: #d73948">record</span> city
+  name <span style="color: #d73948">str</span>(<span style="color: #b60157">16</span>)
+  people <span style="color: #d73948">i32</span>
+  capital <span style="color: #d73948">bool</span>
+<span style="color: #d73948">end</span>
+<span style="color: #d73948">list</span> cities city <span style="color: #b60157">8</span>
+<span style="color: #d73948">buffer</span> out <span style="color: #b60157">512</span>
+<span style="color: #d73948">array</span> scratch city <span style="color: #b60157">1</span>                         <span style="color: #74747c">rem a row to try a line on first</span>
+<span style="color: #d73948">word</span> read_rows (input <span style="color: #d73948">str</span> <span style="color: #d73948">or</span> <span style="color: #d73948">fail</span>)
+  input <span style="color: #d73948">str</span>.lines <span style="color: #d73948">do</span> (line <span style="color: #d73948">str</span>)
+    <span style="color: #d73948">true</span> <span style="color: #d73948">to</span> ok
+    line <span style="color: #b60157">0</span> scratch idx csv.unpack <span style="color: #d73948">or_else</span> (e) <span style="color: #d73948">false</span> <span style="color: #d73948">to</span> ok <span style="color: #198810">""</span> <span style="color: #d73948">end</span> drop
+    ok <span style="color: #d73948">if</span>
+      cities add_row <span style="color: #d73948">or_fail</span> <span style="color: #d73948">to</span> c
+      line c csv.unpack <span style="color: #d73948">or_fail</span> drop
+    <span style="color: #d73948">else</span>
+      <span style="color: #d73948">cat</span> (<span style="color: #198810">"bad row: "</span>, line) io.println
+    <span style="color: #d73948">end</span>
+  <span style="color: #d73948">end</span> each
+<span style="color: #d73948">end</span>
+<span style="color: #d73948">word</span> to_json (<span style="color: #d73948">or</span> <span style="color: #d73948">fail</span>)
+  out json.begin_array <span style="color: #d73948">or_fail</span>
+  cities <span style="color: #d73948">do</span> (c cities) c out json.pack <span style="color: #d73948">or_else</span> (e) <span style="color: #d73948">end</span> <span style="color: #d73948">end</span> each
+  out json.end_array <span style="color: #d73948">or_fail</span>
+<span style="color: #d73948">end</span>
+<span style="color: #d73948">text</span><span style="color: #198810"> </span><span style="color: #4b69c6">END</span>
+<span style="color: #198810">Seoul,9411000,true</span>
+<span style="color: #198810">Busan,3349000,false</span>
+<span style="color: #198810">Daejeon,lots,false</span>
+<span style="color: #4b69c6">END</span>
+read_rows <span style="color: #d73948">or_else</span> (e) <span style="color: #d73948">end</span>
+to_json <span style="color: #d73948">or_else</span> (e) e err_text io.println <span style="color: #d73948">end</span>
+out contents io.println
+</code></pre><p class="ex-label">출력</p><pre><code data-lang="text">$ pnx 11-csv-to-json.pnx
+bad row: Daejeon,lots,false
+[{"name":"Seoul","people":9411000,"capital":true},{"name":"Busan","people":3349000,"capital":false}]
+</code></pre></div><p><code>unpack</code> 은 모든 필드가 맞을 때만 줄에 쓴다. 그래서 먼저 빈 줄 하나(<code>scratch</code>)에 시험해 보고, 맞을 때만 목록에 줄을 더했다.</p><div class="box mistake"><p class="box-title">흔한 오해: 레코드 목록에서도 <code>pop</code> 으로 마지막 줄을 뺀다</p>레코드의 목록에는 <code>pop</code> 이 없다(값의 목록에만 있다). 더한 줄을 거둘 길이 없으므로, 줄을 더하기 전에 확인한다.<div class="example refused"><p class="ex-file"><code>11-pop-records.pnx</code></p><pre><code data-lang="pinax"><span style="color: #d73948">record</span> city
+  name <span style="color: #d73948">str</span>(<span style="color: #b60157">16</span>)
+<span style="color: #d73948">end</span>
+<span style="color: #d73948">list</span> cities city <span style="color: #b60157">4</span>
+<span style="color: #d73948">word</span> undo () cities pop <span style="color: #d73948">or_else</span> (e) cities <span style="color: #d73948">none</span> <span style="color: #d73948">end</span> drop <span style="color: #d73948">end</span>
+</code></pre><p class="ex-label">거절</p><pre><code data-lang="text">$ pnx 11-pop-records.pnx
+11-pop-records.pnx:5:21: pop takes from a list of values; a list of records has no pop
+</code></pre></div></div><p>JSON 을 토큰으로 읽으면 깊이와 상관없이 필요한 것만 고를 수 있다. <code>json.next</code> 는 토큰의 갈래, 값의 뷰, 나머지를 준다.</p><div class="example run"><p class="ex-file"><code>11-json-read.pnx</code></p><pre><code data-lang="pinax"><span style="color: #d73948">use</span> io
+<span style="color: #d73948">use</span> json
+<span style="color: #d73948">use</span> <span style="color: #d73948">str</span>
+<span style="color: #74747c">rem Sum every number in a JSON text, at any depth, without building a tree.</span>
+<span style="color: #d73948">word</span> sum_numbers (s <span style="color: #d73948">str</span> <span style="color: #d73948">gives</span> <span style="color: #d73948">int</span>)
+  <span style="color: #b60157">0</span> <span style="color: #d73948">to</span> total
+  s <span style="color: #d73948">to</span> rest
+  <span style="color: #d73948">loop</span>
+    rest json.next <span style="color: #d73948">or_else</span> (e) <span style="color: #d73948">break</span> <span style="color: #d73948">end</span> <span style="color: #d73948">to</span> (kind, value, rest)
+    kind json.number eq <span style="color: #d73948">if</span> total value <span style="color: #d73948">str</span>.to_int <span style="color: #d73948">or_else</span> (e) <span style="color: #b60157">0</span> <span style="color: #d73948">end</span> add <span style="color: #d73948">to</span> total <span style="color: #d73948">end</span>
+  <span style="color: #d73948">end</span>
+  total
+<span style="color: #d73948">end</span>
+<span style="color: #d73948">text</span><span style="color: #198810"> </span><span style="color: #4b69c6">END</span>
+<span style="color: #198810">{"a": 1, "b": [2, 3, {"c": 4}], "d": {"e": [5]}, "f": "6"}</span>
+<span style="color: #4b69c6">END</span>
+sum_numbers <span style="color: #d73948">str</span>.to_str io.println
+</code></pre><p class="ex-label">출력</p><pre><code data-lang="text">$ pnx 11-json-read.pnx
+15
+</code></pre></div><h3>11.2 바이트</h3><p>모듈 <code>bytes</code> 는 정해진 폭과 바이트 순서로 쓰고 읽는다. 레코드에 <code>big_endian</code> 을 적으면 <code>bytes.pack</code> 이 큰 끝부터 쓴다. <code>varint</code> 필드는 작은 수를 적은 바이트로 쓴다.</p><div class="example run"><p class="ex-file"><code>11-binary.pnx</code></p><pre><code data-lang="pinax"><span style="color: #d73948">use</span> io
+<span style="color: #d73948">use</span> bytes
+<span style="color: #d73948">use</span> encode
+<span style="color: #d73948">use</span> hash
+<span style="color: #d73948">use</span> fmt
+<span style="color: #d73948">record</span> header
+  <span style="color: #d73948">big_endian</span>
+  magic <span style="color: #d73948">u32</span>
+  version <span style="color: #d73948">u16</span>
+  length varint
+<span style="color: #d73948">end</span>
+<span style="color: #d73948">array</span> headers header <span style="color: #b60157">2</span>
+<span style="color: #d73948">buffer</span> wire <span style="color: #b60157">32</span>
+<span style="color: #d73948">buffer</span> hex <span style="color: #b60157">64</span>
+<span style="color: #d73948">word</span> demo (<span style="color: #d73948">or</span> <span style="color: #d73948">fail</span>)
+  <span style="color: #b60157">0</span> headers idx <span style="color: #d73948">to</span> h
+  <span style="color: #b60157">0x50494e58</span> h <span style="color: #d73948">to</span> header.magic           <span style="color: #74747c">rem "PINX"</span>
+  <span style="color: #b60157">1</span> h <span style="color: #d73948">to</span> header.version
+  <span style="color: #b60157">300</span> h <span style="color: #d73948">to</span> header.length
+  h wire bytes.pack <span style="color: #d73948">or_fail</span>
+  wire contents hex encode.hex_encode <span style="color: #d73948">or_fail</span>
+  <span style="color: #d73948">cat</span> (<span style="color: #198810">"bytes: "</span>, hex contents, <span style="color: #198810">", crc32: "</span>, wire contents hash.crc32 fmt.hex) io.println
+  <span style="color: #b60157">1</span> headers idx <span style="color: #d73948">to</span> back
+  wire contents back bytes.unpack <span style="color: #d73948">or_fail</span> drop
+  <span style="color: #d73948">cat</span> (<span style="color: #198810">"read back: version "</span>, back header.version, <span style="color: #198810">", length "</span>, back header.length) io.println
+<span style="color: #d73948">end</span>
+demo <span style="color: #d73948">or_else</span> (e) e err_text io.println <span style="color: #d73948">end</span>
+</code></pre><p class="ex-label">출력</p><pre><code data-lang="text">$ pnx 11-binary.pnx
+bytes: 50494e580001ac02, crc32: 31d80bed
+read back: version 1, length 300
+</code></pre></div><div class="box qa"><p class="box-title">문답</p><p><strong>물음. 메모리 안의 레코드도 큰 끝으로 놓이는가?</strong></p><p>답. 아니다. <code>big_endian</code> 은 <code>pack</code> 과 <code>unpack</code> 이 쓰는 바이트의 차례만 정한다. 메모리 안의 모양은 처리기가 정하고, 스크립트는 그것을 볼 수 없다.</p></div><h3>11.3 그 밖의 바꾸기</h3><p><code>fmt</code> 는 수를 십육진, 이진, 0 을 채운 모양으로 바꾼다. <code>hash</code> 는 CRC-32, FNV-1a, SipHash 를, <code>encode</code> 는 Base64, 십육진, URL 퍼센트 부호화를 준다. 바꾼 결과를 버퍼에 쓰는 낱말은 버퍼가 차면 실패한다. 자세한 목록은 표준 16절에 있다.</p><div class="box summary"><p class="box-title">정리</p><ul><li><code>json.next</code> 와 <code>csv.fields</code> 는 한 토큰, 한 필드씩 읽는다. 나무를 만들지 않는다(표준 16.8, 16.9).</li><li><code>pack</code> 은 버퍼에 쓰고, <code>unpack</code> 은 모두 맞을 때만 줄에 쓴다(16.5, 16.8, 16.9).</li><li><code>big_endian</code> 은 바이트 순서만 정한다(16.5).</li><li>레코드의 목록에는 <code>pop</code> 이 없다(15.3).</li></ul></div></main><nav class="bottom"><a href="index.html">처음</a> · <a href="11.html">앞</a> · <a href="13.html">다음</a> · <a href="../html-en/12.html">English</a></nav></body></html>

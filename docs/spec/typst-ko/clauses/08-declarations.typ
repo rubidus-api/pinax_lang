@@ -115,7 +115,8 @@ assign-item = "assign" NAME "(" value { "," value } ")" ;
 
 == 큐 <decl-queue>
 
-#para("1")[`queue 이름 타입 용량` 은 먼저 넣은 것이 먼저 나오는 #term("큐", en: "queue")를 만든다.
+#para("1")[`queue 이름 타입 용량` 은 먼저 넣은 것이 먼저 나오는 #term("큐", en: "queue")를 만든다. 원소 타입은 `int`
+`bool` `err` 다.
 `v 큐 put` 은 뒤에 넣고, `큐 take` 는 앞에서 빼서 주며, `큐 peek` 은 빼지 않고 앞의 것을 준다. 셋 다 실패할
 수 있다: 가득 찬 큐에 넣으면 `err.full`, 빈 큐에서 꺼내면 `err.range` 다.]
 

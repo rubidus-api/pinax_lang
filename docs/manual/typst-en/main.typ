@@ -18,3 +18,6 @@
 #include "chapters/10-modules.typ"
 #include "chapters/11-formats.typ"
 #include "chapters/12-patterns.typ"
+#include "chapters/13-tasks.typ"
+#include "chapters/14-embedding.typ"
+#include "chapters/15-tools.typ"

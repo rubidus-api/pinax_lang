@@ -1,0 +1,95 @@
+<!DOCTYPE html>
+<html lang="ko"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>5 문자열 - Pinax 매뉴얼</title><link rel="stylesheet" href="style.css"></head><body><nav class="top"><a href="index.html">처음</a> · <a href="05.html">앞</a> · <a href="07.html">다음</a> · <a href="../html-en/06.html">English</a></nav><main><h2>5 문자열</h2><div class="box opening"><p><strong>먼저 알아야 할 것</strong>: 2장(값의 타입), 4장(줄기와 블록).</p><p><strong>이 장이 답하는 물음</strong></p><ul><li>문자열을 자르고 가르는데 왜 복사가 일어나지 않는가?</li><li><code>str</code> 와 <code>str(N)</code> 은 무엇이 다르고, 언제 어느 것을 쓰는가?</li><li>새 글을 만드는 바이트는 어디에 놓이고, 어떻게 되돌리는가?</li></ul></div><h3>5.1 뷰: 복사하지 않는 문자열</h3><p><code>str</code> 값은 <strong>뷰</strong>(view)다. 바이트가 있는 자리와 길이만 가리키고, 바이트를 갖지 않는다. 그래서 자르기 (<code>str.take</code> <code>str.skip</code> <code>str.slice</code>), 다듬기(<code>str.trim</code>), 가르기(<code>str.cut</code> <code>str.split</code> <code>str.lines</code> <code>str.words</code>)는 바이트를 하나도 복사하지 않고 원래 글의 일부를 가리키는 새 뷰를 준다.</p><div class="example run"><p class="ex-file"><code>05-views.pnx</code></p><pre><code data-lang="pinax"><span style="color: #d73948">use</span> io
+<span style="color: #d73948">use</span> <span style="color: #d73948">str</span>
+<span style="color: #74747c">rem Parse "key = value" lines without copying a byte.</span>
+<span style="color: #d73948">word</span> parse (line <span style="color: #d73948">str</span>)
+  line <span style="color: #d73948">str</span>.trim <span style="color: #d73948">to</span> t
+  t <span style="color: #d73948">str</span>.is_empty t <span style="color: #198810">"#"</span> <span style="color: #d73948">str</span>.starts_with <span style="color: #d73948">or</span> <span style="color: #d73948">if</span> <span style="color: #d73948">return</span> <span style="color: #d73948">end</span>      <span style="color: #74747c">rem blank lines and remarks</span>
+  t <span style="color: #198810">"="</span> <span style="color: #d73948">str</span>.try_cut <span style="color: #d73948">or_else</span> (e) <span style="color: #d73948">cat</span> (<span style="color: #198810">"no '=' in: "</span>, t) io.println <span style="color: #d73948">return</span> <span style="color: #d73948">end</span> <span style="color: #d73948">to</span> (key, value)
+  <span style="color: #d73948">cat</span> (<span style="color: #198810">"["</span>, key <span style="color: #d73948">str</span>.trim, <span style="color: #198810">"] = ["</span>, value <span style="color: #d73948">str</span>.trim, <span style="color: #198810">"]"</span>) io.println
+<span style="color: #d73948">end</span>
+<span style="color: #d73948">text</span><span style="color: #198810"> </span><span style="color: #4b69c6">END</span>
+<span style="color: #198810"># settings</span>
+<span style="color: #198810">name = Pinax</span>
+<span style="color: #198810">  version= 1</span>
+
+<span style="color: #198810">broken line</span>
+<span style="color: #4b69c6">END</span>
+<span style="color: #d73948">str</span>.lines <span style="color: #d73948">do</span> (l <span style="color: #d73948">str</span>) l parse <span style="color: #d73948">end</span> each
+</code></pre><p class="ex-label">출력</p><pre><code data-lang="text">$ pnx 05-views.pnx
+[name] = [Pinax]
+[version] = [1]
+no '=' in: broken line
+</code></pre></div><p>이 프로그램은 설정 글을 줄로 가르고, 줄을 다듬고, <code>=</code> 에서 둘로 자른다. 바이트를 옮기는 일은 출력할 때뿐이다. <code>str.try_cut</code> 은 <code>=</code> 가 없으면 실패하므로 <code>or_else</code> 로 받았다. 실패하지 않는 <code>str.cut</code> 은 <code>=</code> 가 없으면 뒤를 빈 글로 준다.</p><h3>5.2 저장된 글</h3><p>뷰는 자기가 가리키는 바이트보다 오래 살 수 없다. 그래서 전역, 배열의 칸, 레코드의 필드처럼 오래 사는 자리에는 뷰를 둘 수 없고, <strong>저장된 글</strong> <code>str(N)</code> 을 쓴다. <code>str(N)</code> 은 N 바이트의 자리를 차지하고, 넣을 때 바이트를 복사한다. 읽으면 그 자리를 가리키는 뷰가 된다.</p><div class="example run"><p class="ex-file"><code>05-stored.pnx</code></p><pre><code data-lang="pinax"><span style="color: #d73948">use</span> io
+<span style="color: #d73948">use</span> <span style="color: #d73948">str</span>
+<span style="color: #d73948">global</span> longest <span style="color: #d73948">str</span>(<span style="color: #b60157">16</span>)                     <span style="color: #74747c">rem stored text: 16 bytes, copied in</span>
+<span style="color: #d73948">word</span> keep_longest (w <span style="color: #d73948">str</span>) w <span style="color: #d73948">str</span>.len longest <span style="color: #d73948">str</span>.len gt <span style="color: #d73948">if</span> w <span style="color: #d73948">to</span> longest <span style="color: #d73948">end</span> <span style="color: #d73948">end</span>
+<span style="color: #198810">"the quick brown fox jumps over the lazy dog"</span> <span style="color: #d73948">str</span>.words <span style="color: #d73948">do</span> (w <span style="color: #d73948">str</span>) w keep_longest <span style="color: #d73948">end</span> each
+<span style="color: #d73948">cat</span> (<span style="color: #198810">"longest word: "</span>, longest) io.println
+</code></pre><p class="ex-label">출력</p><pre><code data-lang="text">$ pnx 05-stored.pnx
+longest word: quick
+</code></pre></div><div class="example refused"><p class="ex-file"><code>05-global-view.pnx</code></p><pre><code data-lang="pinax"><span style="color: #d73948">global</span> name <span style="color: #d73948">str</span>
+</code></pre><p class="ex-label">거절</p><pre><code data-lang="text">$ pnx 05-global-view.pnx
+05-global-view.pnx:2:1: stored text is str(N); a str view lives only in locals, arguments and results
+</code></pre></div><div class="box mistake"><p class="box-title">흔한 오해: <code>str(N)</code> 보다 긴 글은 잘려서 들어간다</p>잘리지 않는다. 자리보다 긴 글을 넣으면 결함으로 멈춘다. 잘라서 넣으려면 <code>str.take</code> 로 먼저 자른다.<div class="example fault"><p class="ex-file"><code>05-too-long.pnx</code></p><pre><code data-lang="pinax"><span style="color: #d73948">use</span> io
+<span style="color: #d73948">global</span> name <span style="color: #d73948">str</span>(<span style="color: #b60157">8</span>)
+<span style="color: #198810">"Pinax"</span> <span style="color: #d73948">to</span> name
+<span style="color: #d73948">cat</span> (<span style="color: #198810">"stored: "</span>, name) io.println
+<span style="color: #198810">"an embeddable language"</span> <span style="color: #d73948">to</span> name
+</code></pre><p class="ex-label">결함으로 멈춤</p><pre><code data-lang="text">$ pnx 05-too-long.pnx
+stored: Pinax
+05-too-long.pnx:5: index out of range
+</code></pre></div></div><h3>5.3 새 글 만들기와 버퍼</h3><p><code>cat</code> 과 <code>str.upper</code> <code>str.repeat</code> 처럼 새 바이트를 만드는 낱말은 그 바이트를 <strong>구역</strong>에 쓰고 뷰를 준다. 글을 조금씩 이어 붙일 때는 <strong>버퍼</strong>를 선언하고 <code>append</code> 류의 낱말로 붙인다. 버퍼가 차면 붙이는 낱말이 실패한다.</p><div class="example run"><p class="ex-file"><code>05-build.pnx</code></p><pre><code data-lang="pinax"><span style="color: #d73948">use</span> io
+<span style="color: #d73948">use</span> <span style="color: #d73948">str</span>
+<span style="color: #d73948">use</span> fmt
+<span style="color: #d73948">buffer</span> out <span style="color: #b60157">64</span>
+<span style="color: #d73948">word</span> report (<span style="color: #d73948">or</span> <span style="color: #d73948">fail</span>)
+  <span style="color: #198810">"id: "</span> out append <span style="color: #d73948">or_fail</span>
+  <span style="color: #b60157">42</span> out append_int <span style="color: #d73948">or_fail</span>
+  <span style="color: #198810">", hex: 0x"</span> out append <span style="color: #d73948">or_fail</span>
+  <span style="color: #b60157">255</span> out fmt.append_hex <span style="color: #d73948">or_fail</span>
+  <span style="color: #b60157">'!'</span> out append_byte <span style="color: #d73948">or_fail</span>
+<span style="color: #d73948">end</span>
+report <span style="color: #d73948">or_else</span> (e) <span style="color: #d73948">cat</span> (<span style="color: #198810">"buffer full: "</span>, e err_text) io.println <span style="color: #d73948">end</span>
+out contents io.println
+<span style="color: #d73948">cat</span> (<span style="color: #198810">"upper: "</span>, <span style="color: #198810">"pinax"</span> <span style="color: #d73948">str</span>.upper, <span style="color: #198810">", repeat: "</span>, <span style="color: #198810">"ab"</span> <span style="color: #b60157">3</span> <span style="color: #d73948">str</span>.repeat, <span style="color: #198810">", padded: ["</span>, <span style="color: #198810">"7"</span> <span style="color: #b60157">4</span> <span style="color: #d73948">str</span>.pad_left, <span style="color: #198810">"]"</span>) io.println
+</code></pre><p class="ex-label">출력</p><pre><code data-lang="text">$ pnx 05-build.pnx
+id: 42, hex: 0xff!
+upper: PINAX, repeat: ababab, padded: [   7]
+</code></pre></div><h3>5.4 구역을 되돌리기</h3><p>구역은 실행마다 정해진 크기다. 루프 안에서 글을 계속 만들면 구역이 찬다. <code>mark</code> 로 지금 자리를 기억하고 <code>release</code> 로 되돌리면 그 사이에 만든 바이트를 다시 쓴다.</p><div class="example run"><p class="ex-file"><code>05-region.pnx</code></p><pre><code data-lang="pinax"><span style="color: #d73948">use</span> io
+<span style="color: #d73948">use</span> <span style="color: #d73948">str</span>
+<span style="color: #d73948">word</span> line (i <span style="color: #d73948">int</span> <span style="color: #d73948">gives</span> <span style="color: #d73948">str</span>) <span style="color: #d73948">cat</span> (<span style="color: #198810">"line "</span>, i) <span style="color: #d73948">end</span>
+<span style="color: #d73948">word</span> lots ()
+  region_free <span style="color: #d73948">to</span> before
+  <span style="color: #b60157">1</span> <span style="color: #b60157">10001</span> range <span style="color: #d73948">do</span> (i <span style="color: #d73948">int</span>)
+    <span style="color: #d73948">mark</span> <span style="color: #d73948">to</span> m                               <span style="color: #74747c">rem every turn gives its bytes back</span>
+    i line drop
+    m release
+  <span style="color: #d73948">end</span> each
+  <span style="color: #d73948">cat</span> (<span style="color: #198810">"bytes still taken after 10000 lines: "</span>, before region_free sub) io.println
+<span style="color: #d73948">end</span>
+lots
+</code></pre><p class="ex-label">출력</p><pre><code data-lang="text">$ pnx 05-region.pnx
+bytes still taken after 10000 lines: 0
+</code></pre></div><p>되돌린 뒤에는 그 사이에 만든 뷰를 쓸 수 없다. 처리기는 이것도 적재 때 검사한다.</p><div class="example refused"><p class="ex-file"><code>05-release-view.pnx</code></p><pre><code data-lang="pinax"><span style="color: #d73948">use</span> io
+<span style="color: #d73948">word</span> f ()
+  <span style="color: #d73948">mark</span> <span style="color: #d73948">to</span> m
+  <span style="color: #d73948">cat</span> (<span style="color: #198810">"made "</span>, <span style="color: #198810">"after the mark"</span>) <span style="color: #d73948">to</span> s
+  m release
+  s io.println
+<span style="color: #d73948">end</span>
+</code></pre><p class="ex-label">거절</p><pre><code data-lang="text">$ pnx 05-release-view.pnx
+05-release-view.pnx:6:3: this str was made after a mark that was released since; the region may hold other bytes there now
+</code></pre></div><div class="box qa"><p class="box-title">문답</p><p><strong>물음. 되돌린 뒤에도 남겨야 할 글은 어떻게 하는가?</strong></p><p>답. <code>str(N)</code> 전역이나 칸에 넣는다. 넣을 때 복사되므로 구역을 되돌려도 남는다. 위의 <code>05-stored.pnx</code> 가 그렇게 한다.</p></div><h3>5.5 바이트와 글자</h3><p>길이와 자리는 모두 바이트로 센다. 한글 한 글자는 UTF-8 로 3 바이트다. 글자 단위가 필요하면 <code>str.char_count</code> 와 <code>str.chars</code> 를 쓴다. <code>str.chars</code> 는 글자마다 그 글자의 뷰를 낸다(코드포인트 수가 아니다).</p><div class="example run"><p class="ex-file"><code>05-chars.pnx</code></p><pre><code data-lang="pinax"><span style="color: #d73948">use</span> io
+<span style="color: #d73948">use</span> <span style="color: #d73948">str</span>
+<span style="color: #d73948">word</span> show ()
+  <span style="color: #198810">"한글 ok"</span> <span style="color: #d73948">to</span> s
+  <span style="color: #d73948">cat</span> (<span style="color: #198810">"bytes "</span>, s <span style="color: #d73948">str</span>.len, <span style="color: #198810">", characters "</span>, s <span style="color: #d73948">str</span>.char_count) io.println
+  s <span style="color: #d73948">str</span>.chars <span style="color: #d73948">do</span> (c <span style="color: #d73948">str</span>) <span style="color: #d73948">cat</span> (<span style="color: #198810">"&lt;"</span>, c, <span style="color: #198810">"&gt;"</span>) io.print <span style="color: #d73948">end</span> each
+  <span style="color: #198810">""</span> io.println
+<span style="color: #d73948">end</span>
+show
+</code></pre><p class="ex-label">출력</p><pre><code data-lang="text">$ pnx 05-chars.pnx
+bytes 9, characters 5
+&lt;한&gt;&lt;글&gt;&lt; &gt;&lt;o&gt;&lt;k&gt;
+</code></pre></div><div class="box summary"><p class="box-title">정리</p><ul><li><code>str</code> 는 뷰다. 자르고 가르는 낱말은 복사하지 않는다(표준 7.3, 16.1).</li><li>오래 사는 자리에는 <code>str(N)</code> 을 쓴다. 넣을 때 복사되고, 길면 결함이다(7.3).</li><li>새 바이트는 구역에 놓이고, <code>mark</code>/<code>release</code> 로 되돌린다. 되돌린 뒤의 뷰는 거절된다(12.2, 12.3).</li><li>버퍼는 글을 이어 붙이는 자리다. 차면 실패한다(8.7).</li><li>길이는 바이트다. 글자는 <code>char_count</code>, <code>chars</code>(16.1).</li></ul></div></main><nav class="bottom"><a href="index.html">처음</a> · <a href="05.html">앞</a> · <a href="07.html">다음</a> · <a href="../html-en/06.html">English</a></nav></body></html>

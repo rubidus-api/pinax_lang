@@ -1,0 +1,10 @@
+rem fault
+use io
+tasks workers 2
+global zero int
+word demo ()
+  do "the healthy task starts" io.println yield or_return "and never finishes" io.println end workers spawn or_else (e) return end drop
+  do 1 zero div drop end workers spawn or_else (e) return end drop
+  workers run_all
+end
+demo

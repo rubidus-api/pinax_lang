@@ -1,0 +1,38 @@
+rem run
+use io
+rem Three stages linked by queues: numbers -> squares -> total.
+tasks stages 3
+queue numbers int 2
+queue squares int 2
+global total int
+word send (v int, q int)                      rem put v into queue q (1 or 2), yielding while it is full
+  loop
+    true to ok
+    q 1 eq if v numbers put or_else (e) false to ok end else v squares put or_else (e) false to ok end end
+    ok until
+    yield or_return
+  end
+end
+word produce () 1 6 range do (i int) i 1 send end each  -1 1 send end
+word square ()
+  loop
+    numbers take or_else (e) yield or_return 0 end to n
+    n 0 lt if -1 2 send return end
+    n 0 gt if n n mul 2 send end
+  end
+end
+word add_up ()
+  loop
+    squares take or_else (e) yield or_return 0 end to n
+    n 0 lt if return end
+    total n add to total
+  end
+end
+word demo ()
+  do produce end stages spawn or_else (e) return end drop
+  do square end stages spawn or_else (e) return end drop
+  do add_up end stages spawn or_else (e) return end drop
+  stages run_all
+  cat ("1 + 4 + 9 + 16 + 25 = ", total) io.println
+end
+demo
