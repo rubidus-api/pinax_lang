@@ -1,0 +1,3 @@
+rem refused
+use str
+word f (s str gives int) s str.to_int or_else (e) "zero" end end

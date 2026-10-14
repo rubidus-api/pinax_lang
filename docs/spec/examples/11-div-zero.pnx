@@ -1,0 +1,6 @@
+rem fault
+use io
+use str
+word ratio (a int, b int gives int) a 100 mul b div end
+3 4 ratio str.to_str io.println
+3 0 ratio str.to_str io.println

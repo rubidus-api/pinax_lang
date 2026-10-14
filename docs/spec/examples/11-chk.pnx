@@ -1,0 +1,6 @@
+rem run
+use io
+use str
+9223372036854775807 1 chk_add or_else (e) cat ("chk_add failed: ", e err_text) io.println 0 end drop
+6 7 chk_mul or_else (e) 0 end str.to_str io.println
+1 0 chk_div or_else (e) cat ("chk_div failed: ", e err_text) io.println 0 end drop

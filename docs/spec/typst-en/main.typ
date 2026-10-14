@@ -15,3 +15,4 @@
 #include "clauses/08-declarations.typ"
 #include "clauses/09-words.typ"
 #include "clauses/10-control.typ"
+#include "clauses/11-errors.typ"

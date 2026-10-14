@@ -1,0 +1,16 @@
+rem run
+use io
+use str
+list items int 2
+word try_three (or fail)
+  1 items push or_fail                      rem or_fail: fail the same way
+  2 items push or_fail
+  3 items push or_fail
+end
+word fill_some ()
+  4 items push or_return                    rem or_return: leave this word quietly
+  "not reached when the list is full" io.println
+end
+try_three or_else (e) cat ("try_three failed: ", e err_text) io.println end
+fill_some
+"x" str.to_int or_else 0 end str.to_str io.println     rem or_else: a value in its place

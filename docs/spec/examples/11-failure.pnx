@@ -1,0 +1,16 @@
+rem run
+use io
+use str
+word parse_port (s str gives port int or fail)
+  s str.to_int or_fail to n                 rem not a number: fail with the same error
+  n 1 lt n 65535 gt or if err.range fail end
+  n
+end
+word show (s str)
+  s parse_port or_else (e) cat ("bad port ", s, ": ", e err_text) io.println return end
+  to p
+  cat ("port ", p) io.println
+end
+"8080" show
+"http" show
+"70000" show

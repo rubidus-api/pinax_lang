@@ -1,0 +1,2 @@
+rem refused
+word check (n int) n 0 lt if err.range fail end end
