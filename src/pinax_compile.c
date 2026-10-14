@@ -67,6 +67,7 @@ typedef struct entry {
     bool    hidden;  // an operand of a running block: code cannot reach it
     bool    owned;   // a value that must be given on (RFC-0008 section 5.3), fresh on the stack
     uint8_t src;     // read from this local (its number plus one): lent, or given when it reaches a taker
+    uint8_t born;    // a str: the marks made before it (fn.marks then); a mark: its own number
     int64_t value;   // E_CONST
 } entry;
 
@@ -103,12 +104,22 @@ typedef struct local {
     uint8_t reg;
     uint8_t state; // L_PLAIN, L_OWNS, L_MOVED
     bool    stored; // `to` stored into it after it was made (a loop's element, see end_do)
+    uint8_t born;   // as entry.born, for the value it holds
+    bool    stale;  // a str made after a mark that was released since: it is not read
 } local;
+
+// What must agree, or is merged, where paths meet: what a local owns, and when its value was
+// made (RFC-0009 section 3.5: a str made after a mark is not used after its release).
+typedef struct lstate {
+    uint8_t state, born;
+    bool    stale;
+} lstate;
 
 // The types of the stack at one moment; `hidden` marks the entries that belong to a running
 // block and not to the code.
 typedef struct shot {
     tid      types[MAX_STACK];
+    uint8_t  born[MAX_STACK];
     uint64_t hidden, owned;
     uint8_t  depth;
 } shot;
@@ -123,7 +134,8 @@ typedef struct block {
     uint32_t locals_mark;
     uint8_t  nloc_mark[2];
     shot     in, out; // the stack when the block began; what a finished branch left
-    uint8_t  owns_in[MAX_LOCALS], owns_out[MAX_LOCALS]; // and the state of the locals then
+    lstate   owns_in[MAX_LOCALS], owns_out[MAX_LOCALS]; // and the state of the locals then
+    uint32_t releases; // fn.releases when the block began
     // case
     uint32_t next_test;   // jump of the last test, taken when no value matched
     uint8_t  subject;
@@ -159,6 +171,8 @@ typedef struct fn {
     uint32_t n_locals;
     uint8_t  nloc[2], maxloc[2], maxslot[2];
     uint32_t floor; // stack entries below this belong to a running block
+    uint8_t  marks; // the marks made so far, in the order of the source (entry.born)
+    uint32_t releases; // the releases compiled so far
     bool     dead; // the code here cannot be reached
     sig      own_sig; // a value block keeps its effect here
     vec      code; // of uint32_t
@@ -842,10 +856,12 @@ static uint32_t top_slot(comp *c, int bank, uint32_t extra) {
     return SLOT0 + pos;
 }
 
+// A value pushed is new: made after every mark so far. Copies of a value keep its own `born`.
 static bool push(comp *c, entry e) {
     fn *f = c->f;
     if (f->depth == MAX_STACK)
         return syntax(c, "the stack is deeper than 64 values here");
+    e.born = f->marks;
     f->stack[f->depth++] = e;
     return true;
 }
@@ -1291,9 +1307,13 @@ static bool stack_word(comp *c, int which) {
             const uint32_t source = slot_of(c, from);
             if (!push_slot(c, copy.type))
                 return false;
+            f->stack[f->depth - 1].born = copy.born;
             return move_slot(c, copy.type, slot_of(c, f->depth - 1), source);
         }
-        return push(c, copy);
+        if (!push(c, copy))
+            return false;
+        f->stack[f->depth - 1].born = copy.born;
+        return true;
     }
     case ST_NIP: {
         entry *under = top - 1;
@@ -1572,6 +1592,8 @@ static bool check_before_call(comp *c) {
 
 // Checks the arguments on the stack against `s`, puts them into their registers and reports
 // the first register of each bank. Leaves the arguments popped.
+static bool released(comp *c, uint8_t serial);
+
 static bool call_args(comp *c, const sig *s, uint32_t base[2]) {
     fn *f = c->f;
     for (uint32_t k = 0; k < s->n_in && f->depth - f->floor >= s->n_in; ++k) {
@@ -1598,6 +1620,10 @@ static bool call_args(comp *c, const sig *s, uint32_t base[2]) {
             return false;
     }
     f->depth = first;
+    for (uint32_t k = 0; k < s->n_in; ++k) { // the word may release a mark given to it
+        if (s->in[k] == TY_MARK && s->in_owned[k] && !released(c, f->stack[first + k].born))
+            return false;
+    }
     base[BANK_I] = top_slot(c, BANK_I, 0);
     base[BANK_S] = top_slot(c, BANK_S, 0);
     return true;
@@ -1615,6 +1641,14 @@ static void count_sig(const sig *s, uint32_t in[2], uint32_t out[2]) {
 // wants them where the arguments were.
 static bool push_results(comp *c, const sig *s, const uint32_t base[2], const uint32_t in[2], bool host) {
     uint32_t seen[2] = {0, 0};
+    for (uint32_t k = 0; k < s->n_out; ++k) { // a mark given back is a new one: made after the call's values
+        if (s->out[k] == TY_MARK) {
+            if (c->f->marks == UINT8_MAX)
+                return syntax(c, "a word makes at most 255 marks");
+            ++c->f->marks;
+            break;
+        }
+    }
     for (uint32_t k = 0; k < s->n_out; ++k) {
         const int bank = bank_of(s->out[k]);
         if (!push_slot(c, s->out[k]))
@@ -1882,6 +1916,8 @@ static bool store_local(comp *c, name n) {
                 return false;
         }
     }
+    l->born = e.born;
+    l->stale = false;
     return write_reg(c, l->reg);
 }
 
@@ -1994,6 +2030,7 @@ static void snapshot(const fn *f, shot *out) {
     out->hidden = out->owned = 0;
     for (uint32_t k = 0; k < f->depth; ++k) {
         out->types[k] = f->stack[k].type;
+        out->born[k] = f->stack[k].born;
         if (f->stack[k].hidden)
             out->hidden |= (uint64_t)1 << k;
         if (f->stack[k].owned)
@@ -2005,40 +2042,94 @@ static void snapshot(const fn *f, shot *out) {
 static void restore(fn *f, const shot *from) {
     for (uint32_t k = 0; k < from->depth; ++k)
         f->stack[k] = (entry){.type = from->types[k], .kind = E_SLOT, .hidden = (from->hidden >> k & 1u) != 0,
-                              .owned = (from->owned >> k & 1u) != 0};
+                              .owned = (from->owned >> k & 1u) != 0, .born = from->born[k]};
     f->depth = from->depth;
 }
 
-static bool same_stack(const fn *f, const shot *as) {
+// Where two paths meet, a value counts as made as late as on either path, and a mark as
+// early: what a release then refuses covers both.
+static uint8_t merged_born(tid type, uint8_t a, uint8_t b) {
+    return type == TY_MARK ? (a < b ? a : b) : (a > b ? a : b);
+}
+
+// The stacks of two paths agree; when they do, the two are merged into both.
+static bool same_stack(fn *f, shot *as) {
     if (f->depth != as->depth)
         return false;
     for (uint32_t k = 0; k < as->depth; ++k) {
         if (f->stack[k].type != as->types[k] || f->stack[k].owned != ((as->owned >> k & 1u) != 0))
             return false;
     }
+    for (uint32_t k = 0; k < as->depth; ++k)
+        f->stack[k].born = as->born[k] = merged_born(as->types[k], f->stack[k].born, as->born[k]);
     return true;
 }
 
 // The state of the locals (what they own) is part of what must agree where paths meet.
-static void save_owns(const fn *f, uint8_t *out) {
+static void save_owns(const fn *f, lstate *out) {
     for (uint32_t k = 0; k < f->n_locals; ++k)
-        out[k] = f->locals[k].state;
+        out[k] = (lstate){f->locals[k].state, f->locals[k].born, f->locals[k].stale};
 }
 
-static void restore_owns(fn *f, const uint8_t *from, uint32_t count) {
-    for (uint32_t k = 0; k < count && k < f->n_locals; ++k)
-        f->locals[k].state = from[k];
+static void restore_owns(fn *f, const lstate *from, uint32_t count) {
+    for (uint32_t k = 0; k < count && k < f->n_locals; ++k) {
+        f->locals[k].state = from[k].state;
+        f->locals[k].born = from[k].born;
+        f->locals[k].stale = from[k].stale;
+    }
 }
 
 // The locals that existed when block `b` began hold what `as` says, and those made inside it
-// hold nothing owned any more.
-static bool same_owns(comp *c, const block *b, const uint8_t *as) {
-    const fn *f = c->f;
+// hold nothing owned any more. When they agree, when their values were made is merged into both.
+static bool same_owns(comp *c, const block *b, lstate *as) {
+    fn *f = c->f;
     for (uint32_t k = as ? 0 : b->locals_mark; k < f->n_locals; ++k) {
-        if (k < b->locals_mark ? f->locals[k].state != as[k] : f->locals[k].state == L_OWNS)
+        if (k < b->locals_mark ? f->locals[k].state != as[k].state : f->locals[k].state == L_OWNS)
             return type_error(c, k < b->locals_mark
                                      ? "an owned value is given on one path and kept on another; every path must do the same"
                                      : "an owned value made in this block is not given before the block ends");
+    }
+    for (uint32_t k = 0; as && k < b->locals_mark && k < f->n_locals; ++k) {
+        local *l = &f->locals[k];
+        l->born = as[k].born = merged_born(l->type, l->born, as[k].born);
+        l->stale = as[k].stale = l->stale || as[k].stale;
+    }
+    return true;
+}
+
+// The end of one turn of a loop that has a release inside it: a str kept from turn to turn
+// must not be made anew in the turn, since the next turn's release was checked against the
+// value from before the loop.
+static bool same_turn(comp *c, const block *b) {
+    const fn *f = c->f;
+    if (f->releases == b->releases)
+        return true;
+    for (uint32_t k = 0; k < b->in.depth; ++k) {
+        if (bank_of(b->in.types[k]) == BANK_S && f->stack[k].born != b->in.born[k])
+            return type_error(c, "a str kept from turn to turn of this loop is made anew after a release in it; "
+                                 "the next turn could read bytes the release gave back");
+    }
+    for (uint32_t k = 0; k < b->locals_mark && k < f->n_locals; ++k) {
+        const local *l = &f->locals[k];
+        if (bank_of(l->type) == BANK_S && (l->born != b->owns_in[k].born || l->stale != b->owns_in[k].stale))
+            return type_error(c, "a str local kept from turn to turn of this loop is made anew after a release in "
+                                 "it; the next turn could read bytes the release gave back");
+    }
+    return true;
+}
+
+// A release, or a mark given to a word that may release it: the str values made after mark
+// number `serial` are gone. One still on the stack is refused; a local holding one is stale.
+static bool released(comp *c, uint8_t serial) {
+    fn *f = c->f;
+    ++f->releases;
+    for (uint32_t k = 0; k < f->depth; ++k) {
+        if (bank_of(f->stack[k].type) == BANK_S && f->stack[k].born >= serial)
+            return type_error(c, "a str made after this mark is still on the stack; the release gives its bytes back");
+    }
+    for (uint32_t k = 0; k < f->n_locals; ++k) {
+        if (bank_of(f->locals[k].type) == BANK_S && f->locals[k].born >= serial)
+            f->locals[k].stale = true;
     }
     return true;
 }
@@ -2058,6 +2149,7 @@ static block *open_block(comp *c, uint8_t kind) {
     b->nloc_mark[1] = f->nloc[1];
     snapshot(f, &b->in);
     save_owns(f, b->owns_in);
+    b->releases = f->releases;
     return b;
 }
 
@@ -2246,6 +2338,8 @@ static bool end_loop(comp *c, block *b) {
     fn *f = c->f;
     if (!f->dead) {
         if (!settle_all(c))
+            return false;
+        if (f->depth == b->in.depth && !same_turn(c, b))
             return false;
         if (!same_stack(f, &b->in))
             return type_error(c, "one turn of a loop must leave the stack as it found it");
@@ -3032,6 +3126,8 @@ static bool end_do(comp *c, block *b) {
         }
         if (!settle_all(c))
             return false;
+        if (f->depth == b->in.depth && !same_turn(c, b))
+            return false;
         if (!same_stack(f, &b->in))
             return type_error(c, "this block must leave the stack as it found it");
         if (!same_owns(c, b, b->owns_in))
@@ -3305,6 +3401,9 @@ static bool builtin(comp *c, const struct builtin *w) {
         return bs.fails ? guard(c, &bs, base, in, false) : push_results(c, &bs, base, in, false);
     }
     case BW_MARK: // the top of the region now; release gives back everything made after it
+        if (f->marks == UINT8_MAX)
+            return syntax(c, "a word makes at most 255 marks");
+        ++f->marks;
         if (!push_slot(c, TY_MARK))
             return false;
         f->stack[f->depth - 1].owned = true;
@@ -3320,7 +3419,7 @@ static bool builtin(comp *c, const struct builtin *w) {
         if (!give(c, f->depth - 1))
             return type_error(c, "this mark was already released");
         --f->depth;
-        return emit(c, PNX_ABX(PNX_RCUT, ra, 0)) != NONE && advance(c);
+        return released(c, f->stack[f->depth].born) && emit(c, PNX_ABX(PNX_RCUT, ra, 0)) != NONE && advance(c);
     case BW_REGION_FREE:
         if (!push_slot(c, TY_INT))
             return false;
@@ -3943,6 +4042,7 @@ static bool add_string(comp *c, const pnx_token *tp, uint32_t *index) {
 static bool push_string(comp *c, uint32_t index) {
     if (!push_slot(c, TY_STR))
         return false;
+    c->f->stack[c->f->depth - 1].born = 0; // the text of a literal is not in the region
     return emit_def(c, PNX_ABX(PNX_LOADKS, slot_of(c, c->f->depth - 1), index), BANK_S) != NONE;
 }
 
@@ -4059,8 +4159,13 @@ static bool body_name(comp *c) {
         if (l) {
             if (l->state == L_MOVED)
                 return type_error(c, "this local gave its owned value away; it holds nothing to read");
-            return push(c, (entry){.type = l->type, .kind = E_LOCAL, .reg = l->reg, .src = (uint8_t)(l - f->locals + 1)}) &&
-                   advance(c);
+            if (l->stale)
+                return type_error(c, "this str was made after a mark that was released since; the region may hold "
+                                     "other bytes there now");
+            if (!push(c, (entry){.type = l->type, .kind = E_LOCAL, .reg = l->reg, .src = (uint8_t)(l - f->locals + 1)}))
+                return false;
+            f->stack[f->depth - 1].born = l->born;
+            return advance(c);
         }
         const constant *k = find_const(c, n);
         if (k) {
@@ -4340,11 +4445,15 @@ static void fn_reset(fn *f, bool is_top) {
 // locals, bare ones start on the stack and are read from those registers.
 static bool bind_inputs(comp *c, const sig *s) {
     fn *f = c->f;
+    // a word that takes a mark cannot tell whether its str inputs were made after it: they
+    // count as made after it, so that releasing the mark takes them too
+    for (uint32_t k = 0; k < s->n_in; ++k)
+        f->marks = s->in[k] == TY_MARK ? 1 : f->marks;
     for (uint32_t k = 0; k < s->n_in; ++k) {
         const int bank = bank_of(s->in[k]);
         local *l = &f->locals[f->n_locals++];
         *l = (local){.name = sig_in_name(s, k), .type = s->in[k], .reg = f->nloc[bank]++,
-                     .state = s->in_owned[k] ? L_OWNS : L_PLAIN};
+                     .state = s->in_owned[k] ? L_OWNS : L_PLAIN, .born = f->marks};
         if (l->name.length) {
             for (uint32_t j = 0; j + 1 < f->n_locals; ++j) {
                 if (f->locals[j].name.length && name_eq(f->locals[j].name, l->name))
