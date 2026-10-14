@@ -1,0 +1,16 @@
+rem run
+use io
+use str
+"Hello, World" str.upper io.println
+"Hello, World" str.lower io.println
+"ab" 3 str.repeat io.println
+"one two one" "one" "1" str.replace io.println
+cat ("[", "7" 4 str.pad_left, "]") io.println
+cat ("[", "7" 4 str.pad_right, "]") io.println
+-42 str.to_str io.println
+"ff" 16 str.to_int_base or_else (e) -1 end str.to_str io.println
+"  12" str.to_int or_else (e) -1 end str.to_str io.println
+"12x" str.to_int or_else (e) -1 end str.to_str io.println
+"한글" str.len str.to_str io.println
+"한글" str.char_count str.to_str io.println
+"\xff" str.is_utf8 if "utf-8" else "not utf-8" end io.println

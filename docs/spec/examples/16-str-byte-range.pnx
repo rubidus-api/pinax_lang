@@ -1,0 +1,3 @@
+rem fault
+use str
+"hello" 5 str.byte_at drop

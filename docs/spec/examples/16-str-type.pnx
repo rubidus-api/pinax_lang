@@ -1,0 +1,3 @@
+rem refused
+use str
+42 str.upper drop

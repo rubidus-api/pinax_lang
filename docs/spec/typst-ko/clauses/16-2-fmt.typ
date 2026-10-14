@@ -1,0 +1,17 @@
+#import "/tools/common.typ": *
+// shape: no constraint of its own; the words take int as clause 15 says
+
+== `fmt` --- 수를 글로 <std-fmt>
+
+#para("1")[`cat` 은 `int` 를 십진으로 넣는다(9.8). 다른 모양은 모듈 `fmt` 의 낱말로 `str` 을 만든다. 형식을 적는
+작은 언어(`%08x` 같은 것)는 없다. 결과는 구역에 쓴다.
+#table(columns: (auto, auto, 1fr), inset: 5pt, stroke: 0.5pt + luma(170),
+  [*낱말*], [*서명*], [*뜻*],
+  [`hex` `bin`], [`(int gives str)`], [십육진(소문자), 이진. 음수는 64 비트 2 의 보수로],
+  [`hex_pad`], [`(n int, width int gives str)`], [십육진을 앞에 0 을 채워 `width` 자리로],
+  [`zero_pad`], [`(n int, width int gives str)`], [십진을 앞에 0 을 채워 `width` 자리로. 부호도 자리를 차지한다],
+  [`append_hex`], [`(n int, buf or fail)`], [십육진을 버퍼에 붙인다],
+)
+십진은 `str.to_str`, 버퍼에 붙이는 십진은 `append_int`(15.3)다.]
+
+#ex("spec", "16-fmt.pnx")

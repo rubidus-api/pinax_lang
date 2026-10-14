@@ -1,0 +1,14 @@
+rem run
+use io
+use str
+word yes (b bool gives str) b if "yes" else "no" end end
+"hello.pnx" ".pnx" str.ends_with yes io.println
+"hello.pnx" "he" str.starts_with yes io.println
+"hello.pnx" "lo." str.contains yes io.println
+"a,b,c,b" ",b" str.find or_else (e) -1 end str.to_str io.println
+"a,b,c,b" ",b" str.find_last or_else (e) -1 end str.to_str io.println
+"a,b,c,b" "x" str.find or_else (e) -1 end str.to_str io.println
+"abc" "abd" str.compare str.to_str io.println
+"hello" 1 str.byte_at str.to_str io.println
+"hello" str.len str.to_str io.println
+"" str.is_empty yes io.println

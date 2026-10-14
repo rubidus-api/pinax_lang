@@ -1,0 +1,12 @@
+rem run
+use io
+use fmt
+255 fmt.hex io.println
+5 fmt.bin io.println
+255 8 fmt.hex_pad io.println
+7 3 fmt.zero_pad io.println
+-7 3 fmt.zero_pad io.println
+buffer out 32
+"0x" out append or_else (e) end
+48879 out fmt.append_hex or_else (e) end
+out contents io.println

@@ -30,7 +30,7 @@
 
 #para("2")[산술 낱말 `add` `sub` `mul` `div` `mod` `neg` `abs` 는 결과가 범위를 벗어나면 결함
 `overflow` 로 멈춘다(11.3). 값을 감아 돌리는 낱말(`wrap_add` …), 끝에서 멈추는 낱말(`sat_add` …),
-넘침을 실패로 알리는 낱말(`chk_add` …)이 따로 있다(15.2).]
+넘침을 실패로 알리는 낱말(`chk_add` …)이 따로 있다(15.1).]
 
 #para("3")[`div` 는 0 쪽으로 버리고, `mod` 의 결과는 나뉘는 수의 부호를 따른다(`a b div b mul a b mod add`
 가 `a` 다). `floor_div` 와 `floor_mod` 는 아래로 버린다. 0 으로 나누면 결함 `div_zero` 다.]

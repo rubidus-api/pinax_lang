@@ -52,7 +52,7 @@ guard = "or_fail" | "or_return" | "or_else" [ "(" NAME ")" ] { body } "end" ;
 #ex("spec", "11-guards.pnx")
 
 #para("4")[넘침과 0 으로 나눔을 결함 대신 실패로 받으려면 `chk_add` `chk_sub` `chk_mul` `chk_div` 를 쓴다
-(15.2).]
+(15.1).]
 
 #ex("spec", "11-chk.pnx")
 
@@ -78,7 +78,7 @@ guard = "or_fail" | "or_return" | "or_else" [ "(" NAME ")" ] { body } "end" ;
 반환값이 된다. 작업 안의 결함도 그 실행 전체와 모든 작업을 끝낸다(14.3). 상태는 남아 다음 실행을 받는다.]
 
 #para("2")[결함은 다음에서 난다.
-- 산술의 넘침(`overflow`), 0 으로 나눔(`div_zero`) --- 7.1, 15.2;
+- 산술의 넘침(`overflow`), 0 으로 나눔(`div_zero`) --- 7.1, 15.1;
 - 배열·목록의 범위 밖 번호, 맞는 가지가 없는 `case`, 없음 줄, `str(N)` 보다 긴 글(`range`) --- 8, 10.3;
 - 좁은 필드에 맞지 않는 값(`overflow`) --- 8.8;
 - 구역이나 작업 공간이 모자람(`full`) --- 12.2;

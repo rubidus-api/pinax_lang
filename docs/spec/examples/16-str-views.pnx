@@ -1,0 +1,24 @@
+rem run
+use io
+use str
+word show (label str, s str) cat (label, " [", s, "]") io.println end
+word demo ()
+  "  key = value  " to line
+  "trim" line str.trim show
+  "trim_left" line str.trim_left show
+  "take 5" "hello, world" 5 str.take show
+  "skip 7" "hello, world" 7 str.skip show
+  "take_last 5" "hello, world" 5 str.take_last show
+  "skip_last 7" "hello, world" 7 str.skip_last show
+  "take 99" "short" 99 str.take show                 rem n beyond the end: what is there
+  "slice 7 3" "hello, world" 7 3 str.slice show
+  "key = value" " = " str.cut to (k, v)
+  "cut, before" k show
+  "cut, after" v show
+  "a=b=c" '=' str.cut to (k2, v2)                    rem the separator may be a character
+  "cut at a char" v2 show
+  "2026-10-15" str.digit str.span to (year, rest)
+  "span digits" year show
+  "span rest" rest show
+end
+demo
