@@ -117,6 +117,16 @@ cc -std=c99 -Iinclude host.c build/native/libpinax.a -lm -o host
 모듈(`io` `file` `clock` `random` `env`)은 `src/host/` 에 있는 평범한 호스트 낱말이고, 필요한
 호스트만 링크합니다.
 
+## 문서
+
+- [Pinax 매뉴얼](docs/manual/md-ko/README.md): 첫 프로그램부터 C 프로그램에 넣기까지, 돌아가는 예제와 거절되는 예제와
+  함께 배우는 책입니다([영어판](docs/manual/md-en/README.md)).
+- [Pinax 표준](docs/spec/md-ko/README.md): 언어의 정의입니다. 구문, 제약, 의미, 결함과 모든 진단을 번호 붙은 조항으로
+  적었습니다([영어판](docs/spec/md-en/README.md)).
+
+두 문서 모두 Typst 로 쓰고 `docs/tools/build.sh` 로 PDF, HTML, Markdown 을 짓습니다. 실린 프로그램은 모두 실제로 돌린
+것이고, 출력도 그때 받은 그대로입니다.
+
 ## 라이선스
 
 MIT. [LICENSE](LICENSE) 를 보십시오.

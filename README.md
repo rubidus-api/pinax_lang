@@ -120,6 +120,16 @@ The state lives entirely inside `block`; Pinax never asks the system for memory.
 host modules (`io`, `file`, `clock`, `random`, `env`) are ordinary host words in
 `src/host/`, linked only by hosts that want them.
 
+## Documentation
+
+- [The Pinax Manual](docs/manual/md-en/README.md): the language from the first program to embedding it in C, with
+  running and refused examples ([Korean original](docs/manual/md-ko/README.md)).
+- [The Pinax Standard](docs/spec/md-en/README.md): the definition in numbered clauses: syntax, constraints,
+  semantics, faults and every diagnostic ([Korean original](docs/spec/md-ko/README.md)).
+
+Both are written in Typst and built to PDF, HTML and Markdown by `docs/tools/build.sh`; every program they show is run
+and its output captured. The English editions are being translated from the Korean originals.
+
 ## License
 
 MIT. See [LICENSE](LICENSE).
