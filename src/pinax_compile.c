@@ -134,6 +134,7 @@ typedef struct block {
     // do block of a combining word
     uint8_t  use, stem, cur, lim, acc, n_hidden;
     uint32_t dst, full;  // map_into, filter_into: the list filled, and the jumps taken when it is full
+    uint8_t  fill, room; // ... into an array: the cells written so far, and the array's length
     name     dst_name;
     uint8_t  val, idx;   // first: the register of the element found; each_index: the counter
     uint32_t elem_local; // the named local the element of a range goes to, or NONE
@@ -2843,11 +2844,13 @@ static bool do_block(comp *c) {
         const bool rows = g && g->kind == GK_LIST && g->record != NONE && use == USE_FILTER && from != NONE &&
                           ((const globalsym *)c->globals.ptr + from)->record == g->record &&
                           ((const globalsym *)c->globals.ptr + from)->kind != GK_POOL;
-        if (!g || g->kind != GK_LIST || (g->record != NONE && !rows))
+        if (!g || (g->kind != GK_LIST && g->kind != GK_ARRAY) || (g->record != NONE && !rows))
             return error_at(c, PINAX_ERR_TYPE, at.line, at.column,
                             g && g->kind == GK_LIST && g->record != NONE
                                 ? "filter_into fills a list of records from a list or an array of the same record"
-                                : "map_into and filter_into fill a list of values: ... end names map_into");
+                            : g && g->record != NONE ? "an array of records is not filled by filter_into; a list is"
+                                                     : "map_into and filter_into fill a list or an array of values: "
+                                                       "... end names map_into");
         if (rows) {
             if (bs.n_out != 1 || bs.n_in > 1 || (bs.n_in == 1 && bs.in[0] != element) || bs.out[0] != TY_BOOL)
                 return error_at(c, PINAX_ERR_TYPE, at.line, at.column, "the block of filter_into is (x T gives bool)");
@@ -2873,6 +2876,18 @@ static bool do_block(comp *c) {
     } else if (use != USE_TIMES) { // count, any, all, first: a test of one element
         if (bs.n_out != 1 || bs.out[0] != TY_BOOL || bs.n_in > 1 || (bs.n_in == 1 && bs.in[0] != element))
             return error_at(c, PINAX_ERR_TYPE, at.line, at.column, "this block takes one element and gives a bool");
+    }
+    // ... into an array: the cells written so far and the array's length, below the flag
+    uint8_t fill = 0, room = 0;
+    if (dst != NONE && ((const globalsym *)c->globals.ptr + dst)->kind == GK_ARRAY) {
+        if (!push_slot(c, TY_INT) || !push_slot(c, TY_INT))
+            return false;
+        f->stack[f->depth - 2].hidden = f->stack[f->depth - 1].hidden = true;
+        fill = (uint8_t)slot_of(c, f->depth - 2);
+        room = (uint8_t)slot_of(c, f->depth - 1);
+        hidden += 2;
+        if (emit(c, PNX_ABX(PNX_LOADI, fill, 0)) == NONE || emit(c, PNX_ABX(PNX_GLEN, room, dst)) == NONE)
+            return false;
     }
     // what the word keeps while the block runs, above the operands of the stem
     uint8_t keep = 0, val = 0, idx = cur;
@@ -2917,6 +2932,8 @@ static bool do_block(comp *c) {
     b->dst = dst;
     b->dst_name = dst_name;
     b->full = NONE;
+    b->fill = fill;
+    b->room = room;
     b->floor_mark = f->floor;
     f->floor = f->depth;
     if (use == USE_FOLD) {
@@ -2968,6 +2985,23 @@ static bool do_block(comp *c) {
     return true;
 }
 
+// The value in register `value` written to the next cell of the array a map_into or a
+// filter_into fills; when every cell is written, the jump to the block's failure is taken.
+static bool array_put(comp *c, block *b, uint32_t value) {
+    const globalsym *g = (const globalsym *)c->globals.ptr + b->dst;
+    if (emit(c, PNX_ABC(PNX_JLT, b->fill, b->room, 1)) == NONE || !jump_later(c, &b->full))
+        return false;
+    if (g->strcap) { // the bytes are copied into the cell
+        const uint32_t row = top_slot(c, BANK_I, 1);
+        if (emit_g(c, PNX_ROW, row, b->fill, b->dst) == NONE || emit(c, PNX_ABC(PNX_FSETS, value, row, 0)) == NONE ||
+            emit(c, PNX_FIELD(b->dst, 0, g->strcap)) == NONE)
+            return false;
+    } else if (emit_g(c, PNX_ASET, value, b->fill, b->dst) == NONE) {
+        return false;
+    }
+    return emit(c, PNX_ABC(PNX_ADDI, b->fill, b->fill, 1)) != NONE;
+}
+
 static bool end_do(comp *c, block *b) {
     fn *f = c->f;
     if (!f->dead) {
@@ -3006,7 +3040,15 @@ static bool end_do(comp *c, block *b) {
                                       ((const globalsym *)c->globals.ptr + b->dst)->strcap
                                   ? PNX_LPUSHS
                                   : PNX_LPUSH;
-        if (b->use == USE_MAP) { // the instruction after the push runs when the list is full
+        if ((b->use == USE_MAP || b->use == USE_FILTER) &&
+            ((const globalsym *)c->globals.ptr + b->dst)->kind == GK_ARRAY) {
+            uint32_t skip = NONE; // filter_into: past the store when the verdict is false
+            if (b->use == USE_FILTER && (!cond_jump(c, &verdict, 1) || !jump_later(c, &skip)))
+                return false;
+            if (!array_put(c, b, b->use == USE_MAP ? made : b->val))
+                return false;
+            land(c, &skip);
+        } else if (b->use == USE_MAP) { // the instruction after the push runs when the list is full
             if (emit(c, PNX_ABX(push, made, b->dst)) == NONE || !jump_later(c, &b->full))
                 return false;
         } else if (b->use == USE_FILTER && ((const globalsym *)c->globals.ptr + b->dst)->record != NONE) {
@@ -3079,6 +3121,15 @@ static bool end_do(comp *c, block *b) {
     if (done.use == USE_MAP || done.use == USE_FILTER) { // the list, then the word; fails with full
         if (c->tok.kind != PNX_T_NAME || !name_eq(tok_name(c), done.dst_name) || !advance(c))
             return c->err == PINAX_OK ? syntax(c, "the list to fill is expected right after the end") : false;
+        if (((const globalsym *)c->globals.ptr + done.dst)->kind == GK_ARRAY) { // gives the cells written
+            const uint32_t to = top_slot(c, BANK_I, 1);
+            if (!settle_all(c) || !move_slot(c, TY_INT, to, done.fill) ||
+                emit(c, PNX_ABX(PNX_SETFAIL, 0, PINAX_ERR_FULL)) == NONE ||
+                emit(c, PNX_ABC(PNX_JNEI, done.acc, 0, 1)) == NONE)
+                return false;
+            f->def_at = NONE;
+            return guard_op(c, TY_INT);
+        }
         if (!settle_all(c) || emit(c, PNX_ABX(PNX_SETFAIL, 0, PINAX_ERR_FULL)) == NONE ||
             emit(c, PNX_ABC(PNX_JNEI, done.acc, 0, 1)) == NONE)
             return false;
