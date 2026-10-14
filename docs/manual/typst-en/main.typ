@@ -12,3 +12,5 @@
 #include "chapters/04-control.typ"
 #include "chapters/05-strings.typ"
 #include "chapters/06-collections.typ"
+#include "chapters/07-records.typ"
+#include "chapters/08-errors.typ"

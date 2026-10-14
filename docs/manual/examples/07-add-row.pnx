@@ -1,0 +1,16 @@
+rem run
+use io
+record point
+  x i32
+  y i32
+end
+list path point 4
+word add_point (x int, y int or fail)
+  path add_row or_fail to p                         rem a new, zeroed row at the end
+  x p to point.x
+  y p to point.y
+end
+word walk (or fail) 0 0 add_point or_fail  3 4 add_point or_fail  6 0 add_point or_fail end
+walk or_else (e) e err_text io.println end
+path do (p path) cat ("(", p point.x, ", ", p point.y, ")") io.print end each
+"" io.println

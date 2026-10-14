@@ -1,0 +1,4 @@
+rem refused
+use io
+use str
+"42" str.to_int or_fail str.to_str io.println

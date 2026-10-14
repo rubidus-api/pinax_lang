@@ -1,0 +1,37 @@
+rem run
+use io
+use str
+rem A binary search tree in a pool: rows point to rows by number, never by address.
+forward pool nodes
+record node
+  key int
+  left nodes
+  right nodes
+end
+pool nodes node 16
+global root nodes
+word put_key (k int or fail)
+  nodes alloc or_fail to n
+  k n to node.key
+  root is_none if n to root return end
+  root to at
+  loop
+    k at node.key lt if
+      at node.left is_none if n at to node.left return end
+      at node.left to at
+    else
+      at node.right is_none if n at to node.right return end
+      at node.right to at
+    end
+  end
+end
+word show (t nodes)                                  rem in order: left, self, right
+  t is_none if return end
+  t node.left show
+  t node.key str.to_str io.print " " io.print
+  t node.right show
+end
+word build (or fail) 50 put_key or_fail 30 put_key or_fail 70 put_key or_fail 20 put_key or_fail 40 put_key or_fail end
+build or_else (e) e err_text io.println end
+root show
+"" io.println

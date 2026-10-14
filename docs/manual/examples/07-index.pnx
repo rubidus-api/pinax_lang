@@ -1,0 +1,23 @@
+rem run
+use io
+record user
+  name str(16)
+  age u8
+end
+list users user 8
+index by_name users user.name
+row users ("kim", 30)
+row users ("lee", 25)
+word register (name str, age int or fail)
+  users add_row or_fail to u
+  name u to user.name
+  age u to user.age
+  u by_name insert or_fail                          rem without this, lookup does not see it
+end
+word age_of (name str gives int or fail) name by_name lookup or_fail user.age end
+"park" 41 register or_else (e) e err_text io.println end
+"kim" 31 register or_else (e) cat ("kim again: ", e err_text) io.println end
+word show (name str) cat (name, ": ", name age_of or_else (e) -1 end) io.println end
+"lee" show
+"park" show
+"choi" show

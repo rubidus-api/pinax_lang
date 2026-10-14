@@ -1,0 +1,6 @@
+rem fault
+use io
+use str
+word average (total int, n int gives int) total n div end
+cat ("average of 10 over 4: ", 10 4 average) io.println
+cat ("average of nothing: ", 0 0 average) io.println

@@ -1,0 +1,8 @@
+rem fault
+use io
+word percent (part int, whole int gives int)
+  whole 0 gt assert                                  rem a promise the caller must keep
+  part 100 mul whole div
+end
+cat ("3 of 4: ", 3 4 percent, "%") io.println
+cat ("3 of 0: ", 3 0 percent, "%") io.println

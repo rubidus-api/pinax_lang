@@ -1,0 +1,3 @@
+rem refused
+use str
+word twice (s str gives int) s str.to_int 2 mul end

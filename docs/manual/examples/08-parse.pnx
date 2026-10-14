@@ -1,0 +1,21 @@
+rem run
+use io
+use str
+rem Read "name,score" lines; a bad line is reported, not fatal.
+word parse (line str gives name str, score int or fail)
+  line "," str.try_cut or_fail to (n, s)              rem no comma: fail the same way
+  s str.trim str.to_int or_fail to v                  rem not a number: fail
+  v 0 lt v 100 gt or if err.range fail end            rem our own rule: 0..100
+  n str.trim v
+end
+word report (line str)
+  line parse or_else (e) cat ("skipped \"", line, "\": ", e err_text) io.println return end to (name, score)
+  cat (name, " scored ", score) io.println
+end
+text END
+kim, 91
+lee 77
+park, ninety
+choi, 140
+END
+str.lines do (l str) l report end each

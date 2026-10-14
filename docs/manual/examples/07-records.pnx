@@ -1,0 +1,16 @@
+rem run
+use io
+record book
+  title str(32)
+  year u16
+  pages u16
+end
+list shelf book 8
+row shelf ("The C Programming Language", 1978, 228)
+row shelf ("Thinking Forth", 1984, 300)
+row shelf lua ("Programming in Lua", 2003)          rem a named row; pages left out: 0
+word show (b shelf) cat (b book.year, " ", b book.title, ", ", b book.pages, " pages") io.println end
+shelf do (b shelf) b show end each
+2016 lua to book.year                               rem value, row, to record.field
+388 lua to book.pages
+lua show

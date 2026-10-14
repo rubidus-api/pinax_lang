@@ -1,0 +1,8 @@
+rem run
+use io
+list seen int 3
+word note_it (n int)
+  n seen push or_return                              rem full: quietly do nothing
+  cat ("noted ", n) io.println
+end
+1 note_it 2 note_it 3 note_it 4 note_it

@@ -1,0 +1,5 @@
+rem run
+use io
+word safe_average (total int, n int gives int or fail) total n chk_div or_fail end
+word show () cat ("10/4: ", 10 4 safe_average or_else (e) -1 end, ", 0/0: ", 0 0 safe_average or_else (e) -1 end) io.println end
+show

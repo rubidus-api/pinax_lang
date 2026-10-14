@@ -1,0 +1,15 @@
+rem fault
+use io
+record node
+  key int
+end
+pool nodes node 4
+global keep nodes
+word demo (or fail)
+  nodes alloc or_fail to n
+  n to keep
+  keep nodes free
+  "the row is given back" io.println
+  keep node.key drop
+end
+demo or_else (e) end
