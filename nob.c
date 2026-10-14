@@ -48,7 +48,7 @@ static const char *const proven_portable[] = {
     "src/proven/map.c",       "src/proven/memory.c",        "src/proven/panic.c",
     "src/proven/pool.c",      "src/proven/random.c",        "src/proven/ring.c",
     "src/proven/scan.c",      "src/proven/time.c",          "src/proven/u8str.c",
-    "src/proven/utf.c",       "platform/proven_sys_math.c",
+    "src/proven/url.c",       "src/proven/utf.c",           "platform/proven_sys_math.c",
 };
 
 // Hosted builds of the library also carry proven's memory primitives and its UTF-16 strings:
@@ -275,12 +275,19 @@ static int cmd_test(const target_t *t) {
 // What the core links from proven_c_lib (hosted build).
 static const char *const dist_proven[] = {
     "vendor/proven/platform/proven_sys_mem.c", "vendor/proven/src/proven/buffer.c",
+    "vendor/proven/src/proven/encode.c",        "vendor/proven/src/proven/url.c",
     "vendor/proven/src/proven/float_decimal.c", "vendor/proven/src/proven/float_format.c",
     "vendor/proven/src/proven/float_parse.c",   "vendor/proven/src/proven/fmt.c",
     "vendor/proven/src/proven/hash.c",          "vendor/proven/src/proven/scan.c",
     "vendor/proven/src/proven/u16str.c",        "vendor/proven/src/proven/u8str.c",
     "vendor/proven/src/proven/utf.c",
 };
+// Static names several of those files define: in one translation unit each file listed here
+// sees its own under another name.
+static const struct {
+    const char *file, *name;
+} dist_renames[] = {{"vendor/proven/src/proven/encode.c", "hex_value"}, {"vendor/proven/src/proven/url.c", "hex_value"}};
+
 static const char *const dist_dirs[] = {"include/", "src/", "vendor/proven/include/", "vendor/proven/platform/",
                                         "vendor/proven/src/proven/", "vendor/proven/src/"};
 
@@ -371,8 +378,17 @@ static int cmd_dist(const target_t *t) {
     fputs("#if defined(__GNUC__)\n#pragma GCC diagnostic ignored \"-Wunused-const-variable\"\n#endif\n", out);
     dist_seen_n = 0;
     int status = 0;
-    for (size_t k = 0; !status && k < COUNT(dist_proven); ++k)
+    for (size_t k = 0; !status && k < COUNT(dist_proven); ++k) {
+        for (size_t j = 0; j < COUNT(dist_renames); ++j) {
+            if (strcmp(dist_renames[j].file, dist_proven[k]) == 0)
+                fprintf(out, "#define %s %s_%zu\n", dist_renames[j].name, dist_renames[j].name, k);
+        }
         status = dist_emit(out, dist_proven[k]);
+        for (size_t j = 0; j < COUNT(dist_renames); ++j) {
+            if (strcmp(dist_renames[j].file, dist_proven[k]) == 0)
+                fprintf(out, "#undef %s\n", dist_renames[j].name);
+        }
+    }
     for (size_t k = 0; !status && k < core_count; ++k)
         status = dist_emit(out, core_sources[k]);
     if (fclose(out) || status)

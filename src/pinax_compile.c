@@ -774,6 +774,7 @@ static uint32_t wide_of(uint32_t op) {
     case PNX_IXGET: return PNX_IXGETW;
     case PNX_IXGETS: return PNX_IXGETSW;
     case PNX_BPUT: return PNX_BPUTW;
+    case PNX_BENC: return PNX_BENCW;
     case PNX_BPUTS: return PNX_BPUTSW;
     case PNX_TSPAWN: return PNX_TSPAWNW;
     case PNX_TRESUME: return PNX_TRESUMEW;
@@ -1242,7 +1243,8 @@ enum {
     BW_SLICE, BW_CUT, BW_TRY_CUT, BW_TRIM, BW_TRIM_LEFT, BW_TRIM_RIGHT, BW_LINES, BW_SPLIT, BW_FIND_LAST, BW_COMPARE,
     BW_HEX, BW_BIN, BW_HEX_PAD, BW_ZERO_PAD, BW_PAD_LEFT, BW_PAD_RIGHT, BW_CALL, BW_MARK, BW_RELEASE, BW_REGION_FREE,
     BW_SPAN, BW_CHARS, BW_JOIN_INTO, BW_UPPER, BW_LOWER, BW_REPEAT, BW_TO_INT_BASE, BW_IS_UTF8, BW_CHAR_COUNT,
-    BW_REPLACE_INTO, BW_APPEND_HEX
+    BW_REPLACE_INTO, BW_APPEND_HEX, BW_CRC32, BW_FNV1A, BW_HASH64, BW_BASE64_ENCODE, BW_BASE64_DECODE,
+    BW_HEX_ENCODE, BW_HEX_DECODE, BW_URL_ENCODE, BW_URL_DECODE
 };
 static const struct builtin {
     const char *name;
@@ -1282,12 +1284,21 @@ static const struct builtin {
     {"upper", BW_UPPER, 1},         {"lower", BW_LOWER, 1},        {"repeat", BW_REPEAT, 1},
     {"to_int_base", BW_TO_INT_BASE, 1}, {"is_utf8", BW_IS_UTF8, 1}, {"char_count", BW_CHAR_COUNT, 1},
     {"replace_into", BW_REPLACE_INTO, 1}, {"append_hex", BW_APPEND_HEX, 2},
+    {"crc32", BW_CRC32, 3},         {"fnv1a", BW_FNV1A, 3},        {"hash64", BW_HASH64, 3},
+    {"base64_encode", BW_BASE64_ENCODE, 4}, {"base64_decode", BW_BASE64_DECODE, 4},
+    {"hex_encode", BW_HEX_ENCODE, 4}, {"hex_decode", BW_HEX_DECODE, 4},
+    {"url_encode", BW_URL_ENCODE, 4}, {"url_decode", BW_URL_DECODE, 4},
     {"len", BW_LEN, 1},             {"is_empty", BW_IS_EMPTY, 1},  {"take", BW_TAKE, 1},
 };
 
 // A word of the core (module 0, written bare) or of a standard module (1: str, 2: fmt, written
 // with the module: str.len). `len`, `is_empty` and `take` exist twice: bare for collections
 // and queues, in `str` for strings.
+// The standard modules, part of the language: their number in the builtin table, or 0.
+static uint8_t standard_module(name n) {
+    return name_is(n, "str") ? 1 : name_is(n, "fmt") ? 2 : name_is(n, "hash") ? 3 : name_is(n, "encode") ? 4 : 0;
+}
+
 static const struct builtin *find_builtin(name n, uint8_t module) {
     for (size_t k = 0; k < sizeof builtins / sizeof builtins[0]; ++k) {
         if (builtins[k].module == module && name_is(n, builtins[k].name))
@@ -3590,6 +3601,40 @@ static bool builtin(comp *c, const struct builtin *w) {
         return push_slot(c, TY_STR) &&
                emit(c, PNX_ABC(PNX_SSPAN, ra, slot_of(c, f->depth - 1), (uint32_t)class.value)) != NONE && advance(c);
     }
+    case BW_CRC32:
+    case BW_FNV1A:
+    case BW_HASH64: { // s crc32 : the hash of the bytes, as an int
+        if (!need(c, 1))
+            return false;
+        if (f->stack[f->depth - 1].type != TY_STR)
+            return type_error(c, "this word takes a str");
+        if (!reg_of(c, f->depth - 1, &ra))
+            return false;
+        --f->depth;
+        if (!push_slot(c, TY_INT))
+            return false;
+        const uint32_t kind = w->id == BW_CRC32 ? PNX_HASH_CRC32 : w->id == BW_FNV1A ? PNX_HASH_FNV1A : PNX_HASH_SIP;
+        return emit_def(c, PNX_ABC(PNX_SHASH, slot_of(c, f->depth - 1), ra, kind), BANK_I) != NONE && advance(c);
+    }
+    case BW_BASE64_ENCODE:
+    case BW_BASE64_DECODE:
+    case BW_HEX_ENCODE:
+    case BW_HEX_DECODE:
+    case BW_URL_ENCODE:
+    case BW_URL_DECODE: { // s buf base64_encode : appended to the buffer; fails with full or format
+        if (!need_coll(c, &g, &gi) || !need(c, 1))
+            return false;
+        if (g->kind != GK_BUFFER || f->stack[f->depth - 1].type != TY_STR)
+            return type_error(c, "this word takes a str and a buffer: s buf encode.base64_encode");
+        if (!settle(c, f->depth - 1))
+            return false;
+        ra = slot_of(c, f->depth - 1);
+        --f->depth;
+        if (!settle_all(c))
+            return false;
+        const uint32_t kind = (uint32_t)(w->id - BW_BASE64_ENCODE); // in the order of PNX_ENC_...
+        return emit_g(c, PNX_BENC, ra, kind, gi) != NONE && guard_op(c, TY_NONE);
+    }
     case BW_APPEND_HEX: { // n buf append_hex : fails when the buffer is full
         if (!need_coll(c, &g, &gi) || !need(c, 1))
             return false;
@@ -4387,7 +4432,7 @@ static bool body_name(comp *c) {
         const uint32_t source = source_module(c, module);
         if (source != NONE)
             return module_symbol(c, (uint16_t)source, n);
-        const uint8_t standard = name_is(module, "str") ? 1 : name_is(module, "fmt") ? 2 : 0;
+        const uint8_t standard = standard_module(module);
         if (standard == 1) { // the byte classes of str.span
             static const char *const classes[] = {"digit",      "alpha",      "alnum",     "space",
                                                 "upper_case", "lower_case", "hex_digit", "punct"};
@@ -4459,7 +4504,7 @@ static bool body_name(comp *c) {
         if (bw)
             return builtin(c, bw);
         // not a name of the core: say so when it is a word of a module, which is written with it
-        if (find_builtin(n, 1) || find_builtin(n, 2))
+        if (find_builtin(n, 1) || find_builtin(n, 2) || find_builtin(n, 3) || find_builtin(n, 4))
             return error(c, PINAX_ERR_NOT_FOUND, "a word of a module is written with the module: str.len, fmt.hex");
         for (uint32_t k = 0; k < c->st->n_hosts; ++k) {
             if (name_eq(cname(c->st->hosts[k].name), n) && module_used(c, cname(c->st->hosts[k].module)))
@@ -4912,7 +4957,7 @@ static bool use_module(comp *c) {
     if (c->tok.kind != PNX_T_NAME)
         return syntax(c, "use is followed by the name of a module");
     const name n = tok_name(c);
-    bool known = name_is(n, "str") || name_is(n, "fmt"); // standard modules: part of the language
+    bool known = standard_module(n) != 0; // standard modules: part of the language
     for (uint32_t k = 0; !known && k < c->st->n_hosts; ++k)
         known = name_eq(cname(c->st->hosts[k].module), n);
     if (!known && source_module(c, n) == NONE)
@@ -6546,7 +6591,7 @@ static pinax_err load_source(pinax_state *st, const char *file, pinax_str source
         name *slot = c.err == PINAX_OK && !resumed ? vec_push(&c, &c.srcmods, sizeof(name)) : NULL;
         if (slot) {
             *slot = self;
-            bool taken = self.length && (name_is(self, "str") || name_is(self, "fmt") || source_module(&c, self) != NONE);
+            bool taken = self.length && (standard_module(self) || source_module(&c, self) != NONE);
             for (uint32_t k = 0; self.length && !taken && k < st->n_hosts; ++k)
                 taken = name_eq(cname(st->hosts[k].module), self);
             if (taken)

@@ -430,7 +430,7 @@ static const char *check_word(const pinax_state *st, uint32_t index, span range,
         case PNX_TCANCEL: case PNX_TRUNALL: want = PNX_G_TASKS; global = bx; break;
         case PNX_ROW: want = PNX_G_TABLE; global = c; break;
         case PNX_BCLEAR: case PNX_BVIEW: want = PNX_G_BUFFER; global = bx; break;
-        case PNX_BPUT: case PNX_BPUTS: want = PNX_G_BUFFER; global = c; break;
+        case PNX_BPUT: case PNX_BPUTS: case PNX_BENC: want = PNX_G_BUFFER; global = c; break;
         case PNX_FGET: case PNX_FSET: case PNX_FGETS: case PNX_FSETS: want = PNX_G_TABLE; global = x & 0xfffu; break;
         default: break;
         }
@@ -445,7 +445,7 @@ static const char *check_word(const pinax_state *st, uint32_t index, span range,
             case PNX_ROWW: want = PNX_G_TABLE; break;
             case PNX_PALIVEW: want = PNX_G_POOL; break;
             case PNX_IXGETW: case PNX_IXGETSW: want = PNX_G_INDEX; break;
-            case PNX_BPUTW: case PNX_BPUTSW: want = PNX_G_BUFFER; break;
+            case PNX_BPUTW: case PNX_BPUTSW: case PNX_BENCW: want = PNX_G_BUFFER; break;
             default: want = PNX_G_TASKS; break; // TSPAWNW TRESUMEW TDONEW
             }
             global = x;
@@ -474,6 +474,8 @@ static const char *check_word(const pinax_state *st, uint32_t index, span range,
         }
         if (((op == PNX_BPUT || op == PNX_BPUTW) && b >= PNX_W_COUNT) || (op == PNX_SGET && c >= PNX_W_COUNT))
             return "code: unknown width";
+        if (((op == PNX_BENC || op == PNX_BENCW) && b >= PNX_ENC_COUNT) || (op == PNX_SHASH && c >= PNX_HASH_COUNT))
+            return "code: unknown encoding or hash";
         if (info.second == PNX_X_SREG && x >= word->str_cells)
             return "code: register outside the window";
 

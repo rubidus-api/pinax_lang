@@ -254,6 +254,7 @@ enum {
     X(TOINTB, 0xaa, PNX_K_I, PNX_K_S, PNX_K_I, PNX_F_ABC, PNX_X_NONE, 1, "wrr") \
     X(SSPAN, 0xab, PNX_K_S, PNX_K_S, PNX_K_IMM, PNX_F_ABC, PNX_X_NONE, 0, "mw-") \
     X(SCHAR, 0xac, PNX_K_S, PNX_K_S, PNX_K_NONE, PNX_F_ABC, PNX_X_NONE, 1, "mw-") \
+    X(SHASH, 0xad, PNX_K_I, PNX_K_S, PNX_K_IMM, PNX_F_ABC, PNX_X_NONE, 0, "wr-") \
     /* strings built in the region */ \
     X(RMARK, 0xb8, PNX_K_S, PNX_K_NONE, PNX_K_NONE, PNX_F_ABC, PNX_X_NONE, 0, "w--") \
     X(RCATS, 0xb9, PNX_K_S, PNX_K_S, PNX_K_NONE, PNX_F_ABC, PNX_X_NONE, 0, "mr-") \
@@ -289,7 +290,9 @@ enum {
     X(TRESUMEW, 0xd7, PNX_K_I, PNX_K_I, PNX_K_NONE, PNX_F_ABC, PNX_X_GLOBAL, 0, "wr-") \
     X(TDONEW, 0xd8, PNX_K_I, PNX_K_I, PNX_K_NONE, PNX_F_ABC, PNX_X_GLOBAL, 0, "wr-") \
     /* more collections */ \
-    X(LCOPYR, 0xe0, PNX_K_I, PNX_K_NONE, PNX_K_NONE, PNX_F_GLOBAL, PNX_X_GLOBAL, 1, "r--")
+    X(LCOPYR, 0xe0, PNX_K_I, PNX_K_NONE, PNX_K_NONE, PNX_F_GLOBAL, PNX_X_GLOBAL, 1, "r--") \
+    X(BENC, 0xe1, PNX_K_S, PNX_K_IMM, PNX_K_G, PNX_F_ABC, PNX_X_NONE, 1, "r--") \
+    X(BENCW, 0xe2, PNX_K_S, PNX_K_IMM, PNX_K_NONE, PNX_F_ABC, PNX_X_GLOBAL, 1, "r--")
 
 enum {
 #define PNX_ENUM(name, number, a, b, c, shape, second, fails, roles) PNX_##name = number,
@@ -308,6 +311,10 @@ enum {
 
 // Width codes of FGET, FSET, BPUT and SGET. Bytes are little-endian.
 enum { PNX_W_U8, PNX_W_U16, PNX_W_U32, PNX_W_64, PNX_W_I8, PNX_W_I16, PNX_W_I32, PNX_W_COUNT };
+
+// What SHASH computes (its C) and what BENC writes (its B).
+enum { PNX_HASH_CRC32, PNX_HASH_FNV1A, PNX_HASH_SIP, PNX_HASH_COUNT };
+enum { PNX_ENC_BASE64, PNX_ENC_BASE64_DEC, PNX_ENC_HEX, PNX_ENC_HEX_DEC, PNX_ENC_URL, PNX_ENC_URL_DEC, PNX_ENC_COUNT };
 
 // Kinds of global.
 enum {

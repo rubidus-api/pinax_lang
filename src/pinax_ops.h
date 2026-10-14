@@ -852,6 +852,31 @@ PNX_OP(RPADR) {
     return pnx_append_padded(st, &S[OP_A(w)], pnx_view_bytes(st, s), s.length, R[OP_C(w)], ' ', true);
 }
 
+// ---- the modules hash and encode (RFC-0016 S1) ---------------------------------------------
+
+PNX_OP(SHASH) {
+    const pnx_scell s = S[OP_B(w)];
+    R[OP_A(w)] = (int64_t)pnx_hash_kind(OP_C(w), pnx_view_bytes(st, s), s.length);
+    st->charge += s.length;
+    return PNX_R_OK;
+}
+// A, encoded or decoded as B says, appended to buffer x. PNX_R_FAILED: no room (full), or the
+// text is not of the form (format); the buffer keeps what it held.
+PNX_OP(BENC) {
+    const pnx_global *g = &st->globals[x];
+    const pnx_scell   s = S[OP_A(w)];
+    uint64_t          len = pnx_buffer_len(g), n = 0;
+    const int r = pnx_encode(OP_B(w), pnx_view_bytes(st, s), s.length, g->ptr + 8 + len, g->capacity - len, &n);
+    st->charge += s.length + n;
+    if (r) {
+        st->fail = r == 1 ? PINAX_ERR_FULL : PINAX_ERR_FORMAT;
+        return PNX_R_FAILED;
+    }
+    len += n;
+    __builtin_memcpy(g->ptr, &len, 8);
+    return PNX_R_OK;
+}
+
 // ---- the rest of the str module (RFC-0016 S0) ------------------------------------------------
 
 // The length of the UTF-8 sequence that starts at bytes[0] (of n), or 0 when it is not a valid

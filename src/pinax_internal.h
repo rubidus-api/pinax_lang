@@ -246,6 +246,10 @@ uint32_t pnx_format_int(int64_t value, uint8_t out[24]);
 uint32_t pnx_find(const uint8_t *bytes, uint32_t length, const uint8_t *part, uint32_t part_length);
 // Hash of key bytes for an index: the vendored proven's keyed SipHash-2-4.
 uint64_t pnx_hash(const uint8_t key[16], const uint8_t *bytes, uint32_t length);
+// The words of the modules hash and encode, over proven_c_lib. pnx_encode writes at most `cap`
+// bytes to `out`: 0 done (`*written` set), 1 not enough room, 2 the input is not of the form.
+uint64_t pnx_hash_kind(uint32_t kind, const uint8_t *bytes, uint32_t length);
+int      pnx_encode(uint32_t kind, const uint8_t *in, uint32_t length, uint8_t *out, uint64_t cap, uint64_t *written);
 // The name of an error number as a view into the interpreter's static text.
 extern const char pnx_static_text[];
 void pnx_err_name(int64_t err, uint32_t *offset, uint32_t *length);

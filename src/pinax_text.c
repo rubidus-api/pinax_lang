@@ -1,10 +1,12 @@
 // pinax_text.c - scanning and parsing of text, on the vendored proven (D0017).
 #include "pinax_internal.h"
 
+#include "proven/encode.h"
 #include "proven/fmt.h"
 #include "proven/hash.h"
 #include "proven/scan.h"
 #include "proven/u8str.h"
+#include "proven/url.h"
 
 bool pnx_parse_int(const uint8_t *bytes, uint32_t length, int64_t *out) {
     // proven_scan_i64 skips leading white space; here the whole view must be the number.
@@ -85,4 +87,29 @@ uint32_t pnx_find_last(const uint8_t *bytes, uint32_t length, const uint8_t *par
     const proven_size_t at =
         proven_u8str_view_find_last((proven_u8str_view_t){bytes, length}, (proven_u8str_view_t){part, part_length});
     return at == PROVEN_INDEX_NOT_FOUND ? UINT32_MAX : (uint32_t)at;
+}
+
+uint64_t pnx_hash_kind(uint32_t kind, const uint8_t *bytes, uint32_t length) {
+    static const uint8_t zero[16] = {0};
+    const proven_mem_view_t data = {bytes, length};
+    return kind == PNX_HASH_CRC32   ? proven_crc32(data)
+         : kind == PNX_HASH_FNV1A ? proven_hash_bytes(data)
+                                  : proven_hash_keyed(data, zero); // hash64: SipHash-2-4, key 0
+}
+
+int pnx_encode(uint32_t kind, const uint8_t *in, uint32_t length, uint8_t *out, uint64_t cap, uint64_t *written) {
+    const proven_mem_view_t view = {in, length};
+    const proven_mem_mut_t  room = {out, (proven_size_t)cap};
+    proven_size_t           n = 0;
+    proven_err_t            err;
+    switch (kind) {
+    case PNX_ENC_BASE64: err = proven_base64_encode(view, out, room.size, &n); break;
+    case PNX_ENC_BASE64_DEC: err = proven_base64_decode(view, out, room.size, &n); break;
+    case PNX_ENC_HEX: err = proven_hex_encode(view, out, room.size, &n); break;
+    case PNX_ENC_HEX_DEC: err = proven_hex_decode(view, out, room.size, &n); break;
+    case PNX_ENC_URL: err = proven_url_encode_component(view, room, &n); break;
+    default: err = proven_url_percent_decode((proven_u8str_view_t){in, length}, room, &n); break;
+    }
+    *written = n;
+    return err == PROVEN_OK ? 0 : err == PROVEN_ERR_OUT_OF_BOUNDS || err == PROVEN_ERR_OVERFLOW ? 1 : 2;
 }
