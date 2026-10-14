@@ -12,6 +12,7 @@
    unless the file says `// shape: <reason>` in its first lines.
 3. Examples: every example is shown somewhere, and every example shown exists.
 4. No local absolute path in any file of the tree.
+5. Each term is defined (#term) once.
 """
 import os
 import pathlib
@@ -78,6 +79,15 @@ for f in sorted((root / "examples").glob("*")):
         head = f.read_text(encoding="utf-8").split("\n", 3)
         if not any(l.strip() == "rem hide" for l in head):
             problems.append(f"examples: {f.name} is shown nowhere")
+
+# 5. A term is defined (#term) in one place only.
+defined = {}
+for p in sorted(ko):
+    for m in re.finditer(r'#term\("([^"]+)"', (root / "typst-ko" / p).read_text(encoding="utf-8")):
+        defined.setdefault(m.group(1), []).append(str(p))
+for t, where in sorted(defined.items()):
+    if len(where) > 1:
+        problems.append(f"terms: {t} is defined in {len(where)} places: " + ", ".join(where))
 
 local = re.compile(r"/(opt|home|mnt)/[A-Za-z]")
 for p in root.rglob("*"):

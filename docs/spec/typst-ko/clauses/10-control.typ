@@ -85,12 +85,12 @@ block   = "do" [ "(" effect ")" ] { body } "end" ;
 #para("2")[같은 값이 두 가지에 있으면 거절된다.]
 #ex("spec", "10-case-twice.pnx")
 
-#para("2a")[모듈의 상수(`json.key`, `err.full` 같은 경로)는 가지의 값이 되지 못한다. 그런 값은 `eq` 로 견준다.]
+#para("3")[모듈의 상수(`json.key`, `err.full` 같은 경로)는 가지의 값이 되지 못한다. 그런 값은 `eq` 로 견준다.]
 #ex("spec", "10-case-path.pnx")
 
 #part("결함")
 
-#para("3")[`otherwise` 가 없고 맞는 가지도 없으면 결함 `range` 다.]
+#para("4")[`otherwise` 가 없고 맞는 가지도 없으면 결함 `range` 다.]
 #ex("spec", "10-case-nomatch.pnx")
 
 == 돌아가기 <control-return>
