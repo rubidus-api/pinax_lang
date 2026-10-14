@@ -197,6 +197,11 @@ struct pinax_state {
     void (*diag)(void *user, pinax_str file, uint32_t line, uint32_t column, pinax_str message);
     void *diag_user;
     pinax_resolve_fn resolve; // gives the C functions that `extern` names
+    // what the last pinax_eval() left: its types (the compiler's numbers) and values
+    uint32_t  eval_n;
+    uint16_t  eval_type[16];
+    int64_t   eval_int[16];
+    pinax_str eval_str[16];
     void            *resolve_user;
     uint8_t hash_key[16]; // of the lookup indexes; inside the block, so images carry it
 

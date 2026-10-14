@@ -198,9 +198,39 @@ static void say(const char *line) {
     fflush(stdout); // the host modules write without a buffer; keep the order
 }
 
+// What a line of the session left: 3 "abc" true err.full
+static void show_values(const pinax_state *state) {
+    const uint32_t n = pinax_eval_count(state);
+    char           out[320];
+    size_t         at = 0;
+    for (uint32_t k = 0; k < n && at + 80 < sizeof out; ++k) {
+        pinax_value v;
+        if (pinax_eval_value(state, k, &v) != PINAX_OK)
+            break;
+        const char *gap = k ? " " : "";
+        const int   shown = v.s.len > 60 ? 60 : (int)v.s.len;
+        int         written;
+        if (v.kind == PINAX_VALUE_STR)
+            written = snprintf(out + at, sizeof out - at, "%s\"%.*s%s\"", gap, shown, (const char *)v.s.ptr,
+                               shown < (int)v.s.len ? "..." : "");
+        else if (v.kind == PINAX_VALUE_BOOL)
+            written = snprintf(out + at, sizeof out - at, "%s%s", gap, v.i ? "true" : "false");
+        else if (v.kind == PINAX_VALUE_ERR)
+            written = snprintf(out + at, sizeof out - at, "%serr.%.*s", gap, (int)v.s.len, (const char *)v.s.ptr);
+        else
+            written = snprintf(out + at, sizeof out - at, "%s%lld", gap, (long long)v.i);
+        at += (size_t)written;
+    }
+    if (n && at + 1 < sizeof out) {
+        out[at++] = '\n';
+        out[at] = 0;
+        say(out);
+    }
+}
+
 static void diag(void *user, pinax_str file, uint32_t line, uint32_t column, pinax_str message) {
     (void)user;
-    if (line == 0) { // tool output: what a line left, the list of words
+    if (line == 0) { // tool output: the list of words, the stack at a place
         char out[320];
         snprintf(out, sizeof out, "%.*s\n", (int)message.len, (const char *)message.ptr);
         say(out);
@@ -335,6 +365,8 @@ static pinax_err load_file(pinax_state *state, const char *path, const char *nam
         see_text = text;
         see_length = length;
         const pinax_err err = finish(state, pinax_eval(state, (pinax_str){(const unsigned char *)listed, length + 4}));
+        if (err == PINAX_OK)
+            show_values(state);
         free(listed);
         return err;
     }
@@ -357,6 +389,8 @@ static int repl(pinax_state *state) {
         see_text = text;
         see_length = n;
         pinax_err err = finish(state, pinax_eval(state, (pinax_str){(const unsigned char *)text, n}));
+        if (err == PINAX_OK)
+            show_values(state);
         holding = false;
         const pinax_str why = pinax_error_text(state);
         if (err == PINAX_ERR_SYNTAX && why.len >= 11 && memcmp(why.ptr, "unfinished:", 11) == 0 &&

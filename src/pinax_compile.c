@@ -277,6 +277,12 @@ typedef struct comp {
     bool         see;        // list the stack after every line of the definitions that follow
     uint32_t     see_line;
     sig          eval_sig;   // what the line leaves on the stack: the results of its code
+    // redefine word NAME ... : the session's word that is replaced and the new word whose code
+    // takes its place (RFC-0006 S11); NONE when the text redefines nothing
+    uint32_t     redefine_old, redefine_new;
+    bool         redefining; // `redefine` stands before the definition being read
+    uint32_t    *entries;    // after a redefinition: where every word's code begins now
+    uint16_t     redefine_cells[2]; // and the registers of the new code, which the old word gets
     bool         in_extern; // a signature of an extern is being read: cstr is a type there
     bool         in_host;   // a signature of a host word is being read: buffer is a type there
     bool         drop_names; // the names in the signature being read are not wanted
@@ -4039,6 +4045,19 @@ static bool body_token(comp *c) {
         if (!consumer && !settle(c, f->depth - 1))
             return false;
     }
+    if (c->eval && t.kind == PNX_T_NAME && name_is(tok_name(c), "stack") && !find_local(f, tok_name(c)) &&
+        !name_is_global(c, tok_name(c))) {
+        // stack : a tool word of an interactive session (RFC-0009 section 6); it tells the types
+        // on the stack at this place, as tool output (line 0 of the diagnostics)
+        if (c->st->diag) {
+            char text[200] = "stack: ";
+            stack_text(c, f, text + 7, sizeof text - 7);
+            const pinax_str file = {(const unsigned char *)c->file, __builtin_strlen(c->file)};
+            const pinax_str message = {(const unsigned char *)text, __builtin_strlen(text)};
+            c->st->diag(c->st->diag_user, file, 0, 0, message);
+        }
+        return advance(c);
+    }
     switch (t.kind) {
     case PNX_T_INT:
     case PNX_T_CHAR:
@@ -4299,8 +4318,17 @@ static bool definition(comp *c, bool is_test) {
         n = (name){text, n.length + 5};
         if (find_word(c, n, NULL))
             return type_error(c, "a test of this name is already defined");
+    } else if (c->redefining) {
+        uint32_t old;
+        if (!find_word(c, n, &old) || old >= c->base.words)
+            return type_error(c, "redefine replaces a word that an earlier line of the session defined");
+        if (c->redefine_old != NONE)
+            return syntax(c, "one redefine in a text");
+        c->redefine_old = old;
+        n = cname("(replaced)");
     } else if (name_is_global(c, n) && !(find_fwd(c, n, NULL) && find_fwd(c, n, NULL)->index == NONE)) {
-        return type_error(c, "this name is already defined");
+        return type_error(c, c->eval && find_word(c, n, NULL) ? "this name is already defined; redefine word replaces it"
+                                                              : "this name is already defined");
     }
     if (n.length > 31)
         return syntax(c, "a word name is at most 31 bytes long");
@@ -4317,6 +4345,12 @@ static bool definition(comp *c, bool is_test) {
     char text[72];
     if (!sig_text(c, &w->sig, text, sizeof text))
         return syntax(c, "the signature is longer than 71 bytes");
+    if (c->redefining) { // the code that calls the word was checked against this signature
+        c->redefining = false;
+        if (__builtin_strcmp(c->st->words[c->redefine_old].signature, text) != 0)
+            return error(c, PINAX_ERR_SIGNATURE, "redefine keeps the signature of the word it replaces");
+        c->redefine_new = c->def_index;
+    }
     fwd *ahead = is_test ? NULL : find_fwd(c, n, NULL);
     if (ahead) { // the definition a forward declaration promised
         char promised[72];
@@ -5271,6 +5305,16 @@ static bool compile(comp *c, image *im, bool *has_top) {
     struct counts seen = c->base;
     while (c->tok.kind != PNX_T_END) {
         if (c->eval && c->tok.kind == PNX_T_NAME && !c->top_fn->n_blocks && c->top_fn->depth == 0 &&
+            name_is(tok_name(c), "redefine") && !find_word(c, tok_name(c), NULL)) {
+            // redefine word NAME (effect) ... end : a tool word of an interactive session
+            if (!advance(c))
+                return false;
+            if (!is_word(c, PNX_KW_word))
+                return syntax(c, "redefine is followed by a word definition");
+            c->redefining = true;
+            continue;
+        }
+        if (c->eval && c->tok.kind == PNX_T_NAME && !c->top_fn->n_blocks && c->top_fn->depth == 0 &&
             (name_is(tok_name(c), "see") || name_is(tok_name(c), "list_words"))) {
             // tool words of an interactive session (RFC-0009 section 6)
             if (name_is(tok_name(c), "see")) {
@@ -5443,9 +5487,61 @@ static bool compile(comp *c, image *im, bool *has_top) {
         w->name = cname(LOAD_WORD);
         w->module = c->module;
         w->entry = im->code.n;
-        if (!finish_registers(c, top, w->cells) || !append_code(c, im, top))
+        // a line of a session gives results: their registers count even when only constants
+        // were left (`1 "a" drop` leaves 1 without using a register before the return)
+        if (!finish_word(c, top, c->words.n - 1) || !append_code(c, im, top))
             return false;
     }
+    return true;
+}
+
+// redefine: the new code takes the place of the old word's code, and the old code goes where
+// the new word was, under the hidden name "(replaced)". Calls name words by number and jumps
+// are relative inside a word, so whole words of code can change places; the word that was
+// replaced keeps its number, and every call to it, from earlier code too, runs the new code.
+static bool move_redefined(comp *c, image *im) {
+    const pinax_state *st = c->st;
+    const uint32_t n = c->words.n, total = im->code.n, old_code = st->head->n_code, n_lines = st->head->n_lines;
+    const uint32_t old = c->redefine_old, made = c->redefine_new;
+    wordsym *all = c->words.ptr;
+    uint32_t *code = im->code.ptr, *lines = im->lines.ptr;
+    // the source lines of the earlier code, from its records, one for each code word
+    for (uint32_t pc = 0; pc < old_code; ++pc)
+        lines[pc] = 0;
+    for (uint32_t k = 0; k < n_lines; ++k) {
+        pnx_linerec rec, next = {old_code, 0};
+        __builtin_memcpy(&rec, st->lines + (size_t)k * sizeof rec, sizeof rec);
+        if (k + 1 < n_lines)
+            __builtin_memcpy(&next, st->lines + (size_t)(k + 1) * sizeof next, sizeof next);
+        for (uint32_t pc = rec.pc; pc < next.pc && pc < old_code; ++pc)
+            lines[pc] = rec.line;
+    }
+    uint32_t *begin = arena_alloc(c, (size_t)(n + 1) * sizeof(uint32_t)), *entries = arena_alloc(c, (size_t)n * sizeof(uint32_t)),
+             *code2 = arena_alloc(c, (size_t)total * sizeof(uint32_t)), *lines2 = arena_alloc(c, (size_t)total * sizeof(uint32_t));
+    if (!begin || !entries || !code2 || !lines2)
+        return false;
+    for (uint32_t j = 0; j < n; ++j)
+        begin[j] = j < c->base.words ? st->words[j].entry : all[j].entry;
+    begin[n] = total;
+    for (uint32_t j = 0; j < n; ++j) {
+        if (begin[j] > begin[j + 1] || (j == c->base.words && begin[j] != old_code))
+            return error(c, PINAX_ERR_STATE, "redefine: the code of the words is not laid out in their order");
+    }
+    for (uint32_t j = 0, at = 0; j < n; ++j) {
+        const uint32_t from = j == old ? made : j == made ? old : j, length = begin[from + 1] - begin[from];
+        __builtin_memcpy(code2 + at, code + begin[from], (size_t)length * sizeof(uint32_t));
+        __builtin_memcpy(lines2 + at, lines + begin[from], (size_t)length * sizeof(uint32_t));
+        entries[j] = at;
+        at += length;
+    }
+    __builtin_memcpy(code, code2, (size_t)total * sizeof(uint32_t));
+    __builtin_memcpy(lines, lines2, (size_t)total * sizeof(uint32_t));
+    __builtin_memcpy(c->redefine_cells, all[made].cells, sizeof c->redefine_cells);
+    all[made].cells[0] = st->words[old].int_cells;
+    all[made].cells[1] = st->words[old].str_cells;
+    for (uint32_t j = 0; j < n; ++j)
+        all[j].entry = entries[j];
+    c->entries = entries;
     return true;
 }
 
@@ -5453,7 +5549,10 @@ static bool compile(comp *c, image *im, bool *has_top) {
 static bool serialize(comp *c, const image *im, uint8_t **out, size_t *out_len) {
     // line records: those of the earlier loads, then one wherever the line changes in the new code
     const pinax_state *st = c->st;
-    const uint32_t old_code = st->head ? st->head->n_code : 0, old_lines = st->head ? st->head->n_lines : 0;
+    // after a redefinition every line record is made again from the lines of the code words
+    const bool     moved = c->entries != NULL;
+    const uint32_t old_code = st->head && !moved ? st->head->n_code : 0,
+                   old_lines = st->head && !moved ? st->head->n_lines : 0;
     vec runs = {0};
     if (old_lines) {
         runs.ptr = arena_alloc(c, (size_t)old_lines * sizeof(pnx_linerec));
@@ -5503,7 +5602,15 @@ static bool serialize(comp *c, const image *im, uint8_t **out, size_t *out_len) 
     for (uint32_t k = 0; k < head.n_words; ++k) {
         const wordsym *w = (const wordsym *)c->words.ptr + k;
         if (k < c->base.words) { // a word of an earlier load: its record as it is
-            __builtin_memcpy(p, &st->words[k], sizeof(pnx_wordrec));
+            pnx_wordrec rec;
+            __builtin_memcpy(&rec, &st->words[k], sizeof rec);
+            if (moved)
+                rec.entry = c->entries[k];
+            if (k == c->redefine_old) {
+                rec.int_cells = c->redefine_cells[0];
+                rec.str_cells = c->redefine_cells[1];
+            }
+            __builtin_memcpy(p, &rec, sizeof rec);
             p += sizeof(pnx_wordrec);
             continue;
         }
@@ -5811,57 +5918,42 @@ static bool module_name(const char *file, size_t *length) {
     return n > 0 && n <= 31;
 }
 
-// What a line of a session left on the stack, told to the host through its diagnostics
-// function with line 0: "3 \"abc\" true".
-static void tell_values(pinax_state *st, const char *file, const char *tags, uint32_t count, const int64_t *ints,
-                        const pinax_str *strs) {
-    char   text[240];
-    size_t n = 0;
-    uint32_t ni = 0, ns = 0;
-    for (uint32_t k = 0; k < count && n + 80 < sizeof text; ++k) {
-        if (k)
-            text[n++] = ' ';
-        if (tags[k] == 's') {
-            const pinax_str s = strs[ns++];
-            const size_t shown = s.len > 60 ? 60 : s.len;
-            text[n++] = '"';
-            __builtin_memcpy(text + n, s.ptr, shown);
-            n += shown;
-            if (shown < s.len) {
-                __builtin_memcpy(text + n, "...", 3);
-                n += 3;
-            }
-            text[n++] = '"';
-            continue;
-        }
-        const int64_t v = ints[ni++];
-        if (tags[k] == 'i') {
-            uint8_t digits[24];
-            const uint32_t d = pnx_format_int(v, digits);
-            __builtin_memcpy(text + n, digits, d);
-            n += d;
-        } else if (tags[k] == 'b') {
-            __builtin_memcpy(text + n, v ? "true" : "false", v ? 4 : 5);
-            n += v ? 4 : 5;
-        } else if (tags[k] == 'e') {
-            uint32_t offset, length;
-            pnx_err_name(v, &offset, &length);
-            __builtin_memcpy(text + n, "err.", 4);
-            __builtin_memcpy(text + n + 4, pnx_static_text + offset, length);
-            n += 4 + length;
-        } else {
-            __builtin_memcpy(text + n, "<value>", 7);
-            n += 7;
-        }
+// What the last pinax_eval() left (pinax.h).
+uint32_t pinax_eval_count(const pinax_state *st) {
+    return st ? st->eval_n : 0;
+}
+
+pinax_err pinax_eval_value(const pinax_state *st, uint32_t index, pinax_value *out) {
+    if (!st || !out)
+        return PINAX_ERR_ARGUMENT;
+    if (index >= st->eval_n)
+        return PINAX_ERR_NOT_FOUND;
+    const tid type = st->eval_type[index];
+    // the type's name, from the declarations the state keeps
+    comp view = {.st = (pinax_state *)st};
+    const symtab *t = st->symbols;
+    if (t) {
+        view.globals = t->globals;
+        view.dtypes = t->dtypes;
     }
-    const pinax_str name = {(const unsigned char *)file, __builtin_strlen(file)};
-    const pinax_str message = {(const unsigned char *)text, n};
-    st->diag(st->diag_user, name, 0, 0, message);
+    const name n = type_name(&view, type);
+    const tid base = base_of(&view, type);
+    *out = (pinax_value){.kind = bank_of(type) == BANK_S ? PINAX_VALUE_STR : base == TY_BOOL ? PINAX_VALUE_BOOL
+                                 : base == TY_ERR ? PINAX_VALUE_ERR : PINAX_VALUE_INT,
+                         .i = st->eval_int[index], .s = st->eval_str[index],
+                         .type = {(const unsigned char *)n.text, n.length}};
+    if (out->kind == PINAX_VALUE_ERR) {
+        uint32_t offset, length;
+        pnx_err_name(out->i, &offset, &length);
+        out->s = (pinax_str){(const unsigned char *)pnx_static_text + offset, length};
+    }
+    return PINAX_OK;
 }
 
 static pinax_err load_source(pinax_state *st, const char *file, pinax_str source, uint32_t mode, bool eval) {
     if (!st || (!source.ptr && source.len))
         return PINAX_ERR_ARGUMENT;
+    st->eval_n = 0;
     if (st->suspended || st->host_cur) {
         st->error_text = "a run is suspended or a host word is running; finish it before loading";
         return PINAX_ERR_STATE;
@@ -5882,7 +5974,9 @@ static pinax_err load_source(pinax_state *st, const char *file, pinax_str source
     uint8_t *const tail = st->block + ((st->used + 15u) & ~(size_t)15u);
     uint8_t *const end = st->block + st->block_len;
     comp      c = {.st = st, .file = file ? file : "", .data_only = mode == PINAX_LOAD_DATA, .path_global = NONE,
-                   .eval = eval};
+                   .eval = eval,
+                   .redefine_old = NONE,
+                   .redefine_new = NONE};
     c.arena = tail < end ? tail : end;
     c.arena_end = end;
     const uint8_t *const work = c.arena;
@@ -5935,7 +6029,8 @@ static pinax_err load_source(pinax_state *st, const char *file, pinax_str source
         static const sig no_results = {0};
         c.top_fn->sig = &no_results;
         c.f = c.top_fn;
-        if (compile(&c, &im, &has_top) && serialize(&c, &im, &container, &length))
+        if (compile(&c, &im, &has_top) && (c.redefine_new == NONE || move_redefined(&c, &im)) &&
+            serialize(&c, &im, &container, &length))
             tables = keep_symbols(&c, source, work);
     }
     if (c.err != PINAX_OK) {
@@ -5954,12 +6049,9 @@ static pinax_err load_source(pinax_state *st, const char *file, pinax_str source
     }
 
     // what the line of a session leaves, and whether it declared anything worth keeping
-    char           tags[MAX_PARAMS];
     const uint32_t n_values = eval ? c.eval_sig.n_out : 0;
-    for (uint32_t k = 0; k < n_values; ++k) {
-        const tid t = c.eval_sig.out[k];
-        tags[k] = t == TY_INT ? 'i' : t == TY_BOOL ? 'b' : t == TY_ERR ? 'e' : t == TY_STR ? 's' : '?';
-    }
+    for (uint32_t k = 0; k < n_values; ++k)
+        st->eval_type[k] = c.eval_sig.out[k];
     const symtab *session_before = st->symbols;
     const bool    declared = !eval || c.words.n != c.base.words + (has_top ? 1u : 0u) || c.consts.n != c.base.consts ||
                              c.globals.n != c.base.globals || c.records.n != c.base.records ||
@@ -6008,8 +6100,14 @@ static pinax_err load_source(pinax_state *st, const char *file, pinax_str source
         pinax_args values = {.ri = ints, .rs = strs};
         err = pinax_run(st, st->head->n_words - 1, n_values ? &values : NULL);
         st->budget = budget;
-        if (err == PINAX_OK && n_values && st->diag)
-            tell_values(st, file ? file : "", tags, n_values, ints, strs);
+        if (err == PINAX_OK && n_values) { // in the order of the stack, each bank counted on its own
+            for (uint32_t k = 0, ni = 0, ns = 0; k < n_values; ++k) {
+                const bool text = bank_of(st->eval_type[k]) == BANK_S;
+                st->eval_int[k] = text ? 0 : ints[ni++];
+                st->eval_str[k] = text ? strs[ns++] : (pinax_str){(const unsigned char *)"", 0};
+            }
+            st->eval_n = n_values;
+        }
         if (mode == PINAX_LOAD_DATA && err == PINAX_SUSPENDED) {
             st->error_text = "the data source did not finish inside its budget";
             err = PINAX_ERR_STATE;

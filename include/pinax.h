@@ -246,15 +246,35 @@ PINAX_API pinax_err pinax_load_bytecode(pinax_state *state, pinax_str bytecode);
  *  - All the texts given to pinax_eval() are one module, the session: a line sees what the
  *    lines before it defined and the modules they opened with `use`. Sources loaded with
  *    pinax_load() do not see the session's names.
- *  - What the line leaves on the stack is told through config.diag with line 0, as one message:
- *    3 "abc" true. So are the answers of the tool words that exist only here: `list_words`,
- *    and `see`, after which every definition in the text is listed, one message for each of
- *    its lines (that line number, column 0): "stack: int str".
+ *  - What the line leaves on the stack is read with pinax_eval_count() and pinax_eval_value().
+ *  - The tool words that exist only here answer through config.diag: `list_words` and `stack`
+ *    (the types on the stack at that place: "stack: int str") with line 0, one message each;
+ *    `see`, after which every definition in the text is listed, one message for each of its
+ *    lines (that line number, column 0): "stack: int str". `redefine word NAME ...` replaces a
+ *    word an earlier text defined, keeping its signature; code that calls it runs the new one.
  *  - A text that ends inside a definition or a block answers PINAX_ERR_SYNTAX with an error
  *    text that begins "unfinished:"; give the longer text when the rest has come.
  *  - A text that is refused or ends in a fault leaves nothing behind. A name that exists is
  *    not defined again. */
 PINAX_API pinax_err pinax_eval(pinax_state *state, pinax_str line);
+
+/* What the last pinax_eval() that answered PINAX_OK left on the stack: pinax_eval_count()
+ * values, the deepest at index 0. Strings point into the state's memory and stay valid until
+ * the next load, eval or run; so does the type's name. */
+enum {
+    PINAX_VALUE_INT = 1, /* also characters, handles and distinct types over int */
+    PINAX_VALUE_BOOL,
+    PINAX_VALUE_STR,     /* also distinct types over str */
+    PINAX_VALUE_ERR
+};
+typedef struct pinax_value {
+    uint32_t  kind;  /* PINAX_VALUE_... */
+    int64_t   i;     /* the integer; 0 or 1 for a bool; the error's number for an err */
+    pinax_str s;     /* the bytes of a str; the error's name ("not_found") for an err */
+    pinax_str type;  /* the type as the source writes it: "int", "str", "file", "metres" */
+} pinax_value;
+PINAX_API uint32_t  pinax_eval_count(const pinax_state *state);
+PINAX_API pinax_err pinax_eval_value(const pinax_state *state, uint32_t index, pinax_value *out);
 
 /* ---- running ----------------------------------------------------------------------- */
 
