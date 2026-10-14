@@ -305,6 +305,16 @@ pinax_err pnx_execute(pinax_state *st) {
             FAULT((pinax_err)r);                                                                   \
         NEXT();                                                                                    \
     }
+#define RUNF2(name)                                                                                \
+    CASE(name) {                                                                                   \
+        const int r = pnx_op_##name(st, R, S, w, *pc);                                             \
+        ++pc;                                                                                      \
+        if (r == PNX_R_OK)                                                                         \
+            ++pc;                                                                                  \
+        else if (r != PNX_R_FAILED)                                                                \
+            FAULT((pinax_err)r);                                                                   \
+        NEXT();                                                                                    \
+    }
 #define RUNF(name)                                                                                 \
     CASE(name) {                                                                                   \
         const int r = pnx_op_##name(st, R, S, w, 0);                                               \
@@ -395,6 +405,7 @@ pinax_err pnx_execute(pinax_state *st) {
         RUNF(LPOP)
         RUNF(LPUSHS)
         RUNF(LPOPS)
+        RUNF2(LCOPYR)
         RUNF(SFIND)
         RUNF(SWORD)
         RUN(ERRTEXT)

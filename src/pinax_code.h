@@ -281,7 +281,9 @@ enum {
     X(TRUNALL, 0xd5, PNX_K_NONE, PNX_K_NONE, PNX_K_NONE, PNX_F_GLOBAL, PNX_X_NONE, 0, "---") \
     X(TSPAWNW, 0xd6, PNX_K_I, PNX_K_I, PNX_K_NONE, PNX_F_ABC, PNX_X_GLOBAL, 1, "wr-") \
     X(TRESUMEW, 0xd7, PNX_K_I, PNX_K_I, PNX_K_NONE, PNX_F_ABC, PNX_X_GLOBAL, 0, "wr-") \
-    X(TDONEW, 0xd8, PNX_K_I, PNX_K_I, PNX_K_NONE, PNX_F_ABC, PNX_X_GLOBAL, 0, "wr-")
+    X(TDONEW, 0xd8, PNX_K_I, PNX_K_I, PNX_K_NONE, PNX_F_ABC, PNX_X_GLOBAL, 0, "wr-") \
+    /* more collections */ \
+    X(LCOPYR, 0xe0, PNX_K_I, PNX_K_NONE, PNX_K_NONE, PNX_F_GLOBAL, PNX_X_GLOBAL, 1, "r--")
 
 enum {
 #define PNX_ENUM(name, number, a, b, c, shape, second, fails, roles) PNX_##name = number,

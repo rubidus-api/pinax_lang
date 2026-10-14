@@ -2837,10 +2837,21 @@ static bool do_block(comp *c) {
     if (use == USE_MAP || use == USE_FILTER) { // the list the results are pushed into
         dst = find_global(c, dst_name);
         const globalsym *g = dst == NONE ? NULL : (const globalsym *)c->globals.ptr + dst;
-        if (!g || g->kind != GK_LIST || g->record != NONE)
+        // filter_into a list of records: the rows that pass are copied, from a list or an array
+        // of the same record
+        const uint32_t from = is_row(element) ? (uint32_t)(element - TY_FIRST_DECLARED) : NONE;
+        const bool rows = g && g->kind == GK_LIST && g->record != NONE && use == USE_FILTER && from != NONE &&
+                          ((const globalsym *)c->globals.ptr + from)->record == g->record &&
+                          ((const globalsym *)c->globals.ptr + from)->kind != GK_POOL;
+        if (!g || g->kind != GK_LIST || (g->record != NONE && !rows))
             return error_at(c, PINAX_ERR_TYPE, at.line, at.column,
-                            "map_into and filter_into fill a list of values: ... end names map_into");
-        if (bs.n_out != 1 || bs.n_in > 1 || (bs.n_in == 1 && bs.in[0] != element) ||
+                            g && g->kind == GK_LIST && g->record != NONE
+                                ? "filter_into fills a list of records from a list or an array of the same record"
+                                : "map_into and filter_into fill a list of values: ... end names map_into");
+        if (rows) {
+            if (bs.n_out != 1 || bs.n_in > 1 || (bs.n_in == 1 && bs.in[0] != element) || bs.out[0] != TY_BOOL)
+                return error_at(c, PINAX_ERR_TYPE, at.line, at.column, "the block of filter_into is (x T gives bool)");
+        } else if (bs.n_out != 1 || bs.n_in > 1 || (bs.n_in == 1 && bs.in[0] != element) ||
             bs.out[0] != (use == USE_MAP ? g->type : TY_BOOL) || (use == USE_FILTER && element != g->type))
             return error_at(c, PINAX_ERR_TYPE, at.line, at.column,
                             use == USE_MAP ? "the block of map_into is (x T gives U): T the element's type, U the list's"
@@ -2997,6 +3008,11 @@ static bool end_do(comp *c, block *b) {
                                   : PNX_LPUSH;
         if (b->use == USE_MAP) { // the instruction after the push runs when the list is full
             if (emit(c, PNX_ABX(push, made, b->dst)) == NONE || !jump_later(c, &b->full))
+                return false;
+        } else if (b->use == USE_FILTER && ((const globalsym *)c->globals.ptr + b->dst)->record != NONE) {
+            cond_negate(&verdict); // a row that passes is copied: its table rides in the second word
+            if (!cond_jump(c, &verdict, 3) || emit(c, PNX_ABX(PNX_LCOPYR, b->val, b->dst)) == NONE ||
+                emit(c, (uint32_t)(b->element - TY_FIRST_DECLARED)) == NONE || !jump_later(c, &b->full))
                 return false;
         } else if (b->use == USE_FILTER) { // pushed when the verdict is true
             cond_negate(&verdict);

@@ -463,6 +463,24 @@ PNX_OP(LPOP) {
     __builtin_memcpy(&R[OP_A(w)], g->ptr + (size_t)g->length * 8, 8);
     return PNX_R_OK;
 }
+// Appends a copy of row R[A] of table x (a list or an array of the same record) to the
+// list of records BX. Fails with full.
+PNX_OP(LCOPYR) {
+    pnx_global *g = &st->globals[OP_BX(w)];
+    const pnx_global *from = &st->globals[x];
+    uint64_t row;
+    const int bad = pnx_row_of(from, R[OP_A(w)], &row);
+    if (bad)
+        return bad;
+    if (g->length == g->capacity) {
+        st->fail = PINAX_ERR_FULL;
+        return PNX_R_FAILED;
+    }
+    __builtin_memmove(g->ptr + (size_t)g->length * g->elem_bytes, from->ptr + row * from->elem_bytes, g->elem_bytes);
+    ++g->length;
+    return PNX_R_OK;
+}
+
 // A list of str(N) is a table of text cells: push copies the text into a new last cell (too
 // long is a fault, as a store is), pop copies the last cell's text into the region and drops it.
 PNX_OP(LPUSHS) {

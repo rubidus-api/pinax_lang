@@ -433,7 +433,12 @@ static const char *check_word(const pinax_state *st, uint32_t index, span range,
         case PNX_FGET: case PNX_FSET: case PNX_FGETS: case PNX_FSETS: want = PNX_G_TABLE; global = x & 0xfffu; break;
         default: break;
         }
-        if (info.second == PNX_X_GLOBAL) { // a wide form: what its narrow form needs, of the global in x
+        if (op == PNX_LCOPYR) { // a row of table x copied into list BX: rows of one size
+            if (x >= head->n_globals || bx >= head->n_globals || st->globals[bx].kind != PNX_G_ROWS ||
+                (st->globals[x].kind != PNX_G_ROWS && st->globals[x].kind != PNX_G_TABLE) ||
+                st->globals[x].elem_bytes != st->globals[bx].elem_bytes)
+                return "code: rows copied between tables of another kind or size";
+        } else if (info.second == PNX_X_GLOBAL) { // a wide form: what its narrow form needs, of the global in x
             switch (op) {
             case PNX_AGETW: case PNX_ASETW: want = PNX_G_ARRAY; break;
             case PNX_ROWW: want = PNX_G_TABLE; break;
