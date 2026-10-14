@@ -1,2 +1,75 @@
 <!DOCTYPE html>
-<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>8 실패와 결함 - The Pinax Manual</title><link rel="stylesheet" href="style.css"></head><body><nav class="top"><a href="index.html">Start</a> · <a href="08.html">Previous</a> · <a href="10.html">Next</a> · <a href="../html-ko/09.html">한국어</a></nav><main><h2>8 실패와 결함</h2><p><em>(English edition in preparation.)</em></p></main><nav class="bottom"><a href="index.html">Start</a> · <a href="08.html">Previous</a> · <a href="10.html">Next</a> · <a href="../html-ko/09.html">한국어</a></nav></body></html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>8 Failures and faults - The Pinax Manual</title><link rel="stylesheet" href="style.css"></head><body><nav class="top"><a href="index.html">Start</a> · <a href="08.html">Previous</a> · <a href="10.html">Next</a> · <a href="../html-ko/09.html">한국어</a></nav><main><h2>8 Failures and faults</h2><div class="box opening"><p><strong>Builds on</strong>: Chapter 3 (<code>or fail</code> in signatures), chapter 6 (a failing <code>push</code>).</p><p><strong>Questions this chapter answers</strong></p><ul><li>What does Pinax do when something goes wrong? With no exceptions, how is it handled?</li><li>Can a failure be passed over unhandled?</li><li>What is a fault, and how does it differ from a failure?</li></ul></div><h3>8.1 Two kinds of wrong</h3><p>Pinax tells two kinds of wrong apart.</p><ul><li>A <strong>failure</strong> is something expected now and then: text that is not a number, a full list, a missing key. A word that can fail has <code>or fail</code> in its signature, and the caller handles it <strong>right there</strong>.</li><li>A <strong>fault</strong> means the program is wrong: an overflow, a division by zero, an index out of range. The run stops on the spot, and the host receives it. A script has no way to catch a fault.</li></ul><p>With no exceptions, an error never skips several words and gets caught somewhere unexpected.</p><h3>8.2 Three words that handle a failure</h3><p>Right after a word that can fail comes one <strong>guard</strong>:</p><ul><li><code>or_fail</code> — this word fails too, for the same reason; its signature needs <code>or fail</code> as well;</li><li><code>or_return</code> — this word ends quietly;</li><li><code>or_else … end</code> — makes a value in its place; <code>or_else (e) … end</code> takes the reason.</li></ul><div class="example run"><p class="ex-file"><code>08-parse.pnx</code></p><pre><code data-lang="pinax"><span style="color: #d73948">use</span> io
+<span style="color: #d73948">use</span> <span style="color: #d73948">str</span>
+<span style="color: #74747c">rem Read "name,score" lines; a bad line is reported, not fatal.</span>
+<span style="color: #d73948">word</span> parse (line <span style="color: #d73948">str</span> <span style="color: #d73948">gives</span> name <span style="color: #d73948">str</span>, score <span style="color: #d73948">int</span> <span style="color: #d73948">or</span> <span style="color: #d73948">fail</span>)
+  line <span style="color: #198810">","</span> <span style="color: #d73948">str</span>.try_cut <span style="color: #d73948">or_fail</span> <span style="color: #d73948">to</span> (n, s)              <span style="color: #74747c">rem no comma: fail the same way</span>
+  s <span style="color: #d73948">str</span>.trim <span style="color: #d73948">str</span>.to_int <span style="color: #d73948">or_fail</span> <span style="color: #d73948">to</span> v                  <span style="color: #74747c">rem not a number: fail</span>
+  v <span style="color: #b60157">0</span> lt v <span style="color: #b60157">100</span> gt <span style="color: #d73948">or</span> <span style="color: #d73948">if</span> <span style="color: #d73948">err</span>.range <span style="color: #d73948">fail</span> <span style="color: #d73948">end</span>            <span style="color: #74747c">rem our own rule: 0..100</span>
+  n <span style="color: #d73948">str</span>.trim v
+<span style="color: #d73948">end</span>
+<span style="color: #d73948">word</span> report (line <span style="color: #d73948">str</span>)
+  line parse <span style="color: #d73948">or_else</span> (e) <span style="color: #d73948">cat</span> (<span style="color: #198810">"skipped </span><span style="color: #1d6c76">\"</span><span style="color: #198810">"</span>, line, <span style="color: #198810">"</span><span style="color: #1d6c76">\"</span><span style="color: #198810">: "</span>, e err_text) io.println <span style="color: #d73948">return</span> <span style="color: #d73948">end</span> <span style="color: #d73948">to</span> (name, score)
+  <span style="color: #d73948">cat</span> (name, <span style="color: #198810">" scored "</span>, score) io.println
+<span style="color: #d73948">end</span>
+<span style="color: #d73948">text</span><span style="color: #198810"> </span><span style="color: #4b69c6">END</span>
+<span style="color: #198810">kim, 91</span>
+<span style="color: #198810">lee 77</span>
+<span style="color: #198810">park, ninety</span>
+<span style="color: #198810">choi, 140</span>
+<span style="color: #4b69c6">END</span>
+<span style="color: #d73948">str</span>.lines <span style="color: #d73948">do</span> (l <span style="color: #d73948">str</span>) l report <span style="color: #d73948">end</span> each
+</code></pre><p class="ex-label">Output</p><pre><code data-lang="text">$ pnx 08-parse.pnx
+kim scored 91
+skipped "lee 77": not_found
+skipped "park, ninety": format
+skipped "choi, 140": range
+</code></pre></div><p><code>parse</code> can fail in three places and passes each on with <code>or_fail</code>. Its own rule (0 to 100) fails with <code>err.range fail</code>. <code>report</code> takes the failure with <code>or_else (e)</code>, reports it with its reason, and skips the line.</p><div class="example run"><p class="ex-file"><code>08-or-return.pnx</code></p><pre><code data-lang="pinax"><span style="color: #d73948">use</span> io
+<span style="color: #d73948">list</span> seen <span style="color: #d73948">int</span> <span style="color: #b60157">3</span>
+<span style="color: #d73948">word</span> note_it (n <span style="color: #d73948">int</span>)
+  n seen push <span style="color: #d73948">or_return</span>                              <span style="color: #74747c">rem full: quietly do nothing</span>
+  <span style="color: #d73948">cat</span> (<span style="color: #198810">"noted "</span>, n) io.println
+<span style="color: #d73948">end</span>
+<span style="color: #b60157">1</span> note_it <span style="color: #b60157">2</span> note_it <span style="color: #b60157">3</span> note_it <span style="color: #b60157">4</span> note_it
+</code></pre><p class="ex-label">Output</p><pre><code data-lang="text">$ pnx 08-or-return.pnx
+noted 1
+noted 2
+noted 3
+</code></pre></div><div class="example refused"><p class="ex-file"><code>08-guard-missing.pnx</code></p><pre><code data-lang="pinax"><span style="color: #d73948">use</span> <span style="color: #d73948">str</span>
+<span style="color: #d73948">word</span> twice (s <span style="color: #d73948">str</span> <span style="color: #d73948">gives</span> <span style="color: #d73948">int</span>) s <span style="color: #d73948">str</span>.to_int <span style="color: #b60157">2</span> mul <span style="color: #d73948">end</span>
+</code></pre><p class="ex-label">Refused</p><pre><code data-lang="text">$ pnx 08-guard-missing.pnx
+08-guard-missing.pnx:2:43: a word that can fail is followed by or_fail, or_return or or_else
+</code></pre></div><div class="box mistake"><p class="box-title">Common mistake: Using <code>or_fail</code> at the outermost level of a file</p>Code outside definitions counts as having no <code>or fail</code> signature, so neither <code>or_fail</code> nor <code>or_return</code> nor <code>return</code> can be used there. Put the work into a word, and take its failure with <code>or_else</code> at the outer level.<div class="example refused"><p class="ex-file"><code>08-load-code-or-fail.pnx</code></p><pre><code data-lang="pinax"><span style="color: #d73948">use</span> io
+<span style="color: #d73948">use</span> <span style="color: #d73948">str</span>
+<span style="color: #198810">"42"</span> <span style="color: #d73948">str</span>.to_int <span style="color: #d73948">or_fail</span> <span style="color: #d73948">str</span>.to_str io.println
+</code></pre><p class="ex-label">Refused</p><pre><code data-lang="text">$ pnx 08-load-code-or-fail.pnx
+08-load-code-or-fail.pnx:3:17: or_fail passes the failure on, so this word needs `or fail` in its signature
+</code></pre></div></div><h3>8.3 Faults</h3><div class="example fault"><p class="ex-file"><code>08-fault.pnx</code></p><pre><code data-lang="pinax"><span style="color: #d73948">use</span> io
+<span style="color: #d73948">use</span> <span style="color: #d73948">str</span>
+<span style="color: #d73948">word</span> average (total <span style="color: #d73948">int</span>, n <span style="color: #d73948">int</span> <span style="color: #d73948">gives</span> <span style="color: #d73948">int</span>) total n div <span style="color: #d73948">end</span>
+<span style="color: #d73948">cat</span> (<span style="color: #198810">"average of 10 over 4: "</span>, <span style="color: #b60157">10</span> <span style="color: #b60157">4</span> average) io.println
+<span style="color: #d73948">cat</span> (<span style="color: #198810">"average of nothing: "</span>, <span style="color: #b60157">0</span> <span style="color: #b60157">0</span> average) io.println
+</code></pre><p class="ex-label">Fault</p><pre><code data-lang="text">$ pnx 08-fault.pnx
+average of 10 over 4: 2
+08-fault.pnx:3: division by zero
+  total int = 0
+  n int = 0
+</code></pre></div><p><code>pnx</code> shows the kind of the fault, its line and the locals of the word. What a run that ends with a fault made in the region is rewound, and handles such as files it opened are closed by the processor.</p><p>Where a fault could happen and you want a failure instead, use the <code>chk_</code> words.</p><div class="example run"><p class="ex-file"><code>08-chk.pnx</code></p><pre><code data-lang="pinax"><span style="color: #d73948">use</span> io
+<span style="color: #d73948">word</span> safe_average (total <span style="color: #d73948">int</span>, n <span style="color: #d73948">int</span> <span style="color: #d73948">gives</span> <span style="color: #d73948">int</span> <span style="color: #d73948">or</span> <span style="color: #d73948">fail</span>) total n chk_div <span style="color: #d73948">or_fail</span> <span style="color: #d73948">end</span>
+<span style="color: #d73948">word</span> show () <span style="color: #d73948">cat</span> (<span style="color: #198810">"10/4: "</span>, <span style="color: #b60157">10</span> <span style="color: #b60157">4</span> safe_average <span style="color: #d73948">or_else</span> (e) <span style="color: #b60157">-1</span> <span style="color: #d73948">end</span>, <span style="color: #198810">", 0/0: "</span>, <span style="color: #b60157">0</span> <span style="color: #b60157">0</span> safe_average <span style="color: #d73948">or_else</span> (e) <span style="color: #b60157">-1</span> <span style="color: #d73948">end</span>) io.println <span style="color: #d73948">end</span>
+show
+</code></pre><p class="ex-label">Output</p><pre><code data-lang="text">$ pnx 08-chk.pnx
+10/4: 2, 0/0: -1
+</code></pre></div><p><code>assert</code> makes a fault when it is false. It writes down a promise the caller must keep.</p><div class="example fault"><p class="ex-file"><code>08-assert.pnx</code></p><pre><code data-lang="pinax"><span style="color: #d73948">use</span> io
+<span style="color: #d73948">word</span> percent (part <span style="color: #d73948">int</span>, whole <span style="color: #d73948">int</span> <span style="color: #d73948">gives</span> <span style="color: #d73948">int</span>)
+  whole <span style="color: #b60157">0</span> gt assert                                  <span style="color: #74747c">rem a promise the caller must keep</span>
+  part <span style="color: #b60157">100</span> mul whole div
+<span style="color: #d73948">end</span>
+<span style="color: #d73948">cat</span> (<span style="color: #198810">"3 of 4: "</span>, <span style="color: #b60157">3</span> <span style="color: #b60157">4</span> percent, <span style="color: #198810">"%"</span>) io.println
+<span style="color: #d73948">cat</span> (<span style="color: #198810">"3 of 0: "</span>, <span style="color: #b60157">3</span> <span style="color: #b60157">0</span> percent, <span style="color: #198810">"%"</span>) io.println
+</code></pre><p class="ex-label">Fault</p><pre><code data-lang="text">$ pnx 08-assert.pnx
+3 of 4: 75%
+08-assert.pnx:3: failed
+  part int = 3
+  whole int = 0
+</code></pre></div><div class="box qa"><p class="box-title">Q&amp;A</p><p><strong>Q. How do I decide what is a failure and what is a fault?</strong></p><p>A. What happens because of data from outside (user input, files, the network) is a failure. What goes away only by fixing the program (a miscomputed index, a broken promise) is a fault.</p></div><div class="box summary"><p class="box-title">Summary</p><ul><li>After a word that can fail comes <code>or_fail</code>, <code>or_return</code> or <code>or_else</code> (standard 11.2).</li><li><code>or_fail</code> and <code>fail</code> only inside an <code>or fail</code> signature; outside definitions only <code>or_else</code> (11.2).</li><li>A fault stops the run, and the processor closes the handles the run opened (11.3).</li><li>To receive overflow and division by zero as failures, use the <code>chk_</code> words (15.1).</li></ul></div></main><nav class="bottom"><a href="index.html">Start</a> · <a href="08.html">Previous</a> · <a href="10.html">Next</a> · <a href="../html-ko/09.html">한국어</a></nav></body></html>

@@ -1,2 +1,99 @@
 <!DOCTYPE html>
-<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>11 글과 바이트의 형식 - The Pinax Manual</title><link rel="stylesheet" href="style.css"></head><body><nav class="top"><a href="index.html">Start</a> · <a href="11.html">Previous</a> · <a href="13.html">Next</a> · <a href="../html-ko/12.html">한국어</a></nav><main><h2>11 글과 바이트의 형식</h2><p><em>(English edition in preparation.)</em></p></main><nav class="bottom"><a href="index.html">Start</a> · <a href="11.html">Previous</a> · <a href="13.html">Next</a> · <a href="../html-ko/12.html">한국어</a></nav></body></html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>11 Text and binary formats - The Pinax Manual</title><link rel="stylesheet" href="style.css"></head><body><nav class="top"><a href="index.html">Start</a> · <a href="11.html">Previous</a> · <a href="13.html">Next</a> · <a href="../html-ko/12.html">한국어</a></nav><main><h2>11 Text and binary formats</h2><div class="box opening"><p><strong>Builds on</strong>: Chapter 5 (views, buffers), chapter 7 (records), chapter 8 (failures).</p><p><strong>Questions this chapter answers</strong></p><ul><li>How are CSV and JSON read and written without building a tree?</li><li>How is a record sent as bytes and read back?</li><li>Where are hashes and conversions like Base64?</li></ul></div><p>Pinax has no heap, so it does not read JSON into a tree of objects. Instead it reads <strong>in one direction</strong>: one token, one field at a time. It writes straight into a buffer. Fitting records is done by code made from the record’s declaration.</p><h3>11.1 CSV and JSON</h3><p><code>csv.unpack</code> reads one line into the fields of a record in order, and <code>json.pack</code> writes a record as an object keyed by field names.</p><div class="example run"><p class="ex-file"><code>11-csv-to-json.pnx</code></p><pre><code data-lang="pinax"><span style="color: #d73948">use</span> io
+<span style="color: #d73948">use</span> csv
+<span style="color: #d73948">use</span> json
+<span style="color: #d73948">use</span> <span style="color: #d73948">str</span>
+<span style="color: #74747c">rem Read CSV rows into records, write them out as JSON.</span>
+<span style="color: #d73948">record</span> city
+  name <span style="color: #d73948">str</span>(<span style="color: #b60157">16</span>)
+  people <span style="color: #d73948">i32</span>
+  capital <span style="color: #d73948">bool</span>
+<span style="color: #d73948">end</span>
+<span style="color: #d73948">list</span> cities city <span style="color: #b60157">8</span>
+<span style="color: #d73948">buffer</span> out <span style="color: #b60157">512</span>
+<span style="color: #d73948">array</span> scratch city <span style="color: #b60157">1</span>                         <span style="color: #74747c">rem a row to try a line on first</span>
+<span style="color: #d73948">word</span> read_rows (input <span style="color: #d73948">str</span> <span style="color: #d73948">or</span> <span style="color: #d73948">fail</span>)
+  input <span style="color: #d73948">str</span>.lines <span style="color: #d73948">do</span> (line <span style="color: #d73948">str</span>)
+    <span style="color: #d73948">true</span> <span style="color: #d73948">to</span> ok
+    line <span style="color: #b60157">0</span> scratch idx csv.unpack <span style="color: #d73948">or_else</span> (e) <span style="color: #d73948">false</span> <span style="color: #d73948">to</span> ok <span style="color: #198810">""</span> <span style="color: #d73948">end</span> drop
+    ok <span style="color: #d73948">if</span>
+      cities add_row <span style="color: #d73948">or_fail</span> <span style="color: #d73948">to</span> c
+      line c csv.unpack <span style="color: #d73948">or_fail</span> drop
+    <span style="color: #d73948">else</span>
+      <span style="color: #d73948">cat</span> (<span style="color: #198810">"bad row: "</span>, line) io.println
+    <span style="color: #d73948">end</span>
+  <span style="color: #d73948">end</span> each
+<span style="color: #d73948">end</span>
+<span style="color: #d73948">word</span> to_json (<span style="color: #d73948">or</span> <span style="color: #d73948">fail</span>)
+  out json.begin_array <span style="color: #d73948">or_fail</span>
+  cities <span style="color: #d73948">do</span> (c cities) c out json.pack <span style="color: #d73948">or_else</span> (e) <span style="color: #d73948">end</span> <span style="color: #d73948">end</span> each
+  out json.end_array <span style="color: #d73948">or_fail</span>
+<span style="color: #d73948">end</span>
+<span style="color: #d73948">text</span><span style="color: #198810"> </span><span style="color: #4b69c6">END</span>
+<span style="color: #198810">Seoul,9411000,true</span>
+<span style="color: #198810">Busan,3349000,false</span>
+<span style="color: #198810">Daejeon,lots,false</span>
+<span style="color: #4b69c6">END</span>
+read_rows <span style="color: #d73948">or_else</span> (e) <span style="color: #d73948">end</span>
+to_json <span style="color: #d73948">or_else</span> (e) e err_text io.println <span style="color: #d73948">end</span>
+out contents io.println
+</code></pre><p class="ex-label">Output</p><pre><code data-lang="text">$ pnx 11-csv-to-json.pnx
+bad row: Daejeon,lots,false
+[{"name":"Seoul","people":9411000,"capital":true},{"name":"Busan","people":3349000,"capital":false}]
+</code></pre></div><p><code>unpack</code> writes into the row only when every field is right. So each line is tried on a spare row (<code>scratch</code>) first, and a row is added to the list only when it fits.</p><div class="box mistake"><p class="box-title">Common mistake: Taking the last row of a list of records off with <code>pop</code></p>Lists of records have no <code>pop</code> (only lists of values do). A row once added cannot be taken back, so check before adding.<div class="example refused"><p class="ex-file"><code>11-pop-records.pnx</code></p><pre><code data-lang="pinax"><span style="color: #d73948">record</span> city
+  name <span style="color: #d73948">str</span>(<span style="color: #b60157">16</span>)
+<span style="color: #d73948">end</span>
+<span style="color: #d73948">list</span> cities city <span style="color: #b60157">4</span>
+<span style="color: #d73948">word</span> undo () cities pop <span style="color: #d73948">or_else</span> (e) cities <span style="color: #d73948">none</span> <span style="color: #d73948">end</span> drop <span style="color: #d73948">end</span>
+</code></pre><p class="ex-label">Refused</p><pre><code data-lang="text">$ pnx 11-pop-records.pnx
+11-pop-records.pnx:5:21: pop takes from a list of values; a list of records has no pop
+</code></pre></div></div><p>Reading JSON by tokens picks out just what is needed, at any depth. <code>json.next</code> gives the kind of the token, a view of its value, and the rest.</p><div class="example run"><p class="ex-file"><code>11-json-read.pnx</code></p><pre><code data-lang="pinax"><span style="color: #d73948">use</span> io
+<span style="color: #d73948">use</span> json
+<span style="color: #d73948">use</span> <span style="color: #d73948">str</span>
+<span style="color: #74747c">rem Sum every number in a JSON text, at any depth, without building a tree.</span>
+<span style="color: #d73948">word</span> sum_numbers (s <span style="color: #d73948">str</span> <span style="color: #d73948">gives</span> <span style="color: #d73948">int</span>)
+  <span style="color: #b60157">0</span> <span style="color: #d73948">to</span> total
+  s <span style="color: #d73948">to</span> rest
+  <span style="color: #d73948">loop</span>
+    rest json.next <span style="color: #d73948">or_else</span> (e) <span style="color: #d73948">break</span> <span style="color: #d73948">end</span> <span style="color: #d73948">to</span> (kind, value, rest)
+    kind json.number eq <span style="color: #d73948">if</span> total value <span style="color: #d73948">str</span>.to_int <span style="color: #d73948">or_else</span> (e) <span style="color: #b60157">0</span> <span style="color: #d73948">end</span> add <span style="color: #d73948">to</span> total <span style="color: #d73948">end</span>
+  <span style="color: #d73948">end</span>
+  total
+<span style="color: #d73948">end</span>
+<span style="color: #d73948">text</span><span style="color: #198810"> </span><span style="color: #4b69c6">END</span>
+<span style="color: #198810">{"a": 1, "b": [2, 3, {"c": 4}], "d": {"e": [5]}, "f": "6"}</span>
+<span style="color: #4b69c6">END</span>
+sum_numbers <span style="color: #d73948">str</span>.to_str io.println
+</code></pre><p class="ex-label">Output</p><pre><code data-lang="text">$ pnx 11-json-read.pnx
+15
+</code></pre></div><h3>11.2 Bytes</h3><p>The module <code>bytes</code> writes and reads fixed widths in a given byte order. With <code>big_endian</code> in a record, <code>bytes.pack</code> writes the most significant byte first. A <code>varint</code> field writes small numbers in few bytes.</p><div class="example run"><p class="ex-file"><code>11-binary.pnx</code></p><pre><code data-lang="pinax"><span style="color: #d73948">use</span> io
+<span style="color: #d73948">use</span> bytes
+<span style="color: #d73948">use</span> encode
+<span style="color: #d73948">use</span> hash
+<span style="color: #d73948">use</span> fmt
+<span style="color: #d73948">record</span> header
+  <span style="color: #d73948">big_endian</span>
+  magic <span style="color: #d73948">u32</span>
+  version <span style="color: #d73948">u16</span>
+  length varint
+<span style="color: #d73948">end</span>
+<span style="color: #d73948">array</span> headers header <span style="color: #b60157">2</span>
+<span style="color: #d73948">buffer</span> wire <span style="color: #b60157">32</span>
+<span style="color: #d73948">buffer</span> hex <span style="color: #b60157">64</span>
+<span style="color: #d73948">word</span> demo (<span style="color: #d73948">or</span> <span style="color: #d73948">fail</span>)
+  <span style="color: #b60157">0</span> headers idx <span style="color: #d73948">to</span> h
+  <span style="color: #b60157">0x50494e58</span> h <span style="color: #d73948">to</span> header.magic           <span style="color: #74747c">rem "PINX"</span>
+  <span style="color: #b60157">1</span> h <span style="color: #d73948">to</span> header.version
+  <span style="color: #b60157">300</span> h <span style="color: #d73948">to</span> header.length
+  h wire bytes.pack <span style="color: #d73948">or_fail</span>
+  wire contents hex encode.hex_encode <span style="color: #d73948">or_fail</span>
+  <span style="color: #d73948">cat</span> (<span style="color: #198810">"bytes: "</span>, hex contents, <span style="color: #198810">", crc32: "</span>, wire contents hash.crc32 fmt.hex) io.println
+  <span style="color: #b60157">1</span> headers idx <span style="color: #d73948">to</span> back
+  wire contents back bytes.unpack <span style="color: #d73948">or_fail</span> drop
+  <span style="color: #d73948">cat</span> (<span style="color: #198810">"read back: version "</span>, back header.version, <span style="color: #198810">", length "</span>, back header.length) io.println
+<span style="color: #d73948">end</span>
+demo <span style="color: #d73948">or_else</span> (e) e err_text io.println <span style="color: #d73948">end</span>
+</code></pre><p class="ex-label">Output</p><pre><code data-lang="text">$ pnx 11-binary.pnx
+bytes: 50494e580001ac02, crc32: 31d80bed
+read back: version 1, length 300
+</code></pre></div><div class="box qa"><p class="box-title">Q&amp;A</p><p><strong>Q. Does the record lie in memory in big-endian order too?</strong></p><p>A. No. <code>big_endian</code> sets only the order of the bytes that <code>pack</code> and <code>unpack</code> use. The layout in memory is the processor’s, and a script cannot see it.</p></div><h3>11.3 Other conversions</h3><p><code>fmt</code> turns numbers into hexadecimal, binary and zero-padded text. <code>hash</code> gives CRC-32, FNV-1a and SipHash; <code>encode</code> gives Base64, hexadecimal and URL percent-encoding. Words that write their results into a buffer fail when the buffer is full. The full lists are in clause 16 of the standard.</p><div class="box summary"><p class="box-title">Summary</p><ul><li><code>json.next</code> and <code>csv.fields</code> read one token, one field at a time; no tree is built (standard 16.8, 16.9).</li><li><code>pack</code> writes into a buffer; <code>unpack</code> writes into the row only when all is right (16.5, 16.8, 16.9).</li><li><code>big_endian</code> sets only the byte order (16.5).</li><li>Lists of records have no <code>pop</code> (15.3).</li></ul></div></main><nav class="bottom"><a href="index.html">Start</a> · <a href="11.html">Previous</a> · <a href="13.html">Next</a> · <a href="../html-ko/12.html">한국어</a></nav></body></html>

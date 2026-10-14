@@ -1,2 +1,120 @@
 <!DOCTYPE html>
-<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>4 지역 변수와 흐름 - The Pinax Manual</title><link rel="stylesheet" href="style.css"></head><body><nav class="top"><a href="index.html">Start</a> · <a href="04.html">Previous</a> · <a href="06.html">Next</a> · <a href="../html-ko/05.html">한국어</a></nav><main><h2>4 지역 변수와 흐름</h2><p><em>(English edition in preparation.)</em></p></main><nav class="bottom"><a href="index.html">Start</a> · <a href="04.html">Previous</a> · <a href="06.html">Next</a> · <a href="../html-ko/05.html">한국어</a></nav></body></html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>4 Locals and flow - The Pinax Manual</title><link rel="stylesheet" href="style.css"></head><body><nav class="top"><a href="index.html">Start</a> · <a href="04.html">Previous</a> · <a href="06.html">Next</a> · <a href="../html-ko/05.html">한국어</a></nav><main><h2>4 Locals and flow</h2><div class="box opening"><p><strong>Builds on</strong>: Chapter 3 (signatures, named inputs).</p><p><strong>Questions this chapter answers</strong></p><ul><li>When is a local made, and how far is it visible?</li><li>How are <code>if</code>, <code>loop</code> and <code>case</code> written, and what must they keep about the stack?</li><li>What is the short way to write a loop over an array?</li></ul></div><h3>4.1 Locals</h3><p>In a body, <code>to NAME</code> puts the top value into that name. The first time a name is used, a local of the value’s type is made; there is no separate line that declares it.</p><div class="example run"><p class="ex-file"><code>04-locals.pnx</code></p><pre><code data-lang="pinax"><span style="color: #d73948">use</span> io
+<span style="color: #d73948">word</span> describe (a <span style="color: #d73948">int</span>, b <span style="color: #d73948">int</span>, c <span style="color: #d73948">int</span> <span style="color: #d73948">gives</span> <span style="color: #d73948">str</span>)
+  a b add c add <span style="color: #d73948">to</span> total
+  total <span style="color: #b60157">3</span> div <span style="color: #d73948">to</span> mean
+  a b max c max <span style="color: #d73948">to</span> top
+  <span style="color: #d73948">cat</span> (<span style="color: #198810">"total "</span>, total, <span style="color: #198810">", mean "</span>, mean, <span style="color: #198810">", largest "</span>, top)
+<span style="color: #d73948">end</span>
+<span style="color: #b60157">3</span> <span style="color: #b60157">9</span> <span style="color: #b60157">6</span> describe io.println
+</code></pre><p class="ex-label">Output</p><pre><code data-lang="text">$ pnx 04-locals.pnx
+total 18, mean 6, largest 9
+</code></pre></div><p>A local is visible from where it is first stored to the end of the branch, loop or block around it. A name first made inside a branch cannot be read outside it: coming by the other branch, it would hold no value.</p><div class="example refused"><p class="ex-file"><code>04-scope.pnx</code></p><pre><code data-lang="pinax"><span style="color: #d73948">use</span> io
+<span style="color: #d73948">word</span> f (n <span style="color: #d73948">int</span> <span style="color: #d73948">gives</span> <span style="color: #d73948">int</span>)
+  n <span style="color: #b60157">0</span> gt <span style="color: #d73948">if</span> n <span style="color: #b60157">2</span> mul <span style="color: #d73948">to</span> doubled <span style="color: #d73948">end</span>
+  doubled
+<span style="color: #d73948">end</span>
+</code></pre><p class="ex-label">Refused</p><pre><code data-lang="text">$ pnx 04-scope.pnx
+04-scope.pnx:4:3: this name is not declared before this place
+</code></pre></div><div class="box mistake"><p class="box-title">Common mistake: Storing into a global’s name makes a local</p>When the <code>total</code> of <code>to total</code> is a global, the value goes into that global; no local is made.<div class="example run"><p class="ex-file"><code>04-store-global.pnx</code></p><pre><code data-lang="pinax"><span style="color: #d73948">use</span> io
+<span style="color: #d73948">global</span> total <span style="color: #d73948">int</span>
+<span style="color: #d73948">word</span> add_to_total (n <span style="color: #d73948">int</span>) total n add <span style="color: #d73948">to</span> total <span style="color: #d73948">end</span>     <span style="color: #74747c">rem total is the global here</span>
+<span style="color: #b60157">3</span> add_to_total
+<span style="color: #b60157">4</span> add_to_total
+<span style="color: #d73948">cat</span> (<span style="color: #198810">"total "</span>, total) io.println
+</code></pre><p class="ex-label">Output</p><pre><code data-lang="text">$ pnx 04-store-global.pnx
+total 7
+</code></pre></div>So the name of a global and the name of a local never clash. A parameter, however, cannot take a global’s name (no hiding, chapter 3).</div><h3>4.2 Branches</h3><p><code>condition if … else … end</code> looks at the <code>bool</code> on top and runs one side. Both branches shall leave the same stack; a branch that leaves with <code>return</code> does not need to match.</p><div class="example run"><p class="ex-file"><code>04-if.pnx</code></p><pre><code data-lang="pinax"><span style="color: #d73948">use</span> io
+<span style="color: #d73948">word</span> grade (score <span style="color: #d73948">int</span> <span style="color: #d73948">gives</span> <span style="color: #d73948">str</span>)
+  score <span style="color: #b60157">90</span> ge <span style="color: #d73948">if</span> <span style="color: #198810">"A"</span> <span style="color: #d73948">return</span> <span style="color: #d73948">end</span>
+  score <span style="color: #b60157">80</span> ge <span style="color: #d73948">if</span> <span style="color: #198810">"B"</span> <span style="color: #d73948">return</span> <span style="color: #d73948">end</span>
+  score <span style="color: #b60157">70</span> ge <span style="color: #d73948">if</span> <span style="color: #198810">"C"</span> <span style="color: #d73948">else</span> <span style="color: #198810">"F"</span> <span style="color: #d73948">end</span>
+<span style="color: #d73948">end</span>
+<span style="color: #b60157">95</span> grade io.println
+<span style="color: #b60157">82</span> grade io.println
+<span style="color: #b60157">40</span> grade io.println
+</code></pre><p class="ex-label">Output</p><pre><code data-lang="text">$ pnx 04-if.pnx
+A
+B
+F
+</code></pre></div><p>An <code>if</code> without <code>else</code> shall leave the stack as it was. Leaving out the <code>else</code> of an <code>if</code> that leaves a value is refused.</p><div class="example refused"><p class="ex-file"><code>04-if-unequal.pnx</code></p><pre><code data-lang="pinax"><span style="color: #d73948">use</span> io
+<span style="color: #d73948">word</span> label (n <span style="color: #d73948">int</span> <span style="color: #d73948">gives</span> <span style="color: #d73948">str</span>) n <span style="color: #b60157">0</span> lt <span style="color: #d73948">if</span> <span style="color: #198810">"negative"</span> <span style="color: #d73948">end</span> <span style="color: #d73948">end</span>
+</code></pre><p class="ex-label">Refused</p><pre><code data-lang="text">$ pnx 04-if-unequal.pnx
+04-if-unequal.pnx:2:51: an if without else must leave the stack as it found it
+</code></pre></div><h3>4.3 Loops</h3><p><code>loop … end</code> repeats. Inside it, <code>condition until</code> leaves when the condition is true, <code>condition while</code> when it is false, and <code>break</code> without a condition. One turn shall leave the stack as it found it — so the values a loop makes are gathered in locals.</p><div class="example run"><p class="ex-file"><code>04-loop.pnx</code></p><pre><code data-lang="pinax"><span style="color: #d73948">use</span> io
+<span style="color: #d73948">word</span> collatz (n <span style="color: #d73948">int</span> <span style="color: #d73948">gives</span> <span style="color: #d73948">int</span>)              <span style="color: #74747c">rem steps to reach 1</span>
+  <span style="color: #b60157">0</span> <span style="color: #d73948">to</span> steps
+  <span style="color: #d73948">loop</span>
+    n <span style="color: #b60157">1</span> eq <span style="color: #d73948">until</span>
+    n <span style="color: #b60157">2</span> mod <span style="color: #b60157">0</span> eq <span style="color: #d73948">if</span> n <span style="color: #b60157">2</span> div <span style="color: #d73948">else</span> n <span style="color: #b60157">3</span> mul <span style="color: #b60157">1</span> add <span style="color: #d73948">end</span> <span style="color: #d73948">to</span> n
+    steps <span style="color: #b60157">1</span> add <span style="color: #d73948">to</span> steps
+  <span style="color: #d73948">end</span>
+  steps
+<span style="color: #d73948">end</span>
+<span style="color: #d73948">cat</span> (<span style="color: #198810">"27 takes "</span>, <span style="color: #b60157">27</span> collatz, <span style="color: #198810">" steps"</span>) io.println
+</code></pre><p class="ex-label">Output</p><pre><code data-lang="text">$ pnx 04-loop.pnx
+27 takes 111 steps
+</code></pre></div><p>A named loop can be left all at once from an inner loop.</p><div class="example run"><p class="ex-file"><code>04-named-loop.pnx</code></p><pre><code data-lang="pinax"><span style="color: #d73948">use</span> io
+<span style="color: #d73948">word</span> is_prime (n <span style="color: #d73948">int</span> <span style="color: #d73948">gives</span> <span style="color: #d73948">bool</span>)
+  n <span style="color: #b60157">2</span> lt <span style="color: #d73948">if</span> <span style="color: #d73948">false</span> <span style="color: #d73948">return</span> <span style="color: #d73948">end</span>
+  <span style="color: #b60157">2</span> <span style="color: #d73948">to</span> d
+  <span style="color: #d73948">loop</span>
+    d d mul n gt <span style="color: #d73948">if</span> <span style="color: #d73948">true</span> <span style="color: #d73948">return</span> <span style="color: #d73948">end</span>
+    n d mod <span style="color: #b60157">0</span> eq <span style="color: #d73948">if</span> <span style="color: #d73948">false</span> <span style="color: #d73948">return</span> <span style="color: #d73948">end</span>
+    d <span style="color: #b60157">1</span> add <span style="color: #d73948">to</span> d
+  <span style="color: #d73948">end</span>
+<span style="color: #d73948">end</span>
+<span style="color: #d73948">word</span> first_pair (target <span style="color: #d73948">int</span> <span style="color: #d73948">gives</span> <span style="color: #d73948">str</span>)       <span style="color: #74747c">rem the first a &lt; b &lt;= 20, both prime, with a + b = target</span>
+  <span style="color: #b60157">2</span> <span style="color: #d73948">to</span> a
+  <span style="color: #b60157">0</span> <span style="color: #d73948">to</span> b
+  <span style="color: #d73948">loop</span> (outer)
+    a <span style="color: #b60157">1</span> add <span style="color: #d73948">to</span> b
+    <span style="color: #d73948">loop</span>
+      b <span style="color: #b60157">20</span> gt <span style="color: #d73948">until</span>
+      a is_prime b is_prime and a b add target eq and <span style="color: #d73948">until</span> (outer)
+      b <span style="color: #b60157">1</span> add <span style="color: #d73948">to</span> b
+    <span style="color: #d73948">end</span>
+    a <span style="color: #b60157">1</span> add <span style="color: #d73948">to</span> a
+    a <span style="color: #b60157">20</span> gt <span style="color: #d73948">if</span> <span style="color: #198810">"none"</span> <span style="color: #d73948">return</span> <span style="color: #d73948">end</span>
+  <span style="color: #d73948">end</span>
+  <span style="color: #d73948">cat</span> (a, <span style="color: #198810">" + "</span>, b)
+<span style="color: #d73948">end</span>
+<span style="color: #b60157">26</span> first_pair io.println
+</code></pre><p class="ex-label">Output</p><pre><code data-lang="text">$ pnx 04-named-loop.pnx
+7 + 19
+</code></pre></div><div class="box qa"><p class="box-title">Q&amp;A</p><p><strong>Q. Can I give the number of loops to leave instead?</strong></p><p>A. No. With a number, wrapping a loop in one more would quietly leave another loop. A name cannot do that.</p></div><h3>4.4 Choosing</h3><p><code>case</code> compares an <code>int</code> or <code>str</code> with the values of its branches. Several values for one branch go in parentheses. What to do when nothing matches goes in <code>otherwise</code>; with no <code>otherwise</code> and no match, it is a fault.</p><div class="example run"><p class="ex-file"><code>04-case.pnx</code></p><pre><code data-lang="pinax"><span style="color: #d73948">use</span> io
+<span style="color: #d73948">word</span> day_kind (day <span style="color: #d73948">str</span> <span style="color: #d73948">gives</span> <span style="color: #d73948">str</span>)
+  day <span style="color: #d73948">case</span>
+    (<span style="color: #198810">"sat"</span>, <span style="color: #198810">"sun"</span>) <span style="color: #d73948">of</span> <span style="color: #198810">"weekend"</span> <span style="color: #d73948">end</span>
+    (<span style="color: #198810">"mon"</span>, <span style="color: #198810">"tue"</span>, <span style="color: #198810">"wed"</span>, <span style="color: #198810">"thu"</span>, <span style="color: #198810">"fri"</span>) <span style="color: #d73948">of</span> <span style="color: #198810">"weekday"</span> <span style="color: #d73948">end</span>
+    <span style="color: #d73948">otherwise</span> <span style="color: #198810">"not a day"</span> <span style="color: #d73948">end</span>
+  <span style="color: #d73948">end</span>
+<span style="color: #d73948">end</span>
+<span style="color: #198810">"sun"</span> day_kind io.println
+<span style="color: #198810">"wed"</span> day_kind io.println
+<span style="color: #198810">"xyz"</span> day_kind io.println
+</code></pre><p class="ex-label">Output</p><pre><code data-lang="text">$ pnx 04-case.pnx
+weekend
+weekday
+not a day
+</code></pre></div><p>The values of the branches are literals or <code>const</code>s of this source. Constants of modules such as <code>err.full</code> or <code>json.key</code> cannot be <code>case</code> values; compare them with <code>eq</code>.</p><h3>4.5 Stems and blocks</h3><p>A loop over an array or a list is written with a <strong>stem</strong> and a <strong>combining word</strong> instead. The name of the array is the stem, and a <code>do … end</code> block after it, with a word such as <code>each</code>, <code>count</code> or <code>fold</code>, takes it. The block is expanded in place, so it can use the locals around it.</p><div class="example run"><p class="ex-file"><code>04-stems.pnx</code></p><pre><code data-lang="pinax"><span style="color: #d73948">use</span> io
+<span style="color: #d73948">use</span> <span style="color: #d73948">str</span>
+<span style="color: #d73948">array</span> temps <span style="color: #d73948">int</span> <span style="color: #b60157">7</span>
+<span style="color: #d73948">assign</span> temps (<span style="color: #b60157">12</span>, <span style="color: #b60157">15</span>, <span style="color: #b60157">9</span>, <span style="color: #b60157">21</span>, <span style="color: #b60157">18</span>, <span style="color: #b60157">7</span>, <span style="color: #b60157">14</span>)
+<span style="color: #d73948">cat</span> (<span style="color: #198810">"sum "</span>, temps sum, <span style="color: #198810">", above 13: "</span>, temps <span style="color: #d73948">do</span> (t <span style="color: #d73948">int</span> <span style="color: #d73948">gives</span> <span style="color: #d73948">bool</span>) t <span style="color: #b60157">13</span> gt <span style="color: #d73948">end</span> count) io.println
+<span style="color: #d73948">cat</span> (<span style="color: #198810">"max "</span>, temps maximum <span style="color: #d73948">or_else</span> (e) <span style="color: #b60157">0</span> <span style="color: #d73948">end</span>, <span style="color: #198810">", min "</span>, temps minimum <span style="color: #d73948">or_else</span> (e) <span style="color: #b60157">0</span> <span style="color: #d73948">end</span>) io.println
+temps <span style="color: #d73948">do</span> (t <span style="color: #d73948">int</span>, i <span style="color: #d73948">int</span>) <span style="color: #d73948">cat</span> (<span style="color: #198810">"day "</span>, i, <span style="color: #198810">": "</span>, t) io.println <span style="color: #d73948">end</span> each_index
+<span style="color: #d73948">word</span> spread (<span style="color: #d73948">gives</span> <span style="color: #d73948">int</span>) <span style="color: #b60157">0</span> temps <span style="color: #d73948">do</span> (acc <span style="color: #d73948">int</span>, t <span style="color: #d73948">int</span> <span style="color: #d73948">gives</span> <span style="color: #d73948">int</span>) acc t <span style="color: #b60157">10</span> sub abs add <span style="color: #d73948">end</span> fold <span style="color: #d73948">end</span>
+<span style="color: #d73948">cat</span> (<span style="color: #198810">"distance from 10, added up: "</span>, spread) io.println
+</code></pre><p class="ex-label">Output</p><pre><code data-lang="text">$ pnx 04-stems.pnx
+sum 96, above 13: 4
+max 21, min 7
+day 0: 12
+day 1: 15
+day 2: 9
+day 3: 21
+day 4: 18
+day 5: 7
+day 6: 14
+distance from 10, added up: 34
+</code></pre></div><p><code>lo hi range</code> is a stem too (<code>hi</code> is not included). <code>fold</code> takes a first value before the stem, and its block takes (the value so far, an element) and gives the new value.</p><div class="box summary"><p class="box-title">Summary</p><ul><li><code>to NAME</code> makes a local; with a global’s name it stores into the global (standard 9.4).</li><li>A name made inside a branch is not visible outside it (9.4).</li><li>The two branches of <code>if</code> and the branches of <code>case</code> leave the same stack; one turn of a loop leaves the stack it found (10).</li><li>A named loop is left at once with <code>until (NAME)</code> (10.2).</li><li>Arrays and lists are walked with stems: <code>each</code> <code>each_index</code> <code>count</code> <code>fold</code> <code>sum</code> … (10.6).</li></ul></div></main><nav class="bottom"><a href="index.html">Start</a> · <a href="04.html">Previous</a> · <a href="06.html">Next</a> · <a href="../html-ko/05.html">한국어</a></nav></body></html>

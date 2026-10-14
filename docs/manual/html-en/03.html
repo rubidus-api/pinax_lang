@@ -1,2 +1,51 @@
 <!DOCTYPE html>
-<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>2 값과 스택 - The Pinax Manual</title><link rel="stylesheet" href="style.css"></head><body><nav class="top"><a href="index.html">Start</a> · <a href="02.html">Previous</a> · <a href="04.html">Next</a> · <a href="../html-ko/03.html">한국어</a></nav><main><h2>2 값과 스택</h2><p><em>(English edition in preparation.)</em></p></main><nav class="bottom"><a href="index.html">Start</a> · <a href="02.html">Previous</a> · <a href="04.html">Next</a> · <a href="../html-ko/03.html">한국어</a></nav></body></html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>2 Values and the stack - The Pinax Manual</title><link rel="stylesheet" href="style.css"></head><body><nav class="top"><a href="index.html">Start</a> · <a href="02.html">Previous</a> · <a href="04.html">Next</a> · <a href="../html-ko/03.html">한국어</a></nav><main><h2>2 Values and the stack</h2><div class="box opening"><p><strong>Builds on</strong>: Chapter 1 (the order of code, <code>pnx</code>).</p><p><strong>Questions this chapter answers</strong></p><ul><li>What values does Pinax have?</li><li>How does the stack move, and when does the processor check it?</li><li>What happens when an integer overflows?</li></ul></div><h3>2.1 Computing on the stack</h3><div class="example run"><p class="ex-file"><code>02-stack.pnx</code></p><pre><code data-lang="pinax"><span style="color: #d73948">use</span> io
+<span style="color: #d73948">use</span> <span style="color: #d73948">str</span>
+<span style="color: #b60157">2</span> <span style="color: #b60157">3</span> add <span style="color: #b60157">4</span> mul <span style="color: #d73948">str</span>.to_str io.println          <span style="color: #74747c">rem (2 + 3) * 4</span>
+<span style="color: #b60157">2</span> <span style="color: #b60157">3</span> <span style="color: #b60157">4</span> mul add <span style="color: #d73948">str</span>.to_str io.println          <span style="color: #74747c">rem 2 + 3 * 4</span>
+<span style="color: #b60157">10</span> <span style="color: #b60157">3</span> sub <span style="color: #d73948">str</span>.to_str io.println               <span style="color: #74747c">rem the first value is on the left: 10 - 3</span>
+<span style="color: #b60157">10</span> <span style="color: #b60157">3</span> swap sub <span style="color: #d73948">str</span>.to_str io.println          <span style="color: #74747c">rem swap turns it round: 3 - 10</span>
+</code></pre><p class="ex-label">Output</p><pre><code data-lang="text">$ pnx 02-stack.pnx
+20
+14
+7
+-7
+</code></pre></div><p>Follow <code>2 3 add 4 mul</code> step by step. <code>2</code> and <code>3</code> go on; <code>add</code> takes both off and puts <code>5</code> on; <code>4</code> goes on; <code>mul</code> takes both off and puts <code>20</code> on. Without parentheses, the order of the computation is the order of the text.</p><p>For words where order matters, such as subtraction and division, <strong>the value put on first is on the left</strong>: <code>10 3 sub</code> is <math><mn>10</mn><mo>−</mo><mn>3</mn></math>. <code>swap</code> exchanges the top two values. The only words that rearrange the stack are the five <code>dup</code> <code>drop</code> <code>swap</code> <code>over</code> <code>nip</code>. When you need more, give the values names (chapter 4).</p><h3>2.2 Types of values</h3><div class="example run"><p class="ex-file"><code>02-values.pnx</code></p><pre><code data-lang="pinax"><span style="color: #d73948">use</span> io
+<span style="color: #d73948">use</span> <span style="color: #d73948">str</span>
+<span style="color: #d73948">use</span> fmt
+<span style="color: #b60157">42</span> <span style="color: #d73948">str</span>.to_str io.println
+<span style="color: #b60157">-7</span> <span style="color: #d73948">str</span>.to_str io.println
+<span style="color: #b60157">0xff</span> <span style="color: #d73948">str</span>.to_str io.println                   <span style="color: #74747c">rem 255</span>
+<span style="color: #b60157">1_000_000</span> <span style="color: #d73948">str</span>.to_str io.println
+<span style="color: #b60157">'A'</span> <span style="color: #d73948">str</span>.to_str io.println                    <span style="color: #74747c">rem a character is its number</span>
+<span style="color: #b60157">3</span> <span style="color: #b60157">4</span> lt <span style="color: #d73948">if</span> <span style="color: #198810">"3 &lt; 4 is true"</span> <span style="color: #d73948">else</span> <span style="color: #198810">"false"</span> <span style="color: #d73948">end</span> io.println
+<span style="color: #198810">"a string"</span> <span style="color: #d73948">str</span>.len <span style="color: #d73948">str</span>.to_str io.println
+<span style="color: #b60157">255</span> fmt.hex io.println
+</code></pre><p class="ex-label">Output</p><pre><code data-lang="text">$ pnx 02-values.pnx
+42
+-7
+255
+1000000
+65
+3 &lt; 4 is true
+8
+ff
+</code></pre></div><p>This book mostly uses four types:</p><ul><li><code>int</code> — 64-bit integers, written in decimal, hexadecimal (<code>0xff</code>) or binary (<code>0b101</code>), with underscores between digits if you like. A character <code>'A'</code> is the <code>int</code> that is its number.</li><li><code>bool</code> — <code>true</code> and <code>false</code>; comparison words (<code>lt</code> <code>eq</code> …) give them and <code>if</code> takes them.</li><li><code>str</code> — strings; chapter 5 covers them.</li><li><code>err</code> — the reason for a failure; see chapter 8.</li></ul><div class="box qa"><p class="box-title">Q&amp;A</p><p><strong>Q. Do <code>int</code> and <code>bool</code> convert into each other?</strong></p><p>A. No. <code>1</code> is not true, and you cannot add to <code>true</code>. Only a <code>bool</code> goes where a condition goes, and only an <code>int</code> into arithmetic.</p></div><h3>2.3 The processor knows the stack in advance</h3><p>At load the processor knows, at every place of a body, how many values are on the stack and of what types. So the two programs below are refused before they run.</p><div class="example refused"><p class="ex-file"><code>02-types-mixed.pnx</code></p><pre><code data-lang="pinax"><span style="color: #d73948">use</span> io
+<span style="color: #198810">"3"</span> <span style="color: #b60157">4</span> add drop
+</code></pre><p class="ex-label">Refused</p><pre><code data-lang="text">$ pnx 02-types-mixed.pnx
+02-types-mixed.pnx:2:7: this word takes two int values, or two of the same declared type
+</code></pre></div><div class="example refused"><p class="ex-file"><code>02-stack-short.pnx</code></p><pre><code data-lang="pinax"><span style="color: #d73948">use</span> io
+<span style="color: #d73948">use</span> <span style="color: #d73948">str</span>
+<span style="color: #b60157">5</span> add <span style="color: #d73948">str</span>.to_str io.println
+</code></pre><p class="ex-label">Refused</p><pre><code data-lang="text">$ pnx 02-stack-short.pnx
+02-stack-short.pnx:3:3: the stack does not hold enough values for this word
+</code></pre></div><div class="box mistake"><p class="box-title">Common mistake: The depth of the stack may change as a program runs</p>Languages like Forth allow words that leave a different number of values depending on what happens. Pinax does not. At every place the depth and types of the stack are one and fixed. So the two branches of an <code>if</code> leave the same stack, and one turn of a loop leaves the stack as it was (chapter 4).</div><h3>2.4 Overflow is a fault</h3><div class="example fault"><p class="ex-file"><code>02-overflow.pnx</code></p><pre><code data-lang="pinax"><span style="color: #d73948">use</span> io
+<span style="color: #d73948">use</span> <span style="color: #d73948">str</span>
+<span style="color: #d73948">word</span> double (n <span style="color: #d73948">int</span> <span style="color: #d73948">gives</span> <span style="color: #d73948">int</span>) n <span style="color: #b60157">2</span> mul <span style="color: #d73948">end</span>
+<span style="color: #b60157">4611686018427387903</span> double <span style="color: #d73948">str</span>.to_str io.println
+<span style="color: #b60157">4611686018427387904</span> double <span style="color: #d73948">str</span>.to_str io.println
+</code></pre><p class="ex-label">Fault</p><pre><code data-lang="text">$ pnx 02-overflow.pnx
+9223372036854775806
+02-overflow.pnx:3: integer overflow
+  n int = 4611686018427387904
+</code></pre></div><p>A result beyond the range of <code>int</code> does not quietly wrap around. The run stops on the spot and the processor reports a <strong>fault</strong>. <code>pnx</code> shows the line of the fault and the locals of the word. For arithmetic that wraps use <code>wrap_mul</code>, for arithmetic that stops at the edge <code>sat_mul</code>, and to receive overflow as a failure <code>chk_mul</code>.</p><div class="box summary"><p class="box-title">Summary</p><ul><li>The value put on first is on the left: <code>10 3 sub</code> is 7 (standard 9.3).</li><li>The stack words are <code>dup</code> <code>drop</code> <code>swap</code> <code>over</code> <code>nip</code> only (9.3).</li><li>Types are checked at load; <code>int</code> and <code>bool</code> do not mix (7.1, 7.2).</li><li>Integer overflow and division by zero are faults; other arithmetic words exist (7.1, 15.1).</li></ul></div></main><nav class="bottom"><a href="index.html">Start</a> · <a href="02.html">Previous</a> · <a href="04.html">Next</a> · <a href="../html-ko/03.html">한국어</a></nav></body></html>

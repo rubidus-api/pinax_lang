@@ -1,2 +1,86 @@
 <!DOCTYPE html>
-<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>6 컬렉션 - The Pinax Manual</title><link rel="stylesheet" href="style.css"></head><body><nav class="top"><a href="index.html">Start</a> · <a href="06.html">Previous</a> · <a href="08.html">Next</a> · <a href="../html-ko/07.html">한국어</a></nav><main><h2>6 컬렉션</h2><p><em>(English edition in preparation.)</em></p></main><nav class="bottom"><a href="index.html">Start</a> · <a href="06.html">Previous</a> · <a href="08.html">Next</a> · <a href="../html-ko/07.html">한국어</a></nav></body></html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>6 Collections - The Pinax Manual</title><link rel="stylesheet" href="style.css"></head><body><nav class="top"><a href="index.html">Start</a> · <a href="06.html">Previous</a> · <a href="08.html">Next</a> · <a href="../html-ko/07.html">한국어</a></nav><main><h2>6 Collections</h2><div class="box opening"><p><strong>Builds on</strong>: Chapter 4 (stems and blocks), chapter 5 (buffers).</p><p><strong>Questions this chapter answers</strong></p><ul><li>What places hold several values, and how is their size decided?</li><li>What happens when you add to a full list or take from an empty queue?</li><li>How do I filter or transform an array into another place?</li></ul></div><p>Every collection has its capacity fixed by its declaration, and its room is placed in the state’s block ahead of time. No storage grows while running. So “how much can it hold” is always written in the source.</p><h3>6.1 Arrays</h3><p><code>array NAME type capacity</code> is a row of cells that is always full. Every cell starts at zero, and <code>len</code> is always the capacity. A cell is read with <code>i ARRAY idx</code> and stored with <code>value i to ARRAY</code>. <code>assign</code> fills it from the first cell, outside definitions.</p><div class="example run"><p class="ex-file"><code>06-array.pnx</code></p><pre><code data-lang="pinax"><span style="color: #d73948">use</span> io
+<span style="color: #d73948">use</span> <span style="color: #d73948">str</span>
+<span style="color: #d73948">const</span> days <span style="color: #b60157">7</span>
+<span style="color: #d73948">array</span> rain <span style="color: #d73948">int</span> days                         <span style="color: #74747c">rem always full: 7 cells, all 0 at first</span>
+<span style="color: #d73948">assign</span> rain (<span style="color: #b60157">0</span>, <span style="color: #b60157">5</span>, <span style="color: #b60157">12</span>, <span style="color: #b60157">0</span>, <span style="color: #b60157">3</span>)                <span style="color: #74747c">rem cells 5 and 6 stay 0</span>
+<span style="color: #b60157">8</span> <span style="color: #b60157">6</span> <span style="color: #d73948">to</span> rain                                 <span style="color: #74747c">rem value, index, to array</span>
+<span style="color: #d73948">word</span> show () rain <span style="color: #d73948">do</span> (r <span style="color: #d73948">int</span>) r <span style="color: #d73948">str</span>.to_str io.print <span style="color: #198810">" "</span> io.print <span style="color: #d73948">end</span> each <span style="color: #198810">""</span> io.println <span style="color: #d73948">end</span>
+show
+<span style="color: #d73948">cat</span> (<span style="color: #198810">"rainy days: "</span>, rain <span style="color: #d73948">do</span> (r <span style="color: #d73948">int</span> <span style="color: #d73948">gives</span> <span style="color: #d73948">bool</span>) r <span style="color: #b60157">0</span> gt <span style="color: #d73948">end</span> count, <span style="color: #198810">" of "</span>, rain len) io.println
+</code></pre><p class="ex-label">Output</p><pre><code data-lang="text">$ pnx 06-array.pnx
+0 5 12 0 3 0 8 
+rainy days: 4 of 7
+</code></pre></div><p>An index out of range is a fault. Compare an index you cannot be sure of with <code>len</code> before using it.</p><div class="example fault"><p class="ex-file"><code>06-index-range.pnx</code></p><pre><code data-lang="pinax"><span style="color: #d73948">use</span> io
+<span style="color: #d73948">array</span> week <span style="color: #d73948">int</span> <span style="color: #b60157">7</span>
+<span style="color: #d73948">word</span> day (i <span style="color: #d73948">int</span> <span style="color: #d73948">gives</span> <span style="color: #d73948">int</span>) i week idx <span style="color: #d73948">end</span>
+<span style="color: #b60157">3</span> day drop
+<span style="color: #198810">"day 3 is fine"</span> io.println
+<span style="color: #b60157">7</span> day drop
+</code></pre><p class="ex-label">Fault</p><pre><code data-lang="text">$ pnx 06-index-range.pnx
+day 3 is fine
+06-index-range.pnx:3: index out of range
+  i int = 7
+</code></pre></div><h3>6.2 Lists</h3><p>A <code>list</code> is an array whose length grows from 0 up to its capacity. <code>push</code> adds at the end and <code>pop</code> takes from the end. Only indexes below the length may be used.</p><div class="example run"><p class="ex-file"><code>06-list.pnx</code></p><pre><code data-lang="pinax"><span style="color: #d73948">use</span> io
+<span style="color: #d73948">use</span> <span style="color: #d73948">str</span>
+<span style="color: #d73948">list</span> stack <span style="color: #d73948">int</span> <span style="color: #b60157">4</span>                            <span style="color: #74747c">rem grows from 0 to 4</span>
+<span style="color: #d73948">word</span> balanced (s <span style="color: #d73948">str</span> <span style="color: #d73948">gives</span> <span style="color: #d73948">bool</span>)            <span style="color: #74747c">rem are the brackets of s balanced?</span>
+  stack clear
+  s <span style="color: #d73948">str</span>.bytes <span style="color: #d73948">do</span> (b <span style="color: #d73948">int</span>)
+    b <span style="color: #b60157">'('</span> eq <span style="color: #d73948">if</span> b stack push <span style="color: #d73948">or_else</span> (e) <span style="color: #d73948">end</span> <span style="color: #d73948">end</span>
+    b <span style="color: #b60157">')'</span> eq <span style="color: #d73948">if</span> stack pop <span style="color: #d73948">or_else</span> (e) <span style="color: #b60157">0</span> <span style="color: #d73948">end</span> drop <span style="color: #d73948">end</span>
+  <span style="color: #d73948">end</span> each
+  stack is_empty
+<span style="color: #d73948">end</span>
+<span style="color: #d73948">word</span> check (s <span style="color: #d73948">str</span>) <span style="color: #d73948">cat</span> (s, <span style="color: #198810">" "</span>, s balanced) io.println <span style="color: #d73948">end</span>
+<span style="color: #198810">"(a(b)c)"</span> check
+<span style="color: #198810">"(a(b c)"</span> check
+</code></pre><p class="ex-label">Output</p><pre><code data-lang="text">$ pnx 06-list.pnx
+(a(b)c) true
+(a(b c) false
+</code></pre></div><p><code>push</code> and <code>pop</code> can fail: a <code>push</code> into a full list fails with <code>full</code>, a <code>pop</code> from an empty list with <code>range</code>. A <code>push</code> that fails does not change the list.</p><div class="example run"><p class="ex-file"><code>06-list-full.pnx</code></p><pre><code data-lang="pinax"><span style="color: #d73948">use</span> io
+<span style="color: #d73948">list</span> two <span style="color: #d73948">int</span> <span style="color: #b60157">2</span>
+<span style="color: #d73948">word</span> fill (<span style="color: #d73948">or</span> <span style="color: #d73948">fail</span>) <span style="color: #b60157">1</span> two push <span style="color: #d73948">or_fail</span> <span style="color: #b60157">2</span> two push <span style="color: #d73948">or_fail</span> <span style="color: #b60157">3</span> two push <span style="color: #d73948">or_fail</span> <span style="color: #d73948">end</span>
+fill <span style="color: #d73948">or_else</span> (e) <span style="color: #d73948">cat</span> (<span style="color: #198810">"the third push failed: "</span>, e err_text) io.println <span style="color: #d73948">end</span>
+<span style="color: #d73948">cat</span> (<span style="color: #198810">"the list holds "</span>, two len) io.println
+</code></pre><p class="ex-label">Output</p><pre><code data-lang="text">$ pnx 06-list-full.pnx
+the third push failed: full
+the list holds 2
+</code></pre></div><div class="box qa"><p class="box-title">Q&amp;A</p><p><strong>Q. Isn’t a generous capacity a waste of memory?</strong></p><p>A. It is. But the amount is in the source and fixed at load. Instead of a program stopping when memory runs out, it shows as a failing <code>push</code>, and that failure has to be handled before the program is even loaded.</p></div><h3>6.3 Queues</h3><p>In a <code>queue</code>, what goes in first comes out first. <code>put</code> puts in, <code>take</code> takes out, and <code>peek</code> looks without taking.</p><div class="example run"><p class="ex-file"><code>06-queue.pnx</code></p><pre><code data-lang="pinax"><span style="color: #d73948">use</span> io
+<span style="color: #d73948">use</span> <span style="color: #d73948">str</span>
+<span style="color: #d73948">queue</span> line <span style="color: #d73948">int</span> <span style="color: #b60157">3</span>
+<span style="color: #d73948">word</span> arrive (n <span style="color: #d73948">int</span>) n line put <span style="color: #d73948">or_else</span> (e) <span style="color: #d73948">cat</span> (<span style="color: #198810">"turned away: "</span>, n) io.println <span style="color: #d73948">end</span> <span style="color: #d73948">end</span>
+<span style="color: #d73948">word</span> serve () line take <span style="color: #d73948">or_else</span> (e) <span style="color: #d73948">cat</span> (<span style="color: #198810">"nobody waits: "</span>, e err_text) io.println <span style="color: #d73948">return</span> <span style="color: #d73948">end</span> <span style="color: #d73948">to</span> n  <span style="color: #d73948">cat</span> (<span style="color: #198810">"served "</span>, n) io.println <span style="color: #d73948">end</span>
+<span style="color: #b60157">1</span> arrive <span style="color: #b60157">2</span> arrive <span style="color: #b60157">3</span> arrive <span style="color: #b60157">4</span> arrive
+serve serve
+<span style="color: #b60157">5</span> arrive
+serve serve serve
+</code></pre><p class="ex-label">Output</p><pre><code data-lang="text">$ pnx 06-queue.pnx
+turned away: 4
+served 1
+served 2
+served 3
+served 5
+nobody waits: range
+</code></pre></div><div class="box mistake"><p class="box-title">Common mistake: A queue can be walked with <code>each</code> too</p>Only arrays and lists are stems. Queues, pools, buffers and indexes are not. To handle the elements of a queue in order, call <code>take</code> in a loop.<div class="example refused"><p class="ex-file"><code>06-queue-stem.pnx</code></p><pre><code data-lang="pinax"><span style="color: #d73948">use</span> io
+<span style="color: #d73948">queue</span> q <span style="color: #d73948">int</span> <span style="color: #b60157">4</span>
+q <span style="color: #d73948">do</span> (x <span style="color: #d73948">int</span>) <span style="color: #d73948">end</span> each
+</code></pre><p class="ex-label">Refused</p><pre><code data-lang="text">$ pnx 06-queue-stem.pnx
+06-queue-stem.pnx:3:14: only an array or a list is a stem (not a queue, a pool, a buffer or an index)
+</code></pre></div></div><h3>6.4 Filtering and mapping into a place</h3><p><code>map_into</code> and <code>filter_into</code> put the results of transforming or filtering the elements of a stem with a block into a <strong>place that already exists</strong> no new array is made. A list destination is added to at the end; an array is written from cell 0, and the number of cells written is given. When the destination is full, they fail.</p><div class="example run"><p class="ex-file"><code>06-map-filter.pnx</code></p><pre><code data-lang="pinax"><span style="color: #d73948">use</span> io
+<span style="color: #d73948">use</span> <span style="color: #d73948">str</span>
+<span style="color: #d73948">array</span> prices <span style="color: #d73948">int</span> <span style="color: #b60157">6</span>
+<span style="color: #d73948">assign</span> prices (<span style="color: #b60157">1200</span>, <span style="color: #b60157">450</span>, <span style="color: #b60157">3000</span>, <span style="color: #b60157">780</span>, <span style="color: #b60157">99</span>, <span style="color: #b60157">2500</span>)
+<span style="color: #d73948">list</span> cheap <span style="color: #d73948">int</span> <span style="color: #b60157">6</span>
+<span style="color: #d73948">array</span> with_tax <span style="color: #d73948">int</span> <span style="color: #b60157">6</span>
+<span style="color: #d73948">word</span> go (<span style="color: #d73948">or</span> <span style="color: #d73948">fail</span>)
+  prices <span style="color: #d73948">do</span> (p <span style="color: #d73948">int</span> <span style="color: #d73948">gives</span> <span style="color: #d73948">bool</span>) p <span style="color: #b60157">1000</span> lt <span style="color: #d73948">end</span> cheap filter_into <span style="color: #d73948">or_fail</span>
+  prices <span style="color: #d73948">do</span> (p <span style="color: #d73948">int</span> <span style="color: #d73948">gives</span> <span style="color: #d73948">int</span>) p <span style="color: #b60157">11</span> mul <span style="color: #b60157">10</span> div <span style="color: #d73948">end</span> with_tax map_into <span style="color: #d73948">or_fail</span> <span style="color: #d73948">to</span> n
+  <span style="color: #d73948">cat</span> (<span style="color: #198810">"cheap: "</span>, cheap len, <span style="color: #198810">" items, the first "</span>, <span style="color: #b60157">0</span> cheap idx) io.println
+  <span style="color: #d73948">cat</span> (<span style="color: #198810">"with tax, "</span>, n, <span style="color: #198810">" cells written, the first "</span>, <span style="color: #b60157">0</span> with_tax idx) io.println
+<span style="color: #d73948">end</span>
+go <span style="color: #d73948">or_else</span> (e) e err_text io.println <span style="color: #d73948">end</span>
+</code></pre><p class="ex-label">Output</p><pre><code data-lang="text">$ pnx 06-map-filter.pnx
+cheap: 3 items, the first 450
+with tax, 6 cells written, the first 1320
+</code></pre></div><div class="box summary"><p class="box-title">Summary</p><ul><li>The capacity of a collection is fixed by its declaration; no storage grows while running (standard 8.1).</li><li>An array is always full; a list’s length grows; an index out of range is a fault (8.4, 8.5).</li><li><code>push</code> <code>pop</code> <code>put</code> <code>take</code> can fail: <code>full</code> when full, <code>range</code> when empty (8.5, 8.6).</li><li>Only arrays and lists are stems (10.6).</li><li><code>map_into</code> and <code>filter_into</code> write into the destination they are given (10.6).</li></ul></div></main><nav class="bottom"><a href="index.html">Start</a> · <a href="06.html">Previous</a> · <a href="08.html">Next</a> · <a href="../html-ko/07.html">한국어</a></nav></body></html>

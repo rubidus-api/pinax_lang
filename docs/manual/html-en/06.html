@@ -1,2 +1,95 @@
 <!DOCTYPE html>
-<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>5 문자열 - The Pinax Manual</title><link rel="stylesheet" href="style.css"></head><body><nav class="top"><a href="index.html">Start</a> · <a href="05.html">Previous</a> · <a href="07.html">Next</a> · <a href="../html-ko/06.html">한국어</a></nav><main><h2>5 문자열</h2><p><em>(English edition in preparation.)</em></p></main><nav class="bottom"><a href="index.html">Start</a> · <a href="05.html">Previous</a> · <a href="07.html">Next</a> · <a href="../html-ko/06.html">한국어</a></nav></body></html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>5 Strings - The Pinax Manual</title><link rel="stylesheet" href="style.css"></head><body><nav class="top"><a href="index.html">Start</a> · <a href="05.html">Previous</a> · <a href="07.html">Next</a> · <a href="../html-ko/06.html">한국어</a></nav><main><h2>5 Strings</h2><div class="box opening"><p><strong>Builds on</strong>: Chapter 2 (types of values), chapter 4 (stems and blocks).</p><p><strong>Questions this chapter answers</strong></p><ul><li>Why does cutting and splitting a string copy nothing?</li><li>How do <code>str</code> and <code>str(N)</code> differ, and when is each used?</li><li>Where do the bytes of new text go, and how are they given back?</li></ul></div><h3>5.1 Views: strings that do not copy</h3><p>A <code>str</code> value is a <strong>view</strong>. It points at where some bytes are and how many; it does not own them. So cutting (<code>str.take</code> <code>str.skip</code> <code>str.slice</code>), trimming (<code>str.trim</code>) and splitting (<code>str.cut</code> <code>str.split</code> <code>str.lines</code> <code>str.words</code>) copy no bytes at all; they give new views of parts of the original text.</p><div class="example run"><p class="ex-file"><code>05-views.pnx</code></p><pre><code data-lang="pinax"><span style="color: #d73948">use</span> io
+<span style="color: #d73948">use</span> <span style="color: #d73948">str</span>
+<span style="color: #74747c">rem Parse "key = value" lines without copying a byte.</span>
+<span style="color: #d73948">word</span> parse (line <span style="color: #d73948">str</span>)
+  line <span style="color: #d73948">str</span>.trim <span style="color: #d73948">to</span> t
+  t <span style="color: #d73948">str</span>.is_empty t <span style="color: #198810">"#"</span> <span style="color: #d73948">str</span>.starts_with <span style="color: #d73948">or</span> <span style="color: #d73948">if</span> <span style="color: #d73948">return</span> <span style="color: #d73948">end</span>      <span style="color: #74747c">rem blank lines and remarks</span>
+  t <span style="color: #198810">"="</span> <span style="color: #d73948">str</span>.try_cut <span style="color: #d73948">or_else</span> (e) <span style="color: #d73948">cat</span> (<span style="color: #198810">"no '=' in: "</span>, t) io.println <span style="color: #d73948">return</span> <span style="color: #d73948">end</span> <span style="color: #d73948">to</span> (key, value)
+  <span style="color: #d73948">cat</span> (<span style="color: #198810">"["</span>, key <span style="color: #d73948">str</span>.trim, <span style="color: #198810">"] = ["</span>, value <span style="color: #d73948">str</span>.trim, <span style="color: #198810">"]"</span>) io.println
+<span style="color: #d73948">end</span>
+<span style="color: #d73948">text</span><span style="color: #198810"> </span><span style="color: #4b69c6">END</span>
+<span style="color: #198810"># settings</span>
+<span style="color: #198810">name = Pinax</span>
+<span style="color: #198810">  version= 1</span>
+
+<span style="color: #198810">broken line</span>
+<span style="color: #4b69c6">END</span>
+<span style="color: #d73948">str</span>.lines <span style="color: #d73948">do</span> (l <span style="color: #d73948">str</span>) l parse <span style="color: #d73948">end</span> each
+</code></pre><p class="ex-label">Output</p><pre><code data-lang="text">$ pnx 05-views.pnx
+[name] = [Pinax]
+[version] = [1]
+no '=' in: broken line
+</code></pre></div><p>This program splits settings text into lines, trims each line and cuts it in two at <code>=</code>. Bytes move only when they are printed. <code>str.try_cut</code> fails when there is no <code>=</code>, so it is taken with <code>or_else</code>. <code>str.cut</code>, which does not fail, gives an empty text after the separator when there is none.</p><h3>5.2 Stored text</h3><p>A view cannot live longer than the bytes it points at. So places that live long — globals, cells of arrays, fields of records — cannot hold views; they use <strong>stored text</strong>, <code>str(N)</code>. A <code>str(N)</code> takes N bytes of room and copies the bytes put into it. Reading it gives a view of that room.</p><div class="example run"><p class="ex-file"><code>05-stored.pnx</code></p><pre><code data-lang="pinax"><span style="color: #d73948">use</span> io
+<span style="color: #d73948">use</span> <span style="color: #d73948">str</span>
+<span style="color: #d73948">global</span> longest <span style="color: #d73948">str</span>(<span style="color: #b60157">16</span>)                     <span style="color: #74747c">rem stored text: 16 bytes, copied in</span>
+<span style="color: #d73948">word</span> keep_longest (w <span style="color: #d73948">str</span>) w <span style="color: #d73948">str</span>.len longest <span style="color: #d73948">str</span>.len gt <span style="color: #d73948">if</span> w <span style="color: #d73948">to</span> longest <span style="color: #d73948">end</span> <span style="color: #d73948">end</span>
+<span style="color: #198810">"the quick brown fox jumps over the lazy dog"</span> <span style="color: #d73948">str</span>.words <span style="color: #d73948">do</span> (w <span style="color: #d73948">str</span>) w keep_longest <span style="color: #d73948">end</span> each
+<span style="color: #d73948">cat</span> (<span style="color: #198810">"longest word: "</span>, longest) io.println
+</code></pre><p class="ex-label">Output</p><pre><code data-lang="text">$ pnx 05-stored.pnx
+longest word: quick
+</code></pre></div><div class="example refused"><p class="ex-file"><code>05-global-view.pnx</code></p><pre><code data-lang="pinax"><span style="color: #d73948">global</span> name <span style="color: #d73948">str</span>
+</code></pre><p class="ex-label">Refused</p><pre><code data-lang="text">$ pnx 05-global-view.pnx
+05-global-view.pnx:2:1: stored text is str(N); a str view lives only in locals, arguments and results
+</code></pre></div><div class="box mistake"><p class="box-title">Common mistake: Text longer than <code>str(N)</code> is cut to fit</p>It is not. Putting text longer than the room stops with a fault. To store part of it, cut it first with <code>str.take</code>.<div class="example fault"><p class="ex-file"><code>05-too-long.pnx</code></p><pre><code data-lang="pinax"><span style="color: #d73948">use</span> io
+<span style="color: #d73948">global</span> name <span style="color: #d73948">str</span>(<span style="color: #b60157">8</span>)
+<span style="color: #198810">"Pinax"</span> <span style="color: #d73948">to</span> name
+<span style="color: #d73948">cat</span> (<span style="color: #198810">"stored: "</span>, name) io.println
+<span style="color: #198810">"an embeddable language"</span> <span style="color: #d73948">to</span> name
+</code></pre><p class="ex-label">Fault</p><pre><code data-lang="text">$ pnx 05-too-long.pnx
+stored: Pinax
+05-too-long.pnx:5: index out of range
+</code></pre></div></div><h3>5.3 Making new text, and buffers</h3><p><code>cat</code> and words that make new bytes, such as <code>str.upper</code> and <code>str.repeat</code>, write those bytes into the <strong>region</strong> and give a view of them. To build text piece by piece, declare a <strong>buffer</strong> and add to it with the <code>append</code> words. When the buffer is full, the word that adds fails.</p><div class="example run"><p class="ex-file"><code>05-build.pnx</code></p><pre><code data-lang="pinax"><span style="color: #d73948">use</span> io
+<span style="color: #d73948">use</span> <span style="color: #d73948">str</span>
+<span style="color: #d73948">use</span> fmt
+<span style="color: #d73948">buffer</span> out <span style="color: #b60157">64</span>
+<span style="color: #d73948">word</span> report (<span style="color: #d73948">or</span> <span style="color: #d73948">fail</span>)
+  <span style="color: #198810">"id: "</span> out append <span style="color: #d73948">or_fail</span>
+  <span style="color: #b60157">42</span> out append_int <span style="color: #d73948">or_fail</span>
+  <span style="color: #198810">", hex: 0x"</span> out append <span style="color: #d73948">or_fail</span>
+  <span style="color: #b60157">255</span> out fmt.append_hex <span style="color: #d73948">or_fail</span>
+  <span style="color: #b60157">'!'</span> out append_byte <span style="color: #d73948">or_fail</span>
+<span style="color: #d73948">end</span>
+report <span style="color: #d73948">or_else</span> (e) <span style="color: #d73948">cat</span> (<span style="color: #198810">"buffer full: "</span>, e err_text) io.println <span style="color: #d73948">end</span>
+out contents io.println
+<span style="color: #d73948">cat</span> (<span style="color: #198810">"upper: "</span>, <span style="color: #198810">"pinax"</span> <span style="color: #d73948">str</span>.upper, <span style="color: #198810">", repeat: "</span>, <span style="color: #198810">"ab"</span> <span style="color: #b60157">3</span> <span style="color: #d73948">str</span>.repeat, <span style="color: #198810">", padded: ["</span>, <span style="color: #198810">"7"</span> <span style="color: #b60157">4</span> <span style="color: #d73948">str</span>.pad_left, <span style="color: #198810">"]"</span>) io.println
+</code></pre><p class="ex-label">Output</p><pre><code data-lang="text">$ pnx 05-build.pnx
+id: 42, hex: 0xff!
+upper: PINAX, repeat: ababab, padded: [   7]
+</code></pre></div><h3>5.4 Giving the region back</h3><p>The region has a fixed size for each run. A loop that keeps making text fills it up. <code>mark</code> remembers the current place and <code>release</code> goes back to it; the bytes made in between are used again.</p><div class="example run"><p class="ex-file"><code>05-region.pnx</code></p><pre><code data-lang="pinax"><span style="color: #d73948">use</span> io
+<span style="color: #d73948">use</span> <span style="color: #d73948">str</span>
+<span style="color: #d73948">word</span> line (i <span style="color: #d73948">int</span> <span style="color: #d73948">gives</span> <span style="color: #d73948">str</span>) <span style="color: #d73948">cat</span> (<span style="color: #198810">"line "</span>, i) <span style="color: #d73948">end</span>
+<span style="color: #d73948">word</span> lots ()
+  region_free <span style="color: #d73948">to</span> before
+  <span style="color: #b60157">1</span> <span style="color: #b60157">10001</span> range <span style="color: #d73948">do</span> (i <span style="color: #d73948">int</span>)
+    <span style="color: #d73948">mark</span> <span style="color: #d73948">to</span> m                               <span style="color: #74747c">rem every turn gives its bytes back</span>
+    i line drop
+    m release
+  <span style="color: #d73948">end</span> each
+  <span style="color: #d73948">cat</span> (<span style="color: #198810">"bytes still taken after 10000 lines: "</span>, before region_free sub) io.println
+<span style="color: #d73948">end</span>
+lots
+</code></pre><p class="ex-label">Output</p><pre><code data-lang="text">$ pnx 05-region.pnx
+bytes still taken after 10000 lines: 0
+</code></pre></div><p>After the release, views made in between cannot be used. The processor checks this at load too.</p><div class="example refused"><p class="ex-file"><code>05-release-view.pnx</code></p><pre><code data-lang="pinax"><span style="color: #d73948">use</span> io
+<span style="color: #d73948">word</span> f ()
+  <span style="color: #d73948">mark</span> <span style="color: #d73948">to</span> m
+  <span style="color: #d73948">cat</span> (<span style="color: #198810">"made "</span>, <span style="color: #198810">"after the mark"</span>) <span style="color: #d73948">to</span> s
+  m release
+  s io.println
+<span style="color: #d73948">end</span>
+</code></pre><p class="ex-label">Refused</p><pre><code data-lang="text">$ pnx 05-release-view.pnx
+05-release-view.pnx:6:3: this str was made after a mark that was released since; the region may hold other bytes there now
+</code></pre></div><div class="box qa"><p class="box-title">Q&amp;A</p><p><strong>Q. How do I keep text that must outlive the release?</strong></p><p>A. Put it into a <code>str(N)</code> global or cell. It is copied there, so it survives rewinding the region. <code>05-stored.pnx</code> above does that.</p></div><h3>5.5 Bytes and characters</h3><p>Lengths and positions count bytes. A Hangul character is 3 bytes in UTF-8. When characters matter, use <code>str.char_count</code> and <code>str.chars</code>. <code>str.chars</code> yields a view of each character (not a code point number).</p><div class="example run"><p class="ex-file"><code>05-chars.pnx</code></p><pre><code data-lang="pinax"><span style="color: #d73948">use</span> io
+<span style="color: #d73948">use</span> <span style="color: #d73948">str</span>
+<span style="color: #d73948">word</span> show ()
+  <span style="color: #198810">"한글 ok"</span> <span style="color: #d73948">to</span> s
+  <span style="color: #d73948">cat</span> (<span style="color: #198810">"bytes "</span>, s <span style="color: #d73948">str</span>.len, <span style="color: #198810">", characters "</span>, s <span style="color: #d73948">str</span>.char_count) io.println
+  s <span style="color: #d73948">str</span>.chars <span style="color: #d73948">do</span> (c <span style="color: #d73948">str</span>) <span style="color: #d73948">cat</span> (<span style="color: #198810">"&lt;"</span>, c, <span style="color: #198810">"&gt;"</span>) io.print <span style="color: #d73948">end</span> each
+  <span style="color: #198810">""</span> io.println
+<span style="color: #d73948">end</span>
+show
+</code></pre><p class="ex-label">Output</p><pre><code data-lang="text">$ pnx 05-chars.pnx
+bytes 9, characters 5
+&lt;한&gt;&lt;글&gt;&lt; &gt;&lt;o&gt;&lt;k&gt;
+</code></pre></div><div class="box summary"><p class="box-title">Summary</p><ul><li><code>str</code> is a view; cutting and splitting copy nothing (standard 7.3, 16.1).</li><li>Long-lived places use <code>str(N)</code>; putting text there copies it, and text too long is a fault (7.3).</li><li>New bytes go into the region; <code>mark</code>/<code>release</code> gives them back, and views made in between are refused after (12.2, 12.3).</li><li>A buffer is where text is built; it fails when full (8.7).</li><li>Lengths are bytes; for characters, <code>char_count</code> and <code>chars</code> (16.1).</li></ul></div></main><nav class="bottom"><a href="index.html">Start</a> · <a href="05.html">Previous</a> · <a href="07.html">Next</a> · <a href="../html-ko/06.html">한국어</a></nav></body></html>

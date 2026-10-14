@@ -1,2 +1,81 @@
 <!DOCTYPE html>
-<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>12 패턴 - The Pinax Manual</title><link rel="stylesheet" href="style.css"></head><body><nav class="top"><a href="index.html">Start</a> · <a href="12.html">Previous</a> · <a href="14.html">Next</a> · <a href="../html-ko/13.html">한국어</a></nav><main><h2>12 패턴</h2><p><em>(English edition in preparation.)</em></p></main><nav class="bottom"><a href="index.html">Start</a> · <a href="12.html">Previous</a> · <a href="14.html">Next</a> · <a href="../html-ko/13.html">한국어</a></nav></body></html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>12 Patterns - The Pinax Manual</title><link rel="stylesheet" href="style.css"></head><body><nav class="top"><a href="index.html">Start</a> · <a href="12.html">Previous</a> · <a href="14.html">Next</a> · <a href="../html-ko/13.html">한국어</a></nav><main><h2>12 Patterns</h2><div class="box opening"><p><strong>Builds on</strong>: Chapter 5 (views), chapter 4 (stems).</p><p><strong>Questions this chapter answers</strong></p><ul><li>What finds and replaces text by its shape?</li><li>Why must patterns be constants?</li><li>When is <code>ptn</code> the right choice, and when <code>rex</code>?</li></ul></div><h3>12.1 Small patterns: <code>ptn</code></h3><p>The patterns of <code>ptn</code> are the size of Lua’s: classes such as <code>%d</code> <code>%a</code> <code>%s</code>, <code>[…]</code> sets, <code>*</code> <code>+</code> <code>-</code> <code>?</code>, and captures <code>(…)</code>. There is no alternation (<code>|</code>). After a match, <code>n ptn.capture</code> reads a capture.</p><div class="example run"><p class="ex-file"><code>12-ptn.pnx</code></p><pre><code data-lang="pinax"><span style="color: #d73948">use</span> io
+<span style="color: #d73948">use</span> ptn
+<span style="color: #d73948">use</span> <span style="color: #d73948">str</span>
+<span style="color: #74747c">rem Pull fields out of log lines with a small pattern.</span>
+<span style="color: #d73948">const</span> entry <span style="color: #198810">"^(%d+):(%d+) (%u+) (.*)$"</span>
+<span style="color: #d73948">word</span> show (line <span style="color: #d73948">str</span>)
+  line entry ptn.match <span style="color: #d73948">or_else</span> (e) <span style="color: #d73948">cat</span> (<span style="color: #198810">"no match: "</span>, line) io.println <span style="color: #d73948">return</span> <span style="color: #d73948">end</span> drop
+  <span style="color: #d73948">cat</span> (<span style="color: #b60157">3</span> ptn.capture, <span style="color: #198810">" at "</span>, <span style="color: #b60157">1</span> ptn.capture, <span style="color: #198810">"h"</span>, <span style="color: #b60157">2</span> ptn.capture, <span style="color: #198810">": "</span>, <span style="color: #b60157">4</span> ptn.capture) io.println
+<span style="color: #d73948">end</span>
+<span style="color: #198810">"09:15 INFO server started"</span> show
+<span style="color: #198810">"10:02 WARN disk 91% full"</span> show
+<span style="color: #198810">"garbage"</span> show
+<span style="color: #198810">"a1b22c333"</span> <span style="color: #198810">"%d+"</span> ptn.matches <span style="color: #d73948">do</span> (m <span style="color: #d73948">str</span>) <span style="color: #d73948">cat</span> (<span style="color: #198810">"["</span>, m, <span style="color: #198810">"]"</span>) io.print <span style="color: #d73948">end</span> each
+<span style="color: #198810">""</span> io.println
+<span style="color: #198810">"hello world"</span> <span style="color: #198810">"(%w+)"</span> <span style="color: #198810">"&lt;%1&gt;"</span> ptn.replace io.println
+</code></pre><p class="ex-label">Output</p><pre><code data-lang="text">$ pnx 12-ptn.pnx
+INFO at 09h15: server started
+WARN at 10h02: disk 91% full
+no match: garbage
+[1][22][333]
+&lt;hello&gt; &lt;world&gt;
+</code></pre></div><h3>12.2 Regular expressions: <code>rex</code></h3><p><code>rex</code> has regular expressions with alternation, counts (<code>{n,m}</code>), word boundaries (<code>\b</code>) and flags (<code>(?i)</code> and so on). It matches without going back, so any pattern ends in time proportional to the length of the text. A pattern is made into a program with <code>rex.rx</code>, and the block of <code>matches</code> takes the groups as parameters.</p><div class="example run"><p class="ex-file"><code>12-rex.pnx</code></p><pre><code data-lang="pinax"><span style="color: #d73948">use</span> io
+<span style="color: #d73948">use</span> rex
+<span style="color: #d73948">use</span> <span style="color: #d73948">str</span>
+<span style="color: #74747c">rem Dates in any of two forms, rewritten to one.</span>
+<span style="color: #d73948">const</span> iso <span style="color: #198810">r"(\d{4})-(\d{2})-(\d{2})"</span>
+<span style="color: #d73948">word</span> demo ()
+  <span style="color: #198810">"due 2026-10-15, paid 2026-11-02"</span> iso rex.rx <span style="color: #198810">r"\3.\2.\1"</span> rex.replace io.println
+  <span style="color: #198810">"id=7, x=20; name=kim, n=3"</span> <span style="color: #198810">r"(\w+)=(\d+)"</span> rex.rx rex.matches <span style="color: #d73948">do</span> (whole <span style="color: #d73948">str</span>, key <span style="color: #d73948">str</span>, value <span style="color: #d73948">str</span>)
+    <span style="color: #d73948">cat</span> (key, <span style="color: #198810">" -&gt; "</span>, value) io.println
+  <span style="color: #d73948">end</span> each
+  <span style="color: #198810">"a , b;c ,d"</span> <span style="color: #198810">r"\s*[,;]\s*"</span> rex.rx rex.split <span style="color: #d73948">do</span> (p <span style="color: #d73948">str</span>) <span style="color: #d73948">cat</span> (<span style="color: #198810">"&lt;"</span>, p, <span style="color: #198810">"&gt;"</span>) io.print <span style="color: #d73948">end</span> each
+  <span style="color: #198810">""</span> io.println
+<span style="color: #d73948">end</span>
+demo
+</code></pre><p class="ex-label">Output</p><pre><code data-lang="text">$ pnx 12-rex.pnx
+due 15.10.2026, paid 02.11.2026
+id -&gt; 7
+x -&gt; 20
+n -&gt; 3
+&lt;a&gt;&lt;b&gt;&lt;c&gt;&lt;d&gt;
+</code></pre></div><p>A block can also make the text that replaces each match.</p><div class="example run"><p class="ex-file"><code>12-replace-by.pnx</code></p><pre><code data-lang="pinax"><span style="color: #d73948">use</span> io
+<span style="color: #d73948">use</span> rex
+<span style="color: #d73948">use</span> <span style="color: #d73948">str</span>
+<span style="color: #d73948">buffer</span> out <span style="color: #b60157">128</span>
+<span style="color: #d73948">word</span> title (s <span style="color: #d73948">str</span> <span style="color: #d73948">gives</span> <span style="color: #d73948">int</span> <span style="color: #d73948">or</span> <span style="color: #d73948">fail</span>)          <span style="color: #74747c">rem capitalize every word</span>
+  out clear
+  s <span style="color: #198810">r"\b[a-z]"</span> rex.rx out <span style="color: #d73948">do</span> (w <span style="color: #d73948">str</span> <span style="color: #d73948">gives</span> <span style="color: #d73948">str</span>) w <span style="color: #d73948">str</span>.upper <span style="color: #d73948">end</span> rex.replace_by <span style="color: #d73948">or_fail</span>
+<span style="color: #d73948">end</span>
+<span style="color: #d73948">word</span> show () <span style="color: #198810">"the quick brown fox"</span> title <span style="color: #d73948">or_else</span> (e) <span style="color: #b60157">-1</span> <span style="color: #d73948">end</span> <span style="color: #d73948">to</span> n  <span style="color: #d73948">cat</span> (out contents, <span style="color: #198810">" ("</span>, n, <span style="color: #198810">" letters)"</span>) io.println <span style="color: #d73948">end</span>
+show
+</code></pre><p class="ex-label">Output</p><pre><code data-lang="text">$ pnx 12-replace-by.pnx
+The Quick Brown Fox (4 letters)
+</code></pre></div><div class="box mistake"><p class="box-title">Common mistake: Writing a regular expression in an ordinary string</p><code>"\d+"</code> is refused, because in an ordinary string <code>\d</code> is an unknown escape. Worse is <code>"\b"</code>: it becomes a backspace character and quietly means something else. Write patterns in raw strings <code>r"…"</code>.<div class="example refused"><p class="ex-file"><code>12-escape.pnx</code></p><pre><code data-lang="pinax"><span style="color: #d73948">use</span> rex
+<span style="color: #d73948">word</span> digits (s <span style="color: #d73948">str</span> <span style="color: #d73948">gives</span> <span style="color: #d73948">bool</span>) s <span style="color: #198810">"</span><span style="color: #1d6c76">\d</span><span style="color: #198810">+"</span> rex.rx rex.is_match <span style="color: #d73948">end</span>
+</code></pre><p class="ex-label">Refused</p><pre><code data-lang="text">$ pnx 12-escape.pnx
+12-escape.pnx:2:35: unknown escape; a raw string r"..." keeps backslashes as written
+</code></pre></div></div><h3>12.3 Patterns are constants</h3><p>The patterns of <code>ptn</code> and of <code>rex.rx</code> shall be literals or <code>const</code>s, so that the processor can check them at load and make them into programs. A malformed pattern is refused before anything runs.</p><div class="example refused"><p class="ex-file"><code>12-pattern-variable.pnx</code></p><pre><code data-lang="pinax"><span style="color: #d73948">use</span> rex
+<span style="color: #d73948">word</span> find (s <span style="color: #d73948">str</span>, p <span style="color: #d73948">str</span> <span style="color: #d73948">gives</span> <span style="color: #d73948">bool</span>) s p rex.rx rex.is_match <span style="color: #d73948">end</span>
+</code></pre><p class="ex-label">Refused</p><pre><code data-lang="text">$ pnx 12-pattern-variable.pnx
+12-pattern-variable.pnx:2:41: rx takes a string literal or a const name; a pattern made while running is rex.compile
+</code></pre></div><p>When a pattern made while running is needed, use <code>rex.compile</code>. A malformed pattern comes back as a failure (<code>format</code>).</p><div class="example run"><p class="ex-file"><code>12-compile.pnx</code></p><pre><code data-lang="pinax"><span style="color: #d73948">use</span> io
+<span style="color: #d73948">use</span> rex
+<span style="color: #d73948">use</span> env
+<span style="color: #d73948">word</span> count_matches (pattern <span style="color: #d73948">str</span>, s <span style="color: #d73948">str</span> <span style="color: #d73948">gives</span> <span style="color: #d73948">int</span> <span style="color: #d73948">or</span> <span style="color: #d73948">fail</span>)
+  pattern rex.compile <span style="color: #d73948">or_fail</span> <span style="color: #d73948">to</span> re
+  <span style="color: #b60157">0</span> <span style="color: #d73948">to</span> n
+  s re rex.matches <span style="color: #d73948">do</span> (m <span style="color: #d73948">str</span>) n <span style="color: #b60157">1</span> add <span style="color: #d73948">to</span> n <span style="color: #d73948">end</span> each
+  n
+<span style="color: #d73948">end</span>
+<span style="color: #d73948">word</span> main ()
+  <span style="color: #b60157">1</span> env.arg <span style="color: #d73948">or_else</span> (e) <span style="color: #198810">"x"</span> <span style="color: #d73948">end</span> <span style="color: #d73948">to</span> p
+  <span style="color: #d73948">cat</span> (<span style="color: #198810">"matches of "</span>, p, <span style="color: #198810">": "</span>, p <span style="color: #198810">"a1 b22 c333"</span> count_matches <span style="color: #d73948">or_else</span> (e) <span style="color: #b60157">-1</span> <span style="color: #d73948">end</span>) io.println
+  <span style="color: #198810">"("</span> <span style="color: #198810">"a1"</span> count_matches <span style="color: #d73948">or_else</span> (e) <span style="color: #d73948">cat</span> (<span style="color: #198810">"bad pattern: "</span>, e err_text) io.println <span style="color: #b60157">-1</span> <span style="color: #d73948">end</span> drop
+<span style="color: #d73948">end</span>
+main
+</code></pre><p class="ex-label">Output</p><pre><code data-lang="text">$ pnx 12-compile.pnx [0-9]+
+matches of [0-9]+: 3
+bad pattern: format
+</code></pre></div><div class="box qa"><p class="box-title">Q&amp;A</p><p><strong>Q. Which do I use, <code>ptn</code> or <code>rex</code>?</strong></p><p>A. For short patterns with a few captures <code>ptn</code> is lighter. When you need alternation or counts, when the pattern comes from outside, or when the text is very long, use <code>rex</code>. <code>ptn</code> goes back and tries again, so a bad pattern runs into its step limit and stops with a fault.</p></div><div class="box summary"><p class="box-title">Summary</p><ul><li><code>ptn</code> has Lua-sized patterns; captures are read with <code>ptn.capture</code> (standard 16.6).</li><li><code>rex</code> has regular expressions that never go back; groups become block parameters (16.7).</li><li>Patterns are literals or <code>const</code>s; one made while running goes through <code>rex.compile</code> (16.6, 16.7).</li><li>Regular expressions are written in raw strings (6.5).</li></ul></div></main><nav class="bottom"><a href="index.html">Start</a> · <a href="12.html">Previous</a> · <a href="14.html">Next</a> · <a href="../html-ko/13.html">한국어</a></nav></body></html>

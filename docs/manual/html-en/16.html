@@ -1,2 +1,62 @@
 <!DOCTYPE html>
-<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>15 도구 - The Pinax Manual</title><link rel="stylesheet" href="style.css"></head><body><nav class="top"><a href="index.html">Start</a> · <a href="15.html">Previous</a> · <a href="../html-ko/16.html">한국어</a></nav><main><h2>15 도구</h2><p><em>(English edition in preparation.)</em></p></main><nav class="bottom"><a href="index.html">Start</a> · <a href="15.html">Previous</a> · <a href="../html-ko/16.html">한국어</a></nav></body></html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>15 Tools - The Pinax Manual</title><link rel="stylesheet" href="style.css"></head><body><nav class="top"><a href="index.html">Start</a> · <a href="15.html">Previous</a> · <a href="../html-ko/16.html">한국어</a></nav><main><h2>15 Tools</h2><div class="box opening"><p><strong>Builds on</strong>: Chapter 1 (<code>pnx</code>), chapter 3 (words).</p><p><strong>Questions this chapter answers</strong></p><ul><li>What do I use to test words?</li><li>How do I try things out a line at a time?</li><li>How do I see the stack at every line, or make indentation even?</li></ul></div><h3>15.1 Tests</h3><p><code>test NAME … end</code> defines a test: a word that takes and gives nothing, and does not run at load. <code>pnx test FILE</code> runs the tests in order. A false <code>assert</code> makes that test fail.</p><div class="example test"><p class="ex-file"><code>15-test.pnx</code></p><pre><code data-lang="pinax"><span style="color: #d73948">use</span> <span style="color: #d73948">str</span>
+<span style="color: #d73948">word</span> initials (name <span style="color: #d73948">str</span> <span style="color: #d73948">gives</span> <span style="color: #d73948">str</span>)
+  name <span style="color: #d73948">str</span>.trim <span style="color: #198810">" "</span> <span style="color: #d73948">str</span>.cut <span style="color: #d73948">to</span> (given, family)
+  <span style="color: #d73948">cat</span> (given <span style="color: #b60157">1</span> <span style="color: #d73948">str</span>.take, family <span style="color: #d73948">str</span>.trim <span style="color: #b60157">1</span> <span style="color: #d73948">str</span>.take) <span style="color: #d73948">str</span>.upper
+<span style="color: #d73948">end</span>
+<span style="color: #d73948">test</span> two_names <span style="color: #198810">"grace hopper"</span> initials <span style="color: #198810">"GH"</span> eq assert <span style="color: #d73948">end</span>
+<span style="color: #d73948">test</span> spaces_around <span style="color: #198810">"  ada lovelace "</span> initials <span style="color: #198810">"AL"</span> eq assert <span style="color: #d73948">end</span>
+<span style="color: #d73948">test</span> one_name <span style="color: #198810">"plato"</span> initials <span style="color: #198810">"P"</span> eq assert <span style="color: #d73948">end</span>
+</code></pre><p class="ex-label">Test run</p><pre><code data-lang="text">$ pnx test 15-test.pnx
+ok   two_names
+ok   spaces_around
+ok   one_name
+3 tests, 0 failed
+</code></pre></div><div class="example test-fail"><p class="ex-file"><code>15-test-fail.pnx</code></p><pre><code data-lang="pinax"><span style="color: #d73948">word</span> clamp_percent (n <span style="color: #d73948">int</span> <span style="color: #d73948">gives</span> <span style="color: #d73948">int</span>) n <span style="color: #b60157">0</span> <span style="color: #b60157">100</span> clamp <span style="color: #d73948">end</span>
+<span style="color: #d73948">test</span> inside <span style="color: #b60157">50</span> clamp_percent <span style="color: #b60157">50</span> eq assert <span style="color: #d73948">end</span>
+<span style="color: #d73948">test</span> above <span style="color: #b60157">150</span> clamp_percent <span style="color: #b60157">100</span> eq assert <span style="color: #d73948">end</span>
+<span style="color: #d73948">test</span> wrong <span style="color: #b60157">-5</span> clamp_percent <span style="color: #b60157">-5</span> eq assert <span style="color: #d73948">end</span>
+</code></pre><p class="ex-label">test-fail</p><pre><code data-lang="text">$ pnx test 15-test-fail.pnx
+ok   inside
+ok   above
+FAIL wrong (failed)
+3 tests, 1 failed
+</code></pre></div><p><code>clamp</code> raises a negative to 0, so the test <code>wrong</code> writes down a wrong expectation. When a test fails, <code>pnx</code> exits with 1.</p><div class="box mistake"><p class="box-title">Common mistake: Writing just the comparison makes a test</p><code>21 double 42 eq</code> only leaves a <code>bool</code>; it checks nothing. A test takes and gives nothing, so a test that leaves a value is refused. End it with <code>assert</code>.<div class="example refused"><p class="ex-file"><code>15-test-leaves.pnx</code></p><pre><code data-lang="pinax"><span style="color: #d73948">word</span> double (n <span style="color: #d73948">int</span> <span style="color: #d73948">gives</span> <span style="color: #d73948">int</span>) n <span style="color: #b60157">2</span> mul <span style="color: #d73948">end</span>
+<span style="color: #d73948">test</span> doubles <span style="color: #b60157">21</span> double <span style="color: #b60157">42</span> eq <span style="color: #d73948">end</span>
+</code></pre><p class="ex-label">Refused</p><pre><code data-lang="text">$ pnx 15-test-leaves.pnx
+15-test-leaves.pnx:2:30: the stack does not hold exactly the results of the signature here
+</code></pre></div></div><h3>15.2 Sessions</h3><p><code>pnx repl</code> reads and runs one line at a time and shows what each line leaves. Later lines use the definitions of earlier ones. A line that is refused or ends with a fault leaves nothing behind.</p><div class="example repl"><p class="ex-file"><code>15-repl.pnx</code></p><pre><code data-lang="pinax"><span style="color: #d73948">use</span> <span style="color: #d73948">str</span>
+<span style="color: #b60157">2</span> <span style="color: #b60157">3</span> add
+<span style="color: #d73948">word</span> cube (n <span style="color: #d73948">int</span> <span style="color: #d73948">gives</span> <span style="color: #d73948">int</span>) n n mul n mul <span style="color: #d73948">end</span>
+<span style="color: #b60157">4</span> cube
+<span style="color: #198810">"pinax"</span> <span style="color: #d73948">str</span>.upper
+<span style="color: #b60157">1</span> <span style="color: #b60157">0</span> div
+cube cube
+</code></pre><p class="ex-label">Session</p><pre><code data-lang="text">$ pnx repl
+5
+64
+"PINAX"
+error: line 1: div_zero
+</code></pre></div><p>The last line, <code>cube cube</code>, was refused because the stack was empty. The message of a refusal goes to standard error, so it is not in the output above.</p><h3>15.3 Seeing the stack, and formatting</h3><p><code>pnx see</code> shows, for each line of a definition, the stack where that line ends. Use it when the stack is not what you think.</p><div class="example see"><p class="ex-file"><code>15-see.pnx</code></p><pre><code data-lang="pinax"><span style="color: #d73948">word</span> mean (a <span style="color: #d73948">int</span>, b <span style="color: #d73948">int</span>, c <span style="color: #d73948">int</span> <span style="color: #d73948">gives</span> <span style="color: #d73948">int</span>)
+  a b add
+  c add
+  <span style="color: #b60157">3</span> div
+<span style="color: #d73948">end</span>
+</code></pre><p class="ex-label">Listing</p><pre><code data-lang="text">$ pnx see 15-see.pnx
+    2    a b add                                        | int
+    3    c add                                          | int
+    4    3 div                                          | int
+</code></pre></div><p><code>pnx fmt</code> changes only indentation and spaces. Tokens, the places of lines and remarks stay as they are.</p><div class="example fmt"><p class="ex-file"><code>15-fmt.pnx</code></p><pre><code data-lang="pinax"><span style="color: #d73948">use</span> io
+<span style="color: #d73948">word</span> fizz (n <span style="color: #d73948">int</span> <span style="color: #d73948">gives</span> <span style="color: #d73948">str</span>)
+n <span style="color: #b60157">15</span> mod <span style="color: #b60157">0</span> eq <span style="color: #d73948">if</span> <span style="color: #198810">"FizzBuzz"</span> <span style="color: #d73948">return</span> <span style="color: #d73948">end</span>
+   n <span style="color: #b60157">3</span> mod <span style="color: #b60157">0</span> eq <span style="color: #d73948">if</span> <span style="color: #198810">"Fizz"</span> <span style="color: #d73948">return</span> <span style="color: #d73948">end</span>
+n <span style="color: #b60157">5</span> mod <span style="color: #b60157">0</span> eq <span style="color: #d73948">if</span> <span style="color: #198810">"Buzz"</span> <span style="color: #d73948">else</span> <span style="color: #d73948">cat</span> (n) <span style="color: #d73948">end</span>
+<span style="color: #d73948">end</span>
+</code></pre><p class="ex-label">Formatted</p><pre><code data-lang="text">$ pnx fmt 15-fmt.pnx
+use io
+word fizz (n int gives str)
+  n 15 mod 0 eq if "FizzBuzz" return end
+  n 3 mod 0 eq if "Fizz" return end
+  n 5 mod 0 eq if "Buzz" else cat (n) end
+end
+</code></pre></div><div class="box summary"><p class="box-title">Summary</p><ul><li><code>test … end</code> and <code>pnx test</code>; a failed test makes the exit status 1 (standard 20.2).</li><li><code>pnx repl</code> shows what each line leaves (20.3).</li><li><code>pnx see</code> shows the stack of each line, <code>pnx fmt</code> makes indentation even (20.4).</li></ul></div></main><nav class="bottom"><a href="index.html">Start</a> · <a href="15.html">Previous</a> · <a href="../html-ko/16.html">한국어</a></nav></body></html>

@@ -21,7 +21,11 @@ ok   inside
 ok   above
 FAIL wrong (failed)
 3 tests, 1 failed
-</code></pre></div><p><code>clamp</code> 는 음수를 0 으로 올리므로 <code>wrong</code> 시험은 틀린 기대를 적은 것이다. 실패한 시험이 있으면 <code>pnx</code> 는 1 로 끝난다.</p><h3>15.2 대화</h3><p><code>pnx repl</code> 은 한 줄씩 읽어 돌리고, 줄이 남긴 값을 보인다. 앞 줄의 정의를 뒤 줄에서 쓴다. 거절되거나 결함으로 끝난 줄은 아무것도 남기지 않는다.</p><div class="example repl"><p class="ex-file"><code>15-repl.pnx</code></p><pre><code data-lang="pinax"><span style="color: #d73948">use</span> <span style="color: #d73948">str</span>
+</code></pre></div><p><code>clamp</code> 는 음수를 0 으로 올리므로 <code>wrong</code> 시험은 틀린 기대를 적은 것이다. 실패한 시험이 있으면 <code>pnx</code> 는 1 로 끝난다.</p><div class="box mistake"><p class="box-title">흔한 오해: 비교만 적으면 시험이 된다</p><code>21 double 42 eq</code> 는 <code>bool</code> 하나를 남길 뿐 아무것도 검사하지 않는다. 시험은 받는 것도 주는 것도 없는 낱말이라, 값을 남긴 시험은 거절된다. 끝에 <code>assert</code> 를 붙인다.<div class="example refused"><p class="ex-file"><code>15-test-leaves.pnx</code></p><pre><code data-lang="pinax"><span style="color: #d73948">word</span> double (n <span style="color: #d73948">int</span> <span style="color: #d73948">gives</span> <span style="color: #d73948">int</span>) n <span style="color: #b60157">2</span> mul <span style="color: #d73948">end</span>
+<span style="color: #d73948">test</span> doubles <span style="color: #b60157">21</span> double <span style="color: #b60157">42</span> eq <span style="color: #d73948">end</span>
+</code></pre><p class="ex-label">거절</p><pre><code data-lang="text">$ pnx 15-test-leaves.pnx
+15-test-leaves.pnx:2:30: the stack does not hold exactly the results of the signature here
+</code></pre></div></div><h3>15.2 대화</h3><p><code>pnx repl</code> 은 한 줄씩 읽어 돌리고, 줄이 남긴 값을 보인다. 앞 줄의 정의를 뒤 줄에서 쓴다. 거절되거나 결함으로 끝난 줄은 아무것도 남기지 않는다.</p><div class="example repl"><p class="ex-file"><code>15-repl.pnx</code></p><pre><code data-lang="pinax"><span style="color: #d73948">use</span> <span style="color: #d73948">str</span>
 <span style="color: #b60157">2</span> <span style="color: #b60157">3</span> add
 <span style="color: #d73948">word</span> cube (n <span style="color: #d73948">int</span> <span style="color: #d73948">gives</span> <span style="color: #d73948">int</span>) n n mul n mul <span style="color: #d73948">end</span>
 <span style="color: #b60157">4</span> cube
