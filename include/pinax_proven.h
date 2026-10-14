@@ -42,7 +42,9 @@ static inline proven_u8str_view_t pinax_str_to_proven(pinax_str text) {
 
 /*
  * What a host word written on proven returns to the script. Codes with a close Pinax
- * meaning keep it; every other proven failure becomes PINAX_ERR_FAILED.
+ * meaning keep it; every other proven failure becomes PINAX_ERR_FAILED. The end of the input
+ * is not_found, as the host modules' reading words say it. The pairs that have a meaning on
+ * both sides come back unchanged through pinax_err_to_proven().
  */
 static inline pinax_err pinax_err_from_proven(proven_err_t err) {
     switch (err) {
@@ -55,6 +57,7 @@ static inline pinax_err pinax_err_from_proven(proven_err_t err) {
     case PROVEN_ERR_INVALID_STATE:    return PINAX_ERR_STATE;
     case PROVEN_ERR_INVALID_ENCODING: return PINAX_ERR_FORMAT;
     case PROVEN_ERR_INVALID_FORMAT:   return PINAX_ERR_FORMAT;
+    case PROVEN_ERR_EOF:              return PINAX_ERR_NOT_FOUND;
     default:                          return PINAX_ERR_FAILED;
     }
 }
