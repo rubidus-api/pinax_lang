@@ -1,0 +1,10 @@
+<!DOCTYPE html>
+<html lang="ko"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>1 범위 - Pinax 표준</title><link rel="stylesheet" href="style.css"></head><body><nav class="top"><a href="index.html">처음</a> · <a href="../html-en/01.html">English</a></nav><main><h2>1 범위</h2><p class="para"><span class="pn">(1)</span> 이 문서는 <strong>처리기</strong>(processor) 를 정한다.</p><h5>제약</h5><p class="para"><span class="pn">(2)</span> 문자열을 받는 낱말에 정수를 줄 수 없다.</p><div class="example run"><p class="ex-file"><code>hello.pnx</code></p><pre><code data-lang="pinax"><span style="color: #d73948">use</span> io
+<span style="color: #198810">"hello, world"</span> io.println
+</code></pre><p class="ex-label">출력</p><pre><code data-lang="text">$ pnx hello.pnx
+hello, world
+</code></pre></div><div class="example refused"><p class="ex-file"><code>hello-refused.pnx</code></p><pre><code data-lang="pinax"><span style="color: #d73948">use</span> io
+<span style="color: #b60157">42</span> io.println
+</code></pre><p class="ex-label">거절</p><pre><code data-lang="text">$ pnx hello-refused.pnx
+hello-refused.pnx:2:4: an argument has another type than the word's signature asks for
+</code></pre></div><div class="box qa"><p class="box-title">문답</p>물음. 무엇인가?<br>답. 이것이다.</div><table><thead><tr><th><strong>조건</strong></th><th><strong>메시지</strong></th></tr></thead><tbody><tr><td>타입이 다르다</td><td><code>an argument has another type</code></td></tr></tbody></table></main><nav class="bottom"><a href="index.html">처음</a> · <a href="../html-en/01.html">English</a></nav></body></html>

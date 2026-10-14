@@ -1,0 +1,10 @@
+<!DOCTYPE html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>1 Scope - Pinax Standard</title><link rel="stylesheet" href="style.css"></head><body><nav class="top"><a href="index.html">Start</a> · <a href="../html-ko/01.html">한국어</a></nav><main><h2>1 Scope</h2><p class="para"><span class="pn">(1)</span> This document defines a <strong>processor</strong>.</p><h5>Constraints</h5><p class="para"><span class="pn">(2)</span> A word that takes a string cannot be given an integer.</p><div class="example run"><p class="ex-file"><code>hello.pnx</code></p><pre><code data-lang="pinax"><span style="color: #d73948">use</span> io
+<span style="color: #198810">"hello, world"</span> io.println
+</code></pre><p class="ex-label">Output</p><pre><code data-lang="text">$ pnx hello.pnx
+hello, world
+</code></pre></div><div class="example refused"><p class="ex-file"><code>hello-refused.pnx</code></p><pre><code data-lang="pinax"><span style="color: #d73948">use</span> io
+<span style="color: #b60157">42</span> io.println
+</code></pre><p class="ex-label">Refused</p><pre><code data-lang="text">$ pnx hello-refused.pnx
+hello-refused.pnx:2:4: an argument has another type than the word's signature asks for
+</code></pre></div><div class="box qa"><p class="box-title">Q&amp;A</p>Q. What?<br>A. This.</div><table><thead><tr><th><strong>Condition</strong></th><th><strong>Message</strong></th></tr></thead><tbody><tr><td>types differ</td><td><code>an argument has another type</code></td></tr></tbody></table></main><nav class="bottom"><a href="index.html">Start</a> · <a href="../html-ko/01.html">한국어</a></nav></body></html>

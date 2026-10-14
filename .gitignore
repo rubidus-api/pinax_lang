@@ -1,7 +1,7 @@
 # Whitelist: everything in this folder is private unless it is listed below.
 # Private material lives in the sibling repository ../pinax_lang_private/ and
 # appears here through relative symlinks, which this file keeps out of git.
-# Public = what builds the product, plus README and LICENSE.
+# Public = what builds the product, README, LICENSE, and the spec and manual (docs/spec, docs/manual, docs/tools).
 /*
 !/.gitignore
 !/README.md
@@ -11,20 +11,24 @@
 !/include/
 !/src/
 !/vendor/
+!/docs/
+/docs/*
+!/docs/spec/
+!/docs/manual/
+!/docs/tools/
 
 # The blocks below come from the bootstrap kit. With the whitelist above they
 # are a second line of defence: they also apply inside the public directories.
 /CHANGELOG.md
 /tests
 /resources
-/docs/manual
-/docs
 
 # ── Local operating docs ───────────────────────────────────────────────
 # Working AI/operating state, never published. Under the default location
 # (private-sibling) these are relative links into ../<project>_private/, where
 # they are versioned. Only README.md, CHANGELOG.md, LICENSE, docs/manual/,
 # tests/, the source and the project's own scripts are published.
+# (This project: README, LICENSE, the source, docs/spec and docs/manual only.)
 /AGENTS.md
 /CLAUDE.md
 /CONTEXT.md
@@ -104,3 +108,6 @@ resources/cache/
 .DS_Store
 *.tmp
 *.log
+
+# The PDF editions are built, not kept (they would pile up in history).
+docs/*/pdf-*/

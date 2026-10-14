@@ -1,0 +1,3 @@
+rem run
+use io
+"hello, world" io.println

@@ -1,0 +1,3 @@
+rem refused
+use io
+42 io.println
