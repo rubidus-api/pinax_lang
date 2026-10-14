@@ -10,6 +10,10 @@
  *           write (s str, f file or fail)          read_line (f file gives line str or fail)
  *           read_all (path str gives body str or fail)        close (f owned file)
  *           read (f file, buf buffer gives n int or fail): appends to the buffer; 0 at the end
+ *   The words that make a str in the region have buffer forms that append to a buffer instead:
+ *   io.read_line_into (buf buffer or fail), file.read_line_into (f file, buf buffer or fail),
+ *   file.read_all_into (path str, buf buffer or fail). At the end of the input they fail with
+ *   not_found, and with full when the buffer has no room for the line or the file.
  *   clock   now_ms monotonic_ns (gives int)        sleep (ms int)
  *   random  random (gives int)   random_below (n int gives int)   seed (n int)
  *   env     arg_count (gives int)   arg (i int gives s str or fail)   getenv (name str gives s str or fail)
