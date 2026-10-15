@@ -16,19 +16,15 @@ total 18, mean 6, largest 9
 <span style="color: #d73948">end</span>
 </code></pre><p class="ex-label">거절</p><pre><code data-lang="text">$ pnx 04-scope.pnx
 04-scope.pnx:4:3: this name is not declared before this place
-</code></pre></div><p>낱말 안에서 전역에 넣을 때는 <code>to global.total</code> 처럼 <code>global.</code> 을 붙인다. 읽을 때는 이름만 쓴다.</p><div class="example run"><p class="ex-file"><code>04-store-global.pnx</code></p><pre><code data-lang="pinax"><span style="color: #d73948">use</span> io
+</code></pre></div><div class="box mistake"><p class="box-title">흔한 오해: 전역과 같은 이름에 넣으면 지역 변수가 생긴다</p><code>to total</code> 의 <code>total</code> 이 전역이면 그 전역에 넣는다. 지역 변수가 생기지 않는다.<div class="example run"><p class="ex-file"><code>04-store-global.pnx</code></p><pre><code data-lang="pinax"><span style="color: #d73948">use</span> io
 <span style="color: #d73948">global</span> total <span style="color: #d73948">int</span>
-<span style="color: #d73948">word</span> add_to_total (n <span style="color: #d73948">int</span>) total n add <span style="color: #d73948">to</span> <span style="color: #d73948">global</span>.total <span style="color: #d73948">end</span>     <span style="color: #74747c">rem global.total: the global</span>
+<span style="color: #d73948">word</span> add_to_total (n <span style="color: #d73948">int</span>) total n add <span style="color: #d73948">to</span> total <span style="color: #d73948">end</span>     <span style="color: #74747c">rem total is the global here</span>
 <span style="color: #b60157">3</span> add_to_total
 <span style="color: #b60157">4</span> add_to_total
 <span style="color: #d73948">cat</span> (<span style="color: #198810">"total "</span>, total) io.println
 </code></pre><p class="ex-label">출력</p><pre><code data-lang="text">$ pnx 04-store-global.pnx
 total 7
-</code></pre></div><div class="box mistake"><p class="box-title">흔한 오해: 낱말 안에서도 <code>to total</code> 로 전역에 넣는다</p>낱말 안의 <code>to 이름</code> 은 늘 지역 변수에 넣는다. 이름이 전역이면 거절되고, 메시지가 <code>to global.total</code> 을 알려 준다. 지역을 만들려다 전역을 바꾸는 실수를 막는 규칙이다. 낱말 밖(적재 코드)에서는 지역 변수가 생기지 않으므로 <code>to total</code> 이 그대로 전역에 넣는다.<div class="example refused"><p class="ex-file"><code>04-store-global-bare.pnx</code></p><pre><code data-lang="pinax"><span style="color: #d73948">global</span> total <span style="color: #d73948">int</span>
-<span style="color: #d73948">word</span> add_to_total (n <span style="color: #d73948">int</span>) total n add <span style="color: #d73948">to</span> total <span style="color: #d73948">end</span>
-</code></pre><p class="ex-label">거절</p><pre><code data-lang="text">$ pnx 04-store-global-bare.pnx
-04-store-global-bare.pnx:2:42: this name is a global; inside a definition a global is written with to global.name
-</code></pre></div></div><h3>4.2 갈림</h3><p><code>조건 if … else … end</code> 는 맨 위의 <code>bool</code> 을 보고 한쪽을 돈다. 두 갈래는 같은 스택을 남겨야 한다. <code>return</code> 으로 떠나는 갈래는 맞추지 않아도 된다.</p><div class="example run"><p class="ex-file"><code>04-if.pnx</code></p><pre><code data-lang="pinax"><span style="color: #d73948">use</span> io
+</code></pre></div>그래서 전역의 이름과 지역 변수의 이름이 부딪칠 일은 없다. 다만 매개변수는 전역의 이름을 쓸 수 없다(3장의 가림 금지).</div><h3>4.2 갈림</h3><p><code>조건 if … else … end</code> 는 맨 위의 <code>bool</code> 을 보고 한쪽을 돈다. 두 갈래는 같은 스택을 남겨야 한다. <code>return</code> 으로 떠나는 갈래는 맞추지 않아도 된다.</p><div class="example run"><p class="ex-file"><code>04-if.pnx</code></p><pre><code data-lang="pinax"><span style="color: #d73948">use</span> io
 <span style="color: #d73948">word</span> grade (score <span style="color: #d73948">int</span> <span style="color: #d73948">gives</span> <span style="color: #d73948">str</span>)
   score <span style="color: #b60157">90</span> ge <span style="color: #d73948">if</span> <span style="color: #198810">"A"</span> <span style="color: #d73948">return</span> <span style="color: #d73948">end</span>
   score <span style="color: #b60157">80</span> ge <span style="color: #d73948">if</span> <span style="color: #198810">"B"</span> <span style="color: #d73948">return</span> <span style="color: #d73948">end</span>

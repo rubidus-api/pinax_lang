@@ -26,7 +26,7 @@ size        = INT | NAME ;                         (* NAME: a const *)</code></p
 <span style="color: #d73948">word</span> raise () <span style="color: #b60157">4</span> <span style="color: #d73948">to</span> limit <span style="color: #d73948">end</span>
 </code></pre><p class="ex-label">Refused</p><pre><code data-lang="text">$ pnx 08-const-store.pnx
 08-const-store.pnx:2:20: this name is already visible here; a new name may not hide it
-</code></pre></div><h3>8.3 Globals</h3><p class="para"><span class="pn">(1)</span> <code>global NAME type</code> makes a <strong>global</strong> that holds one value. The type is <code>int</code>, <code>bool</code>, <code>str(N)</code>, a declared type, a row type (the name of a table) or a handle type; not <code>str</code> (7.3).</p><p class="para"><span class="pn">(2)</span> A global is read by writing its name, and stored with <code>to global.NAME</code> inside a definition or <code>to NAME</code> outside one (9.4). Its value stays as long as the state does — after a word’s run ends, and across later loads.</p><div class="example run"><p class="ex-file"><code>08-const-global.pnx</code></p><pre><code data-lang="pinax"><span style="color: #d73948">use</span> io
+</code></pre></div><h3>8.3 Globals</h3><p class="para"><span class="pn">(1)</span> <code>global NAME type</code> makes a <strong>global</strong> that holds one value. The type is <code>int</code>, <code>bool</code>, <code>str(N)</code>, a declared type, a row type (the name of a table) or a handle type; not <code>str</code> (7.3).</p><p class="para"><span class="pn">(2)</span> A global is read by writing its name and stored with <code>to NAME</code>. Its value stays as long as the state does — after a word’s run ends, and across later loads.</p><div class="example run"><p class="ex-file"><code>08-const-global.pnx</code></p><pre><code data-lang="pinax"><span style="color: #d73948">use</span> io
 <span style="color: #d73948">use</span> <span style="color: #d73948">str</span>
 <span style="color: #d73948">const</span> limit <span style="color: #b60157">3</span>
 <span style="color: #d73948">const</span> greeting <span style="color: #198810">"hello"</span>
@@ -193,7 +193,7 @@ lee 26 false
 <span style="color: #d73948">word</span> demo (<span style="color: #d73948">or</span> <span style="color: #d73948">fail</span>)
   nodes alloc <span style="color: #d73948">or_fail</span> <span style="color: #d73948">to</span> a                 <span style="color: #74747c">rem an owned row: it must be stored or freed</span>
   <span style="color: #b60157">7</span> a <span style="color: #d73948">to</span> node.value
-  a <span style="color: #d73948">to</span> <span style="color: #d73948">global</span>.kept                                <span style="color: #74747c">rem stored: the global holds the row now</span>
+  a <span style="color: #d73948">to</span> kept                                <span style="color: #74747c">rem stored: the global holds the row now</span>
   <span style="color: #d73948">cat</span> (<span style="color: #198810">"value "</span>, kept node.value, <span style="color: #198810">", alive: "</span>, kept nodes is_alive) io.println
   kept nodes free
   <span style="color: #d73948">cat</span> (<span style="color: #198810">"alive after free: "</span>, kept nodes is_alive) io.println
@@ -219,7 +219,7 @@ alive after free: false
 <span style="color: #d73948">global</span> keep nodes
 <span style="color: #d73948">word</span> demo (<span style="color: #d73948">or</span> <span style="color: #d73948">fail</span>)
   nodes alloc <span style="color: #d73948">or_fail</span> <span style="color: #d73948">to</span> a
-  a <span style="color: #d73948">to</span> <span style="color: #d73948">global</span>.keep                                 <span style="color: #74747c">rem stored: the row is handed over</span>
+  a <span style="color: #d73948">to</span> keep                                 <span style="color: #74747c">rem stored: the row is handed over</span>
   keep nodes free
   keep node.value drop                      <span style="color: #74747c">rem the row was given back: stale</span>
 <span style="color: #d73948">end</span>

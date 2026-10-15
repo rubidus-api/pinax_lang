@@ -76,11 +76,8 @@ store = "to" ( NAME | PATH | "(" NAME { "," NAME } ")" ) ;
 ```
 
 #para("1")[In a body, `to NAME` takes the top value off and puts it in that name. When the name is new, a
-#term("local variable") of the value's type is made; later `to`s shall store the same type.]
-
-#para("1a")[Inside a definition a global is stored with `to global.NAME`; `global.NAME` may also be read. A global
-another module exports is `to MODULE.NAME`. Outside definitions no new local is made, so `to NAME` stores into the
-global. The rule lets a reader see from the text whether a `to` makes a local or changes a global.]
+#term("local variable") of the value's type is made; later `to`s shall store the same type. When the name is a global,
+the value goes into the global (no local is made).]
 
 #para("2")[`to (a, b, c)` stores the top three values at once. The rightmost name takes the top value --- the same
 order as in a signature.]
@@ -100,30 +97,16 @@ made outside can be stored into inside.]
 value.]
 #ex("spec", "09-local-scope.pnx")
 
-#para("6")[Inside a definition, `to NAME` where the name is a global is refused; the message names `to global.NAME`.]
-#ex("spec", "09-store-global-bare.pnx")
-
 == No hiding <words-shadowing>
 
-#para("1")[A new name (a parameter, a local, the name of a loop or a block, the name of `or_else`) cannot be the same as
-a name visible there --- a word, a global, a constant, a type or a record the source defined or declared, or a local
-outside. One name means one thing at one place.]
-
-#para("1a")[Core words (clause 15) are outside this rule. A local may have the name of a core word, and while it is
-visible the bare name is the local. A core word can always be called as `core.NAME`. A name in the place of a combining
-word (`do … end count`) is the core word even when a local has that name. Core words may grow from version to version;
-a new one does not take a local's name away from an old script. `core` and `global` cannot be module names.]
-
-#ex("spec", "09-shadow-word.pnx")
+#para("1")[A new name (a parameter, a local, the name of a loop) cannot be the same as a name visible there --- a word,
+a global, a constant, a type, a local outside. One name means one thing at one place.]
 
 #part("Constraints")
 
-#para("2")[A parameter or local with the name of a visible name is refused (core words: (1a)).]
+#para("2")[A parameter or local with the name of a visible name is refused.]
 #ex("spec", "09-shadow.pnx")
-
-#para("3")[Where a local hiding a core word is visible, the bare name is the local, so text meant to call the word is
-usually refused because the stack does not fit.]
-#ex("spec", "09-shadow-core.pnx")
+#ex("spec", "09-shadow-word.pnx")
 
 == Recursion and tail calls <words-recursion>
 
@@ -174,8 +157,6 @@ processor adds up the length first and writes once.]
   ([Too few values on the stack], "the stack does not hold enough values for this word"),
   ([A name that is not defined], "this name is not declared before this place"),
   ([A local given another type], "this local variable has another type than the value stored into it"),
-  ([`to GLOBAL` inside a definition], "this name is a global; inside a definition a global is written with to global.name"),
-  ([The name after `global.` is not a global], "this module declares no global of this name"),
   ([Hiding a visible name], "this name is already visible here; a new name may not hide it"),
   ([A signature unlike the forward declaration], "the definition has another signature than its forward declaration"),
 )

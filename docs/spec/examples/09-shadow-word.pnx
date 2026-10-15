@@ -1,5 +1,2 @@
-rem run
-use io
-word average (sum int, count int gives int) sum count core.div end    rem the locals hide the core words
-word plus (add int, n int gives int) add n core.add end
-cat (10 4 average, " ", 40 2 plus) io.println
+rem refused
+word f (add int gives int) add 1 add end

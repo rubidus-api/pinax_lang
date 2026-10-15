@@ -1,3 +1,0 @@
-rem refused
-global total int
-word add_to_total (n int) total n add to total end

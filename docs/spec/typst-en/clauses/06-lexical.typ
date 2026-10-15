@@ -54,7 +54,7 @@ float literals (not in this edition); it is never a token of its own. A path nam
 a field of a record (`p.x`) or a constant (`str.digit`).]
 
 #para("3")[A run after a dot is part of the path even when it is a reserved word (`json.array`). The first run of a
-path cannot be a reserved word, with one exception: `global.NAME` names a global of this module (9.4).]
+path cannot be a reserved word.]
 
 #part("Constraints")
 
@@ -204,8 +204,7 @@ reserved = "rem" | "note" | "text" | "true" | "false" | "pinax"
 `str(32)` is four tokens.]
 
 #para("4")[The names of types (`int` `str` `bool` …) and of core words (`add` `dup` …) are not reserved words but names
-declared in advance. A type's name cannot be declared again (no hiding, 9.5). A core word's name cannot name a word, a
-global or another declaration, but it can name a local (9.5 (1a)).]
+declared in advance. Declaring them again is refused by the rule against hiding names (9.5).]
 
 #para("5")[`make` is reserved for a future feature and refused when used (annex D).]
 

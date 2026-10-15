@@ -26,7 +26,7 @@ size        = INT | NAME ;                         (* NAME: a const *)</code></p
 <span style="color: #d73948">word</span> raise () <span style="color: #b60157">4</span> <span style="color: #d73948">to</span> limit <span style="color: #d73948">end</span>
 </code></pre><p class="ex-label">거절</p><pre><code data-lang="text">$ pnx 08-const-store.pnx
 08-const-store.pnx:2:20: this name is already visible here; a new name may not hide it
-</code></pre></div><h3>8.3 전역</h3><p class="para"><span class="pn">(1)</span> <code>global 이름 타입</code> 은 값 하나를 담는 <strong>전역</strong>(global)을 만든다. 타입은 <code>int</code> <code>bool</code> <code>str(N)</code>, 선언한 타입, 줄의 타입(표의 이름), 핸들 타입이다. <code>str</code> 는 쓰지 못한다(7.3).</p><p class="para"><span class="pn">(2)</span> 전역을 읽으려면 이름을 쓰고, 넣으려면 정의 안에서는 <code>to global.이름</code>, 정의 밖에서는 <code>to 이름</code> 을 쓴다(9.4). 상태가 살아 있는 동안 값이 남는다 — 한 낱말의 실행이 끝나도, 다음 적재가 와도 그대로다.</p><div class="example run"><p class="ex-file"><code>08-const-global.pnx</code></p><pre><code data-lang="pinax"><span style="color: #d73948">use</span> io
+</code></pre></div><h3>8.3 전역</h3><p class="para"><span class="pn">(1)</span> <code>global 이름 타입</code> 은 값 하나를 담는 <strong>전역</strong>(global)을 만든다. 타입은 <code>int</code> <code>bool</code> <code>str(N)</code>, 선언한 타입, 줄의 타입(표의 이름), 핸들 타입이다. <code>str</code> 는 쓰지 못한다(7.3).</p><p class="para"><span class="pn">(2)</span> 전역을 읽으려면 이름을 쓰고, 넣으려면 <code>to 이름</code> 을 쓴다. 상태가 살아 있는 동안 값이 남는다 — 한 낱말의 실행이 끝나도, 다음 적재가 와도 그대로다.</p><div class="example run"><p class="ex-file"><code>08-const-global.pnx</code></p><pre><code data-lang="pinax"><span style="color: #d73948">use</span> io
 <span style="color: #d73948">use</span> <span style="color: #d73948">str</span>
 <span style="color: #d73948">const</span> limit <span style="color: #b60157">3</span>
 <span style="color: #d73948">const</span> greeting <span style="color: #198810">"hello"</span>
@@ -193,7 +193,7 @@ lee 26 false
 <span style="color: #d73948">word</span> demo (<span style="color: #d73948">or</span> <span style="color: #d73948">fail</span>)
   nodes alloc <span style="color: #d73948">or_fail</span> <span style="color: #d73948">to</span> a                 <span style="color: #74747c">rem an owned row: it must be stored or freed</span>
   <span style="color: #b60157">7</span> a <span style="color: #d73948">to</span> node.value
-  a <span style="color: #d73948">to</span> <span style="color: #d73948">global</span>.kept                                <span style="color: #74747c">rem stored: the global holds the row now</span>
+  a <span style="color: #d73948">to</span> kept                                <span style="color: #74747c">rem stored: the global holds the row now</span>
   <span style="color: #d73948">cat</span> (<span style="color: #198810">"value "</span>, kept node.value, <span style="color: #198810">", alive: "</span>, kept nodes is_alive) io.println
   kept nodes free
   <span style="color: #d73948">cat</span> (<span style="color: #198810">"alive after free: "</span>, kept nodes is_alive) io.println
@@ -219,7 +219,7 @@ alive after free: false
 <span style="color: #d73948">global</span> keep nodes
 <span style="color: #d73948">word</span> demo (<span style="color: #d73948">or</span> <span style="color: #d73948">fail</span>)
   nodes alloc <span style="color: #d73948">or_fail</span> <span style="color: #d73948">to</span> a
-  a <span style="color: #d73948">to</span> <span style="color: #d73948">global</span>.keep                                 <span style="color: #74747c">rem stored: the row is handed over</span>
+  a <span style="color: #d73948">to</span> keep                                 <span style="color: #74747c">rem stored: the row is handed over</span>
   keep nodes free
   keep node.value drop                      <span style="color: #74747c">rem the row was given back: stale</span>
 <span style="color: #d73948">end</span>

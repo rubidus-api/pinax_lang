@@ -1368,19 +1368,9 @@ static bool name_is_global(comp *c, name n) {
            name_is(n, "err") || find_const(c, n) || find_global(c, n) != NONE || find_builtin(n, 0);
 }
 
-// A name the source itself declared, or a type: what a local may never hide. The words of the
-// core are not among them (RFC-0017 section 3.4): they are fixed outside the source and grow
-// with new versions, so a local may take such a name; core.NAME still reaches the word.
-static bool name_is_declared(comp *c, name n) {
-    return find_word(c, n, NULL) || find_fwd(c, n, NULL) || find_extern(c, n) != NONE || type_of_name(c, n) != TY_NONE ||
-           name_is(n, "float") || name_is(n, "raw") || find_record(c, n) != NONE || name_is(n, "err") ||
-           name_is(n, "core") || find_const(c, n) || find_global(c, n) != NONE;
-}
-
-// No shadowing (RFC-0008 section 3.3): a new local or loop name must not be a visible name,
-// apart from a word of the core.
+// No shadowing (RFC-0008 section 3.3): a new local or loop name must not be a visible name.
 static bool name_is_free(comp *c, name n) {
-    if (find_local(c->f, n) || name_is_declared(c, n))
+    if (find_local(c->f, n) || name_is_global(c, n))
         return type_error(c, "this name is already visible here; a new name may not hide it");
     for (uint32_t k = 0; k < c->f->n_blocks; ++k) {
         if (c->f->blocks[k].name.length && name_eq(c->f->blocks[k].name, n))
@@ -1989,11 +1979,7 @@ static bool store_local(comp *c, name n) {
     const uint32_t top = f->depth - 1;
     entry    e = f->stack[top];
     const int bank = bank_of(e.type);
-    // Inside a definition `to NAME` stores into a local only; a global is written to global.NAME
-    // (RFC-0017 section 3.3). Outside definitions no local is made, so NAME is the global there.
-    uint32_t g = c->path_global != NONE ? c->path_global : find_local(f, n) ? NONE : find_global(c, n);
-    if (g != NONE && c->path_global == NONE && !f->is_top)
-        return type_error(c, "this name is a global; inside a definition a global is written with to global.name");
+    const uint32_t g = c->path_global != NONE ? c->path_global : find_local(f, n) ? NONE : find_global(c, n);
     if (g != NONE && ((const globalsym *)c->globals.ptr + g)->kind != GK_SCALAR) { // value index to names
         const globalsym *sym = (const globalsym *)c->globals.ptr + g;
         uint32_t rv, ri;
@@ -2155,15 +2141,6 @@ static bool store(comp *c) {
         uint32_t dot = 0;
         while (path.text[dot] != '.')
             ++dot;
-        if (dot == 6 && __builtin_memcmp(path.text, "global", 6) == 0) { // to global.NAME : a global of this module
-            const uint32_t g = find_global(c, (name){path.text + 7, path.length - 7});
-            if (g == NONE)
-                return error(c, PINAX_ERR_NOT_FOUND, "this module declares no global of this name");
-            c->path_global = g;
-            const bool ok = store_local(c, (name){path.text + 7, path.length - 7});
-            c->path_global = NONE;
-            return ok && advance(c);
-        }
         name real;
         const uint32_t m = module_of(c, (name){path.text, dot}, &real) ? source_module(c, real) : NONE;
         if (m != NONE) { // to module.name : a global that module exports
@@ -2902,15 +2879,6 @@ static bool do_cat(comp *c) {
 // Finds the word after the end that closes the block opened by the current `do`.
 static bool value_block(comp *c, const sig *bs, uint32_t line, uint32_t column);
 
-// The current token is the combining word `user`, written bare or as core.user.
-static bool is_user(const comp *c, name user) {
-    const name t = tok_name(c);
-    if (c->tok.kind == PNX_T_NAME)
-        return name_eq(t, user);
-    return c->tok.kind == PNX_T_PATH && t.length == user.length + 5 && __builtin_memcmp(t.text, "core.", 5) == 0 &&
-           __builtin_memcmp(t.text + 5, user.text, user.length) == 0;
-}
-
 static bool scan_user(comp *c, name *out, name *dst) {
     *dst = (name){0};
     pnx_lexer lx = *c->lx;
@@ -2933,10 +2901,8 @@ static bool scan_user(comp *c, name *out, name *dst) {
     }
     if (!pnx_lex_next(&lx, &t))
         return error_at(c, PINAX_ERR_SYNTAX, lx.error_line, lx.error_column, lx.error);
-    // anything but a combining word after the end makes the block a value; core.NAME is NAME
+    // anything but a combining word after the end makes the block a value
     *out = t.kind == PNX_T_NAME ? (name){lx.source + t.start, t.length} : (name){0};
-    if (t.kind == PNX_T_PATH && t.length > 5 && __builtin_memcmp(lx.source + t.start, "core.", 5) == 0)
-        *out = (name){lx.source + t.start + 5, t.length - 5};
     if (t.kind == PNX_T_PATH) { // rex.with_match and rex.replace_by take a block too
         const name path = {lx.source + t.start, t.length};
         if (ends_with_word(path, "with_match") || ends_with_word(path, "replace_by"))
@@ -3665,7 +3631,7 @@ static bool end_do(comp *c, block *b) {
         f->def_at = NONE;
         return guard_op(c, TY_NONE);
     }
-    if (!is_user(c, done.user))
+    if (c->tok.kind != PNX_T_NAME || !name_eq(tok_name(c), done.user))
         return syntax(c, "the word that uses the block is expected right after its end");
     if (done.use == USE_FIRST) // the element found, or the failure not_found
         return found_or_fail(c, done.element, done.val, done.acc);
@@ -5472,21 +5438,6 @@ static bool body_name(comp *c) {
             ++dot;
         module = (name){n.text, dot};
         n = (name){n.text + dot + 1, n.length - dot - 1};
-        if (name_is(module, "core")) { // core.NAME : a word of the core, whatever a local is called
-            const core_word *w = find_core(n);
-            if (w)
-                return core(c, w);
-            const struct builtin *bw = find_builtin(n, 0);
-            if (bw)
-                return builtin(c, bw);
-            return error(c, PINAX_ERR_NOT_FOUND, "the core has no word of this name");
-        }
-        if (name_is(module, "global")) { // global.NAME : a global of this module, read
-            const uint32_t g = find_global(c, n);
-            if (g == NONE)
-                return error(c, PINAX_ERR_NOT_FOUND, "this module declares no global of this name");
-            return read_global(c, g);
-        }
         if (name_is(module, "err")) {
             int64_t value;
             if (!err_constant(n, &value))
@@ -5765,18 +5716,15 @@ static bool body_token(comp *c) {
     // a stem is taken at once by its block or by a word like sum
     if (f->depth > f->floor && f->stack[f->depth - 1].type == TY_STEM &&
         !(t.kind == PNX_T_RESERVED && t.word == PNX_KW_do) &&
-        !(t.kind == PNX_T_NAME && !find_local(f, tok_name(c)) &&
-          (name_is(tok_name(c), "sum") || name_is(tok_name(c), "minimum") || name_is(tok_name(c), "maximum"))) &&
-        !(t.kind == PNX_T_PATH && (name_is(tok_name(c), "core.sum") || name_is(tok_name(c), "core.minimum") ||
-                                   name_is(tok_name(c), "core.maximum"))) &&
+        !(t.kind == PNX_T_NAME && (name_is(tok_name(c), "sum") || name_is(tok_name(c), "minimum") ||
+                                   name_is(tok_name(c), "maximum"))) &&
         !(t.kind == PNX_T_PATH && ends_with_word(tok_name(c), "join_into")))
         return type_error(c, "a stem is not a value: a block or a combining word takes it at once");
     // a pending condition survives only into the word that consumes it
     if (f->depth && f->stack[f->depth - 1].kind == E_COND) {
         const bool consumer = (t.kind == PNX_T_RESERVED && (t.word == PNX_KW_if || t.word == PNX_KW_while ||
                                                             t.word == PNX_KW_until)) ||
-                              (t.kind == PNX_T_NAME && name_is(tok_name(c), "not") && !find_local(f, tok_name(c))) ||
-                              (t.kind == PNX_T_PATH && name_is(tok_name(c), "core.not"));
+                              (t.kind == PNX_T_NAME && name_is(tok_name(c), "not"));
         if (!consumer && !settle(c, f->depth - 1))
             return false;
     }
@@ -7850,8 +7798,7 @@ static pinax_err load_source(pinax_state *st, const char *file, pinax_str source
         name *slot = c.err == PINAX_OK && !resumed ? vec_push(&c, &c.srcmods, sizeof(name)) : NULL;
         if (slot) {
             *slot = self;
-            bool taken = self.length && (standard_module(self) || source_module(&c, self) != NONE ||
-                                         name_is(self, "core") || name_is(self, "global"));
+            bool taken = self.length && (standard_module(self) || source_module(&c, self) != NONE);
             for (uint32_t k = 0; self.length && !taken && k < st->n_hosts; ++k)
                 taken = name_eq(cname(st->hosts[k].module), self);
             if (taken)

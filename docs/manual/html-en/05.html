@@ -16,19 +16,15 @@ total 18, mean 6, largest 9
 <span style="color: #d73948">end</span>
 </code></pre><p class="ex-label">Refused</p><pre><code data-lang="text">$ pnx 04-scope.pnx
 04-scope.pnx:4:3: this name is not declared before this place
-</code></pre></div><p>Inside a word, a global is stored with <code>global.</code> in front, as in <code>to global.total</code>; it is read by its name alone.</p><div class="example run"><p class="ex-file"><code>04-store-global.pnx</code></p><pre><code data-lang="pinax"><span style="color: #d73948">use</span> io
+</code></pre></div><div class="box mistake"><p class="box-title">Common mistake: Storing into a global’s name makes a local</p>When the <code>total</code> of <code>to total</code> is a global, the value goes into that global; no local is made.<div class="example run"><p class="ex-file"><code>04-store-global.pnx</code></p><pre><code data-lang="pinax"><span style="color: #d73948">use</span> io
 <span style="color: #d73948">global</span> total <span style="color: #d73948">int</span>
-<span style="color: #d73948">word</span> add_to_total (n <span style="color: #d73948">int</span>) total n add <span style="color: #d73948">to</span> <span style="color: #d73948">global</span>.total <span style="color: #d73948">end</span>     <span style="color: #74747c">rem global.total: the global</span>
+<span style="color: #d73948">word</span> add_to_total (n <span style="color: #d73948">int</span>) total n add <span style="color: #d73948">to</span> total <span style="color: #d73948">end</span>     <span style="color: #74747c">rem total is the global here</span>
 <span style="color: #b60157">3</span> add_to_total
 <span style="color: #b60157">4</span> add_to_total
 <span style="color: #d73948">cat</span> (<span style="color: #198810">"total "</span>, total) io.println
 </code></pre><p class="ex-label">Output</p><pre><code data-lang="text">$ pnx 04-store-global.pnx
 total 7
-</code></pre></div><div class="box mistake"><p class="box-title">Common mistake: Storing into a global with <code>to total</code> inside a word</p>Inside a word, <code>to NAME</code> always stores into a local. When the name is a global it is refused, and the message names <code>to global.total</code>. The rule keeps a store meant to make a local from changing a global. Outside words (load code) no local is made, so <code>to total</code> stores into the global there.<div class="example refused"><p class="ex-file"><code>04-store-global-bare.pnx</code></p><pre><code data-lang="pinax"><span style="color: #d73948">global</span> total <span style="color: #d73948">int</span>
-<span style="color: #d73948">word</span> add_to_total (n <span style="color: #d73948">int</span>) total n add <span style="color: #d73948">to</span> total <span style="color: #d73948">end</span>
-</code></pre><p class="ex-label">Refused</p><pre><code data-lang="text">$ pnx 04-store-global-bare.pnx
-04-store-global-bare.pnx:2:42: this name is a global; inside a definition a global is written with to global.name
-</code></pre></div></div><h3>4.2 Branches</h3><p><code>condition if … else … end</code> looks at the <code>bool</code> on top and runs one side. Both branches shall leave the same stack; a branch that leaves with <code>return</code> does not need to match.</p><div class="example run"><p class="ex-file"><code>04-if.pnx</code></p><pre><code data-lang="pinax"><span style="color: #d73948">use</span> io
+</code></pre></div>So the name of a global and the name of a local never clash. A parameter, however, cannot take a global’s name (no hiding, chapter 3).</div><h3>4.2 Branches</h3><p><code>condition if … else … end</code> looks at the <code>bool</code> on top and runs one side. Both branches shall leave the same stack; a branch that leaves with <code>return</code> does not need to match.</p><div class="example run"><p class="ex-file"><code>04-if.pnx</code></p><pre><code data-lang="pinax"><span style="color: #d73948">use</span> io
 <span style="color: #d73948">word</span> grade (score <span style="color: #d73948">int</span> <span style="color: #d73948">gives</span> <span style="color: #d73948">str</span>)
   score <span style="color: #b60157">90</span> ge <span style="color: #d73948">if</span> <span style="color: #198810">"A"</span> <span style="color: #d73948">return</span> <span style="color: #d73948">end</span>
   score <span style="color: #b60157">80</span> ge <span style="color: #d73948">if</span> <span style="color: #198810">"B"</span> <span style="color: #d73948">return</span> <span style="color: #d73948">end</span>

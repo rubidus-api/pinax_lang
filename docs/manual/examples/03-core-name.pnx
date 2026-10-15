@@ -1,5 +1,0 @@
-rem run
-use io
-word average (sum int, count int gives int) sum count div end
-word plus (add int, n int gives int) add n core.add end
-cat (10 4 average, " ", 40 2 plus) io.println
