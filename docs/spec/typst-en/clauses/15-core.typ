@@ -95,7 +95,7 @@ in 9.2. `T` means "any one type"; it is a notation for built-in words only. The 
   [`c alloc` / `r c free` / `r c is_alive`], [pool], [take a row (`owned`, `or fail`) / give it back / is it alive],
   [`s c append` `n c append_int` `b c append_byte`], [buffer], [append (`or fail`)],
   [`c contents`], [buffer], [a view of what it holds],
-  [`n c truncate`], [buffer], [cut the length to `n`],
+  [`n c truncate`], [buffer, list], [cut the length to `n` (a list: 8.5 (2b))],
   [`c none` / `r is_none` / `r row_index`], [table of records], [the none row / is it none / the row's number],
   [`k x lookup` / `r x insert` / `r x remove`], [index], [find (`or fail`) / put in (`or fail`) / take out],
 )]

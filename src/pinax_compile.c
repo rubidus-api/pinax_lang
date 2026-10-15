@@ -278,6 +278,11 @@ typedef struct pending_code {
     uint32_t *code, *lines;
 } pending_code;
 
+// A `truncate` of a list (RFC-0017 section 3.2): nothing may keep a row of that list.
+typedef struct trunc_site {
+    uint32_t global, line, column;
+} trunc_site;
+
 typedef struct comp {
     pinax_state *st;
     const char  *file;
@@ -327,6 +332,7 @@ typedef struct comp {
     vec          srcmods;   // name: the modules loaded so far, this one last
     bool         exporting; // `export` stands before the item being compiled
     uint32_t     path_global; // to module.name : the global the path names, for store_local
+    vec          truncs;    // trunc_site: lists cut back by truncate, checked when the source is read
     vec          dtypes;   // dtype
     vec          localrecs; // pnx_localrec: the locals of the words of this load
     uint8_t     *rx_buf;    // where rx compiles a constant pattern, PNX_REX_BUF bytes
@@ -4522,11 +4528,18 @@ static bool builtin(comp *c, const struct builtin *w) {
             return false;
         return emit_def(c, PNX_ABC(PNX_PCAP, slot_of(c, f->depth - 1), ra, 0), BANK_S) != NONE && advance(c);
     }
-    case BW_TRUNCATE: { // n buf truncate : the buffer cut back to n bytes; more than it holds is a fault
+    case BW_TRUNCATE: { // n c truncate : a buffer or a list cut back to n; more than it holds is a fault
+        const pnx_token at = c->tok;
         if (!need_coll(c, &g, &gi) || !need(c, 1))
             return false;
-        if (g->kind != GK_BUFFER || f->stack[f->depth - 1].type != TY_INT)
-            return type_error(c, "truncate takes a length and a buffer: n buf truncate");
+        if ((g->kind != GK_BUFFER && g->kind != GK_LIST) || f->stack[f->depth - 1].type != TY_INT)
+            return type_error(c, "truncate takes a length and a buffer or a list: n c truncate");
+        if (g->kind == GK_LIST) { // whether something keeps one of its rows is known when the source is read
+            trunc_site *t = vec_push(c, &c->truncs, sizeof *t);
+            if (!t)
+                return false;
+            *t = (trunc_site){gi, at.line, at.column};
+        }
         if (!reg_of(c, f->depth - 1, &ra))
             return false;
         --f->depth;
@@ -7498,6 +7511,30 @@ pinax_err pinax_eval_value(const pinax_state *st, uint32_t index, pinax_value *o
     return PINAX_OK;
 }
 
+// A list that `truncate` cuts back may not have its rows kept anywhere they would outlive the
+// cut: in a field, a global, a named row or an index (RFC-0017 section 3.2). A row kept in a
+// local is checked when it is used (range).
+static bool truncs_ok(comp *c) {
+    for (uint32_t k = 0; k < c->truncs.n; ++k) {
+        const trunc_site t = ((const trunc_site *)c->truncs.ptr)[k];
+        const tid        row = row_type(t.global);
+        bool             kept = false;
+        for (uint32_t i = 0; !kept && i < c->fields.n; ++i)
+            kept = ((const field *)c->fields.ptr)[i].type == row;
+        for (uint32_t i = 0; !kept && i < c->globals.n; ++i) {
+            const globalsym *g = (const globalsym *)c->globals.ptr + i;
+            kept = i != t.global && ((g->kind == GK_INDEX && g->table == t.global) ||
+                                     (g->kind != GK_INDEX && g->record == NONE && g->type == row));
+        }
+        for (uint32_t i = 0; !kept && i < c->consts.n; ++i)
+            kept = ((const constant *)c->consts.ptr)[i].type == row;
+        if (kept)
+            return error_at(c, PINAX_ERR_TYPE, t.line, t.column,
+                            "this list's rows are kept by a field, a global, a named row or an index; it cannot be truncated");
+    }
+    return true;
+}
+
 static pinax_err load_source(pinax_state *st, const char *file, pinax_str source, uint32_t mode, bool eval) {
     if (!st || (!source.ptr && source.len))
         return PINAX_ERR_ARGUMENT;
@@ -7577,7 +7614,7 @@ static pinax_err load_source(pinax_state *st, const char *file, pinax_str source
         static const sig no_results = {0};
         c.top_fn->sig = &no_results;
         c.f = c.top_fn;
-        if (compile(&c, &im, &has_top) && (c.redefine_new == NONE || move_redefined(&c, &im)) &&
+        if (compile(&c, &im, &has_top) && truncs_ok(&c) && (c.redefine_new == NONE || move_redefined(&c, &im)) &&
             serialize(&c, &im, &container, &length))
             tables = keep_symbols(&c, source, work);
     }

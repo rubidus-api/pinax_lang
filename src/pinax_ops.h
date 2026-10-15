@@ -403,10 +403,17 @@ PNX_OP(BPUTS) {
     __builtin_memcpy(g->ptr, &len, 8);
     return PNX_R_OK;
 }
-// The buffer cut back to R[A] bytes; more than it holds, or fewer than none, is a fault.
+// The buffer cut back to R[A] bytes, or the list to R[A] elements; more than it holds, or
+// fewer than none, is a fault.
 PNX_OP(BTRUNC) {
-    const pnx_global *g = &st->globals[OP_BX(w)];
-    const uint64_t    n = (uint64_t)R[OP_A(w)];
+    pnx_global    *g = &st->globals[OP_BX(w)];
+    const uint64_t n = (uint64_t)R[OP_A(w)];
+    if (g->kind != PNX_G_BUFFER) {
+        if (n > g->length)
+            return PINAX_ERR_RANGE;
+        g->length = (uint32_t)n;
+        return PNX_R_OK;
+    }
     if (n > pnx_buffer_len(g))
         return PINAX_ERR_RANGE;
     __builtin_memcpy(g->ptr, &n, 8);

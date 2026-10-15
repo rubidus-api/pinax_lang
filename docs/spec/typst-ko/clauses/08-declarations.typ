@@ -108,10 +108,29 @@ assign-item = "assign" NAME "(" value { "," value } ")" ;
 #ex("spec", "08-list.pnx")
 #ex("spec", "08-list-full.pnx")
 
+#para("2a")[`n 목록 truncate` 는 길이를 `n` 으로 줄인다. 정수, 글, 레코드의 목록 모두에 쓴다. `add_row` 로 더한 줄의
+값이 틀린 것을 알았을 때 그 줄을 되돌리는 데 쓴다.]
+
+#ex("spec", "08-list-truncate.pnx")
+
+#part("제약")
+
+#para("2b")[줄이 다른 곳에 남는 레코드의 목록은 `truncate` 하지 못한다. 그 목록의 줄을 담는 필드나 전역, 그 목록에
+`row` 로 이름 붙인 줄, 그 목록의 찾아보기(8.10)가 같은 소스 안에 하나라도 있으면 거절된다. 잘라 낸 자리에 새 줄이
+들어서면 그것들이 엉뚱한 줄을 가리키기 때문이다. 지역에 든 줄은 쓸 때 검사한다(결함 `range`).]
+
+#ex("spec", "08-list-truncate-kept.pnx")
+
 #part("결함")
 
-#para("3")[길이 밖의 번호는 용량 안이라도 결함 `range` 다.]
+#para("3")[길이 밖의 번호는 용량 안이라도 결함 `range` 다. `truncate` 에 길이보다 큰 수나 음수를 주어도 결함
+`range` 다.]
 #ex("spec", "08-list-past-len.pnx")
+
+#part("진단")
+#diag(
+  ([줄이 남는 목록을 `truncate`], "this list's rows are kept by a field, a global, a named row or an index; it cannot be truncated"),
+)
 
 == 큐 <decl-queue>
 

@@ -1,0 +1,18 @@
+rem run
+use io
+record city
+  name str(16)
+  people int
+end
+list cities city 4
+rem Add a row, and take it back when its values turn out wrong.
+word add_city (name str, people int or fail)
+  cities len to before
+  cities add_row or_fail to c
+  name c to city.name
+  people 0 lt if before cities truncate err.format fail end
+  people c to city.people
+end
+"Seoul" 9411000 add_city or_else (e) end
+"Nowhere" -1 add_city or_else (e) cat ("refused: ", e err_text) io.println end
+cat (cities len, " rows") io.println

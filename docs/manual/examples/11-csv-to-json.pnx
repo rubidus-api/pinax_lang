@@ -11,17 +11,11 @@ record city
 end
 list cities city 8
 buffer out 512
-array scratch city 1                         rem a row to try a line on first
 word read_rows (input str or fail)
   input str.lines do (line str)
-    true to ok
-    line 0 scratch idx csv.unpack or_else (e) false to ok "" end drop
-    ok if
-      cities add_row or_fail to c
-      line c csv.unpack or_fail drop
-    else
-      cat ("bad row: ", line) io.println
-    end
+    cities len to before
+    cities add_row or_fail to c
+    line c csv.unpack or_else (e) before cities truncate  cat ("bad row: ", line) io.println  "" end drop
   end each
 end
 word to_json (or fail)

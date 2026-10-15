@@ -110,10 +110,30 @@ records gets an empty row at the end with `LIST add_row`, which gives that row. 
 #ex("spec", "08-list.pnx")
 #ex("spec", "08-list-full.pnx")
 
+#para("2a")[`n LIST truncate` cuts the length to `n`, for lists of integers, of text and of records alike. It takes back
+a row added with `add_row` whose values turn out to be wrong.]
+
+#ex("spec", "08-list-truncate.pnx")
+
+#part("Constraints")
+
+#para("2b")[A list of records whose rows are kept elsewhere cannot be truncated. It is refused when the same source has
+a field or a global that holds its rows, a row of it named with `row`, or an index of it (8.10): once a new row takes
+the place cut off, they would point at the wrong row. A row held in a local is checked when it is used (fault
+`range`).]
+
+#ex("spec", "08-list-truncate-kept.pnx")
+
 #part("Faults")
 
-#para("3")[An index past the length is the fault `range`, even when it is below the capacity.]
+#para("3")[An index past the length is the fault `range`, even when it is below the capacity. So is a number for
+`truncate` larger than the length, or below zero.]
 #ex("spec", "08-list-past-len.pnx")
+
+#part("Diagnostics")
+#diag(
+  ([`truncate` on a list whose rows are kept], "this list's rows are kept by a field, a global, a named row or an index; it cannot be truncated"),
+)
 
 == Queues <decl-queue>
 

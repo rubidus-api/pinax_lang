@@ -95,7 +95,7 @@
   [`c alloc` / `r c free` / `r c is_alive`], [풀], [줄 얻기(`owned`, `or fail`) / 돌려주기 / 살아 있는가],
   [`s c append` `n c append_int` `b c append_byte`], [버퍼], [붙이기(`or fail`)],
   [`c contents`], [버퍼], [내용의 뷰],
-  [`n c truncate`], [버퍼], [길이를 `n` 으로],
+  [`n c truncate`], [버퍼, 목록], [길이를 `n` 으로(목록은 8.5 의 (2b))],
   [`c none` / `r is_none` / `r row_index`], [레코드의 표], [없음 줄 / 없음인가 / 줄의 번호],
   [`k x lookup` / `r x insert` / `r x remove`], [찾아보기], [찾기(`or fail`) / 넣기(`or fail`) / 빼기],
 )]

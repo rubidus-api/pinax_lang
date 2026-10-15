@@ -19,11 +19,12 @@ field names.
 
 #ex("manual", "11-csv-to-json.pnx")
 
-`unpack` writes into the row only when every field is right. So each line is tried on a spare row (`scratch`) first, and
-a row is added to the list only when it fits.
+The row is added first; when `unpack` fails, `before cities truncate` takes it back by cutting the list to the length it
+had before.
 
 #mistake[Taking the last row of a list of records off with `pop`][Lists of records have no `pop` (only lists of values
-do). A row once added cannot be taken back, so check before adding.
+do). The last row is taken back with `truncate`. When an index or a field holds rows of that list, `truncate` is refused
+too; then check before adding.
 #ex("manual", "11-pop-records.pnx")]
 
 Reading JSON by tokens picks out just what is needed, at any depth. `json.next` gives the kind of the token, a view of

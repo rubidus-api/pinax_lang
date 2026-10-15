@@ -475,6 +475,7 @@ static const char *check_word(const pinax_state *st, uint32_t index, span range,
                 return "code: global outside its table";
             const uint32_t kind = st->globals[global].kind;
             const bool ok = kind == want || (want == PNX_G_ARRAY && kind == PNX_G_LIST) ||
+                            (op == PNX_BTRUNC && (kind == PNX_G_LIST || kind == PNX_G_ROWS)) ||
                             (want == PNX_G_TABLE && (kind == PNX_G_ROWS || (kind == PNX_G_POOL && op != PNX_ROW && op != PNX_ROWW))) ||
                             (want == PNX_G_COUNT + 1 && kind != PNX_G_INT && kind != PNX_G_BUFFER &&
                              kind != PNX_G_INDEX && kind != PNX_G_TASKS);
