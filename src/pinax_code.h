@@ -73,7 +73,8 @@ enum {
 // SREPL A, B, C and a second word X: the string in S[B] with every S[C] replaced by S[X], built
 // in the region.
 // QPUT adds at the back of a queue (fails when full); QTAKE and QPEEK take and read the front
-// (fail when empty).
+// (fail when empty). QWTAKE and QWPUT do the same but yield while the queue is empty (full) and
+// fail only when the task was cancelled meanwhile; in the main run they are the fault DEADLOCK.
 // PALLOC takes a free row of a pool (fails when none is left), PFREE gives one back, PALIVE
 // says whether a row is still the one that was handed out. A row of a pool carries the
 // generation of its slot in the upper 32 bits; using it after PFREE is the fault STALE.
@@ -218,6 +219,8 @@ enum {
     X(IXDEL, 0x87, PNX_K_I, PNX_K_NONE, PNX_K_NONE, PNX_F_GLOBAL, PNX_X_NONE, 0, "r--") \
     /* wide forms: the global in a second word */ \
     X(AGETW, 0x88, PNX_K_I, PNX_K_I, PNX_K_NONE, PNX_F_ABC, PNX_X_GLOBAL, 0, "wr-") \
+    X(QWTAKE, 0xd9, PNX_K_I, PNX_K_NONE, PNX_K_NONE, PNX_F_GLOBAL, PNX_X_NONE, 1, "w--") \
+    X(QWPUT, 0xda, PNX_K_I, PNX_K_NONE, PNX_K_NONE, PNX_F_GLOBAL, PNX_X_NONE, 1, "r--") \
     X(ASETW, 0x89, PNX_K_I, PNX_K_I, PNX_K_NONE, PNX_F_ABC, PNX_X_GLOBAL, 0, "rr-") \
     X(ROWW, 0x8a, PNX_K_I, PNX_K_I, PNX_K_NONE, PNX_F_ABC, PNX_X_GLOBAL, 0, "wr-") \
     X(PALIVEW, 0x8b, PNX_K_I, PNX_K_I, PNX_K_NONE, PNX_F_ABC, PNX_X_GLOBAL, 0, "wr-") \

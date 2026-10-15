@@ -23,32 +23,32 @@ pong 1
 ping 2
 pong 2
 ping 3
-</code></pre></div><h3>13.2 Linking with queues</h3><p>Tasks pass data through declared storage, most often queues. When a queue is full or empty, a task <code>yield</code>s and waits for its next turn.</p><div class="example run"><p class="ex-file"><code>13-pipeline.pnx</code></p><pre><code data-lang="pinax"><span style="color: #d73948">use</span> io
+</code></pre></div><h3>13.2 Linking with queues</h3><p>Tasks pass data through declared storage, most often queues. <code>q wait_take</code> takes from a queue and <code>v q wait_put</code> puts into one; while the queue is empty (or full) the task yields and looks again on its next turn.</p><div class="example run"><p class="ex-file"><code>13-pipeline.pnx</code></p><pre><code data-lang="pinax"><span style="color: #d73948">use</span> io
 <span style="color: #74747c">rem Three stages linked by queues: numbers -&gt; squares -&gt; total.</span>
 <span style="color: #d73948">tasks</span> stages <span style="color: #b60157">3</span>
 <span style="color: #d73948">queue</span> numbers <span style="color: #d73948">int</span> <span style="color: #b60157">2</span>
 <span style="color: #d73948">queue</span> squares <span style="color: #d73948">int</span> <span style="color: #b60157">2</span>
 <span style="color: #d73948">global</span> total <span style="color: #d73948">int</span>
-<span style="color: #d73948">word</span> send (v <span style="color: #d73948">int</span>, q <span style="color: #d73948">int</span>)                      <span style="color: #74747c">rem put v into queue q (1 or 2), yielding while it is full</span>
+<span style="color: #d73948">word</span> produce ()
+  <span style="color: #b60157">1</span> <span style="color: #d73948">to</span> i
   <span style="color: #d73948">loop</span>
-    <span style="color: #d73948">true</span> <span style="color: #d73948">to</span> ok
-    q <span style="color: #b60157">1</span> eq <span style="color: #d73948">if</span> v numbers put <span style="color: #d73948">or_else</span> (e) <span style="color: #d73948">false</span> <span style="color: #d73948">to</span> ok <span style="color: #d73948">end</span> <span style="color: #d73948">else</span> v squares put <span style="color: #d73948">or_else</span> (e) <span style="color: #d73948">false</span> <span style="color: #d73948">to</span> ok <span style="color: #d73948">end</span> <span style="color: #d73948">end</span>
-    ok <span style="color: #d73948">until</span>
-    yield <span style="color: #d73948">or_return</span>
+    i <span style="color: #b60157">5</span> gt <span style="color: #d73948">until</span>
+    i numbers wait_put <span style="color: #d73948">or_return</span>              <span style="color: #74747c">rem waits while the queue is full</span>
+    i <span style="color: #b60157">1</span> add <span style="color: #d73948">to</span> i
   <span style="color: #d73948">end</span>
+  <span style="color: #b60157">-1</span> numbers wait_put <span style="color: #d73948">or_return</span>
 <span style="color: #d73948">end</span>
-<span style="color: #d73948">word</span> produce () <span style="color: #b60157">1</span> <span style="color: #b60157">6</span> range <span style="color: #d73948">do</span> (i <span style="color: #d73948">int</span>) i <span style="color: #b60157">1</span> send <span style="color: #d73948">end</span> each  <span style="color: #b60157">-1</span> <span style="color: #b60157">1</span> send <span style="color: #d73948">end</span>
 <span style="color: #d73948">word</span> square ()
   <span style="color: #d73948">loop</span>
-    numbers take <span style="color: #d73948">or_else</span> (e) yield <span style="color: #d73948">or_return</span> <span style="color: #b60157">0</span> <span style="color: #d73948">end</span> <span style="color: #d73948">to</span> n
-    n <span style="color: #b60157">0</span> lt <span style="color: #d73948">if</span> <span style="color: #b60157">-1</span> <span style="color: #b60157">2</span> send <span style="color: #d73948">return</span> <span style="color: #d73948">end</span>
-    n <span style="color: #b60157">0</span> gt <span style="color: #d73948">if</span> n n mul <span style="color: #b60157">2</span> send <span style="color: #d73948">end</span>
+    numbers wait_take <span style="color: #d73948">or_return</span> <span style="color: #d73948">to</span> n          <span style="color: #74747c">rem waits while the queue is empty</span>
+    n <span style="color: #b60157">0</span> lt <span style="color: #d73948">if</span> <span style="color: #b60157">-1</span> squares wait_put <span style="color: #d73948">or_return</span> <span style="color: #d73948">return</span> <span style="color: #d73948">end</span>
+    n n mul squares wait_put <span style="color: #d73948">or_return</span>
   <span style="color: #d73948">end</span>
 <span style="color: #d73948">end</span>
 <span style="color: #d73948">word</span> add_up ()
   <span style="color: #d73948">loop</span>
-    squares take <span style="color: #d73948">or_else</span> (e) yield <span style="color: #d73948">or_return</span> <span style="color: #b60157">0</span> <span style="color: #d73948">end</span> <span style="color: #d73948">to</span> n
-    n <span style="color: #b60157">0</span> lt <span style="color: #d73948">if</span> <span style="color: #d73948">return</span> <span style="color: #d73948">end</span>
+    squares wait_take <span style="color: #d73948">or_return</span> <span style="color: #d73948">to</span> n
+    n <span style="color: #b60157">0</span> lt <span style="color: #d73948">until</span>
     total n add set total
   <span style="color: #d73948">end</span>
 <span style="color: #d73948">end</span>
@@ -62,7 +62,27 @@ ping 3
 demo
 </code></pre><p class="ex-label">Output</p><pre><code data-lang="text">$ pnx 13-pipeline.pnx
 1 + 4 + 9 + 16 + 25 = 55
-</code></pre></div><p>Each of the three stages is a task, and the queues hold only two values each. The stages wait for each other and take turns. The end is announced by sending <code>-1</code>.</p><div class="box mistake"><p class="box-title">Common mistake: The block of <code>spawn</code> sees the locals around it</p>The block given to <code>spawn</code> is a block value and does not see the locals around it, because the task may live on after that word has ended. To give a task values, use globals or queues, or — as in the examples above — call a word inside the block with literals.<div class="example refused"><p class="ex-file"><code>13-no-locals.pnx</code></p><pre><code data-lang="pinax"><span style="color: #d73948">tasks</span> workers <span style="color: #b60157">2</span>
+</code></pre></div><p>Each of the three stages is a task, and the queues hold only two values each. The stages wait for each other and take turns. The end is announced by sending <code>-1</code>.</p><p>When every task waits for a queue that none of them will fill, nothing can go on. <code>run_all</code> sees that and ends the run with the fault <code>deadlock</code>, instead of turning forever. In the main run, which is not a task, waiting for a queue is that fault at once.</p><div class="example fault"><p class="ex-file"><code>13-deadlock.pnx</code></p><pre><code data-lang="pinax"><span style="color: #d73948">use</span> io
+<span style="color: #d73948">tasks</span> stages <span style="color: #b60157">2</span>
+<span style="color: #d73948">queue</span> numbers <span style="color: #d73948">int</span> <span style="color: #b60157">2</span>
+<span style="color: #d73948">queue</span> squares <span style="color: #d73948">int</span> <span style="color: #b60157">2</span>
+<span style="color: #d73948">word</span> square ()
+  numbers wait_take <span style="color: #d73948">or_return</span> <span style="color: #d73948">to</span> n
+  n n mul squares wait_put <span style="color: #d73948">or_return</span>
+<span style="color: #d73948">end</span>
+<span style="color: #d73948">word</span> show ()
+  squares wait_take <span style="color: #d73948">or_return</span> <span style="color: #d73948">to</span> n
+  <span style="color: #d73948">cat</span> (<span style="color: #198810">"square: "</span>, n) io.println
+<span style="color: #d73948">end</span>
+<span style="color: #d73948">word</span> demo ()
+  <span style="color: #d73948">do</span> square <span style="color: #d73948">end</span> stages spawn <span style="color: #d73948">or_else</span> (e) <span style="color: #d73948">return</span> <span style="color: #d73948">end</span> drop
+  <span style="color: #d73948">do</span> show <span style="color: #d73948">end</span> stages spawn <span style="color: #d73948">or_else</span> (e) <span style="color: #d73948">return</span> <span style="color: #d73948">end</span> drop
+  stages run_all                              <span style="color: #74747c">rem no one puts into numbers</span>
+<span style="color: #d73948">end</span>
+demo
+</code></pre><p class="ex-label">Fault</p><pre><code data-lang="text">$ pnx 13-deadlock.pnx
+13-deadlock.pnx:16: deadlock: waiting for a queue that nothing can change
+</code></pre></div><p>Only the two waiting words are watched. A task that waits in a loop of its own (<code>loop … yield … end</code>) is not, so a host that runs such code gives it a budget (chapter 14).</p><div class="box mistake"><p class="box-title">Common mistake: The block of <code>spawn</code> sees the locals around it</p>The block given to <code>spawn</code> is a block value and does not see the locals around it, because the task may live on after that word has ended. To give a task values, use globals or queues, or — as in the examples above — call a word inside the block with literals.<div class="example refused"><p class="ex-file"><code>13-no-locals.pnx</code></p><pre><code data-lang="pinax"><span style="color: #d73948">tasks</span> workers <span style="color: #b60157">2</span>
 <span style="color: #d73948">word</span> start (n <span style="color: #d73948">int</span>) <span style="color: #d73948">do</span> n drop <span style="color: #d73948">end</span> workers spawn <span style="color: #d73948">or_else</span> (e) <span style="color: #d73948">return</span> <span style="color: #d73948">end</span> drop <span style="color: #d73948">end</span>
 </code></pre><p class="ex-label">Refused</p><pre><code data-lang="text">$ pnx 13-no-locals.pnx
 13-no-locals.pnx:2:23: this name is not declared before this place
@@ -78,4 +98,4 @@ demo
 </code></pre><p class="ex-label">Fault</p><pre><code data-lang="text">$ pnx 13-fault.pnx
 the healthy task starts
 13-fault.pnx:6: division by zero
-</code></pre></div><p><code>TASK cancel</code> makes that task’s next <code>yield</code> fail with <code>cancelled</code>. The task takes the failure with <code>or_else</code>, tidies up and ends. Cancelling does not stop a task by force.</p><div class="box summary"><p class="box-title">Summary</p><ul><li>Tasks change only where they <code>yield</code> (standard 14.2).</li><li><code>spawn</code> makes a task from a block that takes and gives nothing; <code>run_all</code> runs them (14.1).</li><li>Tasks share data through globals and queues; blocks do not see the locals around them (14.3).</li><li>A fault in a task ends the whole run (14.3).</li></ul></div></main><nav class="bottom"><a href="index.html">Start</a> · <a href="13.html">Previous</a> · <a href="15.html">Next</a> · <a href="../html-ko/14.html">한국어</a></nav></body></html>
+</code></pre></div><p><code>TASK cancel</code> makes that task’s next <code>yield</code>, or its wait for a queue, fail with <code>cancelled</code>. The task takes the failure with <code>or_else</code>, tidies up and ends. Cancelling does not stop a task by force.</p><div class="box summary"><p class="box-title">Summary</p><ul><li>Tasks change only where they <code>yield</code> (standard 14.2).</li><li><code>spawn</code> makes a task from a block that takes and gives nothing; <code>run_all</code> runs them (14.1).</li><li>Tasks share data through globals and queues; <code>wait_take</code> and <code>wait_put</code> wait for a queue, and a run where every task waits for one is the fault <code>deadlock</code> (14.3).</li><li>Blocks given to <code>spawn</code> do not see the locals around them (14.4).</li><li>A fault in a task ends the whole run (14.4).</li></ul></div></main><nav class="bottom"><a href="index.html">Start</a> · <a href="13.html">Previous</a> · <a href="15.html">Next</a> · <a href="../html-ko/14.html">한국어</a></nav></body></html>

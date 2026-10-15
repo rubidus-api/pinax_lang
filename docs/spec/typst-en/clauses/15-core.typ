@@ -92,6 +92,7 @@ in 9.2. `T` means "any one type"; it is a notation for built-in words only. The 
   [`v c push` / `c pop`], [list], [put at the end / take from the end (`or fail`)],
   [`c add_row`], [list of records], [adds an empty row and gives it (`or fail`)],
   [`v c put` / `c take` / `c peek`], [queue], [put at the back / take from the front / look at the front (`or fail`)],
+  [`v c wait_put` / `c wait_take`], [queue], [put / take, yielding while the queue is full / empty (`or fail`, 14.3)],
   [`c alloc` / `r c free` / `r c is_alive`], [pool], [take a row (`owned`, `or fail`) / give it back / is it alive],
   [`s c append` `n c append_int` `b c append_byte`], [buffer], [append (`or fail`)],
   [`c contents`], [buffer], [a view of what it holds],

@@ -1,0 +1,12 @@
+rem fault
+use io
+tasks workers 2
+queue asks int 1
+queue answers int 1
+word demo ()
+  do asks wait_take or_return drop  1 answers wait_put or_return end workers spawn or_else (e) return end drop
+  do answers wait_take or_return drop  1 asks wait_put or_return end workers spawn or_else (e) return end drop
+  workers run_all                          rem each waits for the other: nothing can go
+end
+demo
+"not reached" io.println

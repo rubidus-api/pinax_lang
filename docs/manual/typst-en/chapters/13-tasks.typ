@@ -20,13 +20,22 @@ ended.
 
 == Linking with queues
 
-Tasks pass data through declared storage, most often queues. When a queue is full or empty, a task `yield`s and waits
-for its next turn.
+Tasks pass data through declared storage, most often queues. `q wait_take` takes from a queue and `v q wait_put` puts
+into one; while the queue is empty (or full) the task yields and looks again on its next turn.
 
 #ex("manual", "13-pipeline.pnx")
 
 Each of the three stages is a task, and the queues hold only two values each. The stages wait for each other and take
 turns. The end is announced by sending `-1`.
+
+When every task waits for a queue that none of them will fill, nothing can go on. `run_all` sees that and ends the run
+with the fault `deadlock`, instead of turning forever. In the main run, which is not a task, waiting for a queue is
+that fault at once.
+
+#ex("manual", "13-deadlock.pnx")
+
+Only the two waiting words are watched. A task that waits in a loop of its own (`loop … yield … end`) is not, so a host
+that runs such code gives it a budget (chapter 14).
 
 #mistake[The block of `spawn` sees the locals around it][The block given to `spawn` is a block value and does not see
 the locals around it, because the task may live on after that word has ended. To give a task values, use globals or
@@ -39,12 +48,14 @@ A fault in one task ends the whole run --- the other tasks stop too. The state r
 
 #ex("manual", "13-fault.pnx")
 
-`TASK cancel` makes that task's next `yield` fail with `cancelled`. The task takes the failure with `or_else`, tidies up
+`TASK cancel` makes that task's next `yield`, or its wait for a queue, fail with `cancelled`. The task takes the failure with `or_else`, tidies up
 and ends. Cancelling does not stop a task by force.
 
 #summary[
 - Tasks change only where they `yield` (standard 14.2).
 - `spawn` makes a task from a block that takes and gives nothing; `run_all` runs them (14.1).
-- Tasks share data through globals and queues; blocks do not see the locals around them (14.3).
-- A fault in a task ends the whole run (14.3).
+- Tasks share data through globals and queues; `wait_take` and `wait_put` wait for a queue, and a run where every
+  task waits for one is the fault `deadlock` (14.3).
+- Blocks given to `spawn` do not see the locals around them (14.4).
+- A fault in a task ends the whole run (14.4).
 ]

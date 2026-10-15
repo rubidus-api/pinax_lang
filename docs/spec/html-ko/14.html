@@ -70,7 +70,63 @@ done <span style="color: #d73948">do</span> (v <span style="color: #d73948">int<
 <span style="color: #198810">""</span> io.println
 </code></pre><p class="ex-label">출력</p><pre><code data-lang="text">$ pnx 14-queue.pnx
 1 2 3 4 5 
-</code></pre></div><p class="para"><span class="pn">(3)</span> <code>yield</code> 를 (직접이든, 부른 낱말 안에서든) 할 수 있는 낱말은 적재 때 알려진다. 호스트 낱말 안에서 그런 낱말은 돌리지 못한다(19절).</p><h3>14.3 취소</h3><p class="para"><span class="pn">(1)</span> <code>작업 cancel</code> 은 작업에 취소를 알린다. 그 작업의 다음 <code>yield</code> 가 <code>err.cancelled</code> 로 실패한다. 작업은 그 실패를 받아 자기 방식으로 끝난다 — 취소는 작업을 억지로 멈추지 않는다.</p><div class="example run"><p class="ex-file"><code>14-cancel.pnx</code></p><pre><code data-lang="pinax"><span style="color: #d73948">use</span> io
+</code></pre></div><p class="para"><span class="pn">(3)</span> <code>yield</code> 를 (직접이든, 부른 낱말 안에서든) 할 수 있는 낱말은 적재 때 알려진다. <code>wait_take</code> 와 <code>wait_put</code>(14.3)도 양보한다. 호스트 낱말 안에서 그런 낱말은 돌리지 못한다(19절).</p><h3>14.3 큐 기다리기</h3><p class="para"><span class="pn">(1)</span> <code>큐 wait_take</code> 는 <code>take</code> 처럼 큐의 맨 앞 값을 꺼내되, 큐가 비어 있는 동안은 양보하고 차례가 돌아오면 다시 본다. <code>v 큐 wait_put</code> 은 <code>put</code> 처럼 넣되, 큐가 차 있는 동안 양보한다. 둘 다 실패할 수 있다(<code>or fail</code>): 기다리는 동안 취소된 작업은 <code>err.cancelled</code> 로 실패한다. 값을 바로 꺼내거나 넣을 수 있을 때는 취소를 보지 않는다.</p><div class="example run"><p class="ex-file"><code>14-queue-wait.pnx</code></p><pre><code data-lang="pinax"><span style="color: #d73948">use</span> io
+<span style="color: #d73948">use</span> <span style="color: #d73948">str</span>
+<span style="color: #d73948">tasks</span> workers <span style="color: #b60157">2</span>
+<span style="color: #d73948">queue</span> jobs <span style="color: #d73948">int</span> <span style="color: #b60157">1</span>
+<span style="color: #d73948">list</span> done <span style="color: #d73948">int</span> <span style="color: #b60157">8</span>
+<span style="color: #d73948">word</span> producer ()
+  <span style="color: #b60157">1</span> <span style="color: #d73948">to</span> i
+  <span style="color: #d73948">loop</span>
+    i <span style="color: #b60157">5</span> gt <span style="color: #d73948">until</span>
+    i jobs wait_put <span style="color: #d73948">or_return</span>              <span style="color: #74747c">rem waits while the queue is full</span>
+    i <span style="color: #b60157">1</span> add <span style="color: #d73948">to</span> i
+  <span style="color: #d73948">end</span>
+  <span style="color: #b60157">-1</span> jobs wait_put <span style="color: #d73948">or_return</span>
+<span style="color: #d73948">end</span>
+<span style="color: #d73948">word</span> consumer ()
+  <span style="color: #d73948">loop</span>
+    jobs wait_take <span style="color: #d73948">or_return</span> <span style="color: #d73948">to</span> v          <span style="color: #74747c">rem waits while the queue is empty</span>
+    v <span style="color: #b60157">0</span> lt <span style="color: #d73948">until</span>
+    v done push <span style="color: #d73948">or_else</span> (e) <span style="color: #d73948">end</span>
+  <span style="color: #d73948">end</span>
+<span style="color: #d73948">end</span>
+<span style="color: #d73948">word</span> demo ()
+  <span style="color: #d73948">do</span> producer <span style="color: #d73948">end</span> workers spawn <span style="color: #d73948">or_else</span> (e) <span style="color: #d73948">return</span> <span style="color: #d73948">end</span> drop
+  <span style="color: #d73948">do</span> consumer <span style="color: #d73948">end</span> workers spawn <span style="color: #d73948">or_else</span> (e) <span style="color: #d73948">return</span> <span style="color: #d73948">end</span> drop
+  workers run_all
+<span style="color: #d73948">end</span>
+demo
+done <span style="color: #d73948">do</span> (v <span style="color: #d73948">int</span>) v <span style="color: #d73948">str</span>.to_str io.println <span style="color: #d73948">end</span> each
+</code></pre><p class="ex-label">출력</p><pre><code data-lang="text">$ pnx 14-queue-wait.pnx
+1
+2
+3
+4
+5
+</code></pre></div><p class="para"><span class="pn">(2)</span> 큐를 기다리는 작업은 어떤 큐든 바뀌기 전에는 다시 돌지 않는다. <code>run_all</code> 이 남은 작업이 모두 큐를 기다리고 호스트를 기다리는 작업은 없다는 것을 알면, 이제 큐를 바꿀 것이 없다: 이것이 결함 <code>deadlock</code> 이다. 작업 안의 결함처럼 모든 작업을 끝낸다. 호스트를 기다리는 작업이 있으면 상태는 전처럼 기다리고(<code>PINAX_WAITING</code>), 그 작업이 이어 돌며 하는 일이 다른 작업을 풀 수 있다.</p><div class="example fault"><p class="ex-file"><code>14-deadlock.pnx</code></p><pre><code data-lang="pinax"><span style="color: #d73948">use</span> io
+<span style="color: #d73948">tasks</span> workers <span style="color: #b60157">2</span>
+<span style="color: #d73948">queue</span> asks <span style="color: #d73948">int</span> <span style="color: #b60157">1</span>
+<span style="color: #d73948">queue</span> answers <span style="color: #d73948">int</span> <span style="color: #b60157">1</span>
+<span style="color: #d73948">word</span> demo ()
+  <span style="color: #d73948">do</span> asks wait_take <span style="color: #d73948">or_return</span> drop  <span style="color: #b60157">1</span> answers wait_put <span style="color: #d73948">or_return</span> <span style="color: #d73948">end</span> workers spawn <span style="color: #d73948">or_else</span> (e) <span style="color: #d73948">return</span> <span style="color: #d73948">end</span> drop
+  <span style="color: #d73948">do</span> answers wait_take <span style="color: #d73948">or_return</span> drop  <span style="color: #b60157">1</span> asks wait_put <span style="color: #d73948">or_return</span> <span style="color: #d73948">end</span> workers spawn <span style="color: #d73948">or_else</span> (e) <span style="color: #d73948">return</span> <span style="color: #d73948">end</span> drop
+  workers run_all                          <span style="color: #74747c">rem each waits for the other: nothing can go</span>
+<span style="color: #d73948">end</span>
+demo
+<span style="color: #198810">"not reached"</span> io.println
+</code></pre><p class="ex-label">결함으로 멈춤</p><pre><code data-lang="text">$ pnx 14-deadlock.pnx
+14-deadlock.pnx:8: deadlock: waiting for a queue that nothing can change
+</code></pre></div><p class="para"><span class="pn">(3)</span> 주 실행은 작업이 아니어서 차례를 넘길 데가 없다. 주 실행에서 빈 큐의 <code>wait_take</code>, 찬 큐의 <code>wait_put</code> 은 바로 결함 <code>deadlock</code> 이다.</p><div class="example fault"><p class="ex-file"><code>14-deadlock-main.pnx</code></p><pre><code data-lang="pinax"><span style="color: #d73948">use</span> io
+<span style="color: #d73948">use</span> <span style="color: #d73948">str</span>
+<span style="color: #d73948">queue</span> jobs <span style="color: #d73948">int</span> <span style="color: #b60157">2</span>
+<span style="color: #d73948">word</span> demo ()
+  jobs wait_take <span style="color: #d73948">or_else</span> (e) <span style="color: #b60157">-1</span> <span style="color: #d73948">end</span> <span style="color: #d73948">str</span>.to_str io.println   <span style="color: #74747c">rem the main run is not a task: no one could fill the queue</span>
+<span style="color: #d73948">end</span>
+demo
+</code></pre><p class="ex-label">결함으로 멈춤</p><pre><code data-lang="text">$ pnx 14-deadlock-main.pnx
+14-deadlock-main.pnx:5: deadlock: waiting for a queue that nothing can change
+</code></pre></div><p class="para"><span class="pn">(4)</span> 교착을 보는 것은 이 두 낱말뿐이다. 스스로 도는 대기(<code>loop … yield … end</code>)나 <code>resume</code> 으로 손수 돌리는 작업은 보지 않는다. 그런 코드를 돌리는 호스트는 예산을 준다(19.5).</p><h3>14.4 취소</h3><p class="para"><span class="pn">(1)</span> <code>작업 cancel</code> 은 작업에 취소를 알린다. 그 작업의 다음 <code>yield</code> 나 큐 기다림(14.3)이 <code>err.cancelled</code> 로 실패한다. 작업은 그 실패를 받아 자기 방식으로 끝난다 — 취소는 작업을 억지로 멈추지 않는다.</p><div class="example run"><p class="ex-file"><code>14-cancel.pnx</code></p><pre><code data-lang="pinax"><span style="color: #d73948">use</span> io
 <span style="color: #d73948">tasks</span> workers <span style="color: #b60157">1</span>
 <span style="color: #d73948">word</span> demo ()
   <span style="color: #d73948">do</span>

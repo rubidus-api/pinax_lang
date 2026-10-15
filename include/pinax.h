@@ -58,6 +58,7 @@ typedef enum pinax_err {
     PINAX_ERR_STALE,    /* handle or pool slot used after release */
     PINAX_ERR_CANCELLED,
     PINAX_ERR_INTERRUPTED,
+    PINAX_ERR_DEADLOCK, /* every task left waits for a queue that nothing will change */
     /* failures of the interface itself */
     PINAX_ERR_ARGUMENT = 0x200,
     PINAX_ERR_NO_ROOM,   /* the block is too small; see pinax_needed() */

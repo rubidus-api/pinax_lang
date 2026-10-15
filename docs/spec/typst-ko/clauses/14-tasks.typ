@@ -44,12 +44,36 @@ tasks-decl = "tasks" NAME size [ size [ size ] ] ;   (* count, call depth, regio
 
 #ex("spec", "14-queue.pnx")
 
-#para("3")[`yield` 를 (직접이든, 부른 낱말 안에서든) 할 수 있는 낱말은 적재 때 알려진다. 호스트 낱말 안에서 그런
-낱말은 돌리지 못한다(19절).]
+#para("3")[`yield` 를 (직접이든, 부른 낱말 안에서든) 할 수 있는 낱말은 적재 때 알려진다. `wait_take` 와
+`wait_put`(14.3)도 양보한다. 호스트 낱말 안에서 그런 낱말은 돌리지 못한다(19절).]
+
+== 큐 기다리기 <tasks-queue-wait>
+
+#para("1")[`큐 wait_take` 는 `take` 처럼 큐의 맨 앞 값을 꺼내되, 큐가 비어 있는 동안은 양보하고 차례가 돌아오면
+다시 본다. `v 큐 wait_put` 은 `put` 처럼 넣되, 큐가 차 있는 동안 양보한다. 둘 다 실패할 수 있다(`or fail`):
+기다리는 동안 취소된 작업은 `err.cancelled` 로 실패한다. 값을 바로 꺼내거나 넣을 수 있을 때는 취소를 보지 않는다.]
+
+#ex("spec", "14-queue-wait.pnx")
+
+#para("2")[큐를 기다리는 작업은 어떤 큐든 바뀌기 전에는 다시 돌지 않는다. `run_all` 이 남은 작업이 모두 큐를
+기다리고 호스트를 기다리는 작업은 없다는 것을 알면, 이제 큐를 바꿀 것이 없다: 이것이 결함 `deadlock` 이다. 작업
+안의 결함처럼 모든 작업을 끝낸다. 호스트를 기다리는 작업이 있으면 상태는 전처럼 기다리고(`PINAX_WAITING`), 그
+작업이 이어 돌며 하는 일이 다른 작업을 풀 수 있다.]
+
+#ex("spec", "14-deadlock.pnx")
+
+#para("3")[주 실행은 작업이 아니어서 차례를 넘길 데가 없다. 주 실행에서 빈 큐의 `wait_take`, 찬 큐의 `wait_put` 은
+바로 결함 `deadlock` 이다.]
+
+#ex("spec", "14-deadlock-main.pnx")
+
+#para("4")[교착을 보는 것은 이 두 낱말뿐이다. 스스로 도는 대기(`loop … yield … end`)나 `resume` 으로 손수 돌리는
+작업은 보지 않는다. 그런 코드를 돌리는 호스트는 예산을 준다(19.5).]
 
 == 취소 <tasks-cancel>
 
-#para("1")[`작업 cancel` 은 작업에 취소를 알린다. 그 작업의 다음 `yield` 가 `err.cancelled` 로 실패한다. 작업은
+#para("1")[`작업 cancel` 은 작업에 취소를 알린다. 그 작업의 다음 `yield` 나 큐 기다림(14.3)이 `err.cancelled` 로
+실패한다. 작업은
 그 실패를 받아 자기 방식으로 끝난다 --- 취소는 작업을 억지로 멈추지 않는다.]
 
 #ex("spec", "14-cancel.pnx")

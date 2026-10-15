@@ -1289,7 +1289,7 @@ enum {
     BW_REPLACE_INTO, BW_APPEND_HEX, BW_CRC32, BW_FNV1A, BW_HASH64, BW_BASE64_ENCODE, BW_BASE64_DECODE,
     BW_HEX_ENCODE, BW_HEX_DECODE, BW_URL_ENCODE, BW_URL_DECODE, BW_TRUNCATE, BW_PTN_IS_MATCH, BW_PTN_MATCH,
     BW_PTN_CAPTURE, BW_PTN_MATCHES, BW_PTN_REPLACE, BW_RX, BW_RX_COMPILE, BW_RX_IS_MATCH, BW_RX_MATCH, BW_RX_CUT,
-    BW_RX_MATCHES, BW_RX_SPLIT, BW_RX_REPLACE, BW_RX_REPLACE_INTO
+    BW_RX_MATCHES, BW_RX_SPLIT, BW_RX_REPLACE, BW_RX_REPLACE_INTO, BW_WAIT_TAKE, BW_WAIT_PUT
 };
 static const struct builtin {
     const char *name;
@@ -1317,6 +1317,7 @@ static const struct builtin {
     {"map_into", BW_MAP_INTO, 0}, {"filter_into", BW_FILTER_INTO, 0},
     {"spawn", BW_SPAWN, 0},     {"yield", BW_YIELD, 0},    {"resume", BW_RESUME, 0},
     {"is_done", BW_IS_DONE, 0}, {"cancel", BW_CANCEL, 0},  {"run_all", BW_RUN_ALL, 0},
+    {"wait_take", BW_WAIT_TAKE, 0}, {"wait_put", BW_WAIT_PUT, 0},
     {"minimum", BW_MINIMUM, 0}, {"maximum", BW_MAXIMUM, 0},
     {"slice", BW_SLICE, 1},         {"cut", BW_CUT, 1},            {"try_cut", BW_TRY_CUT, 1},
     {"trim", BW_TRIM, 1},           {"trim_left", BW_TRIM_LEFT, 1}, {"trim_right", BW_TRIM_RIGHT, 1},
@@ -5127,19 +5128,27 @@ static bool builtin(comp *c, const struct builtin *w) {
         const uint32_t dst = top_slot(c, BANK_I, 1);
         return emit_g_def(c, PNX_PALIVE, dst, ra, gi, BANK_I) != NONE && push_slot(c, TY_BOOL) && advance(c);
     }
-    case BW_PUT: { // v jobs put : fails when the queue is full
+    case BW_PUT:        // v jobs put : fails when the queue is full
+    case BW_WAIT_PUT: { // v jobs wait_put : yields while it is full; fails when the task was cancelled
         if (!need_coll(c, &g, &gi) || !need(c, 1))
             return false;
         if (g->kind != GK_QUEUE)
-            return type_error(c, "put adds to a queue");
+            return type_error(c, w->id == BW_PUT ? "put adds to a queue" : "wait_put adds to a queue");
         if (f->stack[f->depth - 1].type != g->type)
             return type_error(c, "the value has another type than the queue holds");
         if (!settle(c, f->depth - 1))
             return false;
         ra = slot_of(c, f->depth - 1);
         --f->depth;
-        return settle_all(c) && emit(c, PNX_ABX(PNX_QPUT, ra, gi)) != NONE && guard_op(c, TY_NONE);
+        return settle_all(c) && emit(c, PNX_ABX(w->id == BW_PUT ? PNX_QPUT : PNX_QWPUT, ra, gi)) != NONE &&
+               guard_op(c, TY_NONE);
     }
+    case BW_WAIT_TAKE: // jobs wait_take : the oldest value, yielding while the queue is empty
+        if (!need_coll(c, &g, &gi))
+            return false;
+        if (g->kind != GK_QUEUE)
+            return type_error(c, "wait_take reads the front of a queue");
+        return settle_all(c) && emit(c, PNX_ABX(PNX_QWTAKE, top_slot(c, BANK_I, 1), gi)) != NONE && guard_op(c, g->type);
     case BW_PEEK:
     case BW_TAKE:
         if (w->module == 0) { // jobs take : the oldest value; fails when the queue is empty
@@ -5399,7 +5408,7 @@ static const struct {
     {"failed", PINAX_ERR_FAILED},       {"overflow", PINAX_ERR_OVERFLOW}, {"div_zero", PINAX_ERR_DIV_ZERO},
     {"range", PINAX_ERR_RANGE},         {"full", PINAX_ERR_FULL},         {"depth", PINAX_ERR_DEPTH},
     {"stale", PINAX_ERR_STALE},         {"cancelled", PINAX_ERR_CANCELLED},
-    {"interrupted", PINAX_ERR_INTERRUPTED}, {"argument", PINAX_ERR_ARGUMENT},
+    {"interrupted", PINAX_ERR_INTERRUPTED}, {"deadlock", PINAX_ERR_DEADLOCK}, {"argument", PINAX_ERR_ARGUMENT},
     {"not_found", PINAX_ERR_NOT_FOUND}, {"format", PINAX_ERR_FORMAT},     {"state", PINAX_ERR_STATE},
 };
 

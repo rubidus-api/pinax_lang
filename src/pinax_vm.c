@@ -688,7 +688,7 @@ pinax_err pnx_execute(pinax_state *st) {
                 FAULT(PINAX_ERR_DEPTH);
             ++t->generation; // odd: in use
             t->state = PNX_TASK_READY;
-            t->cancelled = t->yielded = false;
+            t->cancelled = t->yielded = t->blocked = false;
             t->wake_fail = t->wake_fault = PINAX_OK;
             t->wait.token = 0;
             t->ctx = (pnx_context){t->ibank,     t->sbank,       t->ctrl, t->int_slots, t->str_slots,
@@ -744,6 +744,42 @@ pinax_err pnx_execute(pinax_state *st) {
             LOAD_CTX();
             NEXT();
         }
+        CASE(QWTAKE) { // the front of a queue, yielding while it is empty
+            if (st->globals[OP_BX(w)].length == 0)
+                goto queue_blocked;
+            (void)pnx_op_QTAKE(st, R, S, w, 0);
+            goto queue_went;
+        }
+        CASE(QWPUT) { // to the back of a queue, yielding while it is full
+            if (st->globals[OP_BX(w)].length == st->globals[OP_BX(w)].capacity)
+                goto queue_blocked;
+            (void)pnx_op_QPUT(st, R, S, w, 0);
+        queue_went:
+            if (st->task)
+                st->task->yielded = st->task->blocked = false;
+            ++pc; // past the failure word
+            NEXT();
+        queue_blocked:;
+            pnx_task *t = st->task;
+            if (!t) // the main run waits for a queue: nothing else can run to change it
+                FAULT(PINAX_ERR_DEADLOCK);
+            if (t->yielded) { // back from waiting, and it still cannot go
+                t->yielded = t->blocked = false;
+                if (t->cancelled) {
+                    st->fail = PINAX_ERR_CANCELLED;
+                    NEXT();
+                }
+            }
+            if (st->nest != t->in_host) // a host word's C stack is in the way
+                FAULT(PINAX_ERR_STATE);
+            t->yielded = t->blocked = true;
+            t->blocked_at = st->qturn; // it cannot go until some queue changes
+            --pc;
+            SAVE_CTX();
+            task_leave(st, false);
+            LOAD_CTX();
+            NEXT();
+        }
         CASE(TDONE) {
             R[OP_A(w)] = task_of(&st->globals[OP_C(w)], R[OP_B(w)]) == NULL;
             NEXT();
@@ -761,20 +797,27 @@ pinax_err pnx_execute(pinax_state *st) {
         CASE(TRUNALL) { // comes back here after every task's turn, until none is left
             pnx_global *g = &st->globals[OP_BX(w)];
             pnx_task *t = NULL;
-            bool any_waits = false;
+            bool any_waits = false, any_blocked = false;
             for (uint32_t k = 0; k < g->capacity && !t; ++k) {
                 const uint32_t slot = (g->head + 1 + k) % g->capacity;
                 pnx_task *each = (pnx_task *)(void *)g->ptr + slot;
                 any_waits = any_waits || each->state == PNX_TASK_WAITING;
-                if (each->state == PNX_TASK_READY) {
-                    t = each;
-                    g->head = slot;
+                if (each->state != PNX_TASK_READY)
+                    continue;
+                if (each->blocked && each->blocked_at == st->qturn && !each->cancelled) {
+                    any_blocked = true; // no queue changed since it stopped: it would stop again
+                    continue;
                 }
+                t = each;
+                g->head = slot;
             }
-            if (!t && !any_waits)
+            if (!t && !any_waits) {
+                if (any_blocked) // every task left waits for a queue, and none can change one
+                    FAULT(PINAX_ERR_DEADLOCK);
                 NEXT();
+            }
             --pc;
-            if (!t) { // every task left waits for the host: so does the state
+            if (!t) { // every task left waits for the host (some perhaps for a queue too): so does the state
                 if (st->nest)
                     FAULT(PINAX_ERR_STATE);
                 goto waiting;
@@ -847,7 +890,8 @@ finished:
         st->fault_pc = (uint32_t)(pc - code);
         st->fault_ibase = ibase;
         st->fault_sbase = sbase;
-        if (st->task && st->nest == 0) // a fault inside a task ends the run and every task
+        // a fault inside a task ends the run and every task; so does a deadlock, whose tasks could never go on
+        if ((st->task || result == PINAX_ERR_DEADLOCK) && st->nest == 0)
             pnx_tasks_abort(st);
     }
     st->left = left;

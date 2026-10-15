@@ -501,8 +501,10 @@ PNX_OP(RCATB) {
 PNX_OP(GLEN) { R[OP_A(w)] = st->globals[OP_BX(w)].length; return PNX_R_OK; }
 PNX_OP(GCLEAR) { // an array is zeroed; a list becomes empty
     pnx_global *g = &st->globals[OP_BX(w)];
-    if (g->kind == PNX_G_LIST || g->kind == PNX_G_ROWS || g->kind == PNX_G_QUEUE)
+    if (g->kind == PNX_G_LIST || g->kind == PNX_G_ROWS || g->kind == PNX_G_QUEUE) {
         g->length = g->head = 0;
+        st->qturn += g->kind == PNX_G_QUEUE;
+    }
     else
         __builtin_memset(g->ptr, 0, (size_t)g->capacity * g->elem_bytes);
     return PNX_R_OK;
@@ -724,6 +726,7 @@ PNX_OP(QPUT) {
     const uint32_t at = (uint32_t)(((uint64_t)g->head + g->length) % g->capacity);
     __builtin_memcpy(g->ptr + (size_t)at * 8, &R[OP_A(w)], 8);
     ++g->length;
+    ++st->qturn;
     return PNX_R_OK;
 }
 PNX_OP(QTAKE) {
@@ -735,6 +738,7 @@ PNX_OP(QTAKE) {
     __builtin_memcpy(&R[OP_A(w)], g->ptr + (size_t)g->head * 8, 8);
     g->head = g->head + 1 == g->capacity ? 0 : g->head + 1;
     --g->length;
+    ++st->qturn;
     return PNX_R_OK;
 }
 PNX_OP(QPEEK) {

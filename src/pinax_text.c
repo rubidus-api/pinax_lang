@@ -49,7 +49,8 @@ uint32_t pnx_find(const uint8_t *bytes, uint32_t length, const uint8_t *part, ui
     X(PINAX_ERR_FAILED, "failed") X(PINAX_ERR_OVERFLOW, "overflow") X(PINAX_ERR_DIV_ZERO, "div_zero")  \
     X(PINAX_ERR_RANGE, "range") X(PINAX_ERR_FULL, "full") X(PINAX_ERR_DEPTH, "depth")              \
     X(PINAX_ERR_STALE, "stale") X(PINAX_ERR_CANCELLED, "cancelled")                                \
-    X(PINAX_ERR_INTERRUPTED, "interrupted") X(PINAX_ERR_ARGUMENT, "argument")                      \
+    X(PINAX_ERR_INTERRUPTED, "interrupted") X(PINAX_ERR_DEADLOCK, "deadlock")                       \
+    X(PINAX_ERR_ARGUMENT, "argument")                                                              \
     X(PINAX_ERR_NO_ROOM, "no_room") X(PINAX_ERR_SYNTAX, "syntax") X(PINAX_ERR_TYPE, "type")        \
     X(PINAX_ERR_NOT_FOUND, "not_found") X(PINAX_ERR_SIGNATURE, "signature")                        \
     X(PINAX_ERR_FORMAT, "format") X(PINAX_ERR_STATE, "state")

@@ -1,0 +1,8 @@
+rem fault
+use io
+use str
+queue jobs int 2
+word demo ()
+  jobs wait_take or_else (e) -1 end str.to_str io.println   rem the main run is not a task: no one could fill the queue
+end
+demo

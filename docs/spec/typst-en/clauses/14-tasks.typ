@@ -44,12 +44,37 @@ the next run.]
 
 #ex("spec", "14-queue.pnx")
 
-#para("3")[Which words may yield (directly or in a word they call) is known at load. Such words cannot be run from
-inside a host word (clause 19).]
+#para("3")[Which words may yield (directly or in a word they call) is known at load. `wait_take` and `wait_put` (14.3)
+yield too. Such words cannot be run from inside a host word (clause 19).]
+
+== Waiting for a queue <tasks-queue-wait>
+
+#para("1")[`QUEUE wait_take` takes the front value of a queue as `take` does, but while the queue is empty it yields and
+looks again when its turn comes back. `v QUEUE wait_put` puts like `put`, yielding while the queue is full. Both can
+fail (`or fail`): a task cancelled while it waits fails with `err.cancelled`. When the value can be taken or put at
+once, cancelling is not looked at.]
+
+#ex("spec", "14-queue-wait.pnx")
+
+#para("2")[A task that waits for a queue does not run again until some queue has changed. When `run_all` finds that
+every task left waits for a queue and none waits for the host, nothing can change a queue any more: that is the fault
+`deadlock`. Like a fault inside a task, it ends every task. While a task waits for the host, the state waits
+(`PINAX_WAITING`) as before; what that task does when it goes on can free the others.]
+
+#ex("spec", "14-deadlock.pnx")
+
+#para("3")[The main run is not a task and has no one to give its turn to. In the main run, `wait_take` on an empty
+queue and `wait_put` on a full one are the fault `deadlock` at once.]
+
+#ex("spec", "14-deadlock-main.pnx")
+
+#para("4")[Only these two words are watched for a deadlock. Tasks that wait in a loop of their own (`loop … yield …
+end`), or a task resumed by hand with `resume`, are not; a host that runs such code gives it a budget (19.5).]
 
 == Cancelling <tasks-cancel>
 
-#para("1")[`TASK cancel` tells a task it is cancelled: its next `yield` fails with `err.cancelled`. The task takes that
+#para("1")[`TASK cancel` tells a task it is cancelled: its next `yield`, or its wait for a queue (14.3), fails with
+`err.cancelled`. The task takes that
 failure and ends in its own way. Cancelling does not stop a task by force.]
 
 #ex("spec", "14-cancel.pnx")

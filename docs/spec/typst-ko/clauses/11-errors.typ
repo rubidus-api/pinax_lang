@@ -21,6 +21,7 @@
   [`err.stale`], [`stale`], [돌려준 줄이나 핸들을 씀],
   [`err.cancelled`], [`cancelled`], [작업이 취소됨(14절)],
   [`err.interrupted`], [`interrupted`], [호스트가 기다리던 일을 끊음(19절)],
+  [`err.deadlock`], [`deadlock`], [남은 작업이 모두 아무것도 바꾸지 못할 큐를 기다림(14.3)],
   [`err.format`], [`format`], [글이나 바이트의 모양이 틀림],
   [`err.not_found`], [`not_found`], [찾는 것이 없음],
 )
@@ -75,7 +76,7 @@ guard = "or_fail" | "or_return" | "or_else" [ "(" NAME ")" ] { body } "end" ;
 == 결함 <errors-fault>
 
 #para("1")[결함은 그 자리에서 실행을 끝낸다. 결함은 호스트가 부른 함수(`pinax_run`, `pinax_load` 등)의
-반환값이 된다. 작업 안의 결함도 그 실행 전체와 모든 작업을 끝낸다(14.3). 상태는 남아 다음 실행을 받는다.]
+반환값이 된다. 작업 안의 결함도 그 실행 전체와 모든 작업을 끝낸다(14.4). 상태는 남아 다음 실행을 받는다.]
 
 #para("2")[결함은 다음에서 난다.
 - 산술의 넘침(`overflow`), 0 으로 나눔(`div_zero`) --- 7.1, 15.1;

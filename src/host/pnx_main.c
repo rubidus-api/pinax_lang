@@ -47,6 +47,7 @@ static const char *err_name(pinax_err err) {
     case PINAX_ERR_FULL: return "a declared capacity is used up";
     case PINAX_ERR_DEPTH: return "call depth limit";
     case PINAX_ERR_STALE: return "a row or handle was used after it was given back";
+    case PINAX_ERR_DEADLOCK: return "deadlock: waiting for a queue that nothing can change";
     case PINAX_ERR_NO_ROOM: return "the memory block is too small (set PNX_BLOCK_KB)";
     case PINAX_ERR_NOT_FOUND: return "not found";
     case PINAX_ERR_FORMAT: return "bad format";

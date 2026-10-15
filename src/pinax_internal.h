@@ -154,6 +154,8 @@ typedef struct pnx_task {
     uint32_t         generation, in_host;
     uint8_t          state;
     bool             cancelled, yielded;
+    bool             blocked;    // it yielded for a queue, when the queue count was blocked_at
+    uint64_t         blocked_at;
     pnx_wait         wait;       // the host operation it waits for
     pinax_err        wake_fail;  // what the operation failed with, for the failure word it goes on at
     pinax_err        wake_fault; // or the fault it ended with
@@ -231,6 +233,7 @@ struct pinax_state {
     pnx_task   *task;
     pnx_context main;
     pnx_wait    main_wait;  // the main run waits for a host operation
+    uint64_t    qturn;      // counts the changes of every queue: a task blocked since the last one cannot go
     pinax_err   main_fault; // that operation failed and the word that called it cannot fail
     uint64_t    token_serial;
     bool        waiting;    // the suspended run ended with PINAX_WAITING

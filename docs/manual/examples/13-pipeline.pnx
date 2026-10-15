@@ -5,26 +5,26 @@ tasks stages 3
 queue numbers int 2
 queue squares int 2
 global total int
-word send (v int, q int)                      rem put v into queue q (1 or 2), yielding while it is full
+word produce ()
+  1 to i
   loop
-    true to ok
-    q 1 eq if v numbers put or_else (e) false to ok end else v squares put or_else (e) false to ok end end
-    ok until
-    yield or_return
+    i 5 gt until
+    i numbers wait_put or_return              rem waits while the queue is full
+    i 1 add to i
   end
+  -1 numbers wait_put or_return
 end
-word produce () 1 6 range do (i int) i 1 send end each  -1 1 send end
 word square ()
   loop
-    numbers take or_else (e) yield or_return 0 end to n
-    n 0 lt if -1 2 send return end
-    n 0 gt if n n mul 2 send end
+    numbers wait_take or_return to n          rem waits while the queue is empty
+    n 0 lt if -1 squares wait_put or_return return end
+    n n mul squares wait_put or_return
   end
 end
 word add_up ()
   loop
-    squares take or_else (e) yield or_return 0 end to n
-    n 0 lt if return end
+    squares wait_take or_return to n
+    n 0 lt until
     total n add set total
   end
 end

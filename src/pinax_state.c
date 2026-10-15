@@ -437,7 +437,7 @@ static const char *check_word(const pinax_state *st, uint32_t index, span range,
         case PNX_GLEN: case PNX_GCLEAR: want = PNX_G_COUNT + 1; global = bx; break; // any collection
         case PNX_ADDROW: want = PNX_G_ROWS; global = bx; break;
         case PNX_BCAT: case PNX_BCATI: case PNX_BTRUNC: want = PNX_G_BUFFER; global = bx; break;
-        case PNX_QPUT: case PNX_QTAKE: case PNX_QPEEK: want = PNX_G_QUEUE; global = bx; break;
+        case PNX_QPUT: case PNX_QTAKE: case PNX_QPEEK: case PNX_QWTAKE: case PNX_QWPUT: want = PNX_G_QUEUE; global = bx; break;
         case PNX_PALLOC: case PNX_PFREE: want = PNX_G_POOL; global = bx; break;
         case PNX_PALIVE: want = PNX_G_POOL; global = c; break;
         case PNX_IXPUT: case PNX_IXDEL: want = PNX_G_INDEX; global = bx; break;
@@ -985,7 +985,7 @@ static void mark_yields(pinax_state *st) {
                 const uint32_t op = st->code[i] & 0xffu;
                 const pnx_opinfo info = opinfo[op];
                 const uint32_t x = info.second ? st->code[i + 1] : 0;
-                yields = op == PNX_TYIELD || op == PNX_TRUNALL ||
+                yields = op == PNX_TYIELD || op == PNX_TRUNALL || op == PNX_QWTAKE || op == PNX_QWPUT ||
                          ((op == PNX_HCALL || op == PNX_HCALLF) && (st->imports[x]->flags & PINAX_WORD_AWAITABLE)) ||
                          (info.second == PNX_X_WORD && st->word_counts[x].yields);
                 i += info.second ? 2u : 1u;

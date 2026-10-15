@@ -70,7 +70,63 @@ done <span style="color: #d73948">do</span> (v <span style="color: #d73948">int<
 <span style="color: #198810">""</span> io.println
 </code></pre><p class="ex-label">Output</p><pre><code data-lang="text">$ pnx 14-queue.pnx
 1 2 3 4 5 
-</code></pre></div><p class="para"><span class="pn">(3)</span> Which words may yield (directly or in a word they call) is known at load. Such words cannot be run from inside a host word (clause 19).</p><h3>14.3 Cancelling</h3><p class="para"><span class="pn">(1)</span> <code>TASK cancel</code> tells a task it is cancelled: its next <code>yield</code> fails with <code>err.cancelled</code>. The task takes that failure and ends in its own way. Cancelling does not stop a task by force.</p><div class="example run"><p class="ex-file"><code>14-cancel.pnx</code></p><pre><code data-lang="pinax"><span style="color: #d73948">use</span> io
+</code></pre></div><p class="para"><span class="pn">(3)</span> Which words may yield (directly or in a word they call) is known at load. <code>wait_take</code> and <code>wait_put</code> (14.3) yield too. Such words cannot be run from inside a host word (clause 19).</p><h3>14.3 Waiting for a queue</h3><p class="para"><span class="pn">(1)</span> <code>QUEUE wait_take</code> takes the front value of a queue as <code>take</code> does, but while the queue is empty it yields and looks again when its turn comes back. <code>v QUEUE wait_put</code> puts like <code>put</code>, yielding while the queue is full. Both can fail (<code>or fail</code>): a task cancelled while it waits fails with <code>err.cancelled</code>. When the value can be taken or put at once, cancelling is not looked at.</p><div class="example run"><p class="ex-file"><code>14-queue-wait.pnx</code></p><pre><code data-lang="pinax"><span style="color: #d73948">use</span> io
+<span style="color: #d73948">use</span> <span style="color: #d73948">str</span>
+<span style="color: #d73948">tasks</span> workers <span style="color: #b60157">2</span>
+<span style="color: #d73948">queue</span> jobs <span style="color: #d73948">int</span> <span style="color: #b60157">1</span>
+<span style="color: #d73948">list</span> done <span style="color: #d73948">int</span> <span style="color: #b60157">8</span>
+<span style="color: #d73948">word</span> producer ()
+  <span style="color: #b60157">1</span> <span style="color: #d73948">to</span> i
+  <span style="color: #d73948">loop</span>
+    i <span style="color: #b60157">5</span> gt <span style="color: #d73948">until</span>
+    i jobs wait_put <span style="color: #d73948">or_return</span>              <span style="color: #74747c">rem waits while the queue is full</span>
+    i <span style="color: #b60157">1</span> add <span style="color: #d73948">to</span> i
+  <span style="color: #d73948">end</span>
+  <span style="color: #b60157">-1</span> jobs wait_put <span style="color: #d73948">or_return</span>
+<span style="color: #d73948">end</span>
+<span style="color: #d73948">word</span> consumer ()
+  <span style="color: #d73948">loop</span>
+    jobs wait_take <span style="color: #d73948">or_return</span> <span style="color: #d73948">to</span> v          <span style="color: #74747c">rem waits while the queue is empty</span>
+    v <span style="color: #b60157">0</span> lt <span style="color: #d73948">until</span>
+    v done push <span style="color: #d73948">or_else</span> (e) <span style="color: #d73948">end</span>
+  <span style="color: #d73948">end</span>
+<span style="color: #d73948">end</span>
+<span style="color: #d73948">word</span> demo ()
+  <span style="color: #d73948">do</span> producer <span style="color: #d73948">end</span> workers spawn <span style="color: #d73948">or_else</span> (e) <span style="color: #d73948">return</span> <span style="color: #d73948">end</span> drop
+  <span style="color: #d73948">do</span> consumer <span style="color: #d73948">end</span> workers spawn <span style="color: #d73948">or_else</span> (e) <span style="color: #d73948">return</span> <span style="color: #d73948">end</span> drop
+  workers run_all
+<span style="color: #d73948">end</span>
+demo
+done <span style="color: #d73948">do</span> (v <span style="color: #d73948">int</span>) v <span style="color: #d73948">str</span>.to_str io.println <span style="color: #d73948">end</span> each
+</code></pre><p class="ex-label">Output</p><pre><code data-lang="text">$ pnx 14-queue-wait.pnx
+1
+2
+3
+4
+5
+</code></pre></div><p class="para"><span class="pn">(2)</span> A task that waits for a queue does not run again until some queue has changed. When <code>run_all</code> finds that every task left waits for a queue and none waits for the host, nothing can change a queue any more: that is the fault <code>deadlock</code>. Like a fault inside a task, it ends every task. While a task waits for the host, the state waits (<code>PINAX_WAITING</code>) as before; what that task does when it goes on can free the others.</p><div class="example fault"><p class="ex-file"><code>14-deadlock.pnx</code></p><pre><code data-lang="pinax"><span style="color: #d73948">use</span> io
+<span style="color: #d73948">tasks</span> workers <span style="color: #b60157">2</span>
+<span style="color: #d73948">queue</span> asks <span style="color: #d73948">int</span> <span style="color: #b60157">1</span>
+<span style="color: #d73948">queue</span> answers <span style="color: #d73948">int</span> <span style="color: #b60157">1</span>
+<span style="color: #d73948">word</span> demo ()
+  <span style="color: #d73948">do</span> asks wait_take <span style="color: #d73948">or_return</span> drop  <span style="color: #b60157">1</span> answers wait_put <span style="color: #d73948">or_return</span> <span style="color: #d73948">end</span> workers spawn <span style="color: #d73948">or_else</span> (e) <span style="color: #d73948">return</span> <span style="color: #d73948">end</span> drop
+  <span style="color: #d73948">do</span> answers wait_take <span style="color: #d73948">or_return</span> drop  <span style="color: #b60157">1</span> asks wait_put <span style="color: #d73948">or_return</span> <span style="color: #d73948">end</span> workers spawn <span style="color: #d73948">or_else</span> (e) <span style="color: #d73948">return</span> <span style="color: #d73948">end</span> drop
+  workers run_all                          <span style="color: #74747c">rem each waits for the other: nothing can go</span>
+<span style="color: #d73948">end</span>
+demo
+<span style="color: #198810">"not reached"</span> io.println
+</code></pre><p class="ex-label">Fault</p><pre><code data-lang="text">$ pnx 14-deadlock.pnx
+14-deadlock.pnx:8: deadlock: waiting for a queue that nothing can change
+</code></pre></div><p class="para"><span class="pn">(3)</span> The main run is not a task and has no one to give its turn to. In the main run, <code>wait_take</code> on an empty queue and <code>wait_put</code> on a full one are the fault <code>deadlock</code> at once.</p><div class="example fault"><p class="ex-file"><code>14-deadlock-main.pnx</code></p><pre><code data-lang="pinax"><span style="color: #d73948">use</span> io
+<span style="color: #d73948">use</span> <span style="color: #d73948">str</span>
+<span style="color: #d73948">queue</span> jobs <span style="color: #d73948">int</span> <span style="color: #b60157">2</span>
+<span style="color: #d73948">word</span> demo ()
+  jobs wait_take <span style="color: #d73948">or_else</span> (e) <span style="color: #b60157">-1</span> <span style="color: #d73948">end</span> <span style="color: #d73948">str</span>.to_str io.println   <span style="color: #74747c">rem the main run is not a task: no one could fill the queue</span>
+<span style="color: #d73948">end</span>
+demo
+</code></pre><p class="ex-label">Fault</p><pre><code data-lang="text">$ pnx 14-deadlock-main.pnx
+14-deadlock-main.pnx:5: deadlock: waiting for a queue that nothing can change
+</code></pre></div><p class="para"><span class="pn">(4)</span> Only these two words are watched for a deadlock. Tasks that wait in a loop of their own (<code>loop … yield …<br>end</code>), or a task resumed by hand with <code>resume</code>, are not; a host that runs such code gives it a budget (19.5).</p><h3>14.4 Cancelling</h3><p class="para"><span class="pn">(1)</span> <code>TASK cancel</code> tells a task it is cancelled: its next <code>yield</code>, or its wait for a queue (14.3), fails with <code>err.cancelled</code>. The task takes that failure and ends in its own way. Cancelling does not stop a task by force.</p><div class="example run"><p class="ex-file"><code>14-cancel.pnx</code></p><pre><code data-lang="pinax"><span style="color: #d73948">use</span> io
 <span style="color: #d73948">tasks</span> workers <span style="color: #b60157">1</span>
 <span style="color: #d73948">word</span> demo ()
   <span style="color: #d73948">do</span>
