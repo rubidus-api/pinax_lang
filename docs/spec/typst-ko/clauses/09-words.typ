@@ -72,11 +72,16 @@ type       = [ "owned" ] ( NAME [ "(" size ")" ] | "word" "(" effect ")" ) ;
 #part("구문")
 ```ebnf
 store = "to" ( NAME | PATH | "(" NAME { "," NAME } ")" ) ;
+set   = "set" ( NAME | PATH ) ;
 ```
 
 #para("1")[몸 안에서 `to 이름` 은 맨 위 값을 내려 그 이름에 넣는다. 그 이름이 처음이면 그 값의 타입으로
-#term("지역 변수", en: "local variable")가 생긴다. 그 뒤의 `to` 는 같은 타입이어야 한다. 이름이 전역이면 그
-전역에 넣는다(지역 변수를 만들지 않는다).]
+#term("지역 변수", en: "local variable")가 생긴다. 그 뒤의 `to` 는 같은 타입이어야 한다. `to` 는 지역 변수(와
+`to r.필드` 의 필드)에만 넣는다.]
+
+#para("1a")[전역에는 `set 이름` 으로 넣는다. `v set 이름` 은 스칼라 전역에, `v i set 이름` 은 배열과 목록의 칸에
+넣는다. 다른 모듈이 내보낸 전역은 `set 모듈.이름` 이다. 정의 안팎이 같다. `to` 가 지역을 만드는 일과 전역을 바꾸는
+일을 글자로 가르려는 규칙이다.]
 
 #para("2")[`to (a, b, c)` 는 위의 값 셋을 한 번에 넣는다. 오른쪽 이름이 맨 위 값을 받는다 --- 서명에 적은
 차례와 같다.]
@@ -94,6 +99,10 @@ store = "to" ( NAME | PATH | "(" NAME { "," NAME } ")" ) ;
 
 #para("5")[가지 안에서 처음 만든 지역 변수는 가지 밖에서 읽지 못한다. 다른 가지로 왔다면 값이 없기 때문이다.]
 #ex("spec", "09-local-scope.pnx")
+
+#para("6")[`to` 의 이름이 전역이면 거절된다. 전역은 가릴 수 없으므로(9.5) 그 이름의 지역을 만들 수도 없고, 전역을
+조용히 바꾸지도 않는다. 메시지가 `set` 을 알려 준다. `set` 의 이름이 전역이 아니면 거절된다.]
+#ex("spec", "09-store-global-bare.pnx")
 
 == 가림 금지 <words-shadowing>
 
@@ -155,6 +164,10 @@ phrase = body { body } ;                   (* code that leaves one value *)
   ([스택의 값이 모자람], "the stack does not hold enough values for this word"),
   ([정의되지 않은 이름], "this name is not declared before this place"),
   ([지역 변수의 타입이 바뀜], "this local variable has another type than the value stored into it"),
+  ([`to` 의 이름이 전역], "this name is a global; a global is written with set: value set name"),
+  ([`to 모듈.이름` 으로 전역에], "a global of a module is written with set: value set module.name"),
+  ([`set` 의 이름이 지역], "set writes a global; a local is written with to"),
+  ([`set` 의 이름이 전역이 아님], "set writes a declared global; there is none of this name"),
   ([보이는 이름을 가림], "this name is already visible here; a new name may not hide it"),
   ([앞선 선언과 다른 서명], "the definition has another signature than its forward declaration"),
 )

@@ -7,7 +7,7 @@ global hits int
 global last str(16)
 global seen bool
 hits str.to_str io.println           rem a global starts at zero
-limit to hits
-greeting to last
-true to seen
+limit set hits
+greeting set last
+true set seen
 cat (last, " ", hits, " ", seen) io.println

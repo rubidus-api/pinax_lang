@@ -3,6 +3,6 @@ use io
 use str
 global name str(8)                 rem stored text: up to 8 bytes, copied in
 word show (s str) cat ("[", s, "] ", s str.len) io.println end
-"Pinax" to name
+"Pinax" set name
 name show
 "hello, world" 7 str.skip show        rem a view: no byte is copied

@@ -2,6 +2,6 @@ rem run
 use io
 use str
 global calls int
-word tick () calls 1 add to calls end      rem `to` with a global's name stores into the global
+word tick () calls 1 add set calls end      rem set stores into a global; to only into locals
 tick tick tick
 calls str.to_str io.println

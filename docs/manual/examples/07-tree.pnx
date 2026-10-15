@@ -13,7 +13,7 @@ global root nodes
 word put_key (k int or fail)
   nodes alloc or_fail to n
   k n to node.key
-  root is_none if n to root return end
+  root is_none if n set root return end
   root to at
   loop
     k at node.key lt if

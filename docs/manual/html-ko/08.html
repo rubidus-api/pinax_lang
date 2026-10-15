@@ -50,7 +50,7 @@ path <span style="color: #d73948">do</span> (p path) <span style="color: #d73948
 <span style="color: #d73948">word</span> put_key (k <span style="color: #d73948">int</span> <span style="color: #d73948">or</span> <span style="color: #d73948">fail</span>)
   nodes alloc <span style="color: #d73948">or_fail</span> <span style="color: #d73948">to</span> n
   k n <span style="color: #d73948">to</span> node.key
-  root is_none <span style="color: #d73948">if</span> n <span style="color: #d73948">to</span> root <span style="color: #d73948">return</span> <span style="color: #d73948">end</span>
+  root is_none <span style="color: #d73948">if</span> n set root <span style="color: #d73948">return</span> <span style="color: #d73948">end</span>
   root <span style="color: #d73948">to</span> at
   <span style="color: #d73948">loop</span>
     k at node.key lt <span style="color: #d73948">if</span>
@@ -92,7 +92,7 @@ root show
 <span style="color: #d73948">global</span> keep nodes
 <span style="color: #d73948">word</span> demo (<span style="color: #d73948">or</span> <span style="color: #d73948">fail</span>)
   nodes alloc <span style="color: #d73948">or_fail</span> <span style="color: #d73948">to</span> n
-  n <span style="color: #d73948">to</span> keep
+  n set keep
   keep nodes free
   <span style="color: #198810">"the row is given back"</span> io.println
   keep node.key drop

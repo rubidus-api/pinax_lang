@@ -1979,7 +1979,11 @@ static bool store_local(comp *c, name n) {
     const uint32_t top = f->depth - 1;
     entry    e = f->stack[top];
     const int bank = bank_of(e.type);
-    const uint32_t g = c->path_global != NONE ? c->path_global : find_local(f, n) ? NONE : find_global(c, n);
+    // `to NAME` stores into a local; a global is written with `set NAME` (D0042), which comes here
+    // with path_global given
+    const uint32_t g = c->path_global;
+    if (g == NONE && !find_local(f, n) && find_global(c, n) != NONE)
+        return type_error(c, "this name is a global; a global is written with set: value set name");
     if (g != NONE && ((const globalsym *)c->globals.ptr + g)->kind != GK_SCALAR) { // value index to names
         const globalsym *sym = (const globalsym *)c->globals.ptr + g;
         uint32_t rv, ri;
@@ -2024,7 +2028,7 @@ static bool store_local(comp *c, name n) {
     local *l = find_local(f, n);
     if (!l) {
         if (f->is_top)
-            return type_error(c, "outside a definition `to` stores into a declared global, not a new local");
+            return type_error(c, "outside a definition `to` makes no new local; a global is written with set");
         if (!name_is_free(c, n))
             return false;
         if (f->n_locals == MAX_LOCALS || f->nloc[bank] >= SLOT0 - 1)
@@ -2143,22 +2147,51 @@ static bool store(comp *c) {
             ++dot;
         name real;
         const uint32_t m = module_of(c, (name){path.text, dot}, &real) ? source_module(c, real) : NONE;
-        if (m != NONE) { // to module.name : a global that module exports
-            const name n = {path.text + dot + 1, path.length - dot - 1};
-            const globalsym *all = c->globals.ptr;
-            for (uint32_t k = 0; k < c->base.globals; ++k) {
-                if (all[k].module == m && all[k].exported && name_eq(all[k].name, n)) {
-                    c->path_global = k;
-                    const bool ok = store_local(c, n);
-                    c->path_global = NONE;
-                    return ok && advance(c);
-                }
-            }
-            return error(c, PINAX_ERR_NOT_FOUND, "the module exports no global of this name");
-        }
+        if (m != NONE)
+            return type_error(c, "a global of a module is written with set: value set module.name");
         return field_access(c, true) && advance(c);
     }
     return syntax(c, "to is followed by a name or a list of names");
+}
+
+// set NAME | set module.NAME : stores into a declared global (D0042); `to` stores into locals
+static bool set_global(comp *c) {
+    if (!advance(c))
+        return false;
+    if (c->tok.kind == PNX_T_NAME) {
+        const name n = tok_name(c);
+        const uint32_t g = find_global(c, n);
+        if (g == NONE)
+            return error(c, find_local(c->f, n) ? PINAX_ERR_TYPE : PINAX_ERR_NOT_FOUND,
+                         find_local(c->f, n) ? "set writes a global; a local is written with to"
+                                             : "set writes a declared global; there is none of this name");
+        c->path_global = g;
+        const bool ok = store_local(c, n);
+        c->path_global = NONE;
+        return ok && advance(c);
+    }
+    if (c->tok.kind == PNX_T_PATH) {
+        const name path = tok_name(c);
+        uint32_t dot = 0;
+        while (path.text[dot] != '.')
+            ++dot;
+        name real;
+        const uint32_t m = module_of(c, (name){path.text, dot}, &real) ? source_module(c, real) : NONE;
+        if (m == NONE)
+            return error(c, PINAX_ERR_NOT_FOUND, "set takes a global, or a global a module in use exports");
+        const name n = {path.text + dot + 1, path.length - dot - 1};
+        const globalsym *all = c->globals.ptr;
+        for (uint32_t k = 0; k < c->base.globals; ++k) {
+            if (all[k].module == m && all[k].exported && name_eq(all[k].name, n)) {
+                c->path_global = k;
+                const bool ok = store_local(c, n);
+                c->path_global = NONE;
+                return ok && advance(c);
+            }
+        }
+        return error(c, PINAX_ERR_NOT_FOUND, "the module exports no global of this name");
+    }
+    return syntax(c, "set is followed by the name of a global");
 }
 
 // ---- control ------------------------------------------------------------------------------
@@ -5708,7 +5741,7 @@ static bool body_token(comp *c) {
     if (f->n_blocks && f->blocks[f->n_blocks - 1].kind == B_CASE)
         return case_item(c);
     if (c->data_only && t.kind == PNX_T_RESERVED && t.word != PNX_KW_true && t.word != PNX_KW_false &&
-        t.word != PNX_KW_to)
+        t.word != PNX_KW_to && t.word != PNX_KW_set)
         return syntax(c, "a data source holds declarations, literals, stores and rows; this word is not allowed");
     const bool closer = t.kind == PNX_T_RESERVED && (t.word == PNX_KW_end || t.word == PNX_KW_else);
     if (f->dead && !closer)
@@ -5755,9 +5788,10 @@ static bool body_token(comp *c) {
     default: return syntax(c, "this token does not belong here");
     }
     if (c->in_defer && (t.word == PNX_KW_return || t.word == PNX_KW_fail || t.word == PNX_KW_break ||
-                        t.word == PNX_KW_while || t.word == PNX_KW_until || t.word == PNX_KW_to || t.word == PNX_KW_loop ||
+                        t.word == PNX_KW_while || t.word == PNX_KW_until || t.word == PNX_KW_to || t.word == PNX_KW_set ||
+                        t.word == PNX_KW_loop ||
                         t.word == PNX_KW_do || t.word == PNX_KW_defer || t.word == PNX_KW_case))
-        return syntax(c, "a defer holds no return, fail, break, while, until, to, loop, do, case or defer");
+        return syntax(c, "a defer holds no return, fail, break, while, until, to, set, loop, do, case or defer");
     switch (t.word) {
     case PNX_KW_defer: return do_defer(c);
     case PNX_KW_true:
@@ -5768,6 +5802,7 @@ static bool body_token(comp *c) {
         return core(c, w);
     }
     case PNX_KW_to: return store(c);
+    case PNX_KW_set: return set_global(c);
     case PNX_KW_if: return do_if(c);
     case PNX_KW_else: return do_else(c);
     case PNX_KW_loop: return do_loop(c);

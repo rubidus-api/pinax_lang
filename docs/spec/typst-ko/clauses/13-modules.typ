@@ -34,7 +34,8 @@ import = "use" NAME [ "as" NAME ] ;
 == 내보내기 <modules-export>
 
 #para("1")[다른 소스가 쓸 수 있는 것은 `export` 를 붙여 선언하거나 정의한 것뿐이다. 낱말, 상수, 전역은
-`모듈.이름` 으로 쓰고, 내보낸 `record` 와 `type` 과 표의 줄 타입은 이름만으로 쓴다.]
+`모듈.이름` 으로 쓰고(내보낸 전역에 넣을 때는 `set 모듈.이름`), 내보낸 `record` 와 `type` 과 표의 줄 타입은 이름만으로
+쓴다.]
 
 #para("2")[아래 모듈 `geometry` 는 13.1 의 예가 쓴 것이다. `square` 는 내보내지 않았다.]
 
@@ -67,7 +68,7 @@ data-item   = [ "export" ] ( [ "bound" ] bindable | "const" NAME literal
               | "index" NAME NAME PATH )
             | "forward" ( "array" | "list" | "pool" ) NAME
             | row-item | assign-item
-            | data-value [ data-value ] "to" ( NAME | PATH ) ;
+            | data-value [ data-value ] "set" ( NAME | PATH ) ;
 data-value  = literal | NAME ;                      (* NAME: a const or a row name *)
 ```
 

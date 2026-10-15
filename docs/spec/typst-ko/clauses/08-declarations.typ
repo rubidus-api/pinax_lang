@@ -53,7 +53,7 @@ size        = INT | NAME ;                         (* NAME: a const *)
 #part("제약")
 
 #para("2")[상수에는 넣지 못한다. 정의 안에서 `v to 상수` 는 같은 이름의 지역 변수를 새로 만들려는 것이 되어
-가림 금지(9.5)로 거절된다. 정의 밖에서는 전역이 아닌 이름에 넣는 것으로 거절된다.]
+가림 금지(9.5)로 거절된다. 정의 밖에서는 `to` 가 지역을 만들지 않으므로 거절된다. `set` 은 전역에만 쓴다(9.4).]
 #ex("spec", "08-const-store.pnx")
 
 == 전역 <decl-global>
@@ -61,7 +61,7 @@ size        = INT | NAME ;                         (* NAME: a const *)
 #para("1")[`global 이름 타입` 은 값 하나를 담는 #term("전역", en: "global")을 만든다. 타입은 `int` `bool`
 `str(N)`, 선언한 타입, 줄의 타입(표의 이름), 핸들 타입이다. `str` 는 쓰지 못한다(7.3).]
 
-#para("2")[전역을 읽으려면 이름을 쓰고, 넣으려면 `to 이름` 을 쓴다. 상태가 살아 있는 동안 값이 남는다 ---
+#para("2")[전역을 읽으려면 이름을 쓰고, 넣으려면 `v set 이름` 을 쓴다(9.4). 상태가 살아 있는 동안 값이 남는다 ---
 한 낱말의 실행이 끝나도, 다음 적재가 와도 그대로다.]
 
 #ex("spec", "08-const-global.pnx")
@@ -269,7 +269,7 @@ forward = "forward" ( "array" | "list" | "pool" ) NAME
 #diag(
   ([이미 있는 이름], "this name is already defined"),
   ([선언 앞에서 쓴 이름], "this name is not declared before this place"),
-  ([정의 밖의 `to` 가 전역이 아닌 이름에], "outside a definition `to` stores into a declared global, not a new local"),
+  ([정의 밖의 `to` 가 전역이 아닌 이름에], "outside a definition `to` makes no new local; a global is written with set"),
   ([`assign` 의 값이 칸보다 많음], "assign has more values than the array has cells"),
   ([`row` 의 값이 필드와 다름], "a value has another type than its field"),
   ([`owned` 줄을 넘기지 않는 경로], "an owned value in a local is not given on every path (close, free or store it)"),

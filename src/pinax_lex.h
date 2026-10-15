@@ -16,7 +16,7 @@
     X(row) X(assign) X(big_endian) X(columns)                                                      \
     X(gives) X(or) X(fail) X(owned)                                                                \
     X(to) X(do) X(end) X(if) X(else) X(loop) X(while) X(until) X(break) X(case) X(of)              \
-    X(otherwise) X(return) X(or_fail) X(or_return) X(or_else) X(cat) X(defer)
+    X(otherwise) X(return) X(or_fail) X(or_return) X(or_else) X(cat) X(defer) X(set)
 
 typedef enum pnx_word_id {
     PNX_KW_NONE,

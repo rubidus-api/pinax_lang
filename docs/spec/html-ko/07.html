@@ -18,9 +18,9 @@
 9223372036854775807
 </code></pre></div><h5>결함</h5><p class="para"><span class="pn">(4)</span> 넘침은 그 자리에서 실행을 끝낸다. 아래 예에서 넘친 줄 뒤의 코드는 돌지 않는다.</p><div class="example fault"><p class="ex-file"><code>07-int-overflow.pnx</code></p><pre><code data-lang="pinax"><span style="color: #d73948">use</span> io
 <span style="color: #d73948">global</span> big <span style="color: #d73948">int</span>
-<span style="color: #b60157">9223372036854775807</span> <span style="color: #d73948">to</span> big
+<span style="color: #b60157">9223372036854775807</span> set big
 <span style="color: #198810">"before"</span> io.println
-big <span style="color: #b60157">1</span> add <span style="color: #d73948">to</span> big
+big <span style="color: #b60157">1</span> add set big
 <span style="color: #198810">"never printed"</span> io.println
 </code></pre><p class="ex-label">결함으로 멈춤</p><pre><code data-lang="text">$ pnx 07-int-overflow.pnx
 before
@@ -42,7 +42,7 @@ true false or not is false
 <span style="color: #d73948">use</span> <span style="color: #d73948">str</span>
 <span style="color: #d73948">global</span> name <span style="color: #d73948">str</span>(<span style="color: #b60157">8</span>)                 <span style="color: #74747c">rem stored text: up to 8 bytes, copied in</span>
 <span style="color: #d73948">word</span> show (s <span style="color: #d73948">str</span>) <span style="color: #d73948">cat</span> (<span style="color: #198810">"["</span>, s, <span style="color: #198810">"] "</span>, s <span style="color: #d73948">str</span>.len) io.println <span style="color: #d73948">end</span>
-<span style="color: #198810">"Pinax"</span> <span style="color: #d73948">to</span> name
+<span style="color: #198810">"Pinax"</span> set name
 name show
 <span style="color: #198810">"hello, world"</span> <span style="color: #b60157">7</span> <span style="color: #d73948">str</span>.skip show        <span style="color: #74747c">rem a view: no byte is copied</span>
 </code></pre><p class="ex-label">출력</p><pre><code data-lang="text">$ pnx 07-str.pnx
@@ -53,8 +53,8 @@ name show
 07-str-global.pnx:2:1: stored text is str(N); a str view lives only in locals, arguments and results
 </code></pre></div><h5>결함</h5><p class="para"><span class="pn">(4)</span> <code>str(N)</code> 자리에 N 바이트보다 긴 글을 넣으면 결함 <code>range</code> 로 멈춘다. 자르지 않는다.</p><div class="example fault"><p class="ex-file"><code>07-str-too-long.pnx</code></p><pre><code data-lang="pinax"><span style="color: #d73948">use</span> io
 <span style="color: #d73948">global</span> name <span style="color: #d73948">str</span>(<span style="color: #b60157">4</span>)
-<span style="color: #198810">"four"</span> <span style="color: #d73948">to</span> name
-<span style="color: #198810">"more than four"</span> <span style="color: #d73948">to</span> name
+<span style="color: #198810">"four"</span> set name
+<span style="color: #198810">"more than four"</span> set name
 </code></pre><p class="ex-label">결함으로 멈춤</p><pre><code data-lang="text">$ pnx 07-str-too-long.pnx
 07-str-too-long.pnx:4: index out of range
 </code></pre></div><p class="para"><span class="pn">(5)</span> 구역에 만든 뷰는 그 구역이 되감기면 쓸 수 없다. 이 규칙은 12.3 이 정한다.</p><h3>7.4 선언한 타입</h3><h5>구문</h5><pre><code data-lang="ebnf">type-decl = "type" NAME base ;

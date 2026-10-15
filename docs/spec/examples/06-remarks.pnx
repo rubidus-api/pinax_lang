@@ -8,5 +8,5 @@ A block remark runs to a line that starts with its tag.
 DOC
 global remark int        rem "remark" is a name: rem must stand alone
 global notes int
-3 to remark
+3 set remark
 "two" io.println

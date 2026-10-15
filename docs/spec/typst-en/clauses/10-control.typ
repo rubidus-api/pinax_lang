@@ -197,7 +197,7 @@ the value can still be lent.]
 #ex("spec", "10-defer-branch.pnx")
 
 #para("4")[Deferred code leaves the stack as it found it and leaves nothing on it. It cannot hold `return` `fail`
-`break` `while` `until` `to` `loop` `do` `case` `defer`, or `or_fail` `or_return`; a word that can fail is taken with
+`break` `while` `until` `to` `set` `loop` `do` `case` `defer`, or `or_fail` `or_return`; a word that can fail is taken with
 `or_else` inside it.]
 
 #para("5")[Giving an owned value that a defer took over, inside the block, is refused.]
@@ -217,7 +217,7 @@ the value can still be lent.]
   ([`defer` in a branch], "defer is written right in a word's body, a loop's body or a do block, not in a branch"),
   ([`defer` outside a definition], "defer belongs inside a definition"),
   ([Deferred code changes the stack], "a defer leaves the stack as it found it"),
-  ([A word that leaves, in deferred code], "a defer holds no return, fail, break, while, until, to, loop, do, case or defer"),
+  ([A word that leaves, in deferred code], "a defer holds no return, fail, break, while, until, to, set, loop, do, case or defer"),
   ([`or_fail` `or_return` in deferred code], "a defer does not leave the word; a failure in it is taken with or_else"),
   ([Giving a value a defer took over], "a defer gives this owned value when the block is left; here it can only be lent"),
 )

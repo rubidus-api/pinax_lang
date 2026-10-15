@@ -192,7 +192,7 @@ reserved = "rem" | "note" | "text" | "true" | "false" | "pinax"
          | "gives" | "or" | "fail" | "owned"
          | "to" | "do" | "end" | "if" | "else" | "loop" | "while" | "until" | "break"
          | "case" | "of" | "otherwise" | "return" | "or_fail" | "or_return" | "or_else" | "cat"
-         | "defer" ;
+         | "defer" | "set" ;
 ```
 
 #para("1")[The list of #term("reserved word")s is closed. A reserved word cannot be a name.]

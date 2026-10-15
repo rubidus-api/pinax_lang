@@ -34,7 +34,7 @@ loaded earlier. When `pnx` meets `use NAME` it first loads `NAME.pnx` from besid
 == Exports <modules-export>
 
 #para("1")[Another source can use only what was declared or defined with `export`. Words, constants and globals are
-written `MODULE.NAME`; exported `record`s and `type`s and the row types of tables are written by their name alone.]
+written `MODULE.NAME` (an exported global is stored with `set MODULE.NAME`); exported `record`s and `type`s and the row types of tables are written by their name alone.]
 
 #para("2")[The module `geometry` below is the one the examples of 13.1 use. `square` is not exported.]
 
@@ -67,7 +67,7 @@ data-item   = [ "export" ] ( [ "bound" ] bindable | "const" NAME literal
               | "index" NAME NAME PATH )
             | "forward" ( "array" | "list" | "pool" ) NAME
             | row-item | assign-item
-            | data-value [ data-value ] "to" ( NAME | PATH ) ;
+            | data-value [ data-value ] "set" ( NAME | PATH ) ;
 data-value  = literal | NAME ;                      (* NAME: a const or a row name *)
 ```
 

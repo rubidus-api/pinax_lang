@@ -191,7 +191,7 @@ defer = "defer" { body } "end" ;
 쓰면 거절된다.]
 #ex("spec", "10-defer-branch.pnx")
 
-#para("4")[미룬 코드는 스택을 받은 그대로 두고 아무것도 남기지 않는다. `return` `fail` `break` `while` `until` `to`
+#para("4")[미룬 코드는 스택을 받은 그대로 두고 아무것도 남기지 않는다. `return` `fail` `break` `while` `until` `to` `set`
 `loop` `do` `case` `defer` 와 `or_fail` `or_return` 을 쓸 수 없다. 실패하는 낱말은 그 안에서 `or_else` 로 다룬다.]
 
 #para("5")[미룬 코드가 맡은 소유 값을 블록 안에서 소비하면 거절된다.]
@@ -211,7 +211,7 @@ defer = "defer" { body } "end" ;
   ([가지 안의 `defer`], "defer is written right in a word's body, a loop's body or a do block, not in a branch"),
   ([정의 밖의 `defer`], "defer belongs inside a definition"),
   ([미룬 코드가 스택을 바꿈], "a defer leaves the stack as it found it"),
-  ([미룬 코드 안의 떠나는 낱말], "a defer holds no return, fail, break, while, until, to, loop, do, case or defer"),
+  ([미룬 코드 안의 떠나는 낱말], "a defer holds no return, fail, break, while, until, to, set, loop, do, case or defer"),
   ([미룬 코드 안의 `or_fail` `or_return`], "a defer does not leave the word; a failure in it is taken with or_else"),
   ([미룬 코드가 맡은 값을 소비], "a defer gives this owned value when the block is left; here it can only be lent"),
 )

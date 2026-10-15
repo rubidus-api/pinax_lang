@@ -24,8 +24,8 @@ int main(void) {
              "global port int\n"
              "global name str(16)\n"
              "array allow str(16) 4\n"
-             "8080 to port\n"
-             "\"edge\" to name\n"
+             "8080 set port\n"
+             "\"edge\" set name\n"
              "assign allow (\"10.0.0.1\", \"10.0.0.2\")\n") != PINAX_OK)
         return 1;
     pinax_global g;
@@ -35,7 +35,7 @@ int main(void) {
 
     /* The same mode refuses code: nothing in such a file can run. */
     load(st, "evil", "word boom () 1 0 div drop end\n");
-    load(st, "evil2", "global n int\n1 2 add to n\n");
+    load(st, "evil2", "global n int\n1 2 add set n\n");
     pinax_close(st);
     return 0;
 }

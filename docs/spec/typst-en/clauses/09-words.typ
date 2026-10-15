@@ -73,11 +73,16 @@ There are no deeper words (`rot` `pick` `roll` `depth`). When three or more valu
 #part("Syntax")
 ```ebnf
 store = "to" ( NAME | PATH | "(" NAME { "," NAME } ")" ) ;
+set   = "set" ( NAME | PATH ) ;
 ```
 
 #para("1")[In a body, `to NAME` takes the top value off and puts it in that name. When the name is new, a
-#term("local variable") of the value's type is made; later `to`s shall store the same type. When the name is a global,
-the value goes into the global (no local is made).]
+#term("local variable") of the value's type is made; later `to`s shall store the same type. `to` stores only into locals
+(and into fields, with `to r.FIELD`).]
+
+#para("1a")[A global is stored with `set NAME`: `v set NAME` for a scalar global, `v i set NAME` for a cell of an array or
+a list. A global another module exports is `set MODULE.NAME`. Inside and outside definitions alike. The rule makes the
+text show whether a store makes a local or changes a global.]
 
 #para("2")[`to (a, b, c)` stores the top three values at once. The rightmost name takes the top value --- the same
 order as in a signature.]
@@ -96,6 +101,11 @@ made outside can be stored into inside.]
 #para("5")[A local first made inside a branch cannot be read outside it: coming by the other branch, it would hold no
 value.]
 #ex("spec", "09-local-scope.pnx")
+
+#para("6")[`to` with the name of a global is refused. A global cannot be hidden (9.5), so no local of that name can be
+made, and the global is not changed silently either; the message names `set`. `set` with a name that is not a global is
+refused.]
+#ex("spec", "09-store-global-bare.pnx")
 
 == No hiding <words-shadowing>
 
@@ -157,6 +167,10 @@ processor adds up the length first and writes once.]
   ([Too few values on the stack], "the stack does not hold enough values for this word"),
   ([A name that is not defined], "this name is not declared before this place"),
   ([A local given another type], "this local variable has another type than the value stored into it"),
+  ([`to` with the name of a global], "this name is a global; a global is written with set: value set name"),
+  ([`to MODULE.NAME` into a global], "a global of a module is written with set: value set module.name"),
+  ([`set` with the name of a local], "set writes a global; a local is written with to"),
+  ([`set` with a name that is not a global], "set writes a declared global; there is none of this name"),
   ([Hiding a visible name], "this name is already visible here; a new name may not hide it"),
   ([A signature unlike the forward declaration], "the definition has another signature than its forward declaration"),
 )

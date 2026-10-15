@@ -22,11 +22,11 @@ size        = INT | NAME ;                         (* NAME: a const *)</code></p
 <span style="color: #d73948">global</span> total <span style="color: #d73948">int</span>
 </code></pre><p class="ex-label">거절</p><pre><code data-lang="text">$ pnx 08-use-before.pnx
 08-use-before.pnx:2:25: this name is not declared before this place
-</code></pre></div><h3>8.2 상수</h3><p class="para"><span class="pn">(1)</span> <code>const 이름 리터럴</code> 은 <strong>상수</strong>(constant)를 만든다. 타입은 리터럴의 타입이다. 상수는 저장소가 없다 — 쓰는 자리에 값이 들어간다. 용량, <code>case</code> 의 가지 값, <code>row</code> 의 값에 쓸 수 있다.</p><h5>제약</h5><p class="para"><span class="pn">(2)</span> 상수에는 넣지 못한다. 정의 안에서 <code>v to 상수</code> 는 같은 이름의 지역 변수를 새로 만들려는 것이 되어 가림 금지(9.5)로 거절된다. 정의 밖에서는 전역이 아닌 이름에 넣는 것으로 거절된다.</p><div class="example refused"><p class="ex-file"><code>08-const-store.pnx</code></p><pre><code data-lang="pinax"><span style="color: #d73948">const</span> limit <span style="color: #b60157">3</span>
+</code></pre></div><h3>8.2 상수</h3><p class="para"><span class="pn">(1)</span> <code>const 이름 리터럴</code> 은 <strong>상수</strong>(constant)를 만든다. 타입은 리터럴의 타입이다. 상수는 저장소가 없다 — 쓰는 자리에 값이 들어간다. 용량, <code>case</code> 의 가지 값, <code>row</code> 의 값에 쓸 수 있다.</p><h5>제약</h5><p class="para"><span class="pn">(2)</span> 상수에는 넣지 못한다. 정의 안에서 <code>v to 상수</code> 는 같은 이름의 지역 변수를 새로 만들려는 것이 되어 가림 금지(9.5)로 거절된다. 정의 밖에서는 <code>to</code> 가 지역을 만들지 않으므로 거절된다. <code>set</code> 은 전역에만 쓴다(9.4).</p><div class="example refused"><p class="ex-file"><code>08-const-store.pnx</code></p><pre><code data-lang="pinax"><span style="color: #d73948">const</span> limit <span style="color: #b60157">3</span>
 <span style="color: #d73948">word</span> raise () <span style="color: #b60157">4</span> <span style="color: #d73948">to</span> limit <span style="color: #d73948">end</span>
 </code></pre><p class="ex-label">거절</p><pre><code data-lang="text">$ pnx 08-const-store.pnx
 08-const-store.pnx:2:20: this name is already visible here; a new name may not hide it
-</code></pre></div><h3>8.3 전역</h3><p class="para"><span class="pn">(1)</span> <code>global 이름 타입</code> 은 값 하나를 담는 <strong>전역</strong>(global)을 만든다. 타입은 <code>int</code> <code>bool</code> <code>str(N)</code>, 선언한 타입, 줄의 타입(표의 이름), 핸들 타입이다. <code>str</code> 는 쓰지 못한다(7.3).</p><p class="para"><span class="pn">(2)</span> 전역을 읽으려면 이름을 쓰고, 넣으려면 <code>to 이름</code> 을 쓴다. 상태가 살아 있는 동안 값이 남는다 — 한 낱말의 실행이 끝나도, 다음 적재가 와도 그대로다.</p><div class="example run"><p class="ex-file"><code>08-const-global.pnx</code></p><pre><code data-lang="pinax"><span style="color: #d73948">use</span> io
+</code></pre></div><h3>8.3 전역</h3><p class="para"><span class="pn">(1)</span> <code>global 이름 타입</code> 은 값 하나를 담는 <strong>전역</strong>(global)을 만든다. 타입은 <code>int</code> <code>bool</code> <code>str(N)</code>, 선언한 타입, 줄의 타입(표의 이름), 핸들 타입이다. <code>str</code> 는 쓰지 못한다(7.3).</p><p class="para"><span class="pn">(2)</span> 전역을 읽으려면 이름을 쓰고, 넣으려면 <code>v set 이름</code> 을 쓴다(9.4). 상태가 살아 있는 동안 값이 남는다 — 한 낱말의 실행이 끝나도, 다음 적재가 와도 그대로다.</p><div class="example run"><p class="ex-file"><code>08-const-global.pnx</code></p><pre><code data-lang="pinax"><span style="color: #d73948">use</span> io
 <span style="color: #d73948">use</span> <span style="color: #d73948">str</span>
 <span style="color: #d73948">const</span> limit <span style="color: #b60157">3</span>
 <span style="color: #d73948">const</span> greeting <span style="color: #198810">"hello"</span>
@@ -34,9 +34,9 @@ size        = INT | NAME ;                         (* NAME: a const *)</code></p
 <span style="color: #d73948">global</span> last <span style="color: #d73948">str</span>(<span style="color: #b60157">16</span>)
 <span style="color: #d73948">global</span> seen <span style="color: #d73948">bool</span>
 hits <span style="color: #d73948">str</span>.to_str io.println           <span style="color: #74747c">rem a global starts at zero</span>
-limit <span style="color: #d73948">to</span> hits
-greeting <span style="color: #d73948">to</span> last
-<span style="color: #d73948">true</span> <span style="color: #d73948">to</span> seen
+limit set hits
+greeting set last
+<span style="color: #d73948">true</span> set seen
 <span style="color: #d73948">cat</span> (last, <span style="color: #198810">" "</span>, hits, <span style="color: #198810">" "</span>, seen) io.println
 </code></pre><p class="ex-label">출력</p><pre><code data-lang="text">$ pnx 08-const-global.pnx
 0
@@ -45,7 +45,7 @@ hello 3 true
 <span style="color: #d73948">use</span> <span style="color: #d73948">str</span>
 <span style="color: #d73948">array</span> primes <span style="color: #d73948">int</span> <span style="color: #b60157">6</span>
 <span style="color: #d73948">assign</span> primes (<span style="color: #b60157">2</span>, <span style="color: #b60157">3</span>, <span style="color: #b60157">5</span>, <span style="color: #b60157">7</span>)                <span style="color: #74747c">rem cells 4 and 5 stay 0</span>
-<span style="color: #b60157">11</span> <span style="color: #b60157">4</span> <span style="color: #d73948">to</span> primes                            <span style="color: #74747c">rem v i to array: store into cell i</span>
+<span style="color: #b60157">11</span> <span style="color: #b60157">4</span> set primes                            <span style="color: #74747c">rem v i to array: store into cell i</span>
 primes <span style="color: #d73948">do</span> (p <span style="color: #d73948">int</span>) p <span style="color: #d73948">str</span>.to_str io.print <span style="color: #198810">" "</span> io.print <span style="color: #d73948">end</span> each
 <span style="color: #198810">""</span> io.println
 <span style="color: #d73948">cat</span> (<span style="color: #198810">"len "</span>, primes len, <span style="color: #198810">", cell 2 is "</span>, <span style="color: #b60157">2</span> primes idx) io.println
@@ -193,7 +193,7 @@ lee 26 false
 <span style="color: #d73948">word</span> demo (<span style="color: #d73948">or</span> <span style="color: #d73948">fail</span>)
   nodes alloc <span style="color: #d73948">or_fail</span> <span style="color: #d73948">to</span> a                 <span style="color: #74747c">rem an owned row: it must be stored or freed</span>
   <span style="color: #b60157">7</span> a <span style="color: #d73948">to</span> node.value
-  a <span style="color: #d73948">to</span> kept                                <span style="color: #74747c">rem stored: the global holds the row now</span>
+  a set kept                                <span style="color: #74747c">rem stored: the global holds the row now</span>
   <span style="color: #d73948">cat</span> (<span style="color: #198810">"value "</span>, kept node.value, <span style="color: #198810">", alive: "</span>, kept nodes is_alive) io.println
   kept nodes free
   <span style="color: #d73948">cat</span> (<span style="color: #198810">"alive after free: "</span>, kept nodes is_alive) io.println
@@ -219,7 +219,7 @@ alive after free: false
 <span style="color: #d73948">global</span> keep nodes
 <span style="color: #d73948">word</span> demo (<span style="color: #d73948">or</span> <span style="color: #d73948">fail</span>)
   nodes alloc <span style="color: #d73948">or_fail</span> <span style="color: #d73948">to</span> a
-  a <span style="color: #d73948">to</span> keep                                 <span style="color: #74747c">rem stored: the row is handed over</span>
+  a set keep                                 <span style="color: #74747c">rem stored: the row is handed over</span>
   keep nodes free
   keep node.value drop                      <span style="color: #74747c">rem the row was given back: stale</span>
 <span style="color: #d73948">end</span>
@@ -287,4 +287,4 @@ the chain ends at b
 <span style="color: #d73948">end</span>
 </code></pre><p class="ex-label">거절</p><pre><code data-lang="text">$ pnx 08-forward-missing.pnx
 08-forward-missing.pnx:5:1: a table announced by forward is never declared
-</code></pre></div><h3>8.12 묶은 저장소</h3><p class="para"><span class="pn">(1)</span> <code>bound</code> 를 앞에 붙인 <code>global</code> <code>array</code> <code>buffer</code> 는 저장소를 호스트가 준다. 스크립트에서는 다른 전역과 같이 쓴다. 호스트가 묶기 전에는 상태 안의 자리를 쓴다. 묶는 법은 19.7 이 정한다.</p><h5>진단</h5><table><thead><tr><th><strong>조건</strong></th><th><strong>메시지</strong></th></tr></thead><tbody><tr><td>이미 있는 이름</td><td><code>this name is already defined</code></td></tr><tr><td>선언 앞에서 쓴 이름</td><td><code>this name is not declared before this place</code></td></tr><tr><td>정의 밖의 <code>to</code> 가 전역이 아닌 이름에</td><td><code>outside a definition `to` stores into a declared global, not a new local</code></td></tr><tr><td><code>assign</code> 의 값이 칸보다 많음</td><td><code>assign has more values than the array has cells</code></td></tr><tr><td><code>row</code> 의 값이 필드와 다름</td><td><code>a value has another type than its field</code></td></tr><tr><td><code>owned</code> 줄을 넘기지 않는 경로</td><td><code>an owned value in a local is not given on every path (close, free or store it)</code></td></tr><tr><td>미리 알린 표가 없음</td><td><code>a table announced by forward is never declared</code></td></tr></tbody></table></main><nav class="bottom"><a href="index.html">처음</a> · <a href="07.html">앞</a> · <a href="09.html">다음</a> · <a href="../html-en/08.html">English</a></nav></body></html>
+</code></pre></div><h3>8.12 묶은 저장소</h3><p class="para"><span class="pn">(1)</span> <code>bound</code> 를 앞에 붙인 <code>global</code> <code>array</code> <code>buffer</code> 는 저장소를 호스트가 준다. 스크립트에서는 다른 전역과 같이 쓴다. 호스트가 묶기 전에는 상태 안의 자리를 쓴다. 묶는 법은 19.7 이 정한다.</p><h5>진단</h5><table><thead><tr><th><strong>조건</strong></th><th><strong>메시지</strong></th></tr></thead><tbody><tr><td>이미 있는 이름</td><td><code>this name is already defined</code></td></tr><tr><td>선언 앞에서 쓴 이름</td><td><code>this name is not declared before this place</code></td></tr><tr><td>정의 밖의 <code>to</code> 가 전역이 아닌 이름에</td><td><code>outside a definition `to` makes no new local; a global is written with set</code></td></tr><tr><td><code>assign</code> 의 값이 칸보다 많음</td><td><code>assign has more values than the array has cells</code></td></tr><tr><td><code>row</code> 의 값이 필드와 다름</td><td><code>a value has another type than its field</code></td></tr><tr><td><code>owned</code> 줄을 넘기지 않는 경로</td><td><code>an owned value in a local is not given on every path (close, free or store it)</code></td></tr><tr><td>미리 알린 표가 없음</td><td><code>a table announced by forward is never declared</code></td></tr></tbody></table></main><nav class="bottom"><a href="index.html">처음</a> · <a href="07.html">앞</a> · <a href="09.html">다음</a> · <a href="../html-en/08.html">English</a></nav></body></html>

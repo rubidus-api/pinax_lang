@@ -54,8 +54,8 @@ value goes where it is used. Constants can be capacities, `case` values and `row
 #part("Constraints")
 
 #para("2")[Nothing can be stored into a constant. Inside a definition `v to CONST` would make a new local of the same
-name and is refused by the rule against hiding names (9.5); outside a definition it is refused as a store into a name
-that is not a global.]
+name and is refused by the rule against hiding names (9.5); outside a definition `to` makes no local, so it is
+refused. `set` writes globals only (9.4).]
 #ex("spec", "08-const-store.pnx")
 
 == Globals <decl-global>
@@ -63,7 +63,7 @@ that is not a global.]
 #para("1")[`global NAME type` makes a #term("global") that holds one value. The type is `int`, `bool`, `str(N)`, a
 declared type, a row type (the name of a table) or a handle type; not `str` (7.3).]
 
-#para("2")[A global is read by writing its name and stored with `to NAME`. Its value stays as long as the state does
+#para("2")[A global is read by writing its name and stored with `v set NAME` (9.4). Its value stays as long as the state does
 --- after a word's run ends, and across later loads.]
 
 #ex("spec", "08-const-global.pnx")
@@ -273,7 +273,7 @@ other globals. Until the host binds them they use room inside the state. 19.7 sa
 #diag(
   ([A name that exists already], "this name is already defined"),
   ([A name used before its declaration], "this name is not declared before this place"),
-  ([`to` outside a definition into a name that is not a global], "outside a definition `to` stores into a declared global, not a new local"),
+  ([`to` outside a definition into a name that is not a global], "outside a definition `to` makes no new local; a global is written with set"),
   ([More `assign` values than cells], "assign has more values than the array has cells"),
   ([A `row` value unlike its field], "a value has another type than its field"),
   ([A path that does not hand over an `owned` row], "an owned value in a local is not given on every path (close, free or store it)"),

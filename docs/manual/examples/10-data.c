@@ -7,8 +7,8 @@
 static const char settings[] =
     "global port int\n"
     "global name str(16)\n"
-    "8080 to port\n"
-    "\"edge\" to name\n";
+    "8080 set port\n"
+    "\"edge\" set name\n";
 static const char hostile[] = "word boom () end\n";
 
 int main(void) {

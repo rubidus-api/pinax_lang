@@ -20,11 +20,14 @@ inside a branch cannot be read outside it: coming by the other branch, it would 
 
 #ex("manual", "04-scope.pnx")
 
-#mistake[Storing into a global's name makes a local][When the `total` of `to total` is a global, the value goes into
-that global; no local is made.
+A global is stored with `set`, not `to`; `to` stores only into locals.
+
 #ex("manual", "04-store-global.pnx")
-So the name of a global and the name of a local never clash. A parameter, however, cannot take a global's name (no
-hiding, chapter 3).]
+
+#mistake[Storing into a global with `to total`][`to` with the name of a global is refused, and the message names `set`.
+A global cannot be hidden, so no local of that name can be made; the rule also keeps a `to` meant to make a local from
+changing a global silently.
+#ex("manual", "04-store-global-bare.pnx")]
 
 == Branches
 
@@ -75,7 +78,7 @@ is expanded in place, so it can use the locals around it.
 (the value so far, an element) and gives the new value.
 
 #summary[
-- `to NAME` makes a local; with a global's name it stores into the global (standard 9.4).
+- `to NAME` stores into a local, `set NAME` into a global (standard 9.4).
 - A name made inside a branch is not visible outside it (9.4).
 - The two branches of `if` and the branches of `case` leave the same stack; one turn of a loop leaves the stack it found
   (10).

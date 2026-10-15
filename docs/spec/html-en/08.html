@@ -22,11 +22,11 @@ size        = INT | NAME ;                         (* NAME: a const *)</code></p
 <span style="color: #d73948">global</span> total <span style="color: #d73948">int</span>
 </code></pre><p class="ex-label">Refused</p><pre><code data-lang="text">$ pnx 08-use-before.pnx
 08-use-before.pnx:2:25: this name is not declared before this place
-</code></pre></div><h3>8.2 Constants</h3><p class="para"><span class="pn">(1)</span> <code>const NAME literal</code> makes a <strong>constant</strong>. Its type is the literal’s. A constant has no storage: its value goes where it is used. Constants can be capacities, <code>case</code> values and <code>row</code> values.</p><h5>Constraints</h5><p class="para"><span class="pn">(2)</span> Nothing can be stored into a constant. Inside a definition <code>v to CONST</code> would make a new local of the same name and is refused by the rule against hiding names (9.5); outside a definition it is refused as a store into a name that is not a global.</p><div class="example refused"><p class="ex-file"><code>08-const-store.pnx</code></p><pre><code data-lang="pinax"><span style="color: #d73948">const</span> limit <span style="color: #b60157">3</span>
+</code></pre></div><h3>8.2 Constants</h3><p class="para"><span class="pn">(1)</span> <code>const NAME literal</code> makes a <strong>constant</strong>. Its type is the literal’s. A constant has no storage: its value goes where it is used. Constants can be capacities, <code>case</code> values and <code>row</code> values.</p><h5>Constraints</h5><p class="para"><span class="pn">(2)</span> Nothing can be stored into a constant. Inside a definition <code>v to CONST</code> would make a new local of the same name and is refused by the rule against hiding names (9.5); outside a definition <code>to</code> makes no local, so it is refused. <code>set</code> writes globals only (9.4).</p><div class="example refused"><p class="ex-file"><code>08-const-store.pnx</code></p><pre><code data-lang="pinax"><span style="color: #d73948">const</span> limit <span style="color: #b60157">3</span>
 <span style="color: #d73948">word</span> raise () <span style="color: #b60157">4</span> <span style="color: #d73948">to</span> limit <span style="color: #d73948">end</span>
 </code></pre><p class="ex-label">Refused</p><pre><code data-lang="text">$ pnx 08-const-store.pnx
 08-const-store.pnx:2:20: this name is already visible here; a new name may not hide it
-</code></pre></div><h3>8.3 Globals</h3><p class="para"><span class="pn">(1)</span> <code>global NAME type</code> makes a <strong>global</strong> that holds one value. The type is <code>int</code>, <code>bool</code>, <code>str(N)</code>, a declared type, a row type (the name of a table) or a handle type; not <code>str</code> (7.3).</p><p class="para"><span class="pn">(2)</span> A global is read by writing its name and stored with <code>to NAME</code>. Its value stays as long as the state does — after a word’s run ends, and across later loads.</p><div class="example run"><p class="ex-file"><code>08-const-global.pnx</code></p><pre><code data-lang="pinax"><span style="color: #d73948">use</span> io
+</code></pre></div><h3>8.3 Globals</h3><p class="para"><span class="pn">(1)</span> <code>global NAME type</code> makes a <strong>global</strong> that holds one value. The type is <code>int</code>, <code>bool</code>, <code>str(N)</code>, a declared type, a row type (the name of a table) or a handle type; not <code>str</code> (7.3).</p><p class="para"><span class="pn">(2)</span> A global is read by writing its name and stored with <code>v set NAME</code> (9.4). Its value stays as long as the state does — after a word’s run ends, and across later loads.</p><div class="example run"><p class="ex-file"><code>08-const-global.pnx</code></p><pre><code data-lang="pinax"><span style="color: #d73948">use</span> io
 <span style="color: #d73948">use</span> <span style="color: #d73948">str</span>
 <span style="color: #d73948">const</span> limit <span style="color: #b60157">3</span>
 <span style="color: #d73948">const</span> greeting <span style="color: #198810">"hello"</span>
@@ -34,9 +34,9 @@ size        = INT | NAME ;                         (* NAME: a const *)</code></p
 <span style="color: #d73948">global</span> last <span style="color: #d73948">str</span>(<span style="color: #b60157">16</span>)
 <span style="color: #d73948">global</span> seen <span style="color: #d73948">bool</span>
 hits <span style="color: #d73948">str</span>.to_str io.println           <span style="color: #74747c">rem a global starts at zero</span>
-limit <span style="color: #d73948">to</span> hits
-greeting <span style="color: #d73948">to</span> last
-<span style="color: #d73948">true</span> <span style="color: #d73948">to</span> seen
+limit set hits
+greeting set last
+<span style="color: #d73948">true</span> set seen
 <span style="color: #d73948">cat</span> (last, <span style="color: #198810">" "</span>, hits, <span style="color: #198810">" "</span>, seen) io.println
 </code></pre><p class="ex-label">Output</p><pre><code data-lang="text">$ pnx 08-const-global.pnx
 0
@@ -45,7 +45,7 @@ hello 3 true
 <span style="color: #d73948">use</span> <span style="color: #d73948">str</span>
 <span style="color: #d73948">array</span> primes <span style="color: #d73948">int</span> <span style="color: #b60157">6</span>
 <span style="color: #d73948">assign</span> primes (<span style="color: #b60157">2</span>, <span style="color: #b60157">3</span>, <span style="color: #b60157">5</span>, <span style="color: #b60157">7</span>)                <span style="color: #74747c">rem cells 4 and 5 stay 0</span>
-<span style="color: #b60157">11</span> <span style="color: #b60157">4</span> <span style="color: #d73948">to</span> primes                            <span style="color: #74747c">rem v i to array: store into cell i</span>
+<span style="color: #b60157">11</span> <span style="color: #b60157">4</span> set primes                            <span style="color: #74747c">rem v i to array: store into cell i</span>
 primes <span style="color: #d73948">do</span> (p <span style="color: #d73948">int</span>) p <span style="color: #d73948">str</span>.to_str io.print <span style="color: #198810">" "</span> io.print <span style="color: #d73948">end</span> each
 <span style="color: #198810">""</span> io.println
 <span style="color: #d73948">cat</span> (<span style="color: #198810">"len "</span>, primes len, <span style="color: #198810">", cell 2 is "</span>, <span style="color: #b60157">2</span> primes idx) io.println
@@ -193,7 +193,7 @@ lee 26 false
 <span style="color: #d73948">word</span> demo (<span style="color: #d73948">or</span> <span style="color: #d73948">fail</span>)
   nodes alloc <span style="color: #d73948">or_fail</span> <span style="color: #d73948">to</span> a                 <span style="color: #74747c">rem an owned row: it must be stored or freed</span>
   <span style="color: #b60157">7</span> a <span style="color: #d73948">to</span> node.value
-  a <span style="color: #d73948">to</span> kept                                <span style="color: #74747c">rem stored: the global holds the row now</span>
+  a set kept                                <span style="color: #74747c">rem stored: the global holds the row now</span>
   <span style="color: #d73948">cat</span> (<span style="color: #198810">"value "</span>, kept node.value, <span style="color: #198810">", alive: "</span>, kept nodes is_alive) io.println
   kept nodes free
   <span style="color: #d73948">cat</span> (<span style="color: #198810">"alive after free: "</span>, kept nodes is_alive) io.println
@@ -219,7 +219,7 @@ alive after free: false
 <span style="color: #d73948">global</span> keep nodes
 <span style="color: #d73948">word</span> demo (<span style="color: #d73948">or</span> <span style="color: #d73948">fail</span>)
   nodes alloc <span style="color: #d73948">or_fail</span> <span style="color: #d73948">to</span> a
-  a <span style="color: #d73948">to</span> keep                                 <span style="color: #74747c">rem stored: the row is handed over</span>
+  a set keep                                 <span style="color: #74747c">rem stored: the row is handed over</span>
   keep nodes free
   keep node.value drop                      <span style="color: #74747c">rem the row was given back: stale</span>
 <span style="color: #d73948">end</span>
@@ -287,4 +287,4 @@ the chain ends at b
 <span style="color: #d73948">end</span>
 </code></pre><p class="ex-label">Refused</p><pre><code data-lang="text">$ pnx 08-forward-missing.pnx
 08-forward-missing.pnx:5:1: a table announced by forward is never declared
-</code></pre></div><h3>8.12 Bound storage</h3><p class="para"><span class="pn">(1)</span> <code>global</code>, <code>array</code> and <code>buffer</code> with <code>bound</code> in front get their storage from the host. Scripts use them like other globals. Until the host binds them they use room inside the state. 19.7 says how to bind.</p><h5>Diagnostics</h5><table><thead><tr><th><strong>Condition</strong></th><th><strong>Message</strong></th></tr></thead><tbody><tr><td>A name that exists already</td><td><code>this name is already defined</code></td></tr><tr><td>A name used before its declaration</td><td><code>this name is not declared before this place</code></td></tr><tr><td><code>to</code> outside a definition into a name that is not a global</td><td><code>outside a definition `to` stores into a declared global, not a new local</code></td></tr><tr><td>More <code>assign</code> values than cells</td><td><code>assign has more values than the array has cells</code></td></tr><tr><td>A <code>row</code> value unlike its field</td><td><code>a value has another type than its field</code></td></tr><tr><td>A path that does not hand over an <code>owned</code> row</td><td><code>an owned value in a local is not given on every path (close, free or store it)</code></td></tr><tr><td>An announced table that is never declared</td><td><code>a table announced by forward is never declared</code></td></tr></tbody></table></main><nav class="bottom"><a href="index.html">Start</a> · <a href="07.html">Previous</a> · <a href="09.html">Next</a> · <a href="../html-ko/08.html">한국어</a></nav></body></html>
+</code></pre></div><h3>8.12 Bound storage</h3><p class="para"><span class="pn">(1)</span> <code>global</code>, <code>array</code> and <code>buffer</code> with <code>bound</code> in front get their storage from the host. Scripts use them like other globals. Until the host binds them they use room inside the state. 19.7 says how to bind.</p><h5>Diagnostics</h5><table><thead><tr><th><strong>Condition</strong></th><th><strong>Message</strong></th></tr></thead><tbody><tr><td>A name that exists already</td><td><code>this name is already defined</code></td></tr><tr><td>A name used before its declaration</td><td><code>this name is not declared before this place</code></td></tr><tr><td><code>to</code> outside a definition into a name that is not a global</td><td><code>outside a definition `to` makes no new local; a global is written with set</code></td></tr><tr><td>More <code>assign</code> values than cells</td><td><code>assign has more values than the array has cells</code></td></tr><tr><td>A <code>row</code> value unlike its field</td><td><code>a value has another type than its field</code></td></tr><tr><td>A path that does not hand over an <code>owned</code> row</td><td><code>an owned value in a local is not given on every path (close, free or store it)</code></td></tr><tr><td>An announced table that is never declared</td><td><code>a table announced by forward is never declared</code></td></tr></tbody></table></main><nav class="bottom"><a href="index.html">Start</a> · <a href="07.html">Previous</a> · <a href="09.html">Next</a> · <a href="../html-ko/08.html">한국어</a></nav></body></html>
