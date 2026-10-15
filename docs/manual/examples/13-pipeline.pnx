@@ -25,7 +25,7 @@ word add_up ()
   loop
     squares take or_else (e) yield or_return 0 end to n
     n 0 lt if return end
-    total n add to total
+    total n add to global.total
   end
 end
 word demo ()

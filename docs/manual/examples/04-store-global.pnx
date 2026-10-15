@@ -1,7 +1,7 @@
 rem run
 use io
 global total int
-word add_to_total (n int) total n add to total end     rem total is the global here
+word add_to_total (n int) total n add to global.total end     rem global.total: the global
 3 add_to_total
 4 add_to_total
 cat ("total ", total) io.println

@@ -1,4 +1,4 @@
 rem run
-pinax 1
+pinax 2
 use io
-"written for format version 1" io.println
+"written for format version 2" io.println

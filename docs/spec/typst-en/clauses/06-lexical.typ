@@ -54,7 +54,7 @@ float literals (not in this edition); it is never a token of its own. A path nam
 a field of a record (`p.x`) or a constant (`str.digit`).]
 
 #para("3")[A run after a dot is part of the path even when it is a reserved word (`json.array`). The first run of a
-path cannot be a reserved word.]
+path cannot be a reserved word, with one exception: `global.NAME` names a global of this module (9.2).]
 
 #part("Constraints")
 
@@ -215,7 +215,7 @@ source = [ "pinax" INT ] { item } ;
 ```
 
 #para("1")[Writing `pinax` and an integer as the first tokens of a source states the #term("format version") the
-source follows. This document defines version 1. Without it, a source is read as version 1.]
+source follows. This document defines version 2. Without it, a source is read as version 2.]
 
 #ex("spec", "06-version.pnx")
 
@@ -238,5 +238,5 @@ source follows. This document defines version 1. Without it, a source is read as
   ([An escape that is not a code point], "the escape is not a code point"),
   ([A prefix other than `r`], "the only prefix of a string is r (raw string)"),
   ([More than one character], "a character literal holds one character"),
-  ([Another format version], "this source is written for another format version; this build reads version 1"),
+  ([Another format version], "this source is written for another format version; this build reads version 2"),
 )

@@ -1933,7 +1933,11 @@ static bool store_local(comp *c, name n) {
     const uint32_t top = f->depth - 1;
     entry    e = f->stack[top];
     const int bank = bank_of(e.type);
-    const uint32_t g = c->path_global != NONE ? c->path_global : find_local(f, n) ? NONE : find_global(c, n);
+    // Inside a definition `to NAME` stores into a local only; a global is written to global.NAME
+    // (RFC-0017 section 3.3). Outside definitions no local is made, so NAME is the global there.
+    uint32_t g = c->path_global != NONE ? c->path_global : find_local(f, n) ? NONE : find_global(c, n);
+    if (g != NONE && c->path_global == NONE && !f->is_top)
+        return type_error(c, "this name is a global; inside a definition a global is written with to global.name");
     if (g != NONE && ((const globalsym *)c->globals.ptr + g)->kind != GK_SCALAR) { // value index to names
         const globalsym *sym = (const globalsym *)c->globals.ptr + g;
         uint32_t rv, ri;
@@ -2095,6 +2099,15 @@ static bool store(comp *c) {
         uint32_t dot = 0;
         while (path.text[dot] != '.')
             ++dot;
+        if (dot == 6 && __builtin_memcmp(path.text, "global", 6) == 0) { // to global.NAME : a global of this module
+            const uint32_t g = find_global(c, (name){path.text + 7, path.length - 7});
+            if (g == NONE)
+                return error(c, PINAX_ERR_NOT_FOUND, "this module declares no global of this name");
+            c->path_global = g;
+            const bool ok = store_local(c, (name){path.text + 7, path.length - 7});
+            c->path_global = NONE;
+            return ok && advance(c);
+        }
         name real;
         const uint32_t m = module_of(c, (name){path.text, dot}, &real) ? source_module(c, real) : NONE;
         if (m != NONE) { // to module.name : a global that module exports
@@ -5363,6 +5376,12 @@ static bool body_name(comp *c) {
             ++dot;
         module = (name){n.text, dot};
         n = (name){n.text + dot + 1, n.length - dot - 1};
+        if (name_is(module, "global")) { // global.NAME : a global of this module, read
+            const uint32_t g = find_global(c, n);
+            if (g == NONE)
+                return error(c, PINAX_ERR_NOT_FOUND, "this module declares no global of this name");
+            return read_global(c, g);
+        }
         if (name_is(module, "err")) {
             int64_t value;
             if (!err_constant(n, &value))
@@ -6820,13 +6839,14 @@ static void mark_new(comp *c, struct counts *seen) {
 static bool compile(comp *c, image *im, bool *has_top) {
     if (!advance(c))
         return false;
-    if (is_word(c, PNX_KW_pinax)) { // pinax 1 : the source format version (RFC-0012)
+    if (is_word(c, PNX_KW_pinax)) { // pinax 2 : the source format version (RFC-0012, RFC-0017 section 3.7)
         if (!advance(c))
             return false;
         if (c->tok.kind != PNX_T_INT)
             return syntax(c, "pinax is followed by the source format version");
-        if (c->tok.integer != 1)
-            return error(c, PINAX_ERR_FORMAT, "this source is written for another format version; this build reads version 1");
+        static_assert(PINAX_FORMAT == 2, "the message below names the version");
+        if (c->tok.integer != PINAX_FORMAT)
+            return error(c, PINAX_ERR_FORMAT, "this source is written for another format version; this build reads version 2");
         if (!advance(c))
             return false;
     }

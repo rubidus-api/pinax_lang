@@ -529,7 +529,9 @@ bool pnx_lex_next(pnx_lexer *lx, pnx_token *t) {
             return true;
         }
         const pnx_word_id word = reserved_word(lx->source + lx->at, run);
-        if (word != PNX_KW_NONE) {
+        // global.NAME (RFC-0017 section 3.3) is the one path that begins with a reserved word: a
+        // global of the module being read
+        if (word != PNX_KW_NONE && !(word == PNX_KW_global && peek(lx, i) == '.')) {
             if (peek(lx, i) == '.')
                 return fail_at(lx, i, "a reserved word is not part of a path");
             lx->at = i;

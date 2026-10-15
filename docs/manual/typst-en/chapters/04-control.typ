@@ -20,11 +20,14 @@ inside a branch cannot be read outside it: coming by the other branch, it would 
 
 #ex("manual", "04-scope.pnx")
 
-#mistake[Storing into a global's name makes a local][When the `total` of `to total` is a global, the value goes into
-that global; no local is made.
+Inside a word, a global is stored with `global.` in front, as in `to global.total`; it is read by its name alone.
+
 #ex("manual", "04-store-global.pnx")
-So the name of a global and the name of a local never clash. A parameter, however, cannot take a global's name (no
-hiding, chapter 3).]
+
+#mistake[Storing into a global with `to total` inside a word][Inside a word, `to NAME` always stores into a local. When
+the name is a global it is refused, and the message names `to global.total`. The rule keeps a store meant to make a
+local from changing a global. Outside words (load code) no local is made, so `to total` stores into the global there.
+#ex("manual", "04-store-global-bare.pnx")]
 
 == Branches
 

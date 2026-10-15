@@ -75,8 +75,11 @@ store = "to" ( NAME | PATH | "(" NAME { "," NAME } ")" ) ;
 ```
 
 #para("1")[몸 안에서 `to 이름` 은 맨 위 값을 내려 그 이름에 넣는다. 그 이름이 처음이면 그 값의 타입으로
-#term("지역 변수", en: "local variable")가 생긴다. 그 뒤의 `to` 는 같은 타입이어야 한다. 이름이 전역이면 그
-전역에 넣는다(지역 변수를 만들지 않는다).]
+#term("지역 변수", en: "local variable")가 생긴다. 그 뒤의 `to` 는 같은 타입이어야 한다.]
+
+#para("1a")[정의 안에서 전역에 넣으려면 `to global.이름` 을 쓴다. `global.이름` 으로 전역을 읽어도 된다. 다른 모듈이
+내보낸 전역은 `to 모듈.이름` 이다. 정의 밖에서는 새 지역 변수가 생기지 않으므로 `to 이름` 이 그 전역에 넣는다.
+`to` 가 지역을 만드는지 전역을 바꾸는지를 글만 보고 알게 하려는 규칙이다.]
 
 #para("2")[`to (a, b, c)` 는 위의 값 셋을 한 번에 넣는다. 오른쪽 이름이 맨 위 값을 받는다 --- 서명에 적은
 차례와 같다.]
@@ -94,6 +97,9 @@ store = "to" ( NAME | PATH | "(" NAME { "," NAME } ")" ) ;
 
 #para("5")[가지 안에서 처음 만든 지역 변수는 가지 밖에서 읽지 못한다. 다른 가지로 왔다면 값이 없기 때문이다.]
 #ex("spec", "09-local-scope.pnx")
+
+#para("6")[정의 안에서 `to 이름` 의 이름이 전역이면 거절된다. 메시지가 `to global.이름` 을 알려 준다.]
+#ex("spec", "09-store-global-bare.pnx")
 
 == 가림 금지 <words-shadowing>
 
@@ -155,6 +161,8 @@ phrase = body { body } ;                   (* code that leaves one value *)
   ([스택의 값이 모자람], "the stack does not hold enough values for this word"),
   ([정의되지 않은 이름], "this name is not declared before this place"),
   ([지역 변수의 타입이 바뀜], "this local variable has another type than the value stored into it"),
+  ([정의 안에서 `to 전역`], "this name is a global; inside a definition a global is written with to global.name"),
+  ([`global.` 뒤의 이름이 전역이 아님], "this module declares no global of this name"),
   ([보이는 이름을 가림], "this name is already visible here; a new name may not hide it"),
   ([앞선 선언과 다른 서명], "the definition has another signature than its forward declaration"),
 )

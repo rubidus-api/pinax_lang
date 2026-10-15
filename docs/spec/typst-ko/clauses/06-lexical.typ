@@ -52,7 +52,8 @@ member = letter { letter | digit } ;              (* a reserved word too: json.a
 (이 판에 없는) 실수 리터럴 안에서만 쓰이며 홀로 토큰이 되지 않는다. 경로는 모듈의 낱말(`io.println`),
 레코드의 필드(`p.x`), 상수(`str.digit`)를 가리킨다.]
 
-#para("3")[점 뒤의 덩이는 예약 낱말이어도 경로의 일부다(`json.array`). 경로의 첫 덩이는 예약 낱말일 수 없다.]
+#para("3")[점 뒤의 덩이는 예약 낱말이어도 경로의 일부다(`json.array`). 경로의 첫 덩이는 예약 낱말일 수 없다. 하나의
+예외는 `global` 이다: `global.이름` 은 이 모듈의 전역을 가리킨다(9.2).]
 
 #part("제약")
 
@@ -210,7 +211,7 @@ source = [ "pinax" INT ] { item } ;
 ```
 
 #para("1")[소스의 첫 토큰으로 `pinax` 와 정수를 적으면 그 소스가 따르는 #term("형식 판", en: "format
-version")을 밝힌다. 이 문서는 판 1 을 정한다. 적지 않으면 판 1 로 읽는다.]
+version")을 밝힌다. 이 문서는 판 2 를 정한다. 적지 않으면 판 2 로 읽는다.]
 
 #ex("spec", "06-version.pnx")
 
@@ -233,5 +234,5 @@ version")을 밝힌다. 이 문서는 판 1 을 정한다. 적지 않으면 판 
   ([코드포인트가 아닌 이스케이프], "the escape is not a code point"),
   ([`r` 이 아닌 접두사], "the only prefix of a string is r (raw string)"),
   ([둘 이상의 문자], "a character literal holds one character"),
-  ([다른 형식 판], "this source is written for another format version; this build reads version 1"),
+  ([다른 형식 판], "this source is written for another format version; this build reads version 2"),
 )

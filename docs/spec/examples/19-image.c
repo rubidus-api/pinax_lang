@@ -29,7 +29,7 @@ int main(void) {
     static const char source[] =
         "use host\n"
         "global calls int\n"
-        "word next (gives r int) calls 1 add to calls  calls host.twice end\n";
+        "word next (gives r int) calls 1 add to global.calls  calls host.twice end\n";
     if (pinax_load(st, "main", (pinax_str){(const unsigned char *)source, sizeof source - 1}, PINAX_LOAD_CODE) != PINAX_OK)
         return 1;
     call_next(st);

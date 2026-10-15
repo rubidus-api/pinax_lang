@@ -1,0 +1,3 @@
+rem refused
+global total int
+word add_up (n int) total n add to total end

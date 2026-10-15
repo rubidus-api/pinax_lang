@@ -76,8 +76,11 @@ store = "to" ( NAME | PATH | "(" NAME { "," NAME } ")" ) ;
 ```
 
 #para("1")[In a body, `to NAME` takes the top value off and puts it in that name. When the name is new, a
-#term("local variable") of the value's type is made; later `to`s shall store the same type. When the name is a global,
-the value goes into the global (no local is made).]
+#term("local variable") of the value's type is made; later `to`s shall store the same type.]
+
+#para("1a")[Inside a definition a global is stored with `to global.NAME`; `global.NAME` may also be read. A global
+another module exports is `to MODULE.NAME`. Outside definitions no new local is made, so `to NAME` stores into the
+global. The rule lets a reader see from the text whether a `to` makes a local or changes a global.]
 
 #para("2")[`to (a, b, c)` stores the top three values at once. The rightmost name takes the top value --- the same
 order as in a signature.]
@@ -96,6 +99,9 @@ made outside can be stored into inside.]
 #para("5")[A local first made inside a branch cannot be read outside it: coming by the other branch, it would hold no
 value.]
 #ex("spec", "09-local-scope.pnx")
+
+#para("6")[Inside a definition, `to NAME` where the name is a global is refused; the message names `to global.NAME`.]
+#ex("spec", "09-store-global-bare.pnx")
 
 == No hiding <words-shadowing>
 
@@ -157,6 +163,8 @@ processor adds up the length first and writes once.]
   ([Too few values on the stack], "the stack does not hold enough values for this word"),
   ([A name that is not defined], "this name is not declared before this place"),
   ([A local given another type], "this local variable has another type than the value stored into it"),
+  ([`to GLOBAL` inside a definition], "this name is a global; inside a definition a global is written with to global.name"),
+  ([The name after `global.` is not a global], "this module declares no global of this name"),
   ([Hiding a visible name], "this name is already visible here; a new name may not hide it"),
   ([A signature unlike the forward declaration], "the definition has another signature than its forward declaration"),
 )

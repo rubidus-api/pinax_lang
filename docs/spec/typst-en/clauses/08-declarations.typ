@@ -63,7 +63,8 @@ that is not a global.]
 #para("1")[`global NAME type` makes a #term("global") that holds one value. The type is `int`, `bool`, `str(N)`, a
 declared type, a row type (the name of a table) or a handle type; not `str` (7.3).]
 
-#para("2")[A global is read by writing its name and stored with `to NAME`. Its value stays as long as the state does
+#para("2")[A global is read by writing its name, and stored with `to global.NAME` inside a definition or `to NAME`
+outside one (9.2). Its value stays as long as the state does
 --- after a word's run ends, and across later loads.]
 
 #ex("spec", "08-const-global.pnx")
