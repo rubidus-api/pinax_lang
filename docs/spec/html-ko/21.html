@@ -43,7 +43,7 @@ param       = [ NAME ] type ;
 type        = [ "owned" ] ( NAME [ "(" size ")" ] | "word" "(" effect ")" ) ;
 
 (* 9 to 11: the body *)
-body        = literal | NAME | PATH | store | block | cat | guard | control
+body        = literal | NAME | PATH | store | block | cat | guard | control | defer
             | "return" | "fail" | ( "while" | "until" | "break" ) [ "(" NAME ")" ] ;
 store       = "to" ( NAME | PATH | "(" NAME { "," NAME } ")" ) ;
 block       = "do" [ "(" effect ")" ] { body } "end" ;
@@ -53,5 +53,6 @@ guard       = "or_fail" | "or_return" | "or_else" [ "(" NAME ")" ] { body } "end
 control     = "if" { body } [ "else" { body } ] "end"
             | "loop" [ "(" NAME ")" ] { body } "end"
             | "case" { branch } [ "otherwise" { body } "end" ] "end" ;
+defer       = "defer" { body } "end" ;             (* 10.7 *)
 branch      = ( case-value | "(" case-value { "," case-value } ")" ) "of" { body } "end" ;
 case-value  = literal | NAME ;</code></pre><p class="para"><span class="pn">(3)</span> 자료 적재(13.4)의 소스는 13.4 의 <code>data-source</code> 를 따른다.</p></main><nav class="bottom"><a href="index.html">처음</a> · <a href="20.html">앞</a> · <a href="22.html">다음</a> · <a href="../html-en/21.html">English</a></nav></body></html>

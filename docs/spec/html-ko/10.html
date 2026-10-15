@@ -211,4 +211,49 @@ xs minimum <span style="color: #d73948">or_else</span> (e) <span style="color: #
 go <span style="color: #d73948">or_else</span> (e) e err_text io.println <span style="color: #d73948">end</span>
 </code></pre><p class="ex-label">출력</p><pre><code data-lang="text">$ pnx 10-map-into.pnx
 squares 16, evens written 2
-</code></pre></div><h5>진단</h5><table><thead><tr><th><strong>조건</strong></th><th><strong>메시지</strong></th></tr></thead><tbody><tr><td>두 갈래의 스택이 다름</td><td><code>the two branches of this if leave different stacks</code></td></tr><tr><td>한 바퀴가 스택을 바꿈</td><td><code>one turn of a loop must leave the stack as it found it</code></td></tr><tr><td>루프 밖의 <code>while</code> <code>until</code> <code>break</code></td><td><code>while, until and break belong inside a loop</code></td></tr><tr><td>닿지 않는 코드</td><td><code>this code cannot be reached: the code before it always leaves</code></td></tr><tr><td><code>case</code> 의 같은 값</td><td><code>this value is already in an earlier branch of the case</code></td></tr><tr><td>펼쳐지는 블록이 스택을 바꿈</td><td><code>this block must leave the stack as it found it</code></td></tr><tr><td>정의 밖의 <code>return</code></td><td><code>return belongs inside a definition</code></td></tr><tr><td>상수가 아닌 가지의 값</td><td><code>a case value is a literal or the name of a const</code></td></tr><tr><td>줄기가 아닌 것에 조합 낱말</td><td><code>only an array or a list is a stem (not a queue, a pool, a buffer or an index)</code></td></tr></tbody></table></main><nav class="bottom"><a href="index.html">처음</a> · <a href="09.html">앞</a> · <a href="11.html">다음</a> · <a href="../html-en/10.html">English</a></nav></body></html>
+</code></pre></div><h3>10.7 미룬 코드</h3><h5>구문</h5><pre><code data-lang="ebnf">defer = "defer" { body } "end" ;</code></pre><p class="para"><span class="pn">(1)</span> <code>defer 코드 end</code> 는 둘러싼 블록을 떠날 때 돌 코드를 적는다. 블록은 낱말의 몸, 루프의 몸(한 바퀴마다), 조합 낱말의 <code>do</code> 블록(한 번 돌 때마다)이다. 그 블록을 떠나는 모든 길에서 돈다: 블록의 <code>end</code>, 루프의 한 바퀴 끝, <code>break</code>, 루프를 떠나는 <code>while</code>·<code>until</code>, <code>return</code>, <code>or_return</code>, <code>or_fail</code>, <code>fail</code>. 여럿이면 적은 차례의 거꾸로 돈다. 결함으로 끝날 때는 돌지 않는다(그때는 상태가 핸들을 닫는다, 19.6).</p><div class="example run"><p class="ex-file"><code>10-defer.pnx</code></p><pre><code data-lang="pinax"><span style="color: #d73948">use</span> io
+<span style="color: #d73948">use</span> <span style="color: #d73948">str</span>
+<span style="color: #d73948">buffer</span> trace <span style="color: #b60157">256</span>
+<span style="color: #d73948">word</span> say (s <span style="color: #d73948">str</span>) s trace append <span style="color: #d73948">or_else</span> (e) <span style="color: #d73948">end</span> <span style="color: #d73948">end</span>
+<span style="color: #74747c">rem Every way out of a block runs its defers, the last written first.</span>
+<span style="color: #d73948">word</span> step (n <span style="color: #d73948">int</span> <span style="color: #d73948">or</span> <span style="color: #d73948">fail</span>)
+  <span style="color: #198810">"open "</span> say
+  defer <span style="color: #198810">"close "</span> say <span style="color: #d73948">end</span>
+  defer <span style="color: #198810">"flush "</span> say <span style="color: #d73948">end</span>
+  n <span style="color: #b60157">0</span> lt <span style="color: #d73948">if</span> <span style="color: #d73948">err</span>.range <span style="color: #d73948">fail</span> <span style="color: #d73948">end</span>
+  <span style="color: #198810">"work "</span> say
+<span style="color: #d73948">end</span>
+<span style="color: #b60157">1</span> step <span style="color: #d73948">or_else</span> (e) <span style="color: #d73948">end</span>
+<span style="color: #b60157">-1</span> step <span style="color: #d73948">or_else</span> (e) <span style="color: #198810">"(failed) "</span> say <span style="color: #d73948">end</span>
+trace contents <span style="color: #d73948">str</span>.trim io.println
+</code></pre><p class="ex-label">출력</p><pre><code data-lang="text">$ pnx 10-defer.pnx
+open work flush close open flush close (failed)
+</code></pre></div><p class="para"><span class="pn">(2)</span> 미룬 코드가 소유 값을 소비하면(<code>m release</code>, <code>f file.close</code>) 그 값은 미룬 코드가 맡는다. 블록을 떠나는 모든 길에서 소비된 것으로 치므로 실패 경로마다 닫는 코드를 따로 쓸 일이 없다. 블록 안에서는 그 값을 빌려 쓸 수 있다.</p><div class="example run"><p class="ex-file"><code>10-defer-owned.pnx</code></p><pre><code data-lang="pinax"><span style="color: #d73948">use</span> io
+<span style="color: #d73948">use</span> <span style="color: #d73948">str</span>
+<span style="color: #d73948">buffer</span> report <span style="color: #b60157">4096</span>
+<span style="color: #74747c">rem A mark taken back at the end of every turn, also when append fails.</span>
+<span style="color: #d73948">word</span> build (<span style="color: #d73948">or</span> <span style="color: #d73948">fail</span>)
+  <span style="color: #b60157">1</span> <span style="color: #b60157">50</span> range <span style="color: #d73948">do</span> (i <span style="color: #d73948">int</span>)
+    <span style="color: #d73948">mark</span> <span style="color: #d73948">to</span> m
+    defer m release <span style="color: #d73948">end</span>
+    <span style="color: #d73948">cat</span> (<span style="color: #198810">"row "</span>, i, <span style="color: #198810">": "</span>, i i mul, <span style="color: #198810">"</span><span style="color: #1d6c76">\n</span><span style="color: #198810">"</span>) report append <span style="color: #d73948">or_fail</span>
+  <span style="color: #d73948">end</span> each
+<span style="color: #d73948">end</span>
+build <span style="color: #d73948">or_else</span> (e) <span style="color: #d73948">cat</span> (<span style="color: #198810">"full: "</span>, e err_text) io.println <span style="color: #d73948">end</span>
+<span style="color: #d73948">cat</span> (<span style="color: #198810">"report: "</span>, report len, <span style="color: #198810">" bytes"</span>) io.println
+</code></pre><p class="ex-label">출력</p><pre><code data-lang="text">$ pnx 10-defer-owned.pnx
+report: 585 bytes
+</code></pre></div><h5>제약</h5><p class="para"><span class="pn">(3)</span> <code>defer</code> 는 낱말의 몸, 루프의 몸, <code>do</code> 블록에 바로 쓴다. <code>if</code>·<code>case</code>·<code>or_else</code> 의 가지 안이나 정의 밖에 쓰면 거절된다.</p><div class="example refused"><p class="ex-file"><code>10-defer-branch.pnx</code></p><pre><code data-lang="pinax"><span style="color: #d73948">word</span> f (c <span style="color: #d73948">bool</span>)
+  c <span style="color: #d73948">if</span> defer <span style="color: #d73948">end</span> <span style="color: #d73948">end</span>
+<span style="color: #d73948">end</span>
+</code></pre><p class="ex-label">거절</p><pre><code data-lang="text">$ pnx 10-defer-branch.pnx
+10-defer-branch.pnx:2:8: defer is written right in a word's body, a loop's body or a do block, not in a branch
+</code></pre></div><p class="para"><span class="pn">(4)</span> 미룬 코드는 스택을 받은 그대로 두고 아무것도 남기지 않는다. <code>return</code> <code>fail</code> <code>break</code> <code>while</code> <code>until</code> <code>to</code> <code>loop</code> <code>do</code> <code>case</code> <code>defer</code> 와 <code>or_fail</code> <code>or_return</code> 을 쓸 수 없다. 실패하는 낱말은 그 안에서 <code>or_else</code> 로 다룬다.</p><p class="para"><span class="pn">(5)</span> 미룬 코드가 맡은 소유 값을 블록 안에서 소비하면 거절된다.</p><div class="example refused"><p class="ex-file"><code>10-defer-taken.pnx</code></p><pre><code data-lang="pinax"><span style="color: #d73948">word</span> twice (<span style="color: #d73948">gives</span> <span style="color: #d73948">int</span>)
+  <span style="color: #d73948">mark</span> <span style="color: #d73948">to</span> m
+  defer m release <span style="color: #d73948">end</span>
+  m release
+  <span style="color: #b60157">0</span>
+<span style="color: #d73948">end</span>
+</code></pre><p class="ex-label">거절</p><pre><code data-lang="text">$ pnx 10-defer-taken.pnx
+10-defer-taken.pnx:4:5: a defer gives this owned value when the block is left; here it can only be lent
+</code></pre></div><h5>진단</h5><table><thead><tr><th><strong>조건</strong></th><th><strong>메시지</strong></th></tr></thead><tbody><tr><td>두 갈래의 스택이 다름</td><td><code>the two branches of this if leave different stacks</code></td></tr><tr><td>한 바퀴가 스택을 바꿈</td><td><code>one turn of a loop must leave the stack as it found it</code></td></tr><tr><td>루프 밖의 <code>while</code> <code>until</code> <code>break</code></td><td><code>while, until and break belong inside a loop</code></td></tr><tr><td>닿지 않는 코드</td><td><code>this code cannot be reached: the code before it always leaves</code></td></tr><tr><td><code>case</code> 의 같은 값</td><td><code>this value is already in an earlier branch of the case</code></td></tr><tr><td>펼쳐지는 블록이 스택을 바꿈</td><td><code>this block must leave the stack as it found it</code></td></tr><tr><td>정의 밖의 <code>return</code></td><td><code>return belongs inside a definition</code></td></tr><tr><td>상수가 아닌 가지의 값</td><td><code>a case value is a literal or the name of a const</code></td></tr><tr><td>줄기가 아닌 것에 조합 낱말</td><td><code>only an array or a list is a stem (not a queue, a pool, a buffer or an index)</code></td></tr><tr><td>가지 안의 <code>defer</code></td><td><code>defer is written right in a word's body, a loop's body or a do block, not in a branch</code></td></tr><tr><td>정의 밖의 <code>defer</code></td><td><code>defer belongs inside a definition</code></td></tr><tr><td>미룬 코드가 스택을 바꿈</td><td><code>a defer leaves the stack as it found it</code></td></tr><tr><td>미룬 코드 안의 떠나는 낱말</td><td><code>a defer holds no return, fail, break, while, until, to, loop, do, case or defer</code></td></tr><tr><td>미룬 코드 안의 <code>or_fail</code> <code>or_return</code></td><td><code>a defer does not leave the word; a failure in it is taken with or_else</code></td></tr><tr><td>미룬 코드가 맡은 값을 소비</td><td><code>a defer gives this owned value when the block is left; here it can only be lent</code></td></tr></tbody></table></main><nav class="bottom"><a href="index.html">처음</a> · <a href="09.html">앞</a> · <a href="11.html">다음</a> · <a href="../html-en/10.html">English</a></nav></body></html>

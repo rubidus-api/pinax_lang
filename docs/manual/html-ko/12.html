@@ -11,17 +11,11 @@
 <span style="color: #d73948">end</span>
 <span style="color: #d73948">list</span> cities city <span style="color: #b60157">8</span>
 <span style="color: #d73948">buffer</span> out <span style="color: #b60157">512</span>
-<span style="color: #d73948">array</span> scratch city <span style="color: #b60157">1</span>                         <span style="color: #74747c">rem a row to try a line on first</span>
 <span style="color: #d73948">word</span> read_rows (input <span style="color: #d73948">str</span> <span style="color: #d73948">or</span> <span style="color: #d73948">fail</span>)
   input <span style="color: #d73948">str</span>.lines <span style="color: #d73948">do</span> (line <span style="color: #d73948">str</span>)
-    <span style="color: #d73948">true</span> <span style="color: #d73948">to</span> ok
-    line <span style="color: #b60157">0</span> scratch idx csv.unpack <span style="color: #d73948">or_else</span> (e) <span style="color: #d73948">false</span> <span style="color: #d73948">to</span> ok <span style="color: #198810">""</span> <span style="color: #d73948">end</span> drop
-    ok <span style="color: #d73948">if</span>
-      cities add_row <span style="color: #d73948">or_fail</span> <span style="color: #d73948">to</span> c
-      line c csv.unpack <span style="color: #d73948">or_fail</span> drop
-    <span style="color: #d73948">else</span>
-      <span style="color: #d73948">cat</span> (<span style="color: #198810">"bad row: "</span>, line) io.println
-    <span style="color: #d73948">end</span>
+    cities len <span style="color: #d73948">to</span> before
+    cities add_row <span style="color: #d73948">or_fail</span> <span style="color: #d73948">to</span> c
+    line c csv.unpack <span style="color: #d73948">or_else</span> (e) before cities truncate  <span style="color: #d73948">cat</span> (<span style="color: #198810">"bad row: "</span>, line) io.println  <span style="color: #198810">""</span> <span style="color: #d73948">end</span> drop
   <span style="color: #d73948">end</span> each
 <span style="color: #d73948">end</span>
 <span style="color: #d73948">word</span> to_json (<span style="color: #d73948">or</span> <span style="color: #d73948">fail</span>)
@@ -40,7 +34,7 @@ out contents io.println
 </code></pre><p class="ex-label">출력</p><pre><code data-lang="text">$ pnx 11-csv-to-json.pnx
 bad row: Daejeon,lots,false
 [{"name":"Seoul","people":9411000,"capital":true},{"name":"Busan","people":3349000,"capital":false}]
-</code></pre></div><p><code>unpack</code> 은 모든 필드가 맞을 때만 줄에 쓴다. 그래서 먼저 빈 줄 하나(<code>scratch</code>)에 시험해 보고, 맞을 때만 목록에 줄을 더했다.</p><div class="box mistake"><p class="box-title">흔한 오해: 레코드 목록에서도 <code>pop</code> 으로 마지막 줄을 뺀다</p>레코드의 목록에는 <code>pop</code> 이 없다(값의 목록에만 있다). 더한 줄을 거둘 길이 없으므로, 줄을 더하기 전에 확인한다.<div class="example refused"><p class="ex-file"><code>11-pop-records.pnx</code></p><pre><code data-lang="pinax"><span style="color: #d73948">record</span> city
+</code></pre></div><p>줄을 먼저 더하고 <code>unpack</code> 이 실패하면 <code>before cities truncate</code> 로 그 줄을 되돌린다. <code>truncate</code> 는 목록의 길이를 더하기 전의 길이로 줄인다.</p><div class="box mistake"><p class="box-title">흔한 오해: 레코드 목록에서도 <code>pop</code> 으로 마지막 줄을 뺀다</p>레코드의 목록에는 <code>pop</code> 이 없다(값의 목록에만 있다). 마지막 줄은 <code>truncate</code> 로 거둔다. 다만 그 목록의 줄을 찾아보기나 필드가 담고 있으면 <code>truncate</code> 도 거절된다. 그때는 줄을 더하기 전에 확인한다.<div class="example refused"><p class="ex-file"><code>11-pop-records.pnx</code></p><pre><code data-lang="pinax"><span style="color: #d73948">record</span> city
   name <span style="color: #d73948">str</span>(<span style="color: #b60157">16</span>)
 <span style="color: #d73948">end</span>
 <span style="color: #d73948">list</span> cities city <span style="color: #b60157">4</span>

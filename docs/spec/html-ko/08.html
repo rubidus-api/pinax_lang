@@ -26,7 +26,7 @@ size        = INT | NAME ;                         (* NAME: a const *)</code></p
 <span style="color: #d73948">word</span> raise () <span style="color: #b60157">4</span> <span style="color: #d73948">to</span> limit <span style="color: #d73948">end</span>
 </code></pre><p class="ex-label">거절</p><pre><code data-lang="text">$ pnx 08-const-store.pnx
 08-const-store.pnx:2:20: this name is already visible here; a new name may not hide it
-</code></pre></div><h3>8.3 전역</h3><p class="para"><span class="pn">(1)</span> <code>global 이름 타입</code> 은 값 하나를 담는 <strong>전역</strong>(global)을 만든다. 타입은 <code>int</code> <code>bool</code> <code>str(N)</code>, 선언한 타입, 줄의 타입(표의 이름), 핸들 타입이다. <code>str</code> 는 쓰지 못한다(7.3).</p><p class="para"><span class="pn">(2)</span> 전역을 읽으려면 이름을 쓰고, 넣으려면 <code>to 이름</code> 을 쓴다. 상태가 살아 있는 동안 값이 남는다 — 한 낱말의 실행이 끝나도, 다음 적재가 와도 그대로다.</p><div class="example run"><p class="ex-file"><code>08-const-global.pnx</code></p><pre><code data-lang="pinax"><span style="color: #d73948">use</span> io
+</code></pre></div><h3>8.3 전역</h3><p class="para"><span class="pn">(1)</span> <code>global 이름 타입</code> 은 값 하나를 담는 <strong>전역</strong>(global)을 만든다. 타입은 <code>int</code> <code>bool</code> <code>str(N)</code>, 선언한 타입, 줄의 타입(표의 이름), 핸들 타입이다. <code>str</code> 는 쓰지 못한다(7.3).</p><p class="para"><span class="pn">(2)</span> 전역을 읽으려면 이름을 쓰고, 넣으려면 정의 안에서는 <code>to global.이름</code>, 정의 밖에서는 <code>to 이름</code> 을 쓴다(9.4). 상태가 살아 있는 동안 값이 남는다 — 한 낱말의 실행이 끝나도, 다음 적재가 와도 그대로다.</p><div class="example run"><p class="ex-file"><code>08-const-global.pnx</code></p><pre><code data-lang="pinax"><span style="color: #d73948">use</span> io
 <span style="color: #d73948">use</span> <span style="color: #d73948">str</span>
 <span style="color: #d73948">const</span> limit <span style="color: #b60157">3</span>
 <span style="color: #d73948">const</span> greeting <span style="color: #198810">"hello"</span>
@@ -85,12 +85,40 @@ len 1
 <span style="color: #b60157">3</span> two push <span style="color: #d73948">or_else</span> (e) <span style="color: #d73948">cat</span> (<span style="color: #198810">"third push failed: "</span>, e err_text) io.println <span style="color: #d73948">end</span>
 </code></pre><p class="ex-label">출력</p><pre><code data-lang="text">$ pnx 08-list-full.pnx
 third push failed: full
-</code></pre></div><h5>결함</h5><p class="para"><span class="pn">(3)</span> 길이 밖의 번호는 용량 안이라도 결함 <code>range</code> 다.</p><div class="example fault"><p class="ex-file"><code>08-list-past-len.pnx</code></p><pre><code data-lang="pinax"><span style="color: #d73948">list</span> items <span style="color: #d73948">int</span> <span style="color: #b60157">8</span>
+</code></pre></div><p class="para"><span class="pn">(2a)</span> <code>n 목록 truncate</code> 는 길이를 <code>n</code> 으로 줄인다. 정수, 글, 레코드의 목록 모두에 쓴다. <code>add_row</code> 로 더한 줄의 값이 틀린 것을 알았을 때 그 줄을 되돌리는 데 쓴다.</p><div class="example run"><p class="ex-file"><code>08-list-truncate.pnx</code></p><pre><code data-lang="pinax"><span style="color: #d73948">use</span> io
+<span style="color: #d73948">record</span> city
+  name <span style="color: #d73948">str</span>(<span style="color: #b60157">16</span>)
+  people <span style="color: #d73948">int</span>
+<span style="color: #d73948">end</span>
+<span style="color: #d73948">list</span> cities city <span style="color: #b60157">4</span>
+<span style="color: #74747c">rem Add a row, and take it back when its values turn out wrong.</span>
+<span style="color: #d73948">word</span> add_city (name <span style="color: #d73948">str</span>, people <span style="color: #d73948">int</span> <span style="color: #d73948">or</span> <span style="color: #d73948">fail</span>)
+  cities len <span style="color: #d73948">to</span> before
+  cities add_row <span style="color: #d73948">or_fail</span> <span style="color: #d73948">to</span> c
+  name c <span style="color: #d73948">to</span> city.name
+  people <span style="color: #b60157">0</span> lt <span style="color: #d73948">if</span> before cities truncate <span style="color: #d73948">err</span>.format <span style="color: #d73948">fail</span> <span style="color: #d73948">end</span>
+  people c <span style="color: #d73948">to</span> city.people
+<span style="color: #d73948">end</span>
+<span style="color: #198810">"Seoul"</span> <span style="color: #b60157">9411000</span> add_city <span style="color: #d73948">or_else</span> (e) <span style="color: #d73948">end</span>
+<span style="color: #198810">"Nowhere"</span> <span style="color: #b60157">-1</span> add_city <span style="color: #d73948">or_else</span> (e) <span style="color: #d73948">cat</span> (<span style="color: #198810">"refused: "</span>, e err_text) io.println <span style="color: #d73948">end</span>
+<span style="color: #d73948">cat</span> (cities len, <span style="color: #198810">" rows"</span>) io.println
+</code></pre><p class="ex-label">출력</p><pre><code data-lang="text">$ pnx 08-list-truncate.pnx
+refused: format
+1 rows
+</code></pre></div><h5>제약</h5><p class="para"><span class="pn">(2b)</span> 줄이 다른 곳에 남는 레코드의 목록은 <code>truncate</code> 하지 못한다. 그 목록의 줄을 담는 필드나 전역, 그 목록에 <code>row</code> 로 이름 붙인 줄, 그 목록의 찾아보기(8.10)가 같은 소스 안에 하나라도 있으면 거절된다. 잘라 낸 자리에 새 줄이 들어서면 그것들이 엉뚱한 줄을 가리키기 때문이다. 지역에 든 줄은 쓸 때 검사한다(결함 <code>range</code>).</p><div class="example refused"><p class="ex-file"><code>08-list-truncate-kept.pnx</code></p><pre><code data-lang="pinax"><span style="color: #d73948">record</span> city
+  name <span style="color: #d73948">str</span>(<span style="color: #b60157">16</span>)
+<span style="color: #d73948">end</span>
+<span style="color: #d73948">list</span> cities city <span style="color: #b60157">4</span>
+<span style="color: #d73948">index</span> by_name cities city.name
+<span style="color: #d73948">word</span> forget () <span style="color: #b60157">0</span> cities truncate <span style="color: #d73948">end</span>
+</code></pre><p class="ex-label">거절</p><pre><code data-lang="text">$ pnx 08-list-truncate-kept.pnx
+08-list-truncate-kept.pnx:6:25: this list's rows are kept by a field, a global, a named row or an index; it cannot be truncated
+</code></pre></div><h5>결함</h5><p class="para"><span class="pn">(3)</span> 길이 밖의 번호는 용량 안이라도 결함 <code>range</code> 다. <code>truncate</code> 에 길이보다 큰 수나 음수를 주어도 결함 <code>range</code> 다.</p><div class="example fault"><p class="ex-file"><code>08-list-past-len.pnx</code></p><pre><code data-lang="pinax"><span style="color: #d73948">list</span> items <span style="color: #d73948">int</span> <span style="color: #b60157">8</span>
 <span style="color: #b60157">1</span> items push <span style="color: #d73948">or_else</span> (e) <span style="color: #d73948">end</span>
 <span style="color: #b60157">1</span> items idx drop                          <span style="color: #74747c">rem the list holds one value: index 1 is past it</span>
 </code></pre><p class="ex-label">결함으로 멈춤</p><pre><code data-lang="text">$ pnx 08-list-past-len.pnx
 08-list-past-len.pnx:3: index out of range
-</code></pre></div><h3>8.6 큐</h3><p class="para"><span class="pn">(1)</span> <code>queue 이름 타입 용량</code> 은 먼저 넣은 것이 먼저 나오는 <strong>큐</strong>(queue)를 만든다. 원소 타입은 <code>int</code> <code>bool</code> <code>err</code> 다. <code>v 큐 put</code> 은 뒤에 넣고, <code>큐 take</code> 는 앞에서 빼서 주며, <code>큐 peek</code> 은 빼지 않고 앞의 것을 준다. 셋 다 실패할 수 있다: 가득 찬 큐에 넣으면 <code>err.full</code>, 빈 큐에서 꺼내면 <code>err.range</code> 다.</p><div class="example run"><p class="ex-file"><code>08-queue.pnx</code></p><pre><code data-lang="pinax"><span style="color: #d73948">use</span> io
+</code></pre></div><h5>진단</h5><table><thead><tr><th><strong>조건</strong></th><th><strong>메시지</strong></th></tr></thead><tbody><tr><td>줄이 남는 목록을 <code>truncate</code></td><td><code>this list's rows are kept by a field, a global, a named row or an index; it cannot be truncated</code></td></tr></tbody></table><h3>8.6 큐</h3><p class="para"><span class="pn">(1)</span> <code>queue 이름 타입 용량</code> 은 먼저 넣은 것이 먼저 나오는 <strong>큐</strong>(queue)를 만든다. 원소 타입은 <code>int</code> <code>bool</code> <code>err</code> 다. <code>v 큐 put</code> 은 뒤에 넣고, <code>큐 take</code> 는 앞에서 빼서 주며, <code>큐 peek</code> 은 빼지 않고 앞의 것을 준다. 셋 다 실패할 수 있다: 가득 찬 큐에 넣으면 <code>err.full</code>, 빈 큐에서 꺼내면 <code>err.range</code> 다.</p><div class="example run"><p class="ex-file"><code>08-queue.pnx</code></p><pre><code data-lang="pinax"><span style="color: #d73948">use</span> io
 <span style="color: #d73948">use</span> <span style="color: #d73948">str</span>
 <span style="color: #d73948">queue</span> jobs <span style="color: #d73948">int</span> <span style="color: #b60157">4</span>
 <span style="color: #d73948">word</span> show (<span style="color: #d73948">gives</span> s <span style="color: #d73948">str</span> <span style="color: #d73948">or</span> <span style="color: #d73948">fail</span>) jobs take <span style="color: #d73948">or_fail</span> <span style="color: #d73948">str</span>.to_str <span style="color: #d73948">end</span>
@@ -165,7 +193,7 @@ lee 26 false
 <span style="color: #d73948">word</span> demo (<span style="color: #d73948">or</span> <span style="color: #d73948">fail</span>)
   nodes alloc <span style="color: #d73948">or_fail</span> <span style="color: #d73948">to</span> a                 <span style="color: #74747c">rem an owned row: it must be stored or freed</span>
   <span style="color: #b60157">7</span> a <span style="color: #d73948">to</span> node.value
-  a <span style="color: #d73948">to</span> kept                                <span style="color: #74747c">rem stored: the global holds the row now</span>
+  a <span style="color: #d73948">to</span> <span style="color: #d73948">global</span>.kept                                <span style="color: #74747c">rem stored: the global holds the row now</span>
   <span style="color: #d73948">cat</span> (<span style="color: #198810">"value "</span>, kept node.value, <span style="color: #198810">", alive: "</span>, kept nodes is_alive) io.println
   kept nodes free
   <span style="color: #d73948">cat</span> (<span style="color: #198810">"alive after free: "</span>, kept nodes is_alive) io.println
@@ -191,7 +219,7 @@ alive after free: false
 <span style="color: #d73948">global</span> keep nodes
 <span style="color: #d73948">word</span> demo (<span style="color: #d73948">or</span> <span style="color: #d73948">fail</span>)
   nodes alloc <span style="color: #d73948">or_fail</span> <span style="color: #d73948">to</span> a
-  a <span style="color: #d73948">to</span> keep                                 <span style="color: #74747c">rem stored: the row is handed over</span>
+  a <span style="color: #d73948">to</span> <span style="color: #d73948">global</span>.keep                                 <span style="color: #74747c">rem stored: the row is handed over</span>
   keep nodes free
   keep node.value drop                      <span style="color: #74747c">rem the row was given back: stale</span>
 <span style="color: #d73948">end</span>

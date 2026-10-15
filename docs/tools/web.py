@@ -242,12 +242,20 @@ def block(node, depth=0):
                 lines += block(k)
         return lines
     if t == "div" and "box" in c:
-        inner = []
+        inner, pending = [], ""  # a run of text and inline elements is one paragraph
         for k in node.kids:
-            if not isinstance(k, str) and "box-title" in k.cls():
+            if isinstance(k, str) or k.tag in ("strong", "em", "code", "a", "span", "br"):
+                pending += inline(k)
+                continue
+            if pending.strip():
+                inner += [re.sub(r"[ \t]+", " ", pending).strip(), ""]
+            pending = ""
+            if "box-title" in k.cls():
                 inner += ["**" + k.text().strip() + "**", ""]
             else:
-                inner += block(k) if not isinstance(k, str) and k.tag not in ("strong", "em", "code", "a", "span", "br") else [inline(k)]
+                inner += block(k)
+        if pending.strip():
+            inner += [re.sub(r"[ \t]+", " ", pending).strip(), ""]
         joined = "\n".join(inner).strip("\n").split("\n")
         return ["> " + s if s else ">" for s in joined] + [""]
     if t in ("div", "section", "figure", "main", "span", "li"):

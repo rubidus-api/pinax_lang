@@ -1,5 +1,6 @@
 rem run
 use io
+use str
 buffer trace 256
 word say (s str) s trace append or_else (e) end end
 rem Every way out of a block runs its defers, the last written first.
@@ -12,4 +13,4 @@ word step (n int or fail)
 end
 1 step or_else (e) end
 -1 step or_else (e) "(failed) " say end
-trace contents io.println
+trace contents str.trim io.println
