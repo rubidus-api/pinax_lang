@@ -12,7 +12,7 @@ to the clauses of the standard. Korean original, English edition with the same c
 |---|---|
 | [`typst-ko/`](typst-ko/) · [`typst-en/`](typst-en/) | 원고(Typst) --- 원본 · the manuscript, the source |
 | [`md-ko/`](md-ko/README.md) · [`md-en/`](md-en/README.md) | GitHub 에서 읽는 Markdown 판 · Markdown editions |
-| [`html-ko/`](html-ko/index.html) · [`html-en/`](html-en/index.html) | 웹 판 · web editions |
+| [`html-ko/`](html-ko/index.html) · [`html-en/`](html-en/index.html) | 웹 판, 읽기는 <https://rubidus-api.github.io/pinax_lang/manual/html-ko/> · web editions, read at <https://rubidus-api.github.io/pinax_lang/manual/html-en/> |
 | `pdf-ko/` · `pdf-en/` | PDF 판(짓기만 하고 커밋하지 않는다) · PDF editions, built, not committed |
 | [`examples/`](examples/) | 책이 싣는 모든 프로그램 · every program the book shows |
 

@@ -1,4 +1,4 @@
-[한국어](README.ko.md) | **English** — **Pinax v0.1.0** — [Spec PDF(ko)](https://github.com/rubidus-api/pinax_lang/releases/download/v0.1.0/pinax-spec-ko.pdf) · [Spec PDF(en)](https://github.com/rubidus-api/pinax_lang/releases/download/v0.1.0/pinax-spec-en.pdf) · [Manual PDF(ko)](https://github.com/rubidus-api/pinax_lang/releases/download/v0.1.0/pinax-manual-ko.pdf) · [Manual PDF(en)](https://github.com/rubidus-api/pinax_lang/releases/download/v0.1.0/pinax-manual-en.pdf) · [pinax.h](https://github.com/rubidus-api/pinax_lang/releases/download/v0.1.0/pinax.h) · [pinax.c](https://github.com/rubidus-api/pinax_lang/releases/download/v0.1.0/pinax.c)
+[한국어](README.ko.md) | **English** — **Pinax v0.1.0** — [Spec PDF(ko)](https://github.com/rubidus-api/pinax_lang/releases/download/v0.1.0/pinax-spec-ko.pdf) · [Spec PDF(en)](https://github.com/rubidus-api/pinax_lang/releases/download/v0.1.0/pinax-spec-en.pdf) · [Manual PDF(ko)](https://github.com/rubidus-api/pinax_lang/releases/download/v0.1.0/pinax-manual-ko.pdf) · [Manual PDF(en)](https://github.com/rubidus-api/pinax_lang/releases/download/v0.1.0/pinax-manual-en.pdf) · [pinax.h](https://github.com/rubidus-api/pinax_lang/releases/download/v0.1.0/pinax.h) · [pinax.c](https://github.com/rubidus-api/pinax_lang/releases/download/v0.1.0/pinax.c) · [Web](https://rubidus-api.github.io/pinax_lang/)
 
 # Pinax
 
@@ -129,7 +129,8 @@ host modules (`io`, `file`, `clock`, `random`, `env`) are ordinary host words in
 
 Both are written in Typst and built to PDF, HTML and Markdown by `docs/tools/build.sh`; every program they show is run
 and its output captured. The Korean editions are the originals; the English editions have the same
-chapters, clauses and examples.
+chapters, clauses and examples. Read them on the web at
+<https://rubidus-api.github.io/pinax_lang/>, or download the PDFs from the release.
 
 ## License
 

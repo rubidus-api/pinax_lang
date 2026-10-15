@@ -1,4 +1,4 @@
-**한국어** | [English](README.md) — **Pinax v0.1.0** — [Spec PDF(ko)](https://github.com/rubidus-api/pinax_lang/releases/download/v0.1.0/pinax-spec-ko.pdf) · [Spec PDF(en)](https://github.com/rubidus-api/pinax_lang/releases/download/v0.1.0/pinax-spec-en.pdf) · [Manual PDF(ko)](https://github.com/rubidus-api/pinax_lang/releases/download/v0.1.0/pinax-manual-ko.pdf) · [Manual PDF(en)](https://github.com/rubidus-api/pinax_lang/releases/download/v0.1.0/pinax-manual-en.pdf) · [pinax.h](https://github.com/rubidus-api/pinax_lang/releases/download/v0.1.0/pinax.h) · [pinax.c](https://github.com/rubidus-api/pinax_lang/releases/download/v0.1.0/pinax.c)
+**한국어** | [English](README.md) — **Pinax v0.1.0** — [Spec PDF(ko)](https://github.com/rubidus-api/pinax_lang/releases/download/v0.1.0/pinax-spec-ko.pdf) · [Spec PDF(en)](https://github.com/rubidus-api/pinax_lang/releases/download/v0.1.0/pinax-spec-en.pdf) · [Manual PDF(ko)](https://github.com/rubidus-api/pinax_lang/releases/download/v0.1.0/pinax-manual-ko.pdf) · [Manual PDF(en)](https://github.com/rubidus-api/pinax_lang/releases/download/v0.1.0/pinax-manual-en.pdf) · [pinax.h](https://github.com/rubidus-api/pinax_lang/releases/download/v0.1.0/pinax.h) · [pinax.c](https://github.com/rubidus-api/pinax_lang/releases/download/v0.1.0/pinax.c) · [웹판](https://rubidus-api.github.io/pinax_lang/)
 
 # Pinax
 
@@ -125,7 +125,8 @@ cc -std=c99 -Iinclude host.c build/native/libpinax.a -lm -o host
   적었습니다([영어판](docs/spec/md-en/README.md)).
 
 두 문서 모두 Typst 로 쓰고 `docs/tools/build.sh` 로 PDF, HTML, Markdown 을 짓습니다. 실린 프로그램은 모두 실제로 돌린
-것이고, 출력도 그때 받은 그대로입니다.
+것이고, 출력도 그때 받은 그대로입니다. 웹판은 <https://rubidus-api.github.io/pinax_lang/> 에서 읽고, PDF 는
+릴리스에서 받습니다.
 
 ## 라이선스
 
