@@ -83,4 +83,28 @@ go <span style="color: #d73948">or_else</span> (e) e err_text io.println <span s
 </code></pre><p class="ex-label">Output</p><pre><code data-lang="text">$ pnx 06-map-filter.pnx
 cheap: 3 items, the first 450
 with tax, 6 cells written, the first 1320
-</code></pre></div><div class="box summary"><p class="box-title">Summary</p><ul><li>The capacity of a collection is fixed by its declaration; no storage grows while running (standard 8.1).</li><li>An array is always full; a list’s length grows; an index out of range is a fault (8.4, 8.5).</li><li><code>push</code> <code>pop</code> <code>put</code> <code>take</code> can fail: <code>full</code> when full, <code>range</code> when empty (8.5, 8.6).</li><li>Only arrays and lists are stems (10.6).</li><li><code>map_into</code> and <code>filter_into</code> write into the destination they are given (10.6).</li></ul></div></main><nav class="bottom"><a href="index.html">Start</a> · <a href="06.html">Previous</a> · <a href="08.html">Next</a> · <a href="../html-ko/07.html">한국어</a></nav></body></html>
+</code></pre></div><h3>6.5 Passing a collection to a word</h3><p>A word can take a collection as a parameter. Write its kind and what its cells hold — <code>list int</code>, <code>array city</code>, <code>queue int</code>, <code>list str(8)</code> — or <code>buffer</code>, and give the collection’s name where you call the word. Inside, the parameter works wherever a collection’s name does. The same word now serves every list of that kind, whatever its capacity.</p><div class="example run"><p class="ex-file"><code>06-coll-param.pnx</code></p><pre><code data-lang="pinax"><span style="color: #d73948">use</span> io
+<span style="color: #d73948">list</span> morning <span style="color: #d73948">int</span> <span style="color: #b60157">8</span>
+<span style="color: #d73948">list</span> evening <span style="color: #d73948">int</span> <span style="color: #b60157">8</span>
+<span style="color: #d73948">word</span> record_all (l <span style="color: #d73948">list</span> <span style="color: #d73948">int</span>, a <span style="color: #d73948">int</span>, b <span style="color: #d73948">int</span>, c <span style="color: #d73948">int</span>)
+  a l push <span style="color: #d73948">or_else</span> (e) <span style="color: #d73948">end</span>  b l push <span style="color: #d73948">or_else</span> (e) <span style="color: #d73948">end</span>  c l push <span style="color: #d73948">or_else</span> (e) <span style="color: #d73948">end</span>
+<span style="color: #d73948">end</span>
+<span style="color: #d73948">word</span> report (name <span style="color: #d73948">str</span>, l <span style="color: #d73948">list</span> <span style="color: #d73948">int</span>)
+  <span style="color: #d73948">cat</span> (name, <span style="color: #198810">": "</span>, l len, <span style="color: #198810">" readings, highest "</span>, l maximum <span style="color: #d73948">or_else</span> (e) <span style="color: #b60157">0</span> <span style="color: #d73948">end</span>) io.println
+<span style="color: #d73948">end</span>
+morning <span style="color: #b60157">12</span> <span style="color: #b60157">15</span> <span style="color: #b60157">11</span> record_all
+evening <span style="color: #b60157">21</span> <span style="color: #b60157">19</span> <span style="color: #b60157">20</span> record_all
+<span style="color: #198810">"morning"</span> morning report
+<span style="color: #198810">"evening"</span> evening report
+</code></pre><p class="ex-label">Output</p><pre><code data-lang="text">$ pnx 06-coll-param.pnx
+morning: 3 readings, highest 15
+evening: 3 readings, highest 21
+</code></pre></div><div class="box mistake"><p class="box-title">Common mistake: A table’s name as a parameter type takes the table</p>Written as a parameter type, the name of a table of records means <em>one row</em> of it (chapter 7). To take the whole table, write <code>list RECORD</code> or <code>array RECORD</code>.<div class="example refused"><p class="ex-file"><code>06-coll-param-row.pnx</code></p><pre><code data-lang="pinax"><span style="color: #d73948">record</span> reading
+  value <span style="color: #d73948">i32</span>
+<span style="color: #d73948">end</span>
+<span style="color: #d73948">list</span> morning reading <span style="color: #b60157">8</span>
+<span style="color: #d73948">word</span> count_them (l morning <span style="color: #d73948">gives</span> <span style="color: #d73948">int</span>) <span style="color: #b60157">0</span> <span style="color: #d73948">end</span>      <span style="color: #74747c">rem a table's name as a type: one row of it</span>
+morning count_them
+</code></pre><p class="ex-label">Refused</p><pre><code data-lang="text">$ pnx 06-coll-param-row.pnx
+06-coll-param-row.pnx:6:9: this parameter takes one row of a table; a parameter that takes the whole table is written list RECORD or array RECORD
+</code></pre></div></div><div class="box summary"><p class="box-title">Summary</p><ul><li>A word takes a collection as <code>list T</code>, <code>array T</code>, <code>queue T</code> or <code>buffer</code> (9.9).</li><li>The capacity of a collection is fixed by its declaration; no storage grows while running (standard 8.1).</li><li>An array is always full; a list’s length grows; an index out of range is a fault (8.4, 8.5).</li><li><code>push</code> <code>pop</code> <code>put</code> <code>take</code> can fail: <code>full</code> when full, <code>range</code> when empty (8.5, 8.6).</li><li>Only arrays and lists are stems (10.6).</li><li><code>map_into</code> and <code>filter_into</code> write into the destination they are given (10.6).</li></ul></div></main><nav class="bottom"><a href="index.html">Start</a> · <a href="06.html">Previous</a> · <a href="08.html">Next</a> · <a href="../html-ko/07.html">한국어</a></nav></body></html>

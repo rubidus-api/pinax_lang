@@ -214,12 +214,16 @@ PINAX_API pinax_err pinax_handle_release(pinax_state *state, uint32_t type, pina
  * memory must outlive the state. */
 PINAX_API pinax_err pinax_bind(pinax_state *state, const char *global, void *memory, size_t bytes);
 
-/* Where a declared global lives, to read or write it in place between calls. */
+/* Where a declared global lives, to read or write it in place between calls. `number` is what a
+ * word with a collection parameter (`l list int`, `q queue int`, `b buffer`) takes as that
+ * argument, an integer. A number of a collection of another kind or element size is the fault
+ * PINAX_ERR_STATE where the word uses it. */
 typedef struct pinax_global {
     void    *ptr;
     size_t   element_bytes;
     size_t   capacity; /* declared element count; 1 for a scalar */
     pinax_str type;    /* type as written in the declaration */
+    int64_t  number;
 } pinax_global;
 PINAX_API pinax_err pinax_global_find(pinax_state *state, const char *name, pinax_global *out);
 

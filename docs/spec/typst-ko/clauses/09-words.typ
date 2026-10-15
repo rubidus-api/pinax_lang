@@ -28,7 +28,7 @@ type       = [ "owned" ] ( NAME [ "(" size ")" ] | "word" "(" effect ")" ) ;
 
 #para("2")[입력에 이름을 쓰면(`w int`) 그 값은 그 이름의 지역 변수가 되고 몸은 빈 스택으로 시작한다. 타입만
 쓰면(`int`) 값은 스택에 놓인 채 몸이 시작한다. 결과 쪽의 이름은 읽는 사람을 위한 표시일 뿐 지역 변수를
-만들지 않는다.]
+만들지 않는다. 입력은 모음을 받을 수도 있다(9.9).]
 
 #ex("spec", "09-signatures.pnx")
 
@@ -157,6 +157,43 @@ phrase = body { body } ;                   (* code that leaves one value *)
 
 #ex("spec", "09-cat.pnx")
 
+== 모음 매개변수 <words-collections>
+
+#part("구문")
+```ebnf
+collection-type = ( "array" | "list" | "queue" ) cell | "buffer" ;
+cell            = NAME [ "(" size ")" ] ;   (* int, bool, err, str(N), 또는 레코드 *)
+```
+
+#para("1")[타입이 `array T`, `list T`, `queue T` 나 `buffer` 인 입력은 모음을 받는다. 부르는 쪽은 그 자리에 모음의
+이름을 쓴다(`scores total`). 몸 안에서 매개변수는 그런 모음의 이름이 들어가는 모든 자리에 쓴다 --- `l len`,
+`i l idx`, `v l push`, `v i set l`, `l do … end each`, `q take`, `s b append` 따위. 칸은 매개변수가 말하는 타입이어야
+한다: `int` `bool` `err`, `N` 이 같은 `str(N)`, 또는 레코드. 용량은 타입에 들지 않는다. 어떤 용량이든 받고,
+`l capacity` 가 그 용량을 준다.]
+
+#ex("spec", "09-coll-param.pnx")
+
+#para("2")[매개변수 `l` 이 레코드 표인 낱말에서는, 선언된 표의 이름처럼(8.8) 이름 `l` 이 그 줄의 타입이기도 하다.
+`l` 로 얻은 줄은 그 낱말 안에서 쓴다: 지역 변수, 필드, 고리의 블록에서.]
+
+#ex("spec", "09-coll-param-rows.pnx")
+
+#para("3")[넘기는 것은 모음 그 자체이고 복사본이 아니다. 모음은 전역이므로 매개변수를 `yield` 와 14.3 의 기다림을
+건너 쥐고 있어도 된다.]
+
+#part("제약")
+
+#para("4")[모음은 그 종류와 칸이 매개변수의 것과 같은 자리에 주어야 한다.]
+#ex("spec", "09-coll-param-kind.pnx")
+
+#para("5")[모음 매개변수는 값이 아니다: `to` 로 담지 못하고, 낱말의 결과가 되지 못하고, 블록(`word (…)`)의 매개변수가
+되지 못한다. 풀과 찾아보기는 받지 않는다.]
+#ex("spec", "09-coll-param-result.pnx")
+
+#para("6")[목록 매개변수를 자르는(8.5 (2a)) 낱말, 또는 자르는 낱말에 그것을 넘기는 낱말은 받은 목록을 자른다. 그러면
+그 낱말을 부르는 자리에서 그 목록에 8.5 (2b) 의 규칙이 적용된다.]
+#ex("spec", "09-coll-param-truncate.pnx")
+
 #part("진단")
 #diag(
   ([입력에 이름 있는 것과 없는 것이 섞임], "inputs are all named or all bare types, not a mix"),
@@ -170,4 +207,8 @@ phrase = body { body } ;                   (* code that leaves one value *)
   ([`set` 의 이름이 전역이 아님], "set writes a declared global; there is none of this name"),
   ([보이는 이름을 가림], "this name is already visible here; a new name may not hide it"),
   ([앞선 선언과 다른 서명], "the definition has another signature than its forward declaration"),
+  ([종류나 칸이 다른 모음], "the collection given here is of another kind, or holds another type, than the parameter says"),
+  ([모음 자리에 값], "this parameter takes an array, list, queue or buffer: give its name"),
+  ([결과로 모음], "a word gives no collection; it takes one as a parameter"),
+  ([남이 쥔 목록을 자르는 낱말에 줌], "this list's rows are kept by a field, a global, a named row or an index; the word it is given to truncates it"),
 )

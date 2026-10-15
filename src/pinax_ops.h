@@ -40,6 +40,10 @@
 
 // The instructions that name a global in C (AGET, ROW, BPUT, IXGET, ...) read its number from
 // `x`: the dispatch gives C for the narrow form and the second word for the wide one (AGETW).
+// A collection reached through a reference (RFC-0018) is named by PNX_GSELECTED (in a field,
+// PNX_FSELECTED): the global that the GSEL right before chose.
+#define PNX_GX(st, i) ((i) == PNX_GSELECTED ? (st)->gsel : (i))
+#define PNX_GF(st, x) (((x) & 0xfffu) == PNX_FSELECTED ? (st)->gsel : (x) & 0xfffu)
 #define PNX_OP(name)                                                                               \
     PNX_INLINE int pnx_op_##name([[maybe_unused]] pinax_state *st, [[maybe_unused]] int64_t *R, \
                                     [[maybe_unused]] pnx_scell *S, [[maybe_unused]] uint32_t w,    \
@@ -199,10 +203,10 @@ PNX_COND(JSEQ) {
 
 // ---- globals, arrays, records -----------------------------------------------------------
 
-PNX_OP(GETG) { __builtin_memcpy(&R[OP_A(w)], st->globals[OP_BX(w)].ptr, 8); return PNX_R_OK; }
-PNX_OP(SETG) { __builtin_memcpy(st->globals[OP_BX(w)].ptr, &R[OP_A(w)], 8); return PNX_R_OK; }
+PNX_OP(GETG) { __builtin_memcpy(&R[OP_A(w)], st->globals[PNX_GX(st, OP_BX(w))].ptr, 8); return PNX_R_OK; }
+PNX_OP(SETG) { __builtin_memcpy(st->globals[PNX_GX(st, OP_BX(w))].ptr, &R[OP_A(w)], 8); return PNX_R_OK; }
 PNX_OP(AGET) {
-    const pnx_global *g = &st->globals[x];
+    const pnx_global *g = &st->globals[PNX_GX(st, x)];
     const uint64_t index = (uint64_t)R[OP_B(w)];
     if (index >= g->length)
         return PINAX_ERR_RANGE;
@@ -210,7 +214,7 @@ PNX_OP(AGET) {
     return PNX_R_OK;
 }
 PNX_OP(ASET) {
-    const pnx_global *g = &st->globals[x];
+    const pnx_global *g = &st->globals[PNX_GX(st, x)];
     const uint64_t index = (uint64_t)R[OP_B(w)];
     if (index >= g->length)
         return PINAX_ERR_RANGE;
@@ -219,13 +223,13 @@ PNX_OP(ASET) {
 }
 PNX_OP(ROW) {
     const uint64_t index = (uint64_t)R[OP_B(w)];
-    if (index >= st->globals[x].length)
+    if (index >= st->globals[PNX_GX(st, x)].length)
         return PINAX_ERR_RANGE;
     R[OP_A(w)] = (int64_t)index + 1;
     return PNX_R_OK;
 }
 PNX_OP(FGET) {
-    const pnx_global *g = &st->globals[x & 0xfffu];
+    const pnx_global *g = &st->globals[PNX_GF(st, x)];
     uint64_t row;
     const int bad = pnx_row_of(g, R[OP_B(w)], &row);
     if (bad)
@@ -234,7 +238,7 @@ PNX_OP(FGET) {
     return PNX_R_OK;
 }
 PNX_OP(FSET) {
-    const pnx_global *g = &st->globals[x & 0xfffu];
+    const pnx_global *g = &st->globals[PNX_GF(st, x)];
     const int64_t value = R[OP_A(w)];
     uint64_t row;
     const int bad = pnx_row_of(g, R[OP_B(w)], &row);
@@ -246,7 +250,7 @@ PNX_OP(FSET) {
     return PNX_R_OK;
 }
 PNX_OP(FGETS) {
-    const pnx_global *g = &st->globals[x & 0xfffu];
+    const pnx_global *g = &st->globals[PNX_GF(st, x)];
     uint64_t row;
     const int bad = pnx_row_of(g, R[OP_B(w)], &row);
     if (bad)
@@ -256,7 +260,7 @@ PNX_OP(FGETS) {
     return PNX_R_OK;
 }
 PNX_OP(FSETS) {
-    const pnx_global *g = &st->globals[x & 0xfffu];
+    const pnx_global *g = &st->globals[PNX_GF(st, x)];
     const pnx_scell value = S[OP_A(w)];
     uint64_t row;
     const int bad = pnx_row_of(g, R[OP_B(w)], &row);
@@ -321,7 +325,7 @@ PNX_OP(TOINT) {
 
 PNX_OP(BCLEAR) {
     const uint64_t zero = 0;
-    __builtin_memcpy(st->globals[OP_BX(w)].ptr, &zero, 8);
+    __builtin_memcpy(st->globals[PNX_GX(st, OP_BX(w))].ptr, &zero, 8);
     return PNX_R_OK;
 }
 // The bytes of `value` in width code `code` (PNX_W_BE, PNX_W_VARINT): their count.
@@ -367,7 +371,7 @@ PNX_INLINE uint32_t pnx_load_code(const uint8_t *p, uint32_t length, uint32_t co
 }
 
 PNX_OP(BPUT) {
-    const pnx_global *g = &st->globals[x];
+    const pnx_global *g = &st->globals[PNX_GX(st, x)];
     const int64_t value = R[OP_A(w)];
     const uint32_t code = OP_B(w);
     uint64_t len = pnx_buffer_len(g);
@@ -386,7 +390,7 @@ PNX_OP(BPUT) {
 }
 // B 0: one length byte, then the bytes (longer than 255 is a fault); B 1: the length as a varint
 PNX_OP(BPUTS) {
-    const pnx_global *g = &st->globals[x];
+    const pnx_global *g = &st->globals[PNX_GX(st, x)];
     const pnx_scell s = S[OP_A(w)];
     uint64_t len = pnx_buffer_len(g);
     if (!OP_B(w) && s.length > 255)
@@ -406,7 +410,7 @@ PNX_OP(BPUTS) {
 // The buffer cut back to R[A] bytes, or the list to R[A] elements; more than it holds, or
 // fewer than none, is a fault.
 PNX_OP(BTRUNC) {
-    pnx_global    *g = &st->globals[OP_BX(w)];
+    pnx_global    *g = &st->globals[PNX_GX(st, OP_BX(w))];
     const uint64_t n = (uint64_t)R[OP_A(w)];
     if (g->kind != PNX_G_BUFFER) {
         if (n > g->length)
@@ -426,7 +430,7 @@ PNX_OP(VLEN) {
     return PNX_R_OK;
 }
 PNX_OP(BVIEW) {
-    const pnx_global *g = &st->globals[OP_BX(w)];
+    const pnx_global *g = &st->globals[PNX_GX(st, OP_BX(w))];
     S[OP_A(w)] = (pnx_scell){PNX_SEG_GLOBAL, (uint32_t)pnx_buffer_len(g),
                              (uint64_t)(g->ptr + 8 - st->segment[PNX_SEG_GLOBAL])};
     return PNX_R_OK;
@@ -498,9 +502,10 @@ PNX_OP(RCATB) {
 
 // ---- arrays and lists of integers ---------------------------------------------------------
 
-PNX_OP(GLEN) { R[OP_A(w)] = st->globals[OP_BX(w)].length; return PNX_R_OK; }
+PNX_OP(GCAP) { R[OP_A(w)] = st->globals[PNX_GX(st, OP_BX(w))].capacity; return PNX_R_OK; }
+PNX_OP(GLEN) { R[OP_A(w)] = st->globals[PNX_GX(st, OP_BX(w))].length; return PNX_R_OK; }
 PNX_OP(GCLEAR) { // an array is zeroed; a list becomes empty
-    pnx_global *g = &st->globals[OP_BX(w)];
+    pnx_global *g = &st->globals[PNX_GX(st, OP_BX(w))];
     if (g->kind == PNX_G_LIST || g->kind == PNX_G_ROWS || g->kind == PNX_G_QUEUE) {
         g->length = g->head = 0;
         st->qturn += g->kind == PNX_G_QUEUE;
@@ -510,7 +515,7 @@ PNX_OP(GCLEAR) { // an array is zeroed; a list becomes empty
     return PNX_R_OK;
 }
 PNX_OP(ADDROW) {
-    pnx_global *g = &st->globals[OP_BX(w)];
+    pnx_global *g = &st->globals[PNX_GX(st, OP_BX(w))];
     if (g->length == g->capacity) {
         st->fail = PINAX_ERR_FULL;
         return PNX_R_FAILED;
@@ -520,7 +525,7 @@ PNX_OP(ADDROW) {
     return PNX_R_OK;
 }
 PNX_OP(LPUSH) {
-    pnx_global *g = &st->globals[OP_BX(w)];
+    pnx_global *g = &st->globals[PNX_GX(st, OP_BX(w))];
     if (g->length == g->capacity) {
         st->fail = PINAX_ERR_FULL;
         return PNX_R_FAILED;
@@ -530,7 +535,7 @@ PNX_OP(LPUSH) {
     return PNX_R_OK;
 }
 PNX_OP(LPOP) {
-    pnx_global *g = &st->globals[OP_BX(w)];
+    pnx_global *g = &st->globals[PNX_GX(st, OP_BX(w))];
     if (g->length == 0) {
         st->fail = PINAX_ERR_RANGE;
         return PNX_R_FAILED;
@@ -542,8 +547,8 @@ PNX_OP(LPOP) {
 // Appends a copy of row R[A] of table x (a list or an array of the same record) to the
 // list of records BX. Fails with full.
 PNX_OP(LCOPYR) {
-    pnx_global *g = &st->globals[OP_BX(w)];
-    const pnx_global *from = &st->globals[x];
+    pnx_global *g = &st->globals[PNX_GX(st, OP_BX(w))];
+    const pnx_global *from = &st->globals[PNX_GX(st, x)];
     uint64_t row;
     const int bad = pnx_row_of(from, R[OP_A(w)], &row);
     if (bad)
@@ -560,7 +565,7 @@ PNX_OP(LCOPYR) {
 // A list of str(N) is a table of text cells: push copies the text into a new last cell (too
 // long is a fault, as a store is), pop copies the last cell's text into the region and drops it.
 PNX_OP(LPUSHS) {
-    pnx_global *g = &st->globals[OP_BX(w)];
+    pnx_global *g = &st->globals[PNX_GX(st, OP_BX(w))];
     const pnx_scell value = S[OP_A(w)];
     if (g->length == g->capacity) {
         st->fail = PINAX_ERR_FULL;
@@ -575,7 +580,7 @@ PNX_OP(LPUSHS) {
     return PNX_R_OK;
 }
 PNX_OP(LPOPS) {
-    pnx_global *g = &st->globals[OP_BX(w)];
+    pnx_global *g = &st->globals[PNX_GX(st, OP_BX(w))];
     if (g->length == 0) {
         st->fail = PINAX_ERR_RANGE;
         return PNX_R_FAILED;
@@ -651,12 +656,12 @@ PNX_INLINE int pnx_buffer_append(pinax_state *st, const pnx_global *g, const uin
 PNX_OP(BCAT) {
     const pnx_scell s = S[OP_A(w)];
     st->charge += s.length;
-    return pnx_buffer_append(st, &st->globals[OP_BX(w)], pnx_view_bytes(st, s), s.length);
+    return pnx_buffer_append(st, &st->globals[PNX_GX(st, OP_BX(w))], pnx_view_bytes(st, s), s.length);
 }
 PNX_OP(BCATI) {
     uint8_t digits[24];
     const uint32_t n = pnx_format_int(R[OP_A(w)], digits);
-    return pnx_buffer_append(st, &st->globals[OP_BX(w)], digits, n);
+    return pnx_buffer_append(st, &st->globals[PNX_GX(st, OP_BX(w))], digits, n);
 }
 
 #define PNX_VIEW_OP(name, expr_offset, expr_length)                                                \
@@ -718,7 +723,7 @@ PNX_OP(SREPL) {
 }
 
 PNX_OP(QPUT) {
-    pnx_global *g = &st->globals[OP_BX(w)];
+    pnx_global *g = &st->globals[PNX_GX(st, OP_BX(w))];
     if (g->length == g->capacity) {
         st->fail = PINAX_ERR_FULL;
         return PNX_R_FAILED;
@@ -730,7 +735,7 @@ PNX_OP(QPUT) {
     return PNX_R_OK;
 }
 PNX_OP(QTAKE) {
-    pnx_global *g = &st->globals[OP_BX(w)];
+    pnx_global *g = &st->globals[PNX_GX(st, OP_BX(w))];
     if (g->length == 0) {
         st->fail = PINAX_ERR_RANGE;
         return PNX_R_FAILED;
@@ -742,7 +747,7 @@ PNX_OP(QTAKE) {
     return PNX_R_OK;
 }
 PNX_OP(QPEEK) {
-    const pnx_global *g = &st->globals[OP_BX(w)];
+    const pnx_global *g = &st->globals[PNX_GX(st, OP_BX(w))];
     if (g->length == 0) {
         st->fail = PINAX_ERR_RANGE;
         return PNX_R_FAILED;
@@ -752,7 +757,7 @@ PNX_OP(QPEEK) {
 }
 
 PNX_OP(PALLOC) {
-    pnx_global *g = &st->globals[OP_BX(w)];
+    pnx_global *g = &st->globals[PNX_GX(st, OP_BX(w))];
     if (g->head == 0) {
         st->fail = PINAX_ERR_FULL;
         return PNX_R_FAILED;
@@ -769,7 +774,7 @@ PNX_OP(PALLOC) {
     return PNX_R_OK;
 }
 PNX_OP(PFREE) {
-    pnx_global *g = &st->globals[OP_BX(w)];
+    pnx_global *g = &st->globals[PNX_GX(st, OP_BX(w))];
     uint64_t row;
     const int bad = pnx_row_of(g, R[OP_A(w)], &row);
     if (bad)
@@ -785,7 +790,7 @@ PNX_OP(PFREE) {
 }
 PNX_OP(PALIVE) {
     uint64_t row;
-    R[OP_A(w)] = pnx_row_of(&st->globals[x], R[OP_B(w)], &row) == PNX_R_OK;
+    R[OP_A(w)] = pnx_row_of(&st->globals[PNX_GX(st, x)], R[OP_B(w)], &row) == PNX_R_OK;
     return PNX_R_OK;
 }
 
@@ -1334,7 +1339,7 @@ PNX_INLINE uint32_t pnx_json_comma(const pnx_global *g) {
 }
 // B: what to write into buffer x: 1 { 2 } 3 [ 4 ] 7 the number R[A] 8 the bool R[A] 9 null.
 PNX_OP(JPUTI) {
-    const pnx_global *g = &st->globals[x];
+    const pnx_global *g = &st->globals[PNX_GX(st, x)];
     const uint32_t    kind = OP_B(w);
     uint8_t           out[32];
     uint32_t          n = 0;
@@ -1356,7 +1361,7 @@ PNX_OP(JPUTI) {
 }
 // B: 5 the key A (and a colon), 6 the string A, quoted, into buffer x.
 PNX_OP(JPUTS) {
-    const pnx_global *g = &st->globals[x];
+    const pnx_global *g = &st->globals[PNX_GX(st, x)];
     const pnx_scell   s = S[OP_A(w)];
     uint64_t          len = pnx_buffer_len(g);
     const uint32_t    comma = pnx_json_comma(g), colon = OP_B(w) == PNX_JSON_KEY;
@@ -1429,7 +1434,7 @@ PNX_OP(CNEXT) {
 }
 // A CSV field A into buffer x: a comma first unless it begins a line; quoted when it must be.
 PNX_OP(CPUTS) {
-    const pnx_global *g = &st->globals[x];
+    const pnx_global *g = &st->globals[PNX_GX(st, x)];
     const pnx_scell   s = S[OP_A(w)];
     uint64_t          len = pnx_buffer_len(g);
     const uint32_t    comma = len && g->ptr[8 + len - 1] != '\n';
@@ -1452,7 +1457,7 @@ PNX_OP(CPUTS) {
 }
 // B 0: the number R[A] as a CSV field; 1: the bool R[A]; 2: the end of the line.
 PNX_OP(CPUTI) {
-    const pnx_global *g = &st->globals[x];
+    const pnx_global *g = &st->globals[PNX_GX(st, x)];
     const uint64_t    len = pnx_buffer_len(g);
     uint8_t           out[32];
     uint32_t          n = 0;
@@ -1482,7 +1487,7 @@ PNX_OP(SHASH) {
 // A, encoded or decoded as B says, appended to buffer x. PNX_R_FAILED: no room (full), or the
 // text is not of the form (format); the buffer keeps what it held.
 PNX_OP(BENC) {
-    const pnx_global *g = &st->globals[x];
+    const pnx_global *g = &st->globals[PNX_GX(st, x)];
     const pnx_scell   s = S[OP_A(w)];
     uint64_t          len = pnx_buffer_len(g), n = 0;
     const int r = pnx_encode(OP_B(w), pnx_view_bytes(st, s), s.length, g->ptr + 8 + len, g->capacity - len, &n);
@@ -1821,14 +1826,14 @@ PNX_INLINE int pnx_index_get(pinax_state *st, const pnx_global *x, const uint8_t
 PNX_OP(IXGET) {
     uint8_t key[8];
     __builtin_memcpy(key, &R[OP_B(w)], 8);
-    return pnx_index_get(st, &st->globals[x], key, 8, &R[OP_A(w)]);
+    return pnx_index_get(st, &st->globals[PNX_GX(st, x)], key, 8, &R[OP_A(w)]);
 }
 PNX_OP(IXGETS) {
     const pnx_scell s = S[OP_B(w)];
-    return pnx_index_get(st, &st->globals[x], pnx_view_bytes(st, s), s.length, &R[OP_A(w)]);
+    return pnx_index_get(st, &st->globals[PNX_GX(st, x)], pnx_view_bytes(st, s), s.length, &R[OP_A(w)]);
 }
 PNX_OP(IXPUT) {
-    const pnx_global *ix = &st->globals[OP_BX(w)];
+    const pnx_global *ix = &st->globals[PNX_GX(st, OP_BX(w))];
     const uint64_t row = (uint64_t)R[OP_A(w)];
     if (row - 1 >= st->globals[ix->key & 0xfffu].length)
         return PINAX_ERR_RANGE;
@@ -1846,7 +1851,7 @@ PNX_OP(IXPUT) {
     return PNX_R_OK;
 }
 PNX_OP(IXDEL) { // nothing happens when the row is not in the index
-    const pnx_global *ix = &st->globals[OP_BX(w)];
+    const pnx_global *ix = &st->globals[PNX_GX(st, OP_BX(w))];
     const uint64_t row = (uint64_t)R[OP_A(w)];
     if (row - 1 >= st->globals[ix->key & 0xfffu].length)
         return PINAX_ERR_RANGE;

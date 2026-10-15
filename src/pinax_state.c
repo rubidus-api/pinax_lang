@@ -376,11 +376,17 @@ static const char *check_word(const pinax_state *st, uint32_t index, span range,
         const uint32_t op = code[i] & 0xffu;
         if (!opinfo[op].known)
             return "code: unknown instruction";
-        heads[i] = 1;
+        if (!heads[i])
+            heads[i] = 1;
         last = i;
         i += opinfo[op].second ? 2 : 1;
         if (i > range.end)
             return "code: instruction cut off";
+        if (op == PNX_GSEL) { // the next instruction uses the global it chose: not a jump target
+            if (i == range.end)
+                return "code: GSEL at the end of a word";
+            heads[i] = 2;
+        }
     }
     const uint32_t last_op = code[last] & 0xffu;
     if (last_op != PNX_JMP && last_op != PNX_RET && last_op != PNX_RETOK && last_op != PNX_RETF &&
@@ -417,7 +423,7 @@ static const char *check_word(const pinax_state *st, uint32_t index, span range,
                 return "code: string constant outside its table";
             break;
         case PNX_F_GLOBAL:
-            if (!reg_ok(info.a, a, word, head->n_globals) || bx >= head->n_globals)
+            if (!reg_ok(info.a, a, word, head->n_globals) || (bx >= head->n_globals && bx != PNX_GSELECTED))
                 return "code: global outside its table";
             break;
         default: // PNX_F_AX
@@ -425,7 +431,7 @@ static const char *check_word(const pinax_state *st, uint32_t index, span range,
             break;
         }
         if (target >= 0 || info.c == PNX_K_J || info.shape == PNX_F_AX) {
-            if (target < range.begin || target >= range.end || !heads[target])
+            if (target < range.begin || target >= range.end || heads[target] != 1)
                 return "code: jump outside the word or into an instruction";
         }
 
@@ -435,6 +441,7 @@ static const char *check_word(const pinax_state *st, uint32_t index, span range,
         case PNX_GETG: case PNX_SETG: want = PNX_G_INT; global = bx; break;
         case PNX_AGET: case PNX_ASET: want = PNX_G_ARRAY; global = c; break; // or a list, below
         case PNX_GLEN: case PNX_GCLEAR: want = PNX_G_COUNT + 1; global = bx; break; // any collection
+        case PNX_GCAP: want = PNX_G_COUNT + 2; global = bx; break; // any collection or a buffer
         case PNX_ADDROW: want = PNX_G_ROWS; global = bx; break;
         case PNX_BCAT: case PNX_BCATI: case PNX_BTRUNC: want = PNX_G_BUFFER; global = bx; break;
         case PNX_QPUT: case PNX_QTAKE: case PNX_QPEEK: case PNX_QWTAKE: case PNX_QWPUT: want = PNX_G_QUEUE; global = bx; break;
@@ -470,17 +477,31 @@ static const char *check_word(const pinax_state *st, uint32_t index, span range,
             }
             global = x;
         }
+        // a global a reference chose: the GSEL right before says its kind and element size
+        const bool selected = global == PNX_GSELECTED ||
+                              (info.second == PNX_X_FIELD && (x & 0xfffu) == PNX_FSELECTED);
+        uint32_t sel_kind = PNX_G_COUNT, sel_elem = 0;
+        if (selected || (op == PNX_LCOPYR && (x == PNX_GSELECTED || bx == PNX_GSELECTED))) {
+            if (heads[i] != 2 || op == PNX_LCOPYR || want == PNX_G_COUNT)
+                return "code: a selected global without its GSEL";
+            sel_kind = (code[i - 2] >> 16) & 0xffu;
+            sel_elem = code[i - 1];
+        }
         if (want != PNX_G_COUNT) {
-            if (global >= head->n_globals)
+            if (!selected && global >= head->n_globals)
                 return "code: global outside its table";
-            const uint32_t kind = st->globals[global].kind;
+            const uint32_t kind = selected ? sel_kind : st->globals[global].kind;
             const bool ok = kind == want || (want == PNX_G_ARRAY && kind == PNX_G_LIST) ||
                             (op == PNX_BTRUNC && (kind == PNX_G_LIST || kind == PNX_G_ROWS)) ||
                             (want == PNX_G_TABLE && (kind == PNX_G_ROWS || (kind == PNX_G_POOL && op != PNX_ROW && op != PNX_ROWW))) ||
                             (want == PNX_G_COUNT + 1 && kind != PNX_G_INT && kind != PNX_G_BUFFER &&
-                             kind != PNX_G_INDEX && kind != PNX_G_TASKS);
+                             kind != PNX_G_INDEX && kind != PNX_G_TASKS) ||
+                            (want == PNX_G_COUNT + 2 && kind != PNX_G_INT && kind != PNX_G_INDEX && kind != PNX_G_TASKS &&
+                             kind != PNX_G_POOL);
             if (!ok)
                 return "code: global of the wrong kind";
+            if (selected && (want == PNX_G_INDEX || want == PNX_G_POOL || want == PNX_G_TASKS))
+                return "code: this global cannot be chosen by a reference";
             if (((op == PNX_IXGET || op == PNX_IXGETW) && st->globals[global].key_is_str) ||
                 ((op == PNX_IXGETS || op == PNX_IXGETSW) && !st->globals[global].key_is_str))
                 return "code: key of the wrong kind for this index";
@@ -490,7 +511,7 @@ static const char *check_word(const pinax_state *st, uint32_t index, span range,
             const bool is_text = op == PNX_FGETS || op == PNX_FSETS;
             if (!is_text && extra >= PNX_W_COUNT)
                 return "code: unknown field width";
-            if (offset + (is_text ? 1u + extra : width_bytes[extra]) > st->globals[global].elem_bytes)
+            if (offset + (is_text ? 1u + extra : width_bytes[extra]) > (selected ? sel_elem : st->globals[global].elem_bytes))
                 return "code: field outside its record";
         }
         const uint32_t wcode = op == PNX_SGET ? c : b; // a width, or varint; big-endian on a width
@@ -1768,6 +1789,7 @@ pinax_err pinax_global_find(pinax_state *st, const char *name, pinax_global *out
         out->capacity = g->capacity;
         out->type.ptr = (const unsigned char *)recs[k].type;
         out->type.len = __builtin_strlen(recs[k].type);
+        out->number = k;
         return PINAX_OK;
     }
     return fail(st, PINAX_ERR_NOT_FOUND, "no such global");

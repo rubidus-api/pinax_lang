@@ -28,7 +28,7 @@ its inputs, and the stack where its body ends shall match its results.]
 
 #para("2")[An input with a name (`w int`) becomes a local of that name, and the body starts with an empty stack. An
 input given as a type only (`int`) stays on the stack when the body starts. Names on the results side are for the
-reader only and make no locals.]
+reader only and make no locals. An input may also take a collection (9.9).]
 
 #ex("spec", "09-signatures.pnx")
 
@@ -160,6 +160,44 @@ processor adds up the length first and writes once.]
 
 #ex("spec", "09-cat.pnx")
 
+== Collections as parameters <words-collections>
+
+#part("Syntax")
+```ebnf
+collection-type = ( "array" | "list" | "queue" ) cell | "buffer" ;
+cell            = NAME [ "(" size ")" ] ;   (* int, bool, err, str(N), or a record *)
+```
+
+#para("1")[An input of type `array T`, `list T` or `queue T`, or of type `buffer`, takes a collection: the caller writes
+the collection's name there (`scores total`). In the body the parameter is used wherever the name of such a collection
+goes --- `l len`, `i l idx`, `v l push`, `v i set l`, `l do … end each`, `q take`, `s b append` and so on. The cells shall
+be of the type the parameter says: `int` `bool` `err`, `str(N)` with the same `N`, or a record. The capacity is not part
+of the type; any capacity is taken, and `l capacity` gives the one it has.]
+
+#ex("spec", "09-coll-param.pnx")
+
+#para("2")[In a word with a parameter `l` that is a table of records, the name `l` is also the type of its rows, as the
+name of a declared table is (8.8). A row reached through `l` is used in that word: in its locals, its fields and the
+blocks of its loops.]
+
+#ex("spec", "09-coll-param-rows.pnx")
+
+#para("3")[What is passed is the collection itself, not a copy. Collections are globals, so a parameter may be held
+across `yield` and the waits of 14.3.]
+
+#part("Constraints")
+
+#para("4")[A collection shall be given where its kind and cells are those of the parameter.]
+#ex("spec", "09-coll-param-kind.pnx")
+
+#para("5")[A collection parameter is not a value: it is not stored with `to`, not a result of a word, and not a
+parameter of a block (`word (…)`). Pools and indexes are not taken.]
+#ex("spec", "09-coll-param-result.pnx")
+
+#para("6")[A word that truncates a list parameter (8.5 (2a)), or gives it to a word that does, truncates the list given
+to it. The rule of 8.5 (2b) then holds for that list, where the word is called.]
+#ex("spec", "09-coll-param-truncate.pnx")
+
 #part("Diagnostics")
 #diag(
   ([Named and bare inputs mixed], "inputs are all named or all bare types, not a mix"),
@@ -173,4 +211,8 @@ processor adds up the length first and writes once.]
   ([`set` with a name that is not a global], "set writes a declared global; there is none of this name"),
   ([Hiding a visible name], "this name is already visible here; a new name may not hide it"),
   ([A signature unlike the forward declaration], "the definition has another signature than its forward declaration"),
+  ([A collection of another kind or cells], "the collection given here is of another kind, or holds another type, than the parameter says"),
+  ([A value where a collection goes], "this parameter takes an array, list, queue or buffer: give its name"),
+  ([A collection as a result], "a word gives no collection; it takes one as a parameter"),
+  ([A kept list given to a word that truncates it], "this list's rows are kept by a field, a global, a named row or an index; the word it is given to truncates it"),
 )

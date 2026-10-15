@@ -1,0 +1,20 @@
+rem run
+use io
+list scores int 8
+list bonus int 8
+queue jobs int 4
+array grid int 3
+word add_range (l list int, lo int, hi int)    rem lo, lo + 1, ... up to hi - 1
+  lo hi range do (v int) v l push or_else (e) end end each
+end
+word summary (l list int gives str) cat (l len, " of ", l capacity, ", sum ", l sum) end
+word fill (q queue int, n int) 0 n range do (v int) v q put or_else (e) end end each end
+word zero (a array int) a do (v int, i int) 0 i set a end each_index end
+word demo ()
+  scores 1 4 add_range  bonus 10 12 add_range
+  scores summary io.println
+  bonus summary io.println
+  jobs 3 fill  cat ("jobs: ", jobs len) io.println
+  7 1 set grid  grid zero  cat ("grid: ", 1 grid idx) io.println
+end
+demo

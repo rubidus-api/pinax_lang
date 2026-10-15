@@ -45,6 +45,10 @@ enum { L_PLAIN, L_OWNS, L_MOVED }; // what a local holds of a value that must be
 #define TY_DISTINCT 0x4000u  // declared by `type`: this plus its number
 #define TY_BLOCK 0x2000u     // word (effect): this plus the number of the effect in comp.btypes
 #define TY_HANDLE 0x1800u    // a handle type of the host: this plus its number
+#define TY_REF 0x1100u       // array T, list T, queue T or buffer (RFC-0018): this plus its number in comp.rtypes
+#define TY_REFROW 0x1400u    // a row of a table a reference names: this plus the register of the reference
+#define REF_GLOBAL 0xf00u    // in place of a global's number: the collection a reference names, this plus its
+                             // register; emit() puts a GSEL before the instruction (globals stay below it)
 #define MAX_NESTED 4         // value blocks inside value blocks
 enum { USE_EACH, USE_FOLD, USE_TIMES, USE_COUNT, USE_ANY, USE_ALL, USE_FIRST, USE_EACH_INDEX, USE_MAP, USE_FILTER,
        USE_WITH, USE_BY }; // the last two: rex.with_match and rex.replace_by
@@ -104,6 +108,7 @@ typedef struct wordsym {
     uint16_t cells[2];
     uint16_t module;   // the source module it was declared in (set when the load is done)
     bool     exported; // visible to other modules as module.name
+    uint16_t truncs;   // the list parameters it truncates, directly or through a word it gives them to
 } wordsym;
 
 typedef struct local {
@@ -199,6 +204,7 @@ typedef struct fn {
     uint8_t  marks; // the marks made so far, in the order of the source (entry.born)
     uint32_t releases; // the releases compiled so far
     bool     dead; // the code here cannot be reached
+    bool     second_due; // the next word emitted is the second word of an instruction
     sig      own_sig; // a value block keeps its effect here
     vec      code; // of uint32_t
     vec      lines; // of uint32_t: the source line of each code word
@@ -282,6 +288,15 @@ typedef struct dtype {
     bool     exported; // visible to other modules as module.name
 } dtype;
 
+// A reference to a collection (RFC-0018): its kind and what its cells hold. One type per kind
+// and contents.
+typedef struct rtype {
+    uint8_t  kind;   // GK_ARRAY, GK_LIST, GK_QUEUE, GK_BUFFER
+    uint8_t  strcap; // cells of str(N): N
+    tid      cell;   // TY_INT, TY_BOOL, TY_ERR or TY_STR; TY_NONE for records and buffers
+    uint32_t record; // NONE, or the record a row holds
+} rtype;
+
 // The finished code of a value block, kept until the word around it has been stored: words lie
 // in the container in the order of their numbers.
 typedef struct pending_code {
@@ -289,10 +304,17 @@ typedef struct pending_code {
     uint32_t *code, *lines;
 } pending_code;
 
-// A `truncate` of a list (RFC-0017 section 3.2): nothing may keep a row of that list.
+// A `truncate` of a list (RFC-0017 section 3.2): nothing may keep a row of that list. A list given
+// to a list parameter (RFC-0018) is a site too, when that word truncates the parameter.
 typedef struct trunc_site {
     uint32_t global, line, column;
+    uint32_t word, param; // NONE: truncated here; else the word called and its parameter
 } trunc_site;
+
+// A word gives its list parameter to a parameter of another word: if that one truncates, so does it.
+typedef struct trunc_edge {
+    uint32_t word, param, callee, callee_param;
+} trunc_edge;
 
 typedef struct comp {
     pinax_state *st;
@@ -312,6 +334,9 @@ typedef struct comp {
     vec          fields;   // field
     vec          fwds;     // fwd
     vec          btypes;   // sig: the effects that are block types
+    vec          rtypes;   // rtype: the reference types
+    globalsym    refsym[4]; // what a reference names, as a global's table entry (gsym)
+    uint32_t     refsym_next;
     vec          pending;  // pending_code: value blocks compiled inside the body now being compiled
     fn          *block_fn[MAX_NESTED];
     uint32_t     nested;   // value blocks open
@@ -344,6 +369,7 @@ typedef struct comp {
     bool         exporting; // `export` stands before the item being compiled
     uint32_t     path_global; // to module.name : the global the path names, for store_local
     vec          truncs;    // trunc_site: lists cut back by truncate, checked when the source is read
+    vec          tedges;    // trunc_edge
     vec          dtypes;   // dtype
     vec          localrecs; // pnx_localrec: the locals of the words of this load
     uint8_t     *rx_buf;    // where rx compiles a constant pattern, PNX_REX_BUF bytes
@@ -459,7 +485,17 @@ static tid row_type(uint32_t index) {
 }
 
 static bool is_row(tid type) {
-    return type >= TY_FIRST_DECLARED && type < TY_HANDLE;
+    return (type >= TY_FIRST_DECLARED && type < TY_FIRST_DECLARED + REF_GLOBAL) ||
+           (type >= TY_REFROW && type < TY_REFROW + 0x100u);
+}
+
+// The table a row type belongs to: a global, or (from REF_GLOBAL up) the one a reference names.
+static uint32_t row_global(tid type) {
+    return type >= TY_REFROW ? REF_GLOBAL + (type - TY_REFROW) : (uint32_t)(type - TY_FIRST_DECLARED);
+}
+
+static bool is_ref(tid type) {
+    return type >= TY_REF && type < TY_REF + 0x300u;
 }
 
 static bool is_handle(tid type) {
@@ -479,7 +515,18 @@ static tid base_of(const comp *c, tid type) {
 
 static uint32_t find_global(const comp *c, name n);
 
+static const local *ref_local(const comp *c, uint32_t reg);
+static local       *find_local(fn *f, name n);
+
 static name type_name(const comp *c, tid type) {
+    if (is_ref(type)) {
+        const uint8_t kind = ((const rtype *)c->rtypes.ptr + (type - TY_REF))->kind;
+        return cname(kind == GK_ARRAY ? "array" : kind == GK_LIST ? "list" : kind == GK_QUEUE ? "queue" : "buffer");
+    }
+    if (type >= TY_REFROW && is_row(type)) { // a row of the table a parameter names: the parameter's name
+        const local *l = ref_local(c, type - TY_REFROW);
+        return l ? l->name : cname("row");
+    }
     if (is_row(type))
         return ((const globalsym *)c->globals.ptr + (type - TY_FIRST_DECLARED))->name;
     if (is_handle(type))
@@ -515,6 +562,9 @@ static tid type_of_name(const comp *c, name n) {
     const tid basic = basic_type(n);
     if (basic != TY_NONE)
         return basic;
+    const local *l = c->f ? find_local(c->f, n) : NULL; // a parameter that names a table: a row of it (RFC-0018)
+    if (l && is_ref(l->type) && ((const rtype *)c->rtypes.ptr + (l->type - TY_REF))->record != NONE)
+        return (tid)(TY_REFROW + l->reg);
     if (name_is(n, "regex") && module_used(c, cname("rex"))) // the type of the module rex, seen where it is used
         return TY_REGEX;
     for (uint32_t k = c->eval ? 0 : c->base.dtypes; k < c->dtypes.n; ++k) {
@@ -574,6 +624,50 @@ static bool block_type(comp *c, const sig *s, tid *out) {
     return true;
 }
 
+static uint32_t find_record_any(const comp *c, name n);
+static bool     str_capacity(comp *c, uint8_t *out);
+
+static bool ref_word(const comp *c) {
+    return is_word(c, PNX_KW_array) || is_word(c, PNX_KW_list) || is_word(c, PNX_KW_queue) || is_word(c, PNX_KW_buffer);
+}
+
+// array T, list T, queue T or buffer, a parameter that takes a collection (RFC-0018); the current
+// token is the kind.
+static bool parse_ref(comp *c, tid *out) {
+    rtype r = {.kind = is_word(c, PNX_KW_array) ? GK_ARRAY : is_word(c, PNX_KW_list) ? GK_LIST
+                     : is_word(c, PNX_KW_queue) ? GK_QUEUE : GK_BUFFER,
+               .record = NONE};
+    if (!advance(c))
+        return false;
+    if (r.kind != GK_BUFFER) {
+        if (c->tok.kind != PNX_T_NAME)
+            return syntax(c, "a collection parameter says what it holds: list int, array city, queue int");
+        r.record = find_record_any(c, tok_name(c));
+        r.cell = r.record == NONE ? basic_type(tok_name(c)) : TY_NONE;
+        if (r.record == NONE && r.cell != TY_INT && r.cell != TY_BOOL && r.cell != TY_ERR && r.cell != TY_STR)
+            return type_error(c, "the cells are int, bool, err, str(N) or a record");
+        if (r.kind == GK_QUEUE && (r.record != NONE || r.cell == TY_STR))
+            return type_error(c, "a queue holds int, bool or err values");
+        if (!advance(c) || (r.cell == TY_STR && !str_capacity(c, &r.strcap)))
+            return false;
+    }
+    const rtype *all = c->rtypes.ptr;
+    for (uint32_t k = 0; k < c->rtypes.n; ++k) {
+        if (all[k].kind == r.kind && all[k].cell == r.cell && all[k].strcap == r.strcap && all[k].record == r.record) {
+            *out = (tid)(TY_REF + k);
+            return true;
+        }
+    }
+    if (c->rtypes.n == 0x300u)
+        return syntax(c, "too many different collection parameter types");
+    rtype *slot = vec_push(c, &c->rtypes, sizeof(rtype));
+    if (!slot)
+        return false;
+    *slot = r;
+    *out = (tid)(TY_REF + c->rtypes.n - 1);
+    return true;
+}
+
 // "(" effect ")" ; the current token is the "(".
 static bool parse_sig(comp *c, sig *s) {
     __builtin_memset(s, 0, sizeof *s);
@@ -614,7 +708,7 @@ static bool parse_sig(comp *c, sig *s) {
             if (!advance(c))
                 return false;
             if (c->tok.kind == PNX_T_NAME || is_word(c, PNX_KW_owned) || is_word(c, PNX_KW_word) ||
-                (c->in_host && is_word(c, PNX_KW_buffer))) {
+                (c->in_host && is_word(c, PNX_KW_buffer)) || (!c->in_host && ref_word(c))) {
                 param = type; // it was the name of the parameter
                 type = (name){0};
             }
@@ -636,6 +730,12 @@ static bool parse_sig(comp *c, sig *s) {
             } else if (c->in_host && !outputs && !owned && is_word(c, PNX_KW_buffer)) {
                 t = TY_BUF;
                 if (!advance(c))
+                    return false;
+            } else if (!c->in_host && ref_word(c)) { // a collection (RFC-0018)
+                if (outputs || owned)
+                    return type_error(c, outputs ? "a word gives no collection; it takes one as a parameter"
+                                                 : "a collection parameter is not owned");
+                if (!parse_ref(c, &t))
                     return false;
             } else {
                 return syntax(c, "a parameter is a type, or a name and a type");
@@ -677,7 +777,8 @@ static bool parse_sig(comp *c, sig *s) {
         if (c->tok.kind == PNX_T_COMMA) {
             if (!advance(c))
                 return false;
-            if (c->tok.kind != PNX_T_NAME && !is_word(c, PNX_KW_owned) && !is_word(c, PNX_KW_word))
+            if (c->tok.kind != PNX_T_NAME && !is_word(c, PNX_KW_owned) && !is_word(c, PNX_KW_word) &&
+                !(!c->in_host && ref_word(c)))
                 return syntax(c, "a parameter is expected after the comma");
         } else if (c->tok.kind != PNX_T_RPAREN && !is_word(c, PNX_KW_gives) && !is_word(c, PNX_KW_or)) {
             return syntax(c, "parameters are separated by commas");
@@ -729,6 +830,28 @@ static bool sig_text(const comp *c, const sig *s, char *out, size_t cap) {
             const name tn = type_name(c, kt);
             if (k)
                 PUT(", ", 2);
+            if (is_ref(kt)) { // list int, array city, queue bool, list str(8), buffer
+                const rtype *r = (const rtype *)c->rtypes.ptr + (kt - TY_REF);
+                if (pn.length) {
+                    PUT(pn.text, pn.length);
+                    PUT(" ", 1);
+                }
+                PUT(tn.text, tn.length);
+                if (r->kind != GK_BUFFER) {
+                    const name cn = r->record != NONE ? ((const record *)c->records.ptr + r->record)->name
+                                                      : type_name(c, r->cell);
+                    PUT(" ", 1);
+                    PUT(cn.text, cn.length);
+                    if (r->cell == TY_STR) {
+                        uint8_t digits[24];
+                        const uint32_t nd = pnx_format_int(r->strcap, digits);
+                        PUT("(", 1);
+                        PUT(digits, nd);
+                        PUT(")", 1);
+                    }
+                }
+                continue;
+            }
             if (pn.length) {
                 PUT(pn.text, pn.length);
                 PUT(" ", 1);
@@ -777,7 +900,7 @@ static uint32_t *code_at(fn *f, uint32_t index) {
     return (uint32_t *)f->code.ptr + index;
 }
 
-static uint32_t emit(comp *c, uint32_t word) {
+static uint32_t emit_raw(comp *c, uint32_t word) {
     fn *f = c->f;
     uint32_t *slot = vec_push(c, &f->code, sizeof(uint32_t));
     uint32_t *line = slot ? vec_push(c, &f->lines, sizeof(uint32_t)) : NULL;
@@ -787,6 +910,42 @@ static uint32_t emit(comp *c, uint32_t word) {
     *line = c->tok.line;
     f->def_at = NONE;
     return f->code.n - 1;
+}
+
+static bool select_ref(comp *c, uint32_t reg);
+
+// One word of code. A global number from REF_GLOBAL up is a collection a reference names: the
+// instruction then names PNX_GSELECTED, and a GSEL before it chooses the global (RFC-0018).
+static uint32_t emit(comp *c, uint32_t word) {
+    fn *f = c->f;
+    if (f->second_due) {
+        f->second_due = false;
+        const uint32_t first = f->code.n - 1, op = f->code.n ? ((uint32_t *)f->code.ptr)[first] & 0xffu : 0;
+        if (pnx_ops_info[op].second == PNX_X_FIELD && (word & 0xfffu) >= REF_GLOBAL && (word & 0xfffu) < PNX_FSELECTED) {
+            // a field of a row a reference names: the GSEL goes in before the instruction
+            // (the second word of an instruction ends what emit_def may retarget, as always)
+            const uint32_t head = ((uint32_t *)f->code.ptr)[first], line = ((uint32_t *)f->lines.ptr)[first];
+            --f->code.n;
+            --f->lines.n;
+            if (!select_ref(c, (word & 0xfffu) - REF_GLOBAL))
+                return NONE;
+            const uint32_t at = emit_raw(c, head);
+            if (at == NONE)
+                return NONE;
+            ((uint32_t *)f->lines.ptr)[at] = line;
+            return emit_raw(c, (word & ~0xfffu) | PNX_FSELECTED);
+        }
+        return emit_raw(c, word);
+    }
+    const pnx_opinfo info = pnx_ops_info[word & 0xffu];
+    const uint32_t bx = word >> 16;
+    if (info.shape == PNX_F_GLOBAL && bx >= REF_GLOBAL && bx < PNX_GSELECTED) {
+        if (!select_ref(c, bx - REF_GLOBAL))
+            return NONE;
+        word = (word & 0xffffu) | (uint32_t)PNX_GSELECTED << 16;
+    }
+    f->second_due = info.second != PNX_X_NONE;
+    return emit_raw(c, word);
 }
 
 // An instruction whose A field is the register it writes and nothing else.
@@ -825,6 +984,11 @@ static uint32_t wide_of(uint32_t op) {
 static uint32_t emit_g(comp *c, uint32_t op, uint32_t a, uint32_t b, uint32_t global) {
     if (global <= 255)
         return emit(c, PNX_ABC(op, a, b, global));
+    if (global >= REF_GLOBAL) { // through a reference: the wide form names the global GSEL chose
+        if (!select_ref(c, global - REF_GLOBAL))
+            return NONE;
+        global = PNX_GSELECTED;
+    }
     const uint32_t at = emit(c, PNX_ABC(wide_of(op), a, b, 0));
     return at == NONE || emit(c, global) == NONE ? NONE : at;
 }
@@ -1041,13 +1205,60 @@ static bool nothing_owned(comp *c) {
     return true;
 }
 
+// The parameter whose register is `reg` and whose type is a reference (RFC-0018).
+static const local *ref_local(const comp *c, uint32_t reg) {
+    const fn *f = c->f;
+    for (uint32_t k = 0; k < f->n_locals; ++k) {
+        if (f->locals[k].reg == reg && is_ref(f->locals[k].type))
+            return &f->locals[k];
+    }
+    return NULL;
+}
+
+// The table entry of global `gi`; from REF_GLOBAL up, an entry made for the collection a
+// reference names: what the type of the reference says of it (the capacity is not known).
+static const globalsym *gsym(comp *c, uint32_t gi) {
+    if (gi < REF_GLOBAL)
+        return (const globalsym *)c->globals.ptr + gi;
+    const local *l = ref_local(c, gi - REF_GLOBAL);
+    const rtype *r = l ? (const rtype *)c->rtypes.ptr + (l->type - TY_REF) : NULL;
+    globalsym *g = &c->refsym[c->refsym_next++ % 4];
+    *g = (globalsym){.name = l ? l->name : cname("(reference)"), .kind = r ? r->kind : GK_LIST, .record = NONE,
+                     .table = NONE, .key = NONE};
+    if (r) {
+        g->type = r->record != NONE ? (tid)(TY_REFROW + (gi - REF_GLOBAL)) : r->cell; // rows: a row of this table
+        g->strcap = r->strcap;
+        g->record = r->record;
+    }
+    return g;
+}
+
+// GSEL for the reference in register `reg`: the kind and element size its type promises are
+// checked when it runs.
+static bool select_ref(comp *c, uint32_t reg) {
+    const local *l = ref_local(c, reg);
+    if (!l)
+        return type_error(c, "this collection is not reachable here");
+    const rtype *r = (const rtype *)c->rtypes.ptr + (l->type - TY_REF);
+    uint32_t kind = r->kind == GK_ARRAY ? PNX_G_ARRAY : r->kind == GK_LIST ? PNX_G_LIST
+                  : r->kind == GK_QUEUE ? PNX_G_QUEUE : PNX_G_BUFFER;
+    uint32_t elem = 0;
+    if (r->record != NONE || r->strcap) {
+        kind = r->kind == GK_ARRAY ? PNX_G_TABLE : PNX_G_ROWS;
+        elem = r->record != NONE ? ((const record *)c->records.ptr + r->record)->size : (uint32_t)r->strcap + 1;
+    } else if (r->kind != GK_BUFFER) {
+        elem = 8;
+    }
+    return emit_raw(c, PNX_ABC(PNX_GSEL, reg, kind, 0)) != NONE && emit_raw(c, elem) != NONE;
+}
+
 // The array or list named on top of the stack; pops the name.
 static bool need_coll(comp *c, const globalsym **out, uint32_t *index) {
     fn *f = c->f;
     if (f->depth == f->floor || f->stack[f->depth - 1].type != TY_COLL)
         return type_error(c, "this word takes the name of an array or list last: i names idx");
     *index = (uint32_t)f->stack[f->depth - 1].value;
-    *out = (const globalsym *)c->globals.ptr + *index;
+    *out = gsym(c, *index);
     --f->depth;
     return true;
 }
@@ -1698,14 +1909,52 @@ static bool check_before_call(comp *c) {
 // the first register of each bank. Leaves the arguments popped.
 static bool released(comp *c, uint8_t serial);
 
+// The name of a collection at stack position `p` takes no register; given to a word as its
+// number it takes one of the I bank. The values above it in that bank move up one register.
+static bool make_room(comp *c, uint32_t p) {
+    fn *f = c->f;
+    for (uint32_t q = p + 1; q < f->depth; ++q) {
+        if (bank_of(f->stack[q].type) == BANK_I && !settle(c, q))
+            return false;
+    }
+    for (uint32_t q = f->depth; q-- > p + 1;) {
+        if (bank_of(f->stack[q].type) != BANK_I)
+            continue;
+        const uint32_t from = slot_of(c, q);
+        if (emit(c, PNX_ABC(PNX_MOVI, from + 1, from, 0)) == NONE)
+            return false;
+    }
+    return true;
+}
+
 static bool call_args(comp *c, const sig *s, uint32_t base[2]) {
     fn *f = c->f;
     for (uint32_t k = 0; k < s->n_in && f->depth - f->floor >= s->n_in; ++k) {
         if (s->in[k] == TY_BUF) { // a buffer goes to a host word as its number
             entry *e = &f->stack[f->depth - s->n_in + k];
-            if (e->type != TY_COLL || ((const globalsym *)c->globals.ptr + e->value)->kind != GK_BUFFER)
+            if (e->type != TY_COLL || gsym(c, e->value)->kind != GK_BUFFER)
                 return type_error(c, "this host word takes a buffer here");
-            *e = (entry){.type = TY_BUF, .kind = E_CONST, .value = e->value};
+            if (!make_room(c, f->depth - s->n_in + k))
+                return false;
+            *e = e->kind == E_LOCAL ? (entry){.type = TY_BUF, .kind = E_LOCAL, .reg = e->reg}
+                                    : (entry){.type = TY_BUF, .kind = E_CONST, .value = e->value};
+        } else if (is_row(s->in[k]) && f->stack[f->depth - s->n_in + k].type == TY_COLL) {
+            return type_error(c, "this parameter takes one row of a table; a parameter that takes the whole table is "
+                                 "written list RECORD or array RECORD");
+        } else if (is_ref(s->in[k])) { // a collection goes to a word as its number (RFC-0018)
+            entry *e = &f->stack[f->depth - s->n_in + k];
+            if (e->type != TY_COLL)
+                return type_error(c, "this parameter takes an array, list, queue or buffer: give its name");
+            const globalsym *g = gsym(c, (uint32_t)e->value);
+            const rtype     *r = (const rtype *)c->rtypes.ptr + (s->in[k] - TY_REF);
+            if (g->kind != r->kind || g->record != r->record || g->strcap != r->strcap ||
+                (r->record == NONE && r->kind != GK_BUFFER && (g->strcap ? TY_STR : g->type) != r->cell))
+                return type_error(c, "the collection given here is of another kind, or holds another type, than the "
+                                     "parameter says");
+            if (!make_room(c, f->depth - s->n_in + k))
+                return false;
+            *e = e->kind == E_LOCAL ? (entry){.type = s->in[k], .kind = E_LOCAL, .reg = e->reg}
+                                    : (entry){.type = s->in[k], .kind = E_CONST, .value = e->value};
         }
     }
     c->sink = true;
@@ -1881,6 +2130,23 @@ static bool guard(comp *c, const sig *s, const uint32_t base[2], const uint32_t 
 static bool call_word(comp *c, const sig *sp, uint32_t index) {
     const sig s = *sp;
     uint32_t base[2], in[2], out[2];
+    fn *const g = c->f;
+    for (uint32_t k = 0; k < s.n_in && g->depth >= s.n_in; ++k) { // lists given to list parameters (RFC-0018)
+        const entry e = g->stack[g->depth - s.n_in + k];
+        if (!is_ref(s.in[k]) || e.type != TY_COLL || gsym(c, (uint32_t)e.value)->kind != GK_LIST)
+            continue;
+        if (e.value < REF_GLOBAL) {
+            trunc_site *t = vec_push(c, &c->truncs, sizeof *t);
+            if (!t)
+                return false;
+            *t = (trunc_site){(uint32_t)e.value, c->tok.line, c->tok.column, index, k};
+        } else if (g == c->word_fn && ref_local(c, (uint32_t)e.value - REF_GLOBAL)) {
+            trunc_edge *t = vec_push(c, &c->tedges, sizeof *t);
+            if (!t)
+                return false;
+            *t = (trunc_edge){c->def_index, (uint32_t)(ref_local(c, (uint32_t)e.value - REF_GLOBAL) - g->locals), index, k};
+        }
+    }
     if (!call_args(c, &s, base) || (s.fails && !settle_all(c)))
         return false;
     count_sig(&s, in, out);
@@ -1985,13 +2251,15 @@ static bool store_local(comp *c, name n) {
     const uint32_t g = c->path_global;
     if (g == NONE && !find_local(f, n) && find_global(c, n) != NONE)
         return type_error(c, "this name is a global; a global is written with set: value set name");
-    if (g != NONE && ((const globalsym *)c->globals.ptr + g)->kind != GK_SCALAR) { // value index to names
-        const globalsym *sym = (const globalsym *)c->globals.ptr + g;
+    if (g != NONE && gsym(c, g)->kind != GK_SCALAR) { // value index to names
+        const globalsym *sym = gsym(c, g);
         uint32_t rv, ri;
         if (!need(c, 2))
             return false;
         if (sym->record != NONE)
             return type_error(c, "a table of records is written field by field: value row to record.field");
+        if (sym->kind != GK_ARRAY && sym->kind != GK_LIST)
+            return type_error(c, "set writes a cell of an array or a list");
         if (f->stack[top].type != TY_INT || f->stack[top - 1].type != sym->type)
             return type_error(c, "a cell is stored as: value index to names, with the value of the cell's type");
         if (!reg_of(c, top - 1, &rv) || !reg_of(c, top, &ri))
@@ -2084,9 +2352,9 @@ static bool field_access(comp *c, bool write) {
     const tid      row = f->stack[top].type;
     if (f->stack[top].owned)
         return type_error(c, "an owned row is kept in a local before its fields are used");
-    if (!is_row(row) || ((const globalsym *)c->globals.ptr + (row - TY_FIRST_DECLARED))->record != r)
+    if (!is_row(row) || gsym(c, row_global(row))->record != r)
         return type_error(c, "a field is reached through a row of a table of that record: row record.field");
-    const uint32_t table = row - TY_FIRST_DECLARED;
+    const uint32_t table = row_global(row);
     const uint32_t where = PNX_FIELD(table, fd->offset, fd->extra);
     uint32_t rr, rv;
     if (write) {
@@ -2161,7 +2429,10 @@ static bool set_global(comp *c) {
         return false;
     if (c->tok.kind == PNX_T_NAME) {
         const name n = tok_name(c);
-        const uint32_t g = find_global(c, n);
+        const local *l = find_local(c->f, n);
+        uint32_t g = l && is_ref(l->type) ? REF_GLOBAL + l->reg : find_global(c, n); // a cell of a collection parameter
+        if (l && !is_ref(l->type))
+            g = NONE;
         if (g == NONE)
             return error(c, find_local(c->f, n) ? PINAX_ERR_TYPE : PINAX_ERR_NOT_FOUND,
                          find_local(c->f, n) ? "set writes a global; a local is written with to"
@@ -2967,7 +3238,7 @@ static bool stem_begin(comp *c, uint8_t *kind, uint8_t *cur, uint8_t *lim, uint1
     *src = 0;
     *element = TY_INT;
     if (stem.type == TY_COLL) { // an array or list: an index and the length
-        const globalsym *g = (const globalsym *)c->globals.ptr + stem.value;
+        const globalsym *g = gsym(c, stem.value);
         if (g->kind != GK_ARRAY && g->kind != GK_LIST)
             return type_error(c, "only an array or a list is a stem (not a queue, a pool, a buffer or an index)");
         if (!push_slot(c, TY_INT) || !push_slot(c, TY_INT))
@@ -3060,7 +3331,7 @@ static bool stem_take(comp *c, uint8_t kind, uint32_t reg, uint32_t src, uint32_
 static bool stem_element(comp *c, uint8_t kind, uint32_t reg, uint32_t cur, uint32_t src) {
     if (kind == STEM_STRS) { // the text of cell cur: its row, then the view
         const uint32_t row = top_slot(c, BANK_I, 1);
-        const globalsym *g = (const globalsym *)c->globals.ptr + src;
+        const globalsym *g = gsym(c, src);
         return emit(c, PNX_ABC(PNX_ADDI, row, cur, 1)) != NONE && emit(c, PNX_ABC(PNX_FGETS, reg, row, 0)) != NONE &&
                emit(c, PNX_FIELD(src, 0, g->strcap)) != NONE;
     }
@@ -3349,13 +3620,16 @@ static bool do_block(comp *c) {
     uint32_t init = NONE, dst = NONE;
     if (use == USE_MAP || use == USE_FILTER) { // the list the results are pushed into
         dst = find_global(c, dst_name);
-        const globalsym *g = dst == NONE ? NULL : (const globalsym *)c->globals.ptr + dst;
+        const globalsym *g = dst == NONE ? NULL : gsym(c, dst);
         // filter_into a list of records: the rows that pass are copied, from a list or an array
         // of the same record
-        const uint32_t from = is_row(element) ? (uint32_t)(element - TY_FIRST_DECLARED) : NONE;
+        const uint32_t from = is_row(element) ? row_global(element) : NONE;
+        if (from != NONE && from >= REF_GLOBAL && g && g->record != NONE)
+            return error_at(c, PINAX_ERR_TYPE, at.line, at.column,
+                            "filter_into does not copy rows of a table a parameter names yet; walk it and add_row");
         const bool rows = g && g->kind == GK_LIST && g->record != NONE && use == USE_FILTER && from != NONE &&
-                          ((const globalsym *)c->globals.ptr + from)->record == g->record &&
-                          ((const globalsym *)c->globals.ptr + from)->kind != GK_POOL;
+                          gsym(c, from)->record == g->record &&
+                          gsym(c, from)->kind != GK_POOL;
         if (!g || (g->kind != GK_LIST && g->kind != GK_ARRAY) || (g->record != NONE && !rows))
             return error_at(c, PINAX_ERR_TYPE, at.line, at.column,
                             g && g->kind == GK_LIST && g->record != NONE
@@ -3391,7 +3665,7 @@ static bool do_block(comp *c) {
     }
     // ... into an array: the cells written so far and the array's length, below the flag
     uint8_t fill = 0, room = 0;
-    if (dst != NONE && ((const globalsym *)c->globals.ptr + dst)->kind == GK_ARRAY) {
+    if (dst != NONE && gsym(c, dst)->kind == GK_ARRAY) {
         if (!push_slot(c, TY_INT) || !push_slot(c, TY_INT))
             return false;
         f->stack[f->depth - 2].hidden = f->stack[f->depth - 1].hidden = true;
@@ -3509,7 +3783,7 @@ static bool do_block(comp *c) {
 // The value in register `value` written to the next cell of the array a map_into or a
 // filter_into fills; when every cell is written, the jump to the block's failure is taken.
 static bool array_put(comp *c, block *b, uint32_t value) {
-    const globalsym *g = (const globalsym *)c->globals.ptr + b->dst;
+    const globalsym *g = gsym(c, b->dst);
     if (emit(c, PNX_ABC(PNX_JLT, b->fill, b->room, 1)) == NONE || !jump_later(c, &b->full))
         return false;
     if (g->strcap) { // the bytes are copied into the cell
@@ -3542,7 +3816,7 @@ static bool end_do(comp *c, block *b) {
         uint32_t made = 0;
         if (b->use == USE_MAP) { // the value the block made, out of the way of the stack check
             if (f->depth != (uint32_t)b->in.depth + 1 ||
-                f->stack[f->depth - 1].type != ((const globalsym *)c->globals.ptr + b->dst)->type)
+                f->stack[f->depth - 1].type != gsym(c, b->dst)->type)
                 return type_error(c, "the block of map_into leaves one value of the list's type");
             if (!settle(c, f->depth - 1))
                 return false;
@@ -3566,11 +3840,11 @@ static bool end_do(comp *c, block *b) {
         if (!same_owns(c, b, b->owns_in))
             return false;
         const uint32_t push = (b->use == USE_MAP || b->use == USE_FILTER) &&
-                                      ((const globalsym *)c->globals.ptr + b->dst)->strcap
+                                      gsym(c, b->dst)->strcap
                                   ? PNX_LPUSHS
                                   : PNX_LPUSH;
         if ((b->use == USE_MAP || b->use == USE_FILTER) &&
-            ((const globalsym *)c->globals.ptr + b->dst)->kind == GK_ARRAY) {
+            gsym(c, b->dst)->kind == GK_ARRAY) {
             uint32_t skip = NONE; // filter_into: past the store when the verdict is false
             if (b->use == USE_FILTER && (!cond_jump(c, &verdict, 1) || !jump_later(c, &skip)))
                 return false;
@@ -3580,10 +3854,10 @@ static bool end_do(comp *c, block *b) {
         } else if (b->use == USE_MAP) { // the instruction after the push runs when the list is full
             if (emit(c, PNX_ABX(push, made, b->dst)) == NONE || !jump_later(c, &b->full))
                 return false;
-        } else if (b->use == USE_FILTER && ((const globalsym *)c->globals.ptr + b->dst)->record != NONE) {
+        } else if (b->use == USE_FILTER && gsym(c, b->dst)->record != NONE) {
             cond_negate(&verdict); // a row that passes is copied: its table rides in the second word
             if (!cond_jump(c, &verdict, 3) || emit(c, PNX_ABX(PNX_LCOPYR, b->val, b->dst)) == NONE ||
-                emit(c, (uint32_t)(b->element - TY_FIRST_DECLARED)) == NONE || !jump_later(c, &b->full))
+                emit(c, row_global(b->element)) == NONE || !jump_later(c, &b->full))
                 return false;
         } else if (b->use == USE_FILTER) { // pushed when the verdict is true
             cond_negate(&verdict);
@@ -3650,7 +3924,7 @@ static bool end_do(comp *c, block *b) {
     if (done.use == USE_MAP || done.use == USE_FILTER) { // the list, then the word; fails with full
         if (c->tok.kind != PNX_T_NAME || !name_eq(tok_name(c), done.dst_name) || !advance(c))
             return c->err == PINAX_OK ? syntax(c, "the list to fill is expected right after the end") : false;
-        if (((const globalsym *)c->globals.ptr + done.dst)->kind == GK_ARRAY) { // gives the cells written
+        if (gsym(c, done.dst)->kind == GK_ARRAY) { // gives the cells written
             const uint32_t to = top_slot(c, BANK_I, 1);
             if (!settle_all(c) || !move_slot(c, TY_INT, to, done.fill) ||
                 emit(c, PNX_ABX(PNX_SETFAIL, 0, PINAX_ERR_FULL)) == NONE ||
@@ -3733,7 +4007,7 @@ static bool do_join(comp *c) {
         return false;
     const uint32_t base = f->depth - hidden; // the operands of the stem begin here
     if (element != TY_STR || base < f->floor + 2 || f->stack[base - 1].type != TY_COLL ||
-        ((const globalsym *)c->globals.ptr + f->stack[base - 1].value)->kind != GK_BUFFER ||
+        gsym(c, f->stack[base - 1].value)->kind != GK_BUFFER ||
         f->stack[base - 2].type != TY_STR)
         return type_error(c, "join_into takes a separator, a buffer and a stem of str: \",\" out s str.words str.join_into");
     const uint32_t gi = (uint32_t)f->stack[base - 1].value;
@@ -3853,7 +4127,7 @@ static bool pack_word(comp *c, name n) {
     if (!need(c, unpack ? 2 : 1))
         return false;
     const tid row = f->stack[f->depth - 1].type;
-    const globalsym *table = is_row(row) ? (const globalsym *)c->globals.ptr + (row - TY_FIRST_DECLARED) : NULL;
+    const globalsym *table = is_row(row) ? gsym(c, row_global(row)) : NULL;
     if (!table || table->record == NONE || (g && g->kind != GK_BUFFER) || (unpack && f->stack[f->depth - 2].type != TY_STR))
         return type_error(c, unpack ? "unpack takes a str and a row of a table of records: s row bytes.unpack"
                            : size   ? "packed_size takes a row of a table of records"
@@ -3861,7 +4135,7 @@ static bool pack_word(comp *c, name n) {
     if (f->stack[f->depth - 1].owned)
         return type_error(c, "an owned row is kept in a local before its fields are used");
     const record *r = (const record *)c->records.ptr + table->record;
-    const uint32_t tab = row - TY_FIRST_DECLARED;
+    const uint32_t tab = row_global(row);
     uint32_t rr, rs = 0;
     if (unpack && !settle(c, f->depth - 2))
         return false;
@@ -4036,7 +4310,7 @@ static bool text_record(comp *c, bool json, bool unpack) {
     if (!need(c, unpack ? 2 : 1))
         return false;
     const tid row = f->stack[f->depth - 1].type;
-    const globalsym *table = is_row(row) ? (const globalsym *)c->globals.ptr + (row - TY_FIRST_DECLARED) : NULL;
+    const globalsym *table = is_row(row) ? gsym(c, row_global(row)) : NULL;
     if (!table || table->record == NONE || (g && g->kind != GK_BUFFER) || (unpack && f->stack[f->depth - 2].type != TY_STR))
         return type_error(c, unpack ? (json ? "unpack takes a str and a row of a table of records: s row json.unpack"
                                             : "unpack takes a str and a row of a table of records: s row csv.unpack")
@@ -4045,7 +4319,7 @@ static bool text_record(comp *c, bool json, bool unpack) {
     if (f->stack[f->depth - 1].owned)
         return type_error(c, "an owned row is kept in a local before its fields are used");
     const record *r = (const record *)c->records.ptr + table->record;
-    const uint32_t tab = row - TY_FIRST_DECLARED;
+    const uint32_t tab = row_global(row);
     textregs x = {0};
     if (unpack && !settle(c, f->depth - 2))
         return false;
@@ -4647,7 +4921,14 @@ static bool builtin(comp *c, const struct builtin *w) {
             trunc_site *t = vec_push(c, &c->truncs, sizeof *t);
             if (!t)
                 return false;
-            *t = (trunc_site){gi, at.line, at.column};
+            *t = (trunc_site){gi, at.line, at.column, NONE, 0};
+        }
+        if (gi >= REF_GLOBAL) { // through a parameter: the word truncates that parameter
+            const local *l = ref_local(c, gi - REF_GLOBAL);
+            if (c->f != c->word_fn || !l)
+                return type_error(c, "this list is not reachable here");
+            ((wordsym *)c->words.ptr + c->def_index)->truncs |= (uint16_t)(1u << (l - c->f->locals));
+            --c->truncs.n; // not a site of its own: the callers' lists are
         }
         if (!reg_of(c, f->depth - 1, &ra))
             return false;
@@ -4925,7 +5206,7 @@ static bool builtin(comp *c, const struct builtin *w) {
                 return push(c, (entry){.type = TY_BOOL, .kind = E_COND, .op = PNX_JEQI, .a = (uint8_t)dst, .b = 0}) &&
                        advance(c);
             }
-            if (g->kind == GK_ARRAY) { // an array is always full
+            if (g->kind == GK_ARRAY && gi < REF_GLOBAL) { // an array is always full
                 return push(c, w->id == BW_LEN ? (entry){.type = TY_INT, .kind = E_CONST, .value = g->capacity}
                                                : (entry){.type = TY_BOOL, .kind = E_CONST, .value = 0}) &&
                        advance(c);
@@ -5037,8 +5318,12 @@ static bool builtin(comp *c, const struct builtin *w) {
         return advance(c);
     }
     case BW_CAPACITY:
-        return need_coll(c, &g, &gi) && push(c, (entry){.type = TY_INT, .kind = E_CONST, .value = g->capacity}) &&
-               advance(c);
+        if (!need_coll(c, &g, &gi))
+            return false;
+        if (gi >= REF_GLOBAL) // through a reference: asked when it runs
+            return emit_def(c, PNX_ABX(PNX_GCAP, top_slot(c, BANK_I, 1), gi), BANK_I) != NONE && push_slot(c, TY_INT) &&
+                   advance(c);
+        return push(c, (entry){.type = TY_INT, .kind = E_CONST, .value = g->capacity}) && advance(c);
     case BW_IS_FULL: {
         if (!need_coll(c, &g, &gi))
             return false;
@@ -5049,6 +5334,13 @@ static bool builtin(comp *c, const struct builtin *w) {
         const uint32_t dst = top_slot(c, BANK_I, 2);
         if (emit(c, PNX_ABX(PNX_GLEN, dst, gi)) == NONE)
             return false;
+        if (gi >= REF_GLOBAL) { // the capacity of a collection a reference names, when it runs
+            if (emit(c, PNX_ABX(PNX_GCAP, dst + 1, gi)) == NONE)
+                return false;
+            f->def_at = NONE;
+            return push(c, (entry){.type = TY_BOOL, .kind = E_COND, .op = PNX_JEQ, .a = (uint8_t)dst, .b = (uint8_t)(dst + 1)}) &&
+                   advance(c);
+        }
         if (fits8(g->capacity))
             return push(c, (entry){.type = TY_BOOL, .kind = E_COND, .op = PNX_JEQI, .a = (uint8_t)dst,
                                    .b = (uint8_t)g->capacity}) && advance(c);
@@ -5280,8 +5572,8 @@ static bool builtin(comp *c, const struct builtin *w) {
         if (!need(c, 1))
             return false;
         const tid type = f->stack[f->depth - 1].type;
-        gi = is_row(type) ? (uint32_t)(type - TY_FIRST_DECLARED) : NONE;
-        if (gi == NONE || ((const globalsym *)c->globals.ptr + gi)->kind != GK_TASKS)
+        gi = is_row(type) ? row_global(type) : NONE;
+        if (gi == NONE || gsym(c, gi)->kind != GK_TASKS)
             return type_error(c, "this word takes a task");
         if (w->id == BW_RESUME && !settle_all(c))
             return false;
@@ -5530,6 +5822,9 @@ static bool body_name(comp *c) {
             if (l->stale)
                 return type_error(c, "this str was made after a mark that was released since; the region may hold "
                                      "other bytes there now");
+            if (is_ref(l->type)) // a collection parameter: used as the name of the collection
+                return push(c, (entry){.type = TY_COLL, .kind = E_LOCAL, .reg = l->reg, .value = REF_GLOBAL + l->reg}) &&
+                       advance(c);
             if (!push(c, (entry){.type = l->type, .kind = E_LOCAL, .reg = l->reg, .src = (uint8_t)(l - f->locals + 1)}))
                 return false;
             f->stack[f->depth - 1].born = l->born;
@@ -6283,7 +6578,7 @@ static bool declare_tasks(comp *c) {
     }
     if (g.capacity > 4096)
         return syntax(c, "a set holds at most 4096 tasks");
-    if (c->globals.n >= 0xfffu)
+    if (c->globals.n >= REF_GLOBAL)
         return syntax(c, "too many globals");
     globalsym *slot = vec_push(c, &c->globals, sizeof(globalsym));
     if (!slot)
@@ -6394,7 +6689,7 @@ static bool declare_global(comp *c) {
     } else if (g.type == TY_NONE || bank_of(g.type) != BANK_I || is_block(g.type) || g.type == TY_MARK) {
         return type_error(c, "this type is not known, or not supported for a global yet");
     }
-    if (c->globals.n >= 0xfffu)
+    if (c->globals.n >= REF_GLOBAL)
         return syntax(c, "too many globals");
     globalsym *slot = vec_push(c, &c->globals, sizeof(globalsym));
     if (!slot)
@@ -6460,7 +6755,7 @@ static bool declare_collection(comp *c, uint8_t kind) {
         g.module = slot->module;
     }
     if (!slot) {
-        if (c->globals.n >= 0xfffu)
+        if (c->globals.n >= REF_GLOBAL)
             return syntax(c, "too many globals");
         slot = vec_push(c, &c->globals, sizeof(globalsym));
         if (!slot)
@@ -6507,7 +6802,7 @@ static bool declare_forward(comp *c) {
         return type_error(c, "this name is already defined");
     if (g.name.length > 31)
         return syntax(c, "a global name is at most 31 bytes long");
-    if (c->globals.n >= 0xfffu)
+    if (c->globals.n >= REF_GLOBAL)
         return syntax(c, "too many globals");
     globalsym *slot = vec_push(c, &c->globals, sizeof(globalsym));
     if (!slot)
@@ -6593,7 +6888,7 @@ static bool declare_record(comp *c) {
             bytes = n + 1;
         } else if (is_row(type_of_name(c, tn))) { // a row of that table: its number plus one, 0 for none
             fd.type = type_of_name(c, tn);
-            const bool pool = ((const globalsym *)c->globals.ptr + (fd.type - TY_FIRST_DECLARED))->kind == GK_POOL;
+            const bool pool = gsym(c, row_global(fd.type))->kind == GK_POOL;
             fd.extra = pool ? PNX_W_64 : PNX_W_U32; // a row of a pool carries its generation
             bytes = pool ? 8 : 4;
         } else {
@@ -6655,7 +6950,7 @@ static bool declare_buffer(comp *c) {
         return syntax(c, "a global name is at most 31 bytes long");
     if (!advance(c) || !declared_size(c, &g.capacity))
         return false;
-    if (c->globals.n >= 0xfffu)
+    if (c->globals.n >= REF_GLOBAL)
         return syntax(c, "too many globals");
     globalsym *slot = vec_push(c, &c->globals, sizeof(globalsym));
     if (!slot)
@@ -6700,7 +6995,7 @@ static bool declare_index(comp *c) {
     g.capacity = 4; // slots: a power of two, at least twice the rows
     while (g.capacity < table->capacity * 2u)
         g.capacity *= 2;
-    if (c->globals.n >= 0xfffu)
+    if (c->globals.n >= REF_GLOBAL)
         return syntax(c, "too many globals");
     globalsym *slot = vec_push(c, &c->globals, sizeof(globalsym));
     if (!slot)
@@ -7495,7 +7790,7 @@ static bool serialize(comp *c, const image *im, uint8_t **out, size_t *out_len) 
 // What a load leaves in the block for the loads after it: the compiler's tables in one piece,
 // with every name it holds copied in, so the host may let go of the source.
 typedef struct symtab {
-    vec    words, consts, globals, records, fields, btypes, dtypes, srcmods, externs;
+    vec    words, consts, globals, records, fields, btypes, dtypes, srcmods, externs, rtypes;
     size_t bytes;
     // the session of pinax_eval(): its module number (NONE before the first line) and the
     // modules its lines opened
@@ -7532,7 +7827,7 @@ static void each_name(symtab *t, name_fn *f, void *user) {
 
 #define TABLES(X)                                                                                            \
     X(words, wordsym) X(consts, constant) X(globals, globalsym) X(records, record) X(fields, field)          \
-    X(btypes, sig) X(dtypes, dtype) X(srcmods, name) X(externs, externsym)
+    X(btypes, sig) X(dtypes, dtype) X(srcmods, name) X(externs, externsym) X(rtypes, rtype)
 
 // A name whose bytes will not outlive this load lies in the source or in the working memory.
 typedef struct keeper {
@@ -7576,7 +7871,7 @@ static void name_shift(name *n, void *user) {
 // The tables as one piece in the working memory.
 static symtab *keep_symbols(comp *c, pinax_str source, const uint8_t *work) {
     symtab now = {c->words, c->consts, c->globals, c->records, c->fields, c->btypes, c->dtypes, c->srcmods,
-                  c->externs, 0, NONE, 0, {{0}}, {{0}}};
+                  c->externs, c->rtypes, 0, NONE, 0, {{0}}, {{0}}};
     const symtab *old = c->st->symbols;
     if (c->eval) { // this line's session: its number and what it has opened by now
         now.session = c->module;
@@ -7639,7 +7934,7 @@ void pnx_symbols_move(void *symbols, const void *from, ptrdiff_t by) {
 // build that lays them out otherwise is refused.
 uint64_t pnx_symbols_layout(uint64_t hash) {
     const uint64_t parts[] = {sizeof(symtab), sizeof(wordsym), sizeof(constant), sizeof(globalsym), sizeof(record),
-                              sizeof(field), sizeof(sig), sizeof(dtype), sizeof(name), sizeof(externsym),
+                              sizeof(field), sizeof(sig), sizeof(dtype), sizeof(name), sizeof(externsym), sizeof(rtype),
                               offsetof(wordsym, sig), offsetof(globalsym, record), offsetof(field, offset),
                               offsetof(symtab, bytes), MAX_PARAMS};
     for (size_t k = 0; k < sizeof parts / sizeof parts[0]; ++k)
@@ -7757,9 +8052,31 @@ pinax_err pinax_eval_value(const pinax_state *st, uint32_t index, pinax_value *o
 // A list that `truncate` cuts back may not have its rows kept anywhere they would outlive the
 // cut: in a field, a global, a named row or an index (RFC-0017 section 3.2). A row kept in a
 // local is checked when it is used (range).
+// The word number of a call: a call of a word announced by forward is resolved by now.
+static uint32_t called(const comp *c, uint32_t index) {
+    return index & FWD_MARK ? ((const fwd *)c->fwds.ptr + (index & ~FWD_MARK))->index : index;
+}
+
 static bool truncs_ok(comp *c) {
+    wordsym *words = c->words.ptr;
+    for (bool changed = true; changed;) { // a word that gives its list on to one that truncates it truncates it too
+        changed = false;
+        for (uint32_t k = 0; k < c->tedges.n; ++k) {
+            const trunc_edge e = ((const trunc_edge *)c->tedges.ptr)[k];
+            const uint32_t callee = called(c, e.callee);
+            if (callee != NONE && (words[callee].truncs >> e.callee_param & 1u) && !(words[e.word].truncs >> e.param & 1u)) {
+                words[e.word].truncs |= (uint16_t)(1u << e.param);
+                changed = true;
+            }
+        }
+    }
+    if (c->redefine_new != NONE && (words[c->redefine_new].truncs & ~words[c->redefine_old].truncs))
+        return error(c, PINAX_ERR_TYPE, "redefine cannot make the word truncate a list parameter the old one did not "
+                                        "truncate: the lists given to it were checked against the old one");
     for (uint32_t k = 0; k < c->truncs.n; ++k) {
         const trunc_site t = ((const trunc_site *)c->truncs.ptr)[k];
+        if (t.word != NONE && (called(c, t.word) == NONE || !(words[called(c, t.word)].truncs >> t.param & 1u)))
+            continue;
         const tid        row = row_type(t.global);
         bool             kept = false;
         for (uint32_t i = 0; !kept && i < c->fields.n; ++i)
@@ -7773,7 +8090,9 @@ static bool truncs_ok(comp *c) {
             kept = ((const constant *)c->consts.ptr)[i].type == row;
         if (kept)
             return error_at(c, PINAX_ERR_TYPE, t.line, t.column,
-                            "this list's rows are kept by a field, a global, a named row or an index; it cannot be truncated");
+                            t.word == NONE ? "this list's rows are kept by a field, a global, a named row or an index; it cannot be truncated"
+                                           : "this list's rows are kept by a field, a global, a named row or an index; the word it "
+                                             "is given to truncates it");
     }
     return true;
 }

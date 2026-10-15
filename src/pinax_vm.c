@@ -401,6 +401,7 @@ pinax_err pnx_execute(pinax_state *st) {
         RUN(RCATB)
         RUN(GLEN)
         RUN(GCLEAR)
+        RUN(GCAP)
         RUNF(LPUSH)
         RUNF(LPOP)
         RUNF(LPUSHS)
@@ -744,14 +745,23 @@ pinax_err pnx_execute(pinax_state *st) {
             LOAD_CTX();
             NEXT();
         }
+        CASE(GSEL) { // the global a reference names, for the instruction after this one
+            const uint64_t gi = (uint64_t)R[OP_A(w)];
+            const uint32_t elem = *pc++;
+            if (gi >= st->head->n_globals || st->globals[gi].kind != OP_B(w) ||
+                (elem && st->globals[gi].elem_bytes != elem))
+                FAULT(PINAX_ERR_STATE);
+            st->gsel = (uint32_t)gi;
+            NEXT();
+        }
         CASE(QWTAKE) { // the front of a queue, yielding while it is empty
-            if (st->globals[OP_BX(w)].length == 0)
+            if (st->globals[PNX_GX(st, OP_BX(w))].length == 0)
                 goto queue_blocked;
             (void)pnx_op_QTAKE(st, R, S, w, 0);
             goto queue_went;
         }
         CASE(QWPUT) { // to the back of a queue, yielding while it is full
-            if (st->globals[OP_BX(w)].length == st->globals[OP_BX(w)].capacity)
+            if (st->globals[PNX_GX(st, OP_BX(w))].length == st->globals[PNX_GX(st, OP_BX(w))].capacity)
                 goto queue_blocked;
             (void)pnx_op_QPUT(st, R, S, w, 0);
         queue_went:
@@ -774,7 +784,7 @@ pinax_err pnx_execute(pinax_state *st) {
                 FAULT(PINAX_ERR_STATE);
             t->yielded = t->blocked = true;
             t->blocked_at = st->qturn; // it cannot go until some queue changes
-            --pc;
+            pc -= OP_BX(w) == PNX_GSELECTED ? 3 : 1; // goes on from this instruction, or the GSEL before it
             SAVE_CTX();
             task_leave(st, false);
             LOAD_CTX();

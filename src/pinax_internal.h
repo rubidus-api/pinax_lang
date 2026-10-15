@@ -234,6 +234,7 @@ struct pinax_state {
     pnx_context main;
     pnx_wait    main_wait;  // the main run waits for a host operation
     uint64_t    qturn;      // counts the changes of every queue: a task blocked since the last one cannot go
+    uint32_t    gsel;       // the global GSEL chose for the instruction after it (RFC-0018)
     pinax_err   main_fault; // that operation failed and the word that called it cannot fail
     uint64_t    token_serial;
     bool        waiting;    // the suspended run ended with PINAX_WAITING

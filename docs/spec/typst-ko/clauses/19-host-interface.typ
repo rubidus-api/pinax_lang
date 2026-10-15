@@ -102,6 +102,10 @@ NULL). `pinax_handle_release` 는 핸들을 돌려준다.]
 
 #ex("spec", "19-bind.c")
 
+#para("2")[`pinax_global_find` 가 주는 `number` 는 모음 매개변수(9.9)가 있는 낱말이 그 인자로 받는 것이다. `i` 에 넣는
+정수다. 종류나 원소 크기가 다른 모음, 또는 없는 전역의 번호는 낱말이 그것을 쓰는 자리에서 결함
+`PINAX_ERR_STATE` 다.]
+
 == 나중에 끝나는 호스트 낱말 <host-await>
 
 #para("1")[`PINAX_WORD_AWAITABLE` 로 등록한 호스트 낱말은 일을 시작하고 `pinax_call_pending` 으로 표를 받은 뒤

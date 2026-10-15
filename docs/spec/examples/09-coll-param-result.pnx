@@ -1,0 +1,2 @@
+rem refused
+word pick (a list int, b list int gives list int) a end

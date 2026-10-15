@@ -83,4 +83,28 @@ go <span style="color: #d73948">or_else</span> (e) e err_text io.println <span s
 </code></pre><p class="ex-label">출력</p><pre><code data-lang="text">$ pnx 06-map-filter.pnx
 cheap: 3 items, the first 450
 with tax, 6 cells written, the first 1320
-</code></pre></div><div class="box summary"><p class="box-title">정리</p><ul><li>컬렉션의 용량은 선언이 정한다. 돌면서 자라는 저장소는 없다(표준 8.1).</li><li>배열은 늘 가득 차 있고, 목록은 길이가 자란다. 범위 밖 번호는 결함이다(8.4, 8.5).</li><li><code>push</code> <code>pop</code> <code>put</code> <code>take</code> 는 실패할 수 있다: 차면 <code>full</code>, 비면 <code>range</code>(8.5, 8.6).</li><li>배열과 목록만 줄기다(10.6).</li><li><code>map_into</code> <code>filter_into</code> 는 주어진 목적지에 담는다(10.6).</li></ul></div></main><nav class="bottom"><a href="index.html">처음</a> · <a href="06.html">앞</a> · <a href="08.html">다음</a> · <a href="../html-en/07.html">English</a></nav></body></html>
+</code></pre></div><h3>6.5 모음을 낱말에 넘기기</h3><p>낱말은 모음을 매개변수로 받을 수 있다. 모음의 종류와 칸이 담는 것을 쓰고 — <code>list int</code>, <code>array city</code>, <code>queue int</code>, <code>list str(8)</code> — 또는 <code>buffer</code> 라고 쓰고, 낱말을 부를 때 그 자리에 모음의 이름을 준다. 안에서 매개변수는 모음의 이름이 쓰이는 모든 자리에 쓰인다. 이제 같은 낱말이 그런 종류의 목록 모두에, 용량에 상관없이 쓰인다.</p><div class="example run"><p class="ex-file"><code>06-coll-param.pnx</code></p><pre><code data-lang="pinax"><span style="color: #d73948">use</span> io
+<span style="color: #d73948">list</span> morning <span style="color: #d73948">int</span> <span style="color: #b60157">8</span>
+<span style="color: #d73948">list</span> evening <span style="color: #d73948">int</span> <span style="color: #b60157">8</span>
+<span style="color: #d73948">word</span> record_all (l <span style="color: #d73948">list</span> <span style="color: #d73948">int</span>, a <span style="color: #d73948">int</span>, b <span style="color: #d73948">int</span>, c <span style="color: #d73948">int</span>)
+  a l push <span style="color: #d73948">or_else</span> (e) <span style="color: #d73948">end</span>  b l push <span style="color: #d73948">or_else</span> (e) <span style="color: #d73948">end</span>  c l push <span style="color: #d73948">or_else</span> (e) <span style="color: #d73948">end</span>
+<span style="color: #d73948">end</span>
+<span style="color: #d73948">word</span> report (name <span style="color: #d73948">str</span>, l <span style="color: #d73948">list</span> <span style="color: #d73948">int</span>)
+  <span style="color: #d73948">cat</span> (name, <span style="color: #198810">": "</span>, l len, <span style="color: #198810">" readings, highest "</span>, l maximum <span style="color: #d73948">or_else</span> (e) <span style="color: #b60157">0</span> <span style="color: #d73948">end</span>) io.println
+<span style="color: #d73948">end</span>
+morning <span style="color: #b60157">12</span> <span style="color: #b60157">15</span> <span style="color: #b60157">11</span> record_all
+evening <span style="color: #b60157">21</span> <span style="color: #b60157">19</span> <span style="color: #b60157">20</span> record_all
+<span style="color: #198810">"morning"</span> morning report
+<span style="color: #198810">"evening"</span> evening report
+</code></pre><p class="ex-label">출력</p><pre><code data-lang="text">$ pnx 06-coll-param.pnx
+morning: 3 readings, highest 15
+evening: 3 readings, highest 21
+</code></pre></div><div class="box mistake"><p class="box-title">흔한 오해: 매개변수 타입으로 쓴 표 이름은 표를 받는다</p>매개변수 타입으로 쓴 레코드 표의 이름은 그 표의 <em>한 줄</em>을 뜻한다(7장). 표 전체를 받으려면 <code>list 레코드</code> 나 <code>array 레코드</code> 라고 쓴다.<div class="example refused"><p class="ex-file"><code>06-coll-param-row.pnx</code></p><pre><code data-lang="pinax"><span style="color: #d73948">record</span> reading
+  value <span style="color: #d73948">i32</span>
+<span style="color: #d73948">end</span>
+<span style="color: #d73948">list</span> morning reading <span style="color: #b60157">8</span>
+<span style="color: #d73948">word</span> count_them (l morning <span style="color: #d73948">gives</span> <span style="color: #d73948">int</span>) <span style="color: #b60157">0</span> <span style="color: #d73948">end</span>      <span style="color: #74747c">rem a table's name as a type: one row of it</span>
+morning count_them
+</code></pre><p class="ex-label">거절</p><pre><code data-lang="text">$ pnx 06-coll-param-row.pnx
+06-coll-param-row.pnx:6:9: this parameter takes one row of a table; a parameter that takes the whole table is written list RECORD or array RECORD
+</code></pre></div></div><div class="box summary"><p class="box-title">정리</p><ul><li>낱말은 모음을 <code>list T</code>, <code>array T</code>, <code>queue T</code>, <code>buffer</code> 로 받는다(9.9).</li><li>컬렉션의 용량은 선언이 정한다. 돌면서 자라는 저장소는 없다(표준 8.1).</li><li>배열은 늘 가득 차 있고, 목록은 길이가 자란다. 범위 밖 번호는 결함이다(8.4, 8.5).</li><li><code>push</code> <code>pop</code> <code>put</code> <code>take</code> 는 실패할 수 있다: 차면 <code>full</code>, 비면 <code>range</code>(8.5, 8.6).</li><li>배열과 목록만 줄기다(10.6).</li><li><code>map_into</code> <code>filter_into</code> 는 주어진 목적지에 담는다(10.6).</li></ul></div></main><nav class="bottom"><a href="index.html">처음</a> · <a href="06.html">앞</a> · <a href="08.html">다음</a> · <a href="../html-en/07.html">English</a></nav></body></html>

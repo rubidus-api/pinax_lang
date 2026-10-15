@@ -1,0 +1,14 @@
+rem run
+use io
+list morning int 8
+list evening int 8
+word record_all (l list int, a int, b int, c int)
+  a l push or_else (e) end  b l push or_else (e) end  c l push or_else (e) end
+end
+word report (name str, l list int)
+  cat (name, ": ", l len, " readings, highest ", l maximum or_else (e) 0 end) io.println
+end
+morning 12 15 11 record_all
+evening 21 19 20 record_all
+"morning" morning report
+"evening" evening report

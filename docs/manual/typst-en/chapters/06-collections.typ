@@ -57,7 +57,20 @@ from cell 0, and the number of cells written is given. When the destination is f
 
 #ex("manual", "06-map-filter.pnx")
 
+== Passing a collection to a word
+
+A word can take a collection as a parameter. Write its kind and what its cells hold --- `list int`, `array city`,
+`queue int`, `list str(8)` --- or `buffer`, and give the collection's name where you call the word. Inside, the parameter
+works wherever a collection's name does. The same word now serves every list of that kind, whatever its capacity.
+
+#ex("manual", "06-coll-param.pnx")
+
+#mistake[A table's name as a parameter type takes the table][Written as a parameter type, the name of a table of records
+means #emph[one row] of it (chapter 7). To take the whole table, write `list RECORD` or `array RECORD`.
+#ex("manual", "06-coll-param-row.pnx")]
+
 #summary[
+- A word takes a collection as `list T`, `array T`, `queue T` or `buffer` (9.9).
 - The capacity of a collection is fixed by its declaration; no storage grows while running (standard 8.1).
 - An array is always full; a list's length grows; an index out of range is a fault (8.4, 8.5).
 - `push` `pop` `put` `take` can fail: `full` when full, `range` when empty (8.5, 8.6).

@@ -1,0 +1,4 @@
+rem refused
+list names str(8) 4
+word total (l list int gives int) l sum end
+word f (gives int) names total end

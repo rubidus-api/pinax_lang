@@ -54,8 +54,9 @@ value       = literal | NAME ;
 definition  = [ "export" ] "word" NAME "(" effect ")" { body } "end" ;
 effect      = [ params ] [ "gives" params ] [ "or" "fail" ] ;
 params      = param { "," param } ;
-param       = [ NAME ] type ;
+param       = [ NAME ] ( type | coll-type ) ;
 type        = [ "owned" ] ( NAME [ "(" size ")" ] | "word" "(" effect ")" ) ;
+coll-type   = ( "array" | "list" | "queue" ) NAME [ "(" size ")" ] | "buffer" ;   (* an input, 9.9 *)
 
 (* 9 to 11: the body *)
 body        = literal | NAME | PATH | store | set | block | cat | guard | control | defer

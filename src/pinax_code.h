@@ -47,7 +47,13 @@ enum {
                   // int results << 16 | str results << 24, and bit 31 when the word can fail
     PNX_X_SREG,   // a register of the S bank that the instruction reads
     PNX_X_GLOBAL, // global index: the wide form of an instruction whose C names a global
+    PNX_X_IMM,    // a number the instruction reads
 };
+
+// A global number that means "the one GSEL chose" (RFC-0018): in BX and in the second word of a
+// wide form, and in the 12 bits of a field. The instruction must come right after its GSEL.
+#define PNX_GSELECTED 0xffffu
+#define PNX_FSELECTED 0xfffu
 
 // "fails": the next word is not skipped when the operation fails (or, for SNEXT, when the
 // sequence is used up); it must be JMP, RETF or FAIL.
@@ -72,6 +78,11 @@ enum {
 // IXPUT enters a row (fails when its key is there already); IXDEL takes a row out.
 // SREPL A, B, C and a second word X: the string in S[B] with every S[C] replaced by S[X], built
 // in the region.
+// GCAP gives the declared capacity of a collection (a buffer: its bytes); the compiler knows it of
+// a collection it names, and asks it of one a reference names.
+// GSEL chooses the global whose number is in R[A] for the instruction right after it, which names
+// PNX_GSELECTED: the global must be of kind B and, when the second word is not 0, have elements of
+// that many bytes; else the fault STATE.
 // QPUT adds at the back of a queue (fails when full); QTAKE and QPEEK take and read the front
 // (fail when empty). QWTAKE and QWPUT do the same but yield while the queue is empty (full) and
 // fail only when the task was cancelled meanwhile; in the main run they are the fault DEADLOCK.
@@ -321,7 +332,9 @@ enum {
     X(CPUTS, 0xeb, PNX_K_S, PNX_K_IMM, PNX_K_G, PNX_F_ABC, PNX_X_NONE, 1, "r--") \
     X(CPUTSW, 0xec, PNX_K_S, PNX_K_IMM, PNX_K_NONE, PNX_F_ABC, PNX_X_GLOBAL, 1, "r--") \
     X(CPUTI, 0xed, PNX_K_I, PNX_K_IMM, PNX_K_G, PNX_F_ABC, PNX_X_NONE, 1, "r--") \
-    X(CPUTIW, 0xee, PNX_K_I, PNX_K_IMM, PNX_K_NONE, PNX_F_ABC, PNX_X_GLOBAL, 1, "r--")
+    X(CPUTIW, 0xee, PNX_K_I, PNX_K_IMM, PNX_K_NONE, PNX_F_ABC, PNX_X_GLOBAL, 1, "r--") \
+    X(GSEL, 0xef, PNX_K_I, PNX_K_IMM, PNX_K_NONE, PNX_F_ABC, PNX_X_IMM, 0, "r--") \
+    X(GCAP, 0xf0, PNX_K_I, PNX_K_NONE, PNX_K_NONE, PNX_F_GLOBAL, PNX_X_NONE, 0, "w--")
 
 enum {
 #define PNX_ENUM(name, number, a, b, c, shape, second, fails, roles) PNX_##name = number,

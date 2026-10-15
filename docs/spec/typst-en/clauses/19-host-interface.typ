@@ -104,6 +104,10 @@ memory; the size shall match the declaration. Script and host read and write the
 
 #ex("spec", "19-bind.c")
 
+#para("2")[The `number` that `pinax_global_find` gives is what a word with a collection parameter (9.9) takes as that
+argument, an integer in `i`. A number of a collection of another kind or another size of element, or of no global, is the
+fault `PINAX_ERR_STATE` where the word uses it.]
+
 == Host words that finish later <host-await>
 
 #para("1")[A host word registered with `PINAX_WORD_AWAITABLE` may start some work, take a token with
