@@ -17,6 +17,7 @@
   [`neg` `abs`], [`(int gives int)`], [부호 바꾸기, 절댓값. 가장 작은 `int` 에서는 넘침],
   [`min` `max`], [`(int, int gives int)`], [작은 쪽, 큰 쪽],
   [`clamp`], [`(n int, lo int, hi int gives int)`], [`n` 을 `lo` 와 `hi` 사이로],
+  [`rescale`], [`(d dec(N), M gives dec(M))`], [점 아래 `M` 자리의 소수로(`M` 은 상수). 자리가 줄면 0 에서 먼 쪽으로 반올림(7.5)],
 )]
 
 #para("2")[넘침을 다르게 다루는 낱말.

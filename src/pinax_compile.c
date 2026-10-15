@@ -47,6 +47,7 @@ enum { L_PLAIN, L_OWNS, L_MOVED }; // what a local holds of a value that must be
 #define TY_HANDLE 0x1800u    // a handle type of the host: this plus its number
 #define TY_REF 0x1100u       // array T, list T, queue T or buffer (RFC-0018): this plus its number in comp.rtypes
 #define TY_REFROW 0x1400u    // a row of a table a reference names: this plus the register of the reference
+#define TY_DEC 0x1500u       // dec(N), N 0 to 18 (RFC-0019): this plus N; an int scaled by 10^N
 #define REF_GLOBAL 0xf00u    // in place of a global's number: the collection a reference names, this plus its
                              // register; emit() puts a GSEL before the instruction (globals stay below it)
 #define MAX_NESTED 4         // value blocks inside value blocks
@@ -494,6 +495,10 @@ static uint32_t row_global(tid type) {
     return type >= TY_REFROW ? REF_GLOBAL + (type - TY_REFROW) : (uint32_t)(type - TY_FIRST_DECLARED);
 }
 
+static bool is_dec(tid type) {
+    return type >= TY_DEC && type <= TY_DEC + 18u;
+}
+
 static bool is_ref(tid type) {
     return type >= TY_REF && type < TY_REF + 0x300u;
 }
@@ -508,6 +513,8 @@ static bool is_block(tid type) {
 
 // The type a distinct type is made of; any other type is its own base.
 static tid base_of(const comp *c, tid type) {
+    if (is_dec(type)) // a dec is an int with a scale: like a type declared over int
+        return TY_INT;
     if ((type & ~TY_SBANK) >= TY_DISTINCT && (type & ~TY_SBANK) - TY_DISTINCT < c->dtypes.n)
         return ((const dtype *)c->dtypes.ptr + ((type & ~TY_SBANK) - TY_DISTINCT))->base;
     return type;
@@ -518,7 +525,20 @@ static uint32_t find_global(const comp *c, name n);
 static const local *ref_local(const comp *c, uint32_t reg);
 static local       *find_local(fn *f, name n);
 
+static const char *const dec_names[19] = {"dec(0)",  "dec(1)",  "dec(2)",  "dec(3)",  "dec(4)",  "dec(5)",  "dec(6)",
+                                           "dec(7)",  "dec(8)",  "dec(9)",  "dec(10)", "dec(11)", "dec(12)", "dec(13)",
+                                           "dec(14)", "dec(15)", "dec(16)", "dec(17)", "dec(18)"};
+
+// The int a number type is made of: int, dec(N), and the types declared over them.
+static tid base_of(const comp *c, tid type);
+static tid num_base(const comp *c, tid type) {
+    const tid b = base_of(c, type);
+    return is_dec(b) ? TY_INT : b;
+}
+
 static name type_name(const comp *c, tid type) {
+    if (is_dec(type))
+        return cname(dec_names[type - TY_DEC]);
     if (is_ref(type)) {
         const uint8_t kind = ((const rtype *)c->rtypes.ptr + (type - TY_REF))->kind;
         return cname(kind == GK_ARRAY ? "array" : kind == GK_LIST ? "list" : kind == GK_QUEUE ? "queue" : "buffer");
@@ -627,6 +647,22 @@ static bool block_type(comp *c, const sig *s, tid *out) {
 static uint32_t find_record_any(const comp *c, name n);
 static bool     str_capacity(comp *c, uint8_t *out);
 
+// dec ( N ): the current token is the "(" after dec; ends past the ")".
+static bool dec_scale(comp *c, tid *out) {
+    if (c->tok.kind != PNX_T_LPAREN)
+        return type_error(c, "a decimal type is written dec(N), N digits after the point (0 to 18)");
+    if (!advance(c))
+        return false;
+    if (c->tok.kind != PNX_T_INT || c->tok.integer < 0 || c->tok.integer > 18)
+        return type_error(c, "dec(N) has 0 to 18 digits after the point");
+    *out = (tid)(TY_DEC + (uint32_t)c->tok.integer);
+    if (!advance(c))
+        return false;
+    if (c->tok.kind != PNX_T_RPAREN)
+        return syntax(c, "dec(N) is closed by )");
+    return advance(c);
+}
+
 static bool ref_word(const comp *c) {
     return is_word(c, PNX_KW_array) || is_word(c, PNX_KW_list) || is_word(c, PNX_KW_queue) || is_word(c, PNX_KW_buffer);
 }
@@ -644,11 +680,12 @@ static bool parse_ref(comp *c, tid *out) {
             return syntax(c, "a collection parameter says what it holds: list int, array city, queue int");
         r.record = find_record_any(c, tok_name(c));
         r.cell = r.record == NONE ? basic_type(tok_name(c)) : TY_NONE;
-        if (r.record == NONE && r.cell != TY_INT && r.cell != TY_BOOL && r.cell != TY_ERR && r.cell != TY_STR)
-            return type_error(c, "the cells are int, bool, err, str(N) or a record");
+        const bool dec = r.record == NONE && name_is(tok_name(c), "dec");
+        if (r.record == NONE && r.cell != TY_INT && r.cell != TY_BOOL && r.cell != TY_ERR && r.cell != TY_STR && !dec)
+            return type_error(c, "the cells are int, bool, err, dec(N), str(N) or a record");
         if (r.kind == GK_QUEUE && (r.record != NONE || r.cell == TY_STR))
-            return type_error(c, "a queue holds int, bool or err values");
-        if (!advance(c) || (r.cell == TY_STR && !str_capacity(c, &r.strcap)))
+            return type_error(c, "a queue holds int, bool, err or dec(N) values");
+        if (!advance(c) || (r.cell == TY_STR && !str_capacity(c, &r.strcap)) || (dec && !dec_scale(c, &r.cell)))
             return false;
     }
     const rtype *all = c->rtypes.ptr;
@@ -741,8 +778,12 @@ static bool parse_sig(comp *c, sig *s) {
                 return syntax(c, "a parameter is a type, or a name and a type");
             }
         }
-        if (type.length)
+        if (type.length && name_is(type, "dec") && !c->in_host) {
+            if (!dec_scale(c, &t))
+                return false;
+        } else if (type.length) {
             t = type_of_name(c, type);
+        }
         if (t == TY_NONE && c->in_extern && !outputs && !owned && name_is(type, "cstr")) {
             t = TY_STR; // handed to the C function as a NUL-terminated copy
             c->cstr_mask |= 1u << s->n_in;
@@ -1500,7 +1541,7 @@ enum {
     BW_REPLACE_INTO, BW_APPEND_HEX, BW_CRC32, BW_FNV1A, BW_HASH64, BW_BASE64_ENCODE, BW_BASE64_DECODE,
     BW_HEX_ENCODE, BW_HEX_DECODE, BW_URL_ENCODE, BW_URL_DECODE, BW_TRUNCATE, BW_PTN_IS_MATCH, BW_PTN_MATCH,
     BW_PTN_CAPTURE, BW_PTN_MATCHES, BW_PTN_REPLACE, BW_RX, BW_RX_COMPILE, BW_RX_IS_MATCH, BW_RX_MATCH, BW_RX_CUT,
-    BW_RX_MATCHES, BW_RX_SPLIT, BW_RX_REPLACE, BW_RX_REPLACE_INTO, BW_WAIT_TAKE, BW_WAIT_PUT
+    BW_RX_MATCHES, BW_RX_SPLIT, BW_RX_REPLACE, BW_RX_REPLACE_INTO, BW_WAIT_TAKE, BW_WAIT_PUT, BW_RESCALE, BW_TO_DEC
 };
 static const struct builtin {
     const char *name;
@@ -1529,6 +1570,7 @@ static const struct builtin {
     {"spawn", BW_SPAWN, 0},     {"yield", BW_YIELD, 0},    {"resume", BW_RESUME, 0},
     {"is_done", BW_IS_DONE, 0}, {"cancel", BW_CANCEL, 0},  {"run_all", BW_RUN_ALL, 0},
     {"wait_take", BW_WAIT_TAKE, 0}, {"wait_put", BW_WAIT_PUT, 0},
+    {"rescale", BW_RESCALE, 0}, {"to_dec", BW_TO_DEC, 1},
     {"minimum", BW_MINIMUM, 0}, {"maximum", BW_MAXIMUM, 0},
     {"slice", BW_SLICE, 1},         {"cut", BW_CUT, 1},            {"try_cut", BW_TRY_CUT, 1},
     {"trim", BW_TRIM, 1},           {"trim_left", BW_TRIM_LEFT, 1}, {"trim_right", BW_TRIM_RIGHT, 1},
@@ -1575,7 +1617,7 @@ static const struct builtin *find_builtin(name n, uint8_t module) {
 // A name every part of the source sees: a word, a constant, a global, a type, a core word.
 static bool name_is_global(comp *c, name n) {
     return find_word(c, n, NULL) || find_fwd(c, n, NULL) || find_extern(c, n) != NONE || find_core(n) || type_of_name(c, n) != TY_NONE ||
-           name_is(n, "float") || name_is(n, "raw") ||
+           name_is(n, "float") || name_is(n, "raw") || name_is(n, "dec") ||
            find_record(c, n) != NONE ||
            name_is(n, "err") || find_const(c, n) || find_global(c, n) != NONE || find_builtin(n, 0);
 }
@@ -1665,14 +1707,29 @@ static bool arith_word(comp *c, uint32_t op) {
     if (!need(c, 2))
         return false;
     entry *a = &f->stack[f->depth - 2], *b = &f->stack[f->depth - 1];
+    if (op == PNX_MUL && is_dec(a->type) && is_dec(b->type)) { // dec(A) dec(B) mul : dec(A+B), exact (RFC-0019)
+        const uint32_t scale = (a->type - TY_DEC) + (b->type - TY_DEC);
+        if (scale > 18)
+            return type_error(c, "dec(A) times dec(B) is dec(A+B), and A+B is at most 18; rescale one first");
+        uint32_t ra, rb;
+        const uint32_t dst = slot_of(c, f->depth - 2);
+        if (!reg_of(c, f->depth - 2, &ra) || !reg_of(c, f->depth - 1, &rb) || emit_def(c, PNX_ABC(PNX_MUL, dst, ra, rb), BANK_I) == NONE)
+            return false;
+        f->depth -= 2;
+        return push_slot(c, (tid)(TY_DEC + scale));
+    }
     // A declared type D over int (RFC-0017 section 3.1): D and D are added and subtracted; D is
     // multiplied by a plain int from either side, divided by one and taken modulo one.
-    const bool da = a->type != TY_INT && base_of(c, a->type) == TY_INT;
-    const bool db = b->type != TY_INT && base_of(c, b->type) == TY_INT;
+    const bool da = a->type != TY_INT && num_base(c, a->type) == TY_INT;
+    const bool db = b->type != TY_INT && num_base(c, b->type) == TY_INT;
     const bool scaled = (op == PNX_MUL && ((da && b->type == TY_INT) || (db && a->type == TY_INT))) ||
                         ((op == PNX_DIV || op == PNX_MOD) && da && b->type == TY_INT);
     const tid result = db && !da ? b->type : a->type;
-    if (!scaled && (a->type != b->type || base_of(c, a->type) != TY_INT ||
+    if (!scaled && is_dec(a->type) && is_dec(b->type) && a->type != b->type && (op == PNX_ADD || op == PNX_SUB))
+        return type_error(c, "two dec values of different scales: rescale one first (d 2 rescale)");
+    if (!scaled && (is_dec(a->type) || is_dec(b->type)) && (op == PNX_DIV || op == PNX_MOD))
+        return type_error(c, "a dec is divided by an int, not by a dec; for a share, rescale first and divide by the int");
+    if (!scaled && (a->type != b->type || num_base(c, a->type) != TY_INT ||
                     (a->type != TY_INT && op != PNX_ADD && op != PNX_SUB)))
         return type_error(c, (da || db) && (a->type == b->type || a->type == TY_INT || b->type == TY_INT)
                                  ? "a declared type is added to and subtracted from its own type, and multiplied, divided "
@@ -1710,7 +1767,7 @@ static bool compare_word(comp *c, int which) {
     entry *a = &f->stack[f->depth - 2], *b = &f->stack[f->depth - 1];
     if (a->type != b->type)
         return type_error(c, "the two values compared must have the same type");
-    if (base_of(c, a->type) != TY_INT && a->type != TY_STR && which != CMP_EQ && which != CMP_NE)
+    if (num_base(c, a->type) != TY_INT && a->type != TY_STR && which != CMP_EQ && which != CMP_NE)
         return type_error(c, "values of this type are compared with eq and ne only");
     entry e = {.type = TY_BOOL, .kind = E_COND};
     uint32_t ra, rb;
@@ -1792,7 +1849,7 @@ static bool core(comp *c, const core_word *w) {
         if (!need(c, 1))
             return false;
         if (f->stack[f->depth - 1].type != TY_INT &&
-            !(w->op == PNX_ABS && base_of(c, f->stack[f->depth - 1].type) == TY_INT)) // abs keeps a declared type
+            !(w->op == PNX_ABS && num_base(c, f->stack[f->depth - 1].type) == TY_INT)) // abs keeps a declared type
             return type_error(c, "this word takes an int");
         const uint32_t dst = slot_of(c, f->depth - 1);
         if (!reg_of(c, f->depth - 1, &ra) || emit_def(c, PNX_ABC(w->op, dst, ra, 0), BANK_I) == NONE)
@@ -1805,15 +1862,26 @@ static bool core(comp *c, const core_word *w) {
     case C_CHK: { // the arithmetic that fails instead of faulting
         if (!need(c, 2))
             return false;
-        if (f->stack[f->depth - 1].type != TY_INT || f->stack[f->depth - 2].type != TY_INT)
+        const tid ta = f->stack[f->depth - 2].type, tb = f->stack[f->depth - 1].type;
+        tid result = TY_INT;
+        if (w->kind == C_CHK && (is_dec(ta) || is_dec(tb))) { // dec(N) as add, sub, mul and div take it (RFC-0019)
+            const bool same = ta == tb && (w->op == PNX_CHKADD || w->op == PNX_CHKSUB);
+            const bool by_int = (w->op == PNX_CHKMUL && (ta == TY_INT || tb == TY_INT)) || (w->op == PNX_CHKDIV && tb == TY_INT);
+            const bool both = w->op == PNX_CHKMUL && is_dec(ta) && is_dec(tb) && (ta - TY_DEC) + (tb - TY_DEC) <= 18;
+            if (!same && !by_int && !both)
+                return type_error(c, "a dec is added to and subtracted from the same dec(N), multiplied by an int or a "
+                                     "dec, and divided by an int");
+            result = both ? (tid)(TY_DEC + (ta - TY_DEC) + (tb - TY_DEC)) : is_dec(ta) ? ta : tb;
+        } else if (tb != TY_INT || ta != TY_INT) {
             return type_error(c, "this word takes two int values");
+        }
         if (!settle(c, f->depth - 2) || !settle(c, f->depth - 1))
             return false;
         ra = slot_of(c, f->depth - 2);
         rb = slot_of(c, f->depth - 1);
         f->depth -= 2;
         if (w->kind == C_CHK)
-            return settle_all(c) && emit(c, PNX_ABC(w->op, ra, ra, rb)) != NONE && guard_op(c, TY_INT);
+            return settle_all(c) && emit(c, PNX_ABC(w->op, ra, ra, rb)) != NONE && guard_op(c, result);
         const bool swap = w->op == CMP_GT || w->op == CMP_GE; // a > b is b < a
         const uint32_t op = w->op == CMP_LT || w->op == CMP_GT ? PNX_ULT : PNX_ULE;
         return emit_def(c, PNX_ABC(op, ra, swap ? rb : ra, swap ? ra : rb), BANK_I) != NONE && push_slot(c, TY_BOOL) &&
@@ -1880,7 +1948,7 @@ static bool core_plain(comp *c, const core_word *w) {
     default: { // C_NEG
         if (!need(c, 1))
             return false;
-        if (base_of(c, f->stack[f->depth - 1].type) != TY_INT)
+        if (num_base(c, f->stack[f->depth - 1].type) != TY_INT)
             return type_error(c, "neg takes an int, or a value of a declared type over int");
         const uint32_t dst = slot_of(c, f->depth - 1);
         uint32_t ra;
@@ -3155,7 +3223,7 @@ static bool do_cat(comp *c) {
         if (f->dead || f->depth != before + 1)
             return type_error(c, "each item of cat leaves exactly one value");
         const tid type = f->stack[before].type;
-        if (type != TY_STR && type != TY_INT && type != TY_BOOL)
+        if (type != TY_STR && type != TY_INT && type != TY_BOOL && !is_dec(type))
             return type_error(c, "cat joins str, int and bool values");
         if (!settle(c, before))
             return false;
@@ -3169,8 +3237,8 @@ static bool do_cat(comp *c) {
         return false;
     for (uint32_t k = first; k < f->depth; ++k) {
         const tid type = f->stack[k].type;
-        const uint32_t op = type == TY_STR ? PNX_RCATS : type == TY_INT ? PNX_RCATI : PNX_RCATB;
-        if (emit(c, PNX_ABC(op, scratch, slot_of(c, k), 0)) == NONE)
+        const uint32_t op = type == TY_STR ? PNX_RCATS : type == TY_INT ? PNX_RCATI : is_dec(type) ? PNX_RCATD : PNX_RCATB;
+        if (emit(c, PNX_ABC(op, scratch, slot_of(c, k), is_dec(type) ? type - TY_DEC : 0)) == NONE)
             return false;
     }
     f->depth = first;
@@ -3967,9 +4035,9 @@ static bool do_extreme(comp *c, bool largest) {
     tid     element_type;
     if (!stem_begin(c, &kind, &cur, &lim, &src, &hidden, &element_type))
         return false;
-    if (element_type != TY_INT || stem_takes(kind))
-        return type_error(c, "this word takes a stem of int values");
-    if (!push_slot(c, TY_INT) || !push_slot(c, TY_INT))
+    if ((element_type != TY_INT && !is_dec(element_type)) || stem_takes(kind))
+        return type_error(c, "this word takes a stem of int or dec(N) values");
+    if (!push_slot(c, element_type) || !push_slot(c, TY_INT))
         return false;
     const uint32_t best = slot_of(c, f->depth - 2), flag = slot_of(c, f->depth - 1);
     uint32_t       element = top_slot(c, BANK_I, 1), exits = NONE;
@@ -3990,7 +4058,7 @@ static bool do_extreme(comp *c, bool largest) {
         return false;
     land(c, &exits);
     f->depth -= (uint32_t)hidden + 2;
-    return found_or_fail(c, TY_INT, best, flag);
+    return found_or_fail(c, element_type, best, flag);
 }
 
 // sep buf stem join_into : the str values of the stem appended to the buffer, sep between two;
@@ -4287,6 +4355,10 @@ static bool text_value(comp *c, const textregs *x, const field *fd, uint32_t whe
             emit(c, PNX_ABC(PNX_JSEQ, x->val, x->key, 1)) == NONE || !jump_later(c, bad))
             return false;
         land(c, &done);
+    } else if (is_dec(fd->type)) { // a decimal with no more digits after the point than the field has
+        if ((json && (emit(c, PNX_ABC(PNX_JEQI, x->t, PNX_JSON_NUMBER, 1)) == NONE || !jump_later(c, bad))) ||
+            emit(c, PNX_ABC(PNX_STODEC, x->aux, x->val, fd->type - TY_DEC)) == NONE || !jump_later(c, bad))
+            return false;
     } else { // a number: an int that fits the field
         if ((json && (emit(c, PNX_ABC(PNX_JEQI, x->t, PNX_JSON_NUMBER, 1)) == NONE || !jump_later(c, bad))) ||
             emit(c, PNX_ABC(PNX_TOINT, x->aux, x->val, 0)) == NONE || !jump_later(c, bad) ||
@@ -4352,7 +4424,9 @@ static bool text_record(comp *c, bool json, bool unpack) {
                                  emit_g(c, json ? PNX_JPUTS : PNX_CPUTS, x.v, json ? PNX_JSON_STRING : 0, gi) == NONE
                            : emit(c, PNX_ABC(PNX_FGET, x.t, x.rr, 0)) == NONE || emit(c, where) == NONE ||
                                  emit_g(c, json ? PNX_JPUTI : PNX_CPUTI, x.t,
-                                        fd->type == TY_BOOL ? (json ? PNX_JSON_BOOLEAN : 1) : (json ? PNX_JSON_NUMBER : 0), gi) == NONE)
+                                        fd->type == TY_BOOL ? (json ? PNX_JSON_BOOLEAN : 1)
+                                        : is_dec(fd->type) ? (json ? PNX_JSON_DEC : 3) + (fd->type - TY_DEC)
+                                                           : (json ? PNX_JSON_NUMBER : 0), gi) == NONE)
                 return false;
             if (!jump_later(c, &bad))
                 return false;
@@ -4460,6 +4534,12 @@ static bool json_word(comp *c, name n) {
     if (name_is(n, "put_int") || name_is(n, "put_bool"))
         return text_put(c, PNX_JPUTI, name_is(n, "put_int") ? PNX_JSON_NUMBER : PNX_JSON_BOOLEAN,
                         name_is(n, "put_int") ? TY_INT : TY_BOOL);
+    if (name_is(n, "put_dec")) { // d buf json.put_dec : the number with its digits after the point
+        const tid t = f->depth >= 2 ? f->stack[f->depth - 2].type : TY_NONE;
+        if (!is_dec(t))
+            return type_error(c, "put_dec takes a dec(N) and a buffer: d buf json.put_dec");
+        return text_put(c, PNX_JPUTI, PNX_JSON_DEC + (t - TY_DEC), t);
+    }
     if (name_is(n, "put_key") || name_is(n, "put_str"))
         return text_put(c, PNX_JPUTS, name_is(n, "put_key") ? PNX_JSON_KEY : PNX_JSON_STRING, TY_STR);
     if (name_is(n, "pack") || name_is(n, "unpack"))
@@ -4497,6 +4577,12 @@ static bool csv_word(comp *c, name n) {
         return text_put(c, PNX_CPUTS, 0, TY_STR);
     if (name_is(n, "put_int") || name_is(n, "put_bool"))
         return text_put(c, PNX_CPUTI, name_is(n, "put_int") ? 0 : 1, name_is(n, "put_int") ? TY_INT : TY_BOOL);
+    if (name_is(n, "put_dec")) {
+        const tid t = c->f->depth >= 2 ? c->f->stack[c->f->depth - 2].type : TY_NONE;
+        if (!is_dec(t))
+            return type_error(c, "put_dec takes a dec(N) and a buffer: d buf csv.put_dec");
+        return text_put(c, PNX_CPUTI, 3 + (t - TY_DEC), t);
+    }
     if (name_is(n, "end_line"))
         return text_put(c, PNX_CPUTI, 2, TY_NONE);
     if (name_is(n, "pack") || name_is(n, "unpack"))
@@ -4752,9 +4838,9 @@ static bool do_sum(comp *c) {
     tid     element_type;
     if (!stem_begin(c, &kind, &cur, &lim, &src, &hidden, &element_type))
         return false;
-    if (element_type != TY_INT)
-        return type_error(c, "sum adds int values");
-    if (!push_slot(c, TY_INT))
+    if (element_type != TY_INT && !is_dec(element_type))
+        return type_error(c, "sum adds int or dec(N) values");
+    if (!push_slot(c, element_type)) // a dec(N) sums to a dec(N)
         return false;
     const uint32_t acc = slot_of(c, f->depth - 1), element = top_slot(c, BANK_I, 1);
     uint32_t       exits = NONE;
@@ -4773,7 +4859,7 @@ static bool do_sum(comp *c) {
         return false;
     land(c, &exits);
     f->depth -= (uint32_t)hidden + 1;
-    return push_slot(c, TY_INT) && move_slot(c, TY_INT, slot_of(c, f->depth - 1), acc);
+    return push_slot(c, element_type) && move_slot(c, element_type, slot_of(c, f->depth - 1), acc);
 }
 
 // The word after an instruction that can fail. `out` is the type of its one result, TY_NONE
@@ -5306,7 +5392,7 @@ static bool builtin(comp *c, const struct builtin *w) {
         if (!need(c, 2))
             return false;
         if (f->stack[f->depth - 1].type != f->stack[f->depth - 2].type ||
-            base_of(c, f->stack[f->depth - 1].type) != TY_INT)
+            num_base(c, f->stack[f->depth - 1].type) != TY_INT)
             return type_error(c, "this word takes two int values, or two of the same declared type");
         if (!settle(c, f->depth - 2) || !reg_of(c, f->depth - 1, &rb))
             return false;
@@ -5624,16 +5710,59 @@ static bool builtin(comp *c, const struct builtin *w) {
         return emit(c, w->id == BW_FIND ? PNX_ABC(PNX_SFIND, dst, ra, rb) : PNX_ABC(PNX_TOINT, dst, ra, 0)) != NONE &&
                guard_op(c, TY_INT);
     }
+    case BW_TO_DEC: { // s N str.to_dec : the text read as a dec(N); fails with format
+        if (!need(c, 2))
+            return false;
+        const entry n = f->stack[f->depth - 1];
+        if (f->stack[f->depth - 2].type != TY_STR || n.type != TY_INT || n.kind != E_CONST || n.value < 0 || n.value > 18)
+            return type_error(c, "to_dec takes a str and the digits after the point, a constant 0 to 18: s 2 str.to_dec");
+        --f->depth;
+        if (!settle(c, f->depth - 1))
+            return false;
+        ra = slot_of(c, f->depth - 1);
+        --f->depth;
+        if (!settle_all(c))
+            return false;
+        return emit(c, PNX_ABC(PNX_STODEC, top_slot(c, BANK_I, 1), ra, (uint32_t)n.value)) != NONE &&
+               guard_op(c, (tid)(TY_DEC + (uint32_t)n.value));
+    }
+    case BW_RESCALE: { // d M rescale : the dec(N) as a dec(M); fewer digits are rounded half away from zero
+        if (!need(c, 2))
+            return false;
+        const entry m = f->stack[f->depth - 1];
+        const tid   from = f->stack[f->depth - 2].type;
+        if (!is_dec(from) || m.type != TY_INT || m.kind != E_CONST || m.value < 0 || m.value > 18)
+            return type_error(c, "rescale takes a dec(N) and the digits after the point, a constant 0 to 18: d 2 rescale");
+        --f->depth;
+        const uint32_t to = (uint32_t)m.value, n = from - TY_DEC;
+        if (to == n)
+            return advance(c);
+        const uint32_t dst = slot_of(c, f->depth - 1);
+        if (!reg_of(c, f->depth - 1, &ra))
+            return false;
+        if (to < n) {
+            if (emit_def(c, PNX_ABC(PNX_DRESC, dst, ra, n - to), BANK_I) == NONE)
+                return false;
+        } else { // more digits: exact, a fault when it does not fit
+            const uint32_t k = top_slot(c, BANK_I, 1);
+            if (!load_int(c, k, pnx_pow10[to - n]) || emit_def(c, PNX_ABC(PNX_MUL, dst, ra, k), BANK_I) == NONE)
+                return false;
+        }
+        --f->depth;
+        return push_slot(c, (tid)(TY_DEC + to)) && advance(c);
+    }
     case BW_TO_STR: { // the decimal text, in the region
         if (!need(c, 1))
             return false;
-        if (f->stack[f->depth - 1].type != TY_INT)
-            return type_error(c, "to_str takes an int");
+        const tid type = f->stack[f->depth - 1].type;
+        if (type != TY_INT && !is_dec(type))
+            return type_error(c, "to_str takes an int or a dec(N)");
         if (!reg_of(c, f->depth - 1, &ra))
             return false;
         --f->depth;
         const uint32_t scratch = top_slot(c, BANK_S, 2) + 1;
-        if (emit(c, PNX_ABC(PNX_RMARK, scratch, 0, 0)) == NONE || emit(c, PNX_ABC(PNX_RCATI, scratch, ra, 0)) == NONE ||
+        if (emit(c, PNX_ABC(PNX_RMARK, scratch, 0, 0)) == NONE ||
+            emit(c, is_dec(type) ? PNX_ABC(PNX_RCATD, scratch, ra, type - TY_DEC) : PNX_ABC(PNX_RCATI, scratch, ra, 0)) == NONE ||
             !push_slot(c, TY_STR))
             return false;
         return move_slot(c, TY_STR, slot_of(c, f->depth - 1), scratch) && advance(c);
@@ -5849,6 +5978,25 @@ static bool body_name(comp *c) {
         const fwd *ahead = find_fwd(c, n, &index);
         if (ahead)
             return call_word(c, &ahead->sig, FWD_MARK | index);
+        if (name_is(n, "dec")) { // n dec(N) : the int n as n.00..., exact; a fault when it does not fit
+            tid made;
+            if (!advance(c) || !dec_scale(c, &made) || !need(c, 1))
+                return false;
+            if (f->stack[f->depth - 1].type != TY_INT)
+                return type_error(c, "dec(N) is made from an int: 5 dec(2) is 5.00; rescale changes the digits of a dec");
+            const uint32_t scale = made - TY_DEC;
+            if (scale) {
+                const uint32_t dst = slot_of(c, f->depth - 1), k = top_slot(c, BANK_I, 1);
+                uint32_t ra;
+                if (!reg_of(c, f->depth - 1, &ra) || !load_int(c, k, pnx_pow10[scale]) ||
+                    emit_def(c, PNX_ABC(PNX_MUL, dst, ra, k), BANK_I) == NONE)
+                    return false;
+                --f->depth;
+                return push_slot(c, made);
+            }
+            f->stack[f->depth - 1].type = made;
+            return true;
+        }
         const tid made = type_of_name(c, n);
         if (base_of(c, made) != made || name_is(n, "raw")) { // 5 meters ; m raw
             if (!need(c, 1))
@@ -6082,7 +6230,9 @@ static bool body_token(comp *c) {
     case PNX_T_INT:
     case PNX_T_CHAR:
         return push(c, (entry){.type = TY_INT, .kind = E_CONST, .value = t.integer}) && advance(c);
-    case PNX_T_FLOAT: return type_error(c, "float is not available: this build has no F bank");
+    case PNX_T_DEC: // 12.50 : a dec(2) of 1250 (RFC-0019)
+        return push(c, (entry){.type = (tid)(TY_DEC + t.scale), .kind = E_CONST, .value = t.integer}) && advance(c);
+    case PNX_T_FLOAT: return type_error(c, "float is not available: this build has no F bank; 2.5 without an exponent is a dec");
     case PNX_T_STRING:
     case PNX_T_RAW:
     case PNX_T_TEXT: return string_literal(c) && advance(c);
@@ -6681,7 +6831,8 @@ static bool declare_global(comp *c) {
         return syntax(c, "global is followed by a name and a type");
     g.record = NONE;
     g.type = type_of_name(c, tok_name(c));
-    if (!advance(c))
+    const bool dec = name_is(tok_name(c), "dec");
+    if (!advance(c) || (dec && !dec_scale(c, &g.type)))
         return false;
     if (g.type == TY_STR) {
         if (!str_capacity(c, &g.strcap))
@@ -6739,16 +6890,19 @@ static bool declare_collection(comp *c, uint8_t kind) {
         return syntax(c, "the declaration is: array name type size");
     g.record = find_record_any(c, tok_name(c));
     g.type = basic_type(tok_name(c));
-    if (g.record == NONE && g.type != TY_INT && g.type != TY_BOOL && g.type != TY_ERR && g.type != TY_STR)
-        return type_error(c, "the cells are int, bool, err, str(N) or a record; other types are not supported yet");
+    const bool dec = g.record == NONE && name_is(tok_name(c), "dec");
+    if (dec)
+        g.type = TY_DEC; // the scale follows
+    if (g.record == NONE && g.type != TY_INT && g.type != TY_BOOL && g.type != TY_ERR && g.type != TY_STR && !dec)
+        return type_error(c, "the cells are int, bool, err, dec(N), str(N) or a record; other types are not supported yet");
     if (slot && g.record == NONE)
         return type_error(c, "a table announced by forward holds a record");
     if (kind == GK_QUEUE && (g.record != NONE || g.type == TY_STR))
-        return type_error(c, "a queue holds int, bool or err values");
+        return type_error(c, "a queue holds int, bool, err or dec(N) values");
     if (kind == GK_POOL && g.record == NONE)
         return type_error(c, "a pool holds records: pool name record size");
     if (!advance(c) || (g.record == NONE && g.type == TY_STR && !str_capacity(c, &g.strcap)) ||
-        !declared_size(c, &g.capacity))
+        (dec && !dec_scale(c, &g.type)) || !declared_size(c, &g.capacity))
         return false;
     if (slot) { // announced by forward: export on either line exports the table
         g.exported = slot->exported || c->exporting;
@@ -6870,6 +7024,11 @@ static bool declare_record(comp *c) {
             fd.type = TY_BOOL;
             fd.extra = PNX_W_U8;
             bytes = 1;
+        } else if (name_is(tn, "dec")) { // dec(N): the scaled int, 64 bits
+            if (!dec_scale(c, &fd.type))
+                return false;
+            fd.extra = PNX_W_64;
+            bytes = 8;
         } else if (name_is(tn, "str")) { // str(N): one length byte, then N bytes
             uint32_t n;
             if (c->tok.kind != PNX_T_LPAREN)
@@ -6926,15 +7085,18 @@ static bool declare_type(comp *c) {
     if (c->tok.kind != PNX_T_NAME)
         return syntax(c, "the declaration is: type name base");
     d.base = basic_type(tok_name(c));
-    if (d.base != TY_INT && d.base != TY_STR && d.base != TY_BOOL)
-        return type_error(c, "a declared type is made of int, bool or str");
+    const bool dec = name_is(tok_name(c), "dec");
+    if (!advance(c) || (dec && !dec_scale(c, &d.base)))
+        return false;
+    if (d.base != TY_INT && d.base != TY_STR && d.base != TY_BOOL && !is_dec(d.base))
+        return type_error(c, "a declared type is made of int, bool, str or dec(N)");
     if (c->dtypes.n >= 0x3000u)
         return syntax(c, "too many declared types");
     dtype *slot = vec_push(c, &c->dtypes, sizeof(dtype));
     if (!slot)
         return false;
     *slot = d;
-    return advance(c);
+    return true;
 }
 
 // buffer NAME size

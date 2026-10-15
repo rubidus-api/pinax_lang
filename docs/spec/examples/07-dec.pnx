@@ -1,0 +1,17 @@
+rem run
+use io
+use str
+type price dec(2)
+word demo ()
+  12.50 to unit                           rem dec(2): two digits after the point
+  unit 3 mul to three                     rem times an int: still dec(2)
+  three 0.75 add to bill
+  cat ("bill ", bill, ", a quarter ", bill 4 div) io.println
+  0.08 to rate
+  bill rate mul to tax                    rem dec(2) times dec(2) is dec(4), exact
+  cat ("tax ", tax, " -> ", tax 2 rescale) io.println
+  cat (5 dec(2), " ", bill raw, " ", 9.99 price raw) io.println
+  "19.9" 2 str.to_dec or_else (e) 0.00 end to read
+  cat (read, " ", read bill gt) io.println
+end
+demo

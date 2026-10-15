@@ -28,6 +28,78 @@ uint32_t pnx_find_byte(const uint8_t *bytes, uint32_t length, uint8_t byte) {
     return at == PROVEN_INDEX_NOT_FOUND ? UINT32_MAX : (uint32_t)at;
 }
 
+const int64_t pnx_pow10[19] = {1,
+                               10,
+                               100,
+                               1000,
+                               10000,
+                               100000,
+                               1000000,
+                               10000000,
+                               100000000,
+                               1000000000,
+                               10000000000,
+                               100000000000,
+                               1000000000000,
+                               10000000000000,
+                               100000000000000,
+                               1000000000000000,
+                               10000000000000000,
+                               100000000000000000,
+                               1000000000000000000};
+
+uint32_t pnx_format_dec(int64_t value, uint32_t scale, uint8_t out[24]) {
+    if (scale == 0)
+        return pnx_format_int(value, out);
+    const uint64_t a = value < 0 ? 0u - (uint64_t)value : (uint64_t)value, p = (uint64_t)pnx_pow10[scale];
+    uint64_t whole = a / p, frac = a % p;
+    uint8_t  digits[20];
+    uint32_t n = 0, k = 0;
+    if (value < 0)
+        out[n++] = '-';
+    do {
+        digits[k++] = (uint8_t)('0' + whole % 10);
+        whole /= 10;
+    } while (whole);
+    while (k)
+        out[n++] = digits[--k];
+    out[n++] = '.';
+    for (uint32_t j = scale; j-- > 0;) {
+        out[n + j] = (uint8_t)('0' + frac % 10);
+        frac /= 10;
+    }
+    return n + scale;
+}
+
+bool pnx_parse_dec(const uint8_t *bytes, uint32_t length, uint32_t scale, int64_t *out) {
+    uint32_t i = 0;
+    const bool negative = length && bytes[0] == '-';
+    if (length && (bytes[0] == '-' || bytes[0] == '+'))
+        ++i;
+    uint64_t v = 0;
+    uint32_t whole = 0, frac = 0;
+    for (; i < length && bytes[i] >= '0' && bytes[i] <= '9'; ++i, ++whole) {
+        if (ckd_mul(&v, v, 10u) || ckd_add(&v, v, (uint64_t)(bytes[i] - '0')))
+            return false;
+    }
+    if (!whole)
+        return false;
+    if (i < length && bytes[i] == '.') {
+        for (++i; i < length && bytes[i] >= '0' && bytes[i] <= '9'; ++i, ++frac) {
+            if (frac == scale || ckd_mul(&v, v, 10u) || ckd_add(&v, v, (uint64_t)(bytes[i] - '0')))
+                return false; // more digits than the scale: not rounded quietly
+        }
+        if (!frac)
+            return false;
+    }
+    if (i != length || ckd_mul(&v, v, (uint64_t)pnx_pow10[scale - frac]))
+        return false;
+    if (negative ? v > (uint64_t)INT64_MAX + 1u : v > (uint64_t)INT64_MAX)
+        return false;
+    *out = negative ? (int64_t)(0u - v) : (int64_t)v;
+    return true;
+}
+
 uint32_t pnx_format_int(int64_t value, uint8_t out[24]) {
     proven_u8str_t text = proven_u8str_borrow(out, 24);
     const proven_fmt_result_t r = proven_u8str_append_fmt(&text, "{}", proven_arg_i64(value));

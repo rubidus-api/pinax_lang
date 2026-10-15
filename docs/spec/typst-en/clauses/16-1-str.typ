@@ -53,7 +53,8 @@ The comparison words `eq` `ne` `lt` and the rest also compare strings in byte or
   [`repeat`], [`(s str, n int gives str)`], [`n` copies joined],
   [`replace`], [`(s str, old str, new str gives str)`], [every `old` replaced by `new`],
   [`pad_left` `pad_right`], [`(s str, width int gives str)`], [filled with spaces to `width` bytes; as it is when longer],
-  [`to_str`], [`(int gives str)`], [decimal text],
+  [`to_str`], [`(int gives str)`], [decimal text; a `dec(N)` with its `N` digits after the point (7.5)],
+  [`to_dec`], [`(s str, N gives dec(N) or fail)`], [read a decimal: a sign, digits, and a point with at most `N` digits after it (`N` a constant); more digits, or anything else, `err.format`],
   [`to_int`], [`(str gives int or fail)`], [read as decimal: one sign and digits only (no spaces); otherwise, or beyond 64 bits, `err.format`],
   [`to_int_base`], [`(s str, base int gives int or fail)`], [read in base 2--36; another `base` is the fault `range`],
 )]

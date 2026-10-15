@@ -51,7 +51,8 @@ int      pnx_rex_search(const uint8_t *prog, uint32_t plen, const uint8_t *s, ui
 // The text formats of json and csv (pinax_json.c), read a token or a field at a time.
 enum {
     PNX_JSON_OBJECT = 1, PNX_JSON_OBJECT_END, PNX_JSON_ARRAY, PNX_JSON_ARRAY_END, PNX_JSON_KEY, PNX_JSON_STRING,
-    PNX_JSON_NUMBER, PNX_JSON_BOOLEAN, PNX_JSON_NULL, PNX_JSON_KINDS
+    PNX_JSON_NUMBER, PNX_JSON_BOOLEAN, PNX_JSON_NULL, PNX_JSON_KINDS,
+    PNX_JSON_DEC = 32, // JPUTI only: a dec(N), N = B - PNX_JSON_DEC (RFC-0019); CPUTI writes one with B = 3 + N
 };
 int      pnx_json_next(const uint8_t *s, uint32_t n, uint32_t *start, uint32_t *len, bool *escaped, uint32_t *past);
 int      pnx_json_skip(const uint8_t *s, uint32_t n, uint32_t *past);
@@ -292,6 +293,11 @@ pinax_err pnx_execute(pinax_state *state);
 bool pnx_parse_int(const uint8_t *bytes, uint32_t length, int64_t *out);
 // Decimal text of `value` into `out`; returns its length (at most 20).
 uint32_t pnx_format_int(int64_t value, uint8_t out[24]);
+// dec(N) (RFC-0019): `value` scaled by 10^scale as text ("-0.05"), and back. Reading takes an
+// optional sign, digits, and a point followed by at most `scale` digits.
+uint32_t pnx_format_dec(int64_t value, uint32_t scale, uint8_t out[24]);
+bool     pnx_parse_dec(const uint8_t *bytes, uint32_t length, uint32_t scale, int64_t *out);
+extern const int64_t pnx_pow10[19];
 // Offset of the first `part` in `bytes`, or UINT32_MAX. An empty part is found at 0.
 uint32_t pnx_find(const uint8_t *bytes, uint32_t length, const uint8_t *part, uint32_t part_length);
 // Hash of key bytes for an index: the vendored proven's keyed SipHash-2-4.

@@ -1,0 +1,10 @@
+rem run
+use io
+word demo ()
+  4.20 to coffee                          rem dec(2): two digits after the point
+  coffee 3 mul 1.15 add to bill           rem times an int, plus another dec(2)
+  bill 0.10 mul to tip                    rem dec(2) times dec(2): dec(4), nothing lost
+  cat ("bill ", bill, ", tip ", tip, ", rounded ", tip 2 rescale) io.println
+  cat ("split in three: ", bill 3 div) io.println
+end
+demo

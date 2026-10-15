@@ -17,6 +17,7 @@ in 9.2. `T` means "any one type"; it is a notation for built-in words only. The 
   [`neg` `abs`], [`(int gives int)`], [negation, absolute value; overflow for the smallest `int`],
   [`min` `max`], [`(int, int gives int)`], [the smaller, the larger],
   [`clamp`], [`(n int, lo int, hi int gives int)`], [`n` brought between `lo` and `hi`],
+  [`rescale`], [`(d dec(N), M gives dec(M))`], [the decimal with `M` digits after the point (`M` a constant); fewer digits rounded half away from zero (7.5)],
 )]
 
 #para("2")[Words that treat overflow otherwise.

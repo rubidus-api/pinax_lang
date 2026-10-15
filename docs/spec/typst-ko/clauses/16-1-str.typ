@@ -52,7 +52,8 @@
   [`repeat`], [`(s str, n int gives str)`], [`n` 번 이은 글],
   [`replace`], [`(s str, old str, new str gives str)`], [모든 `old` 를 `new` 로],
   [`pad_left` `pad_right`], [`(s str, width int gives str)`], [스페이스로 채워 `width` 바이트로. 이미 길면 그대로],
-  [`to_str`], [`(int gives str)`], [십진 글],
+  [`to_str`], [`(int gives str)`], [십진 글. `dec(N)` 은 점 아래 `N` 자리까지(7.5)],
+  [`to_dec`], [`(s str, N gives dec(N) or fail)`], [십진 소수로 읽기: 부호, 숫자, 점과 그 아래 `N` 자리까지(`N` 은 상수). 자리가 더 많거나 다른 꼴이면 `err.format`],
   [`to_int`], [`(str gives int or fail)`], [십진으로 읽기. 부호 하나와 숫자만 받는다(공백도 안 된다). 아니거나 64 비트를 넘으면 `err.format`],
   [`to_int_base`], [`(s str, base int gives int or fail)`], [2--36 진법으로 읽기. 그 밖의 `base` 는 결함 `range`],
 )]

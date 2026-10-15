@@ -521,11 +521,14 @@ static const char *check_word(const pinax_state *st, uint32_t index, span range,
             return "code: unknown width";
         if (((op == PNX_BENC || op == PNX_BENCW) && b >= PNX_ENC_COUNT) || (op == PNX_SHASH && c >= PNX_HASH_COUNT))
             return "code: unknown encoding or hash";
-        if (((op == PNX_JPUTI || op == PNX_JPUTIW) && (b == 0 || b == PNX_JSON_KEY || b == PNX_JSON_STRING || b >= PNX_JSON_KINDS)) ||
+        if (((op == PNX_JPUTI || op == PNX_JPUTIW) && (b == 0 || b == PNX_JSON_KEY || b == PNX_JSON_STRING ||
+                                                       (b >= PNX_JSON_KINDS && (b < PNX_JSON_DEC || b > PNX_JSON_DEC + 18)))) ||
             ((op == PNX_JPUTS || op == PNX_JPUTSW) && b != PNX_JSON_KEY && b != PNX_JSON_STRING) ||
-            ((op == PNX_CPUTI || op == PNX_CPUTIW) && b > 2) || ((op == PNX_CPUTS || op == PNX_CPUTSW) && b != 0) ||
+            ((op == PNX_CPUTI || op == PNX_CPUTIW) && b > 3 + 18) || ((op == PNX_CPUTS || op == PNX_CPUTSW) && b != 0) ||
             (op == PNX_CNEXT && c > 2) || (op == PNX_FITW && c >= PNX_W_COUNT))
             return "code: unknown kind of a json or csv instruction";
+        if (((op == PNX_RCATD || op == PNX_STODEC) && c > 18) || (op == PNX_DRESC && (c == 0 || c > 18)))
+            return "code: a decimal scale outside 0 to 18";
         if (info.second == PNX_X_SREG && x >= word->str_cells)
             return "code: register outside the window";
 

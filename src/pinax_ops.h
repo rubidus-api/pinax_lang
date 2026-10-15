@@ -495,6 +495,27 @@ PNX_OP(RCATI) {
     const uint32_t n = pnx_format_int(R[OP_B(w)], digits);
     return pnx_region_append(st, &S[OP_A(w)], digits, n);
 }
+PNX_OP(RCATD) {
+    uint8_t digits[24];
+    const uint32_t n = pnx_format_dec(R[OP_B(w)], OP_C(w), digits);
+    return pnx_region_append(st, &S[OP_A(w)], digits, n);
+}
+PNX_OP(STODEC) {
+    const pnx_scell s = S[OP_B(w)];
+    if (pnx_parse_dec(pnx_view_bytes(st, s), s.length, OP_C(w), &R[OP_A(w)]))
+        return PNX_R_OK;
+    st->fail = PINAX_ERR_FORMAT;
+    return PNX_R_FAILED;
+}
+PNX_OP(DRESC) { // rounded half away from zero
+    const int64_t v = R[OP_B(w)], p = pnx_pow10[OP_C(w)];
+    int64_t q = v / p;
+    const int64_t r = v % p;
+    if ((r < 0 ? -r : r) >= p - (r < 0 ? -r : r)) // |r| * 2 >= p, without overflow
+        q += v < 0 ? -1 : 1;
+    R[OP_A(w)] = q;
+    return PNX_R_OK;
+}
 PNX_OP(RCATB) {
     return R[OP_B(w)] ? pnx_region_append(st, &S[OP_A(w)], (const uint8_t *)"true", 4)
                       : pnx_region_append(st, &S[OP_A(w)], (const uint8_t *)"false", 5);
@@ -1351,6 +1372,11 @@ PNX_OP(JPUTI) {
     case PNX_JSON_ARRAY: out[n++] = '['; break;
     case PNX_JSON_ARRAY_END: out[n++] = ']'; break;
     case PNX_JSON_NUMBER: n += pnx_format_int(R[OP_A(w)], out + n); break;
+    case PNX_JSON_DEC + 0: case PNX_JSON_DEC + 1: case PNX_JSON_DEC + 2: case PNX_JSON_DEC + 3: case PNX_JSON_DEC + 4:
+    case PNX_JSON_DEC + 5: case PNX_JSON_DEC + 6: case PNX_JSON_DEC + 7: case PNX_JSON_DEC + 8: case PNX_JSON_DEC + 9:
+    case PNX_JSON_DEC + 10: case PNX_JSON_DEC + 11: case PNX_JSON_DEC + 12: case PNX_JSON_DEC + 13:
+    case PNX_JSON_DEC + 14: case PNX_JSON_DEC + 15: case PNX_JSON_DEC + 16: case PNX_JSON_DEC + 17:
+    case PNX_JSON_DEC + 18: n += pnx_format_dec(R[OP_A(w)], kind - PNX_JSON_DEC, out + n); break;
     case PNX_JSON_BOOLEAN:
         __builtin_memcpy(out + n, R[OP_A(w)] ? "true" : "false", R[OP_A(w)] ? 4 : 5);
         n += R[OP_A(w)] ? 4 : 5;
@@ -1468,6 +1494,8 @@ PNX_OP(CPUTI) {
             out[n++] = ',';
         if (OP_B(w) == 0) {
             n += pnx_format_int(R[OP_A(w)], out + n);
+        } else if (OP_B(w) >= 3) { // a dec(B - 3)
+            n += pnx_format_dec(R[OP_A(w)], OP_B(w) - 3, out + n);
         } else {
             __builtin_memcpy(out + n, R[OP_A(w)] ? "true" : "false", R[OP_A(w)] ? 4 : 5);
             n += R[OP_A(w)] ? 4 : 5;

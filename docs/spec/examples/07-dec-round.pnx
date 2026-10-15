@@ -1,0 +1,7 @@
+rem run
+use io
+word show (d dec(3)) cat (d, " -> ", d 2 rescale, ", ", d 0 rescale) io.println end
+word demo ()
+  2.344 show  2.345 show  -2.345 show  0.500 show  -0.500 show
+end
+demo

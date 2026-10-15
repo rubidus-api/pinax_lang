@@ -1,0 +1,19 @@
+rem run
+use io
+use json
+use csv
+record item
+  name str(8)
+  cost dec(2)
+end
+array one item 1
+buffer out 64
+word demo (or fail)
+  0 one idx to r
+  "pen" r to item.name  1.5 1 rescale 2 rescale r to item.cost
+  r out json.pack or_fail  out contents io.println
+  out clear  r out csv.pack or_fail  out contents io.print
+  "{\"cost\": 3.05}" r json.unpack or_fail drop  cat (r item.cost) io.println
+  "{\"cost\": 3.055}" r json.unpack or_else (e) cat ("3.055: ", e err_text) io.println "" end drop
+end
+demo or_else (e) e err_text io.println end

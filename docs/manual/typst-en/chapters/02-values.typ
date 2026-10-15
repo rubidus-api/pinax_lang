@@ -54,7 +54,23 @@ A result beyond the range of `int` does not quietly wrap around. The run stops o
 #strong[fault]. `pnx` shows the line of the fault and the locals of the word. For arithmetic that wraps use
 `wrap_mul`, for arithmetic that stops at the edge `sat_mul`, and to receive overflow as a failure `chk_mul`.
 
+== Decimals
+
+For money and other numbers with a fixed number of digits after the point, write them with the point: `4.20` is a
+`dec(2)`, a decimal with two digits after the point. It is held as the integer 420, so sums come out exactly, and the
+same on every machine. Add and subtract it with the same `dec(N)`, multiply and divide it by an `int`; two `dec`
+multiplied keep all their digits. `rescale` sets the number of digits, rounding half away from zero.
+
+#ex("manual", "02-dec.pnx")
+
+Dividing by an `int` cuts toward zero, as for integers: `9.75 3 div` is `3.25`, but `10.00 3 div` is `3.33`, and one cent
+is left over. When that matters, take the cents with `raw` and share them out yourself.
+
+#mistake[`4.20` and `0.5` can be added][They are `dec(2)` and `dec(1)`, two types. Write `0.50`, or `rescale` one.
+#ex("manual", "02-dec-scales.pnx")]
+
 #summary[
+- A number with a point is a `dec(N)`: N digits after it, exact arithmetic, `rescale` to round (standard 7.5).
 - The value put on first is on the left: `10 3 sub` is 7 (standard 9.3).
 - The stack words are `dup` `drop` `swap` `over` `nip` only (9.3).
 - Types are checked at load; `int` and `bool` do not mix (7.1, 7.2).

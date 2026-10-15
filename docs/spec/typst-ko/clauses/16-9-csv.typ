@@ -9,11 +9,12 @@
 따옴표를 풀어서 낸다. 닫히지 않은 따옴표는 남은 글 그대로를 마지막 필드로 낸다(줄기는 실패를 알리지 못한다).]
 
 #para("3")[쓰는 낱말은 버퍼에 붙인다(`or fail`, 자리가 모자라면 `err.full`). `s buf csv.put`, `n buf
-csv.put_int`, `b buf csv.put_bool` 은 필드 하나를(앞에 필요한 쉼표와 함께), `buf csv.end_line` 은 줄 끝을
+csv.put_int`, `d buf csv.put_dec`, `b buf csv.put_bool` 은 필드 하나를(앞에 필요한 쉼표와 함께), `buf csv.end_line` 은 줄 끝을
 붙인다. 참거짓은 `true` `false` 로 쓴다.]
 
 #para("4")[`줄 buf csv.pack` 은 레코드의 줄 하나를 한 줄로 붙인다. `s 줄 csv.unpack` 은 한 줄을 읽어 필드의
-차례대로 넣고 그 줄 뒤의 나머지를 준다. 모든 필드가 맞을 때만 줄에 쓴다(`err.format`).]
+차례대로 넣고 그 줄 뒤의 나머지를 준다. 모든 필드가 맞을 때만 줄에 쓴다(`err.format`). `dec(N)` 필드는 `json`
+처럼 읽고 쓴다(16.8).]
 
 #ex("spec", "16-csv.pnx")
 

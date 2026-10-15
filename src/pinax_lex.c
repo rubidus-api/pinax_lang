@@ -143,7 +143,8 @@ static bool number(pnx_lexer *lx, pnx_token *t) {
     uint32_t i = start;
     char buf[96];
     uint32_t n = 0;
-    bool negative = false, real = false;
+    bool negative = false, real = false, exp = false;
+    uint32_t dot_at = 0;
     if (peek(lx, i) == '+' || peek(lx, i) == '-') {
         negative = peek(lx, i) == '-';
         buf[n++] = (char)peek(lx, i);
@@ -192,6 +193,7 @@ static bool number(pnx_lexer *lx, pnx_token *t) {
             return false;
         if (peek(lx, i) == '.' && lex_is_digit(peek(lx, i + 1))) {
             real = true;
+            dot_at = n;
             buf[n++] = '.';
             ++i;
             if (!digit_run(lx, &i, 10, buf, &n, sizeof buf - 20))
@@ -200,12 +202,32 @@ static bool number(pnx_lexer *lx, pnx_token *t) {
         if (peek(lx, i) == 'e' && (lex_is_digit(peek(lx, i + 1)) ||
                                    ((peek(lx, i + 1) == '+' || peek(lx, i + 1) == '-') && lex_is_digit(peek(lx, i + 2))))) {
             real = true;
+            exp = true;
             buf[n++] = 'e';
             ++i;
             if (peek(lx, i) == '+' || peek(lx, i) == '-')
                 buf[n++] = (char)lx->source[i++];
             if (!digit_run(lx, &i, 10, buf, &n, sizeof buf))
                 return false;
+        }
+        if (real && !exp) { // a decimal: the digits without the point, and how many follow it
+            const uint32_t scale = n - dot_at - 1;
+            if (scale > 18)
+                return fail_at(lx, start, "a decimal has at most 18 digits after the point");
+            __builtin_memmove(buf + dot_at, buf + dot_at + 1, scale);
+            --n;
+            const proven_u8str_view_t digits = {(const proven_byte_t *)buf, n};
+            proven_scan_t scan = proven_scan_init(digits);
+            const proven_result_i64_t r = proven_scan_i64(&scan);
+            if (r.err != PROVEN_OK || scan.cursor != n)
+                return fail_at(lx, start, "the decimal does not fit in 64 bits at its scale");
+            if (is_run(peek(lx, i)) || peek(lx, i) == '.')
+                return fail_at(lx, i, "a number must not run into letters, an underscore or a dot");
+            t->integer = r.val;
+            t->scale = (uint8_t)scale;
+            t->kind = PNX_T_DEC;
+            lx->at = i;
+            return true;
         }
         const proven_u8str_view_t view = {(const proven_byte_t *)buf, n};
         if (real) {

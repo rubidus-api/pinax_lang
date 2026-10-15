@@ -93,6 +93,7 @@ TAG          = NAME ;
 sign        = "+" | "-" ;                    (* attached: no space before the digits *)
 digits      = digit { [ "_" ] digit } ;
 INT         = [ sign ] ( digits | "0x" hex-digits | "0b" bit-digits ) ;
+DEC         = [ sign ] digits "." digits ;   (* a decimal, 7.5; no exponent *)
 hex-digits  = hex { [ "_" ] hex } ;          (* hex: digit, A-F, a-f *)
 bit-digits  = bit { [ "_" ] bit } ;          (* bit: 0, 1 *)
 ```
@@ -122,8 +123,9 @@ bit-digits  = bit { [ "_" ] bit } ;          (* bit: 0, 1 *)
 #para("7")[밑줄은 숫자와 숫자 사이에만, 하나만 온다. `1__000` `_1` `1_` `0x_F` 는 거절된다.]
 #ex("spec", "06-underscore.pnx")
 
-#para("8")[실수 리터럴(`1.5`, `2e3`)의 모양은 문법(부속서 A)에 있으나 이 판에는 실수 타입이 없어 거절된다
-(부속서 D).]
+#para("8")[점 앞뒤에 숫자가 있고 지수가 없는 수는 십진 소수 리터럴이다(`12.50`, 7.5). 점 아래는 18 자리까지이고,
+숫자 전체를 정수로 보아 64 비트에 들어야 한다. 지수가 있는 수(`2e3`, `2.5e0`)나 `p` 가 있는 십육진 수는 실수
+리터럴이다. 그 모양은 문법(부속서 A)에 있으나 이 판에는 실수 타입이 없어 거절된다(부속서 D).]
 
 == 문자, 문자열, 텍스트 <lex-strings>
 
@@ -228,6 +230,8 @@ version")을 밝힌다. 이 문서는 판 2 를 정한다. 적지 않으면 판 
   ([수에 글자·밑줄·점이 붙음], "a number must not run into letters, an underscore or a dot"),
   ([부호와 숫자 사이의 공백], "a sign is attached to its number; arithmetic uses words (add, sub)"),
   ([64 비트를 넘는 정수], "the integer does not fit in 64 bits"),
+  ([점 아래 18 자리를 넘음], "a decimal has at most 18 digits after the point"),
+  ([64 비트를 넘는 소수], "the decimal does not fit in 64 bits at its scale"),
   ([잘못 놓인 밑줄], "an underscore stands between two digits"),
   ([줄 안에서 닫히지 않은 문자열], "the string is not closed on its line"),
   ([모르는 이스케이프], "unknown escape; a raw string r\"...\" keeps backslashes as written"),

@@ -39,7 +39,8 @@ typedef enum pnx_token_kind {
     PNX_T_TEXT,     // text TAG ... TAG; body as written
     PNX_T_LPAREN,
     PNX_T_RPAREN,
-    PNX_T_COMMA
+    PNX_T_COMMA,
+    PNX_T_DEC,      // digits.digits without an exponent: `integer` scaled by 10^scale (RFC-0019)
 } pnx_token_kind;
 
 typedef struct pnx_token {
@@ -51,6 +52,7 @@ typedef struct pnx_token {
     bool           escapes;
     int64_t        integer;
     double         real;
+    uint8_t        scale; // PNX_T_DEC: the digits after the point
 } pnx_token;
 
 typedef struct pnx_lexer {

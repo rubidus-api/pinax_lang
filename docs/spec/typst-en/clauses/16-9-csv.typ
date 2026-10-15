@@ -10,11 +10,12 @@ with doubled quotes made single. An unclosed quote gives the rest of the text as
 failure).]
 
 #para("3")[The writing words append to a buffer (`or fail`, `err.full` when there is not enough room). `s buf csv.put`,
-`n buf csv.put_int` and `b buf csv.put_bool` append one field (with the comma it needs); `buf csv.end_line` ends the
+`n buf csv.put_int`, `d buf csv.put_dec` and `b buf csv.put_bool` append one field (with the comma it needs); `buf csv.end_line` ends the
 line. Booleans are written `true` and `false`.]
 
 #para("4")[`row buf csv.pack` appends one row of a record as one line. `s row csv.unpack` reads one line into the fields
-in order and gives what follows the line. The row is written only when every field is right (`err.format`).]
+in order and gives what follows the line. The row is written only when every field is right (`err.format`). A `dec(N)`
+field is read and written as in `json` (16.8).]
 
 #ex("spec", "16-csv.pnx")
 

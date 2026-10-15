@@ -78,6 +78,9 @@ enum {
 // IXPUT enters a row (fails when its key is there already); IXDEL takes a row out.
 // SREPL A, B, C and a second word X: the string in S[B] with every S[C] replaced by S[X], built
 // in the region.
+// dec(N) (RFC-0019): DRESC A, B, C is R[B] divided by 10^C, rounded half away from zero (C 1
+// to 18). RCATD appends R[B] as a decimal with C digits after the point; STODEC reads one with C
+// digits after the point (fails: format).
 // GCAP gives the declared capacity of a collection (a buffer: its bytes); the compiler knows it of
 // a collection it names, and asks it of one a reference names.
 // GSEL chooses the global whose number is in R[A] for the instruction right after it, which names
@@ -173,6 +176,7 @@ enum {
     X(SHLI, 0x35, PNX_K_I, PNX_K_I, PNX_K_IMM, PNX_F_ABC, PNX_X_NONE, 0, "wr-") \
     X(SHRI, 0x36, PNX_K_I, PNX_K_I, PNX_K_IMM, PNX_F_ABC, PNX_X_NONE, 0, "wr-") \
     X(USHRI, 0x37, PNX_K_I, PNX_K_I, PNX_K_IMM, PNX_F_ABC, PNX_X_NONE, 0, "wr-") \
+    X(DRESC, 0x3b, PNX_K_I, PNX_K_I, PNX_K_IMM, PNX_F_ABC, PNX_X_NONE, 0, "wr-") \
     X(WMULI, 0x38, PNX_K_I, PNX_K_I, PNX_K_IMM, PNX_F_ABC, PNX_X_NONE, 0, "wr-") \
     X(VLEN, 0x39, PNX_K_I, PNX_K_I, PNX_K_NONE, PNX_F_ABC, PNX_X_NONE, 0, "wr-") \
     X(FITW, 0x3a, PNX_K_I, PNX_K_NONE, PNX_K_IMM, PNX_F_ABC, PNX_X_NONE, 1, "r--") \
@@ -334,7 +338,9 @@ enum {
     X(CPUTI, 0xed, PNX_K_I, PNX_K_IMM, PNX_K_G, PNX_F_ABC, PNX_X_NONE, 1, "r--") \
     X(CPUTIW, 0xee, PNX_K_I, PNX_K_IMM, PNX_K_NONE, PNX_F_ABC, PNX_X_GLOBAL, 1, "r--") \
     X(GSEL, 0xef, PNX_K_I, PNX_K_IMM, PNX_K_NONE, PNX_F_ABC, PNX_X_IMM, 0, "r--") \
-    X(GCAP, 0xf0, PNX_K_I, PNX_K_NONE, PNX_K_NONE, PNX_F_GLOBAL, PNX_X_NONE, 0, "w--")
+    X(GCAP, 0xf0, PNX_K_I, PNX_K_NONE, PNX_K_NONE, PNX_F_GLOBAL, PNX_X_NONE, 0, "w--") \
+    X(RCATD, 0xf1, PNX_K_S, PNX_K_I, PNX_K_IMM, PNX_F_ABC, PNX_X_NONE, 0, "mr-") \
+    X(STODEC, 0xf2, PNX_K_I, PNX_K_S, PNX_K_IMM, PNX_F_ABC, PNX_X_NONE, 1, "wr-")
 
 enum {
 #define PNX_ENUM(name, number, a, b, c, shape, second, fails, roles) PNX_##name = number,
