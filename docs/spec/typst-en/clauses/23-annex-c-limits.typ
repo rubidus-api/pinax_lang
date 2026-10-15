@@ -17,6 +17,7 @@ this implementation's values. Default capacities differ between processors (4 (5
   [`str` arguments, results of a host word], [8, 4], [8, 4],
   [host modules' words (per state)], [64], [64],
   [handle types], [16], [16],
+  [`defer`s in one word (10.7)], [16], [16],
   [locals kept after a fault], [---], [16, 1 KB],
   [default integer slots / string slots], [---], [4096 / 1024],
   [default region of the main run], [---], [65536 bytes],
