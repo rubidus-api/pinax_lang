@@ -1,0 +1,8 @@
+rem refused
+use file
+word first_line (path str gives str or fail)
+  path file.open_read or_fail to f
+  defer f file.close end
+  f file.read_line or_fail
+  f file.close
+end

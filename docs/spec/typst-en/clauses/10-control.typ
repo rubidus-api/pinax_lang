@@ -169,6 +169,40 @@ given (`gives n int or fail`). When the destination is full, they fail with `err
 
 #ex("spec", "10-map-into.pnx")
 
+== Deferred code <control-defer>
+
+#part("Syntax")
+```ebnf
+defer = "defer" { body } "end" ;
+```
+
+#para("1")[`defer CODE end` writes code that runs when the enclosing block is left. The block is a word's body, a
+loop's body (at every turn) or the `do` block of a combining word (at every run). The code runs on every way out of that
+block: the block's `end`, the end of a turn, `break`, a `while` or `until` that leaves the loop, `return`, `or_return`,
+`or_fail` and `fail`. Several run in the reverse of the order they are written. They do not run when a fault ends the
+run (the state closes the handles then, 19.6).]
+
+#ex("spec", "10-defer.pnx")
+
+#para("2")[When deferred code gives an owned value (`m release`, `f file.close`), the defer takes that value over. It
+counts as given on every way out of the block, so no failure path needs code of its own to close it. Inside the block
+the value can still be lent.]
+
+#ex("spec", "10-defer-owned.pnx")
+
+#part("Constraints")
+
+#para("3")[`defer` is written right in a word's body, a loop's body or a `do` block. In a branch of `if`, `case` or
+`or_else`, or outside a definition, it is refused.]
+#ex("spec", "10-defer-branch.pnx")
+
+#para("4")[Deferred code leaves the stack as it found it and leaves nothing on it. It cannot hold `return` `fail`
+`break` `while` `until` `to` `loop` `do` `case` `defer`, or `or_fail` `or_return`; a word that can fail is taken with
+`or_else` inside it.]
+
+#para("5")[Giving an owned value that a defer took over, inside the block, is refused.]
+#ex("spec", "10-defer-taken.pnx")
+
 #part("Diagnostics")
 #diag(
   ([Two branches leave different stacks], "the two branches of this if leave different stacks"),
@@ -180,4 +214,10 @@ given (`gives n int or fail`). When the destination is full, they fail with `err
   ([`return` outside a definition], "return belongs inside a definition"),
   ([A branch value that is not a constant], "a case value is a literal or the name of a const"),
   ([A combining word on something that is not a stem], "only an array or a list is a stem (not a queue, a pool, a buffer or an index)"),
+  ([`defer` in a branch], "defer is written right in a word's body, a loop's body or a do block, not in a branch"),
+  ([`defer` outside a definition], "defer belongs inside a definition"),
+  ([Deferred code changes the stack], "a defer leaves the stack as it found it"),
+  ([A word that leaves, in deferred code], "a defer holds no return, fail, break, while, until, to, loop, do, case or defer"),
+  ([`or_fail` `or_return` in deferred code], "a defer does not leave the word; a failure in it is taken with or_else"),
+  ([Giving a value a defer took over], "a defer gives this owned value when the block is left; here it can only be lent"),
 )

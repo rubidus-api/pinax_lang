@@ -1,0 +1,7 @@
+rem refused
+word twice (gives int)
+  mark to m
+  defer m release end
+  m release
+  0
+end

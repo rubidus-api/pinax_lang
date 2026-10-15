@@ -1,0 +1,14 @@
+rem run
+use io
+use str
+buffer report 4096
+rem A mark taken back at the end of every turn, also when append fails.
+word build (or fail)
+  1 50 range do (i int)
+    mark to m
+    defer m release end
+    cat ("row ", i, ": ", i i mul, "\n") report append or_fail
+  end each
+end
+build or_else (e) cat ("full: ", e err_text) io.println end
+cat ("report: ", report len, " bytes") io.println

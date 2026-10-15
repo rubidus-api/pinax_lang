@@ -1,0 +1,4 @@
+rem refused
+word f (c bool)
+  c if defer end end
+end

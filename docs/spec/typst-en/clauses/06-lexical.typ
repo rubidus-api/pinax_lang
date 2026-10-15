@@ -191,7 +191,8 @@ reserved = "rem" | "note" | "text" | "true" | "false" | "pinax"
          | "make" | "test" | "row" | "assign" | "big_endian" | "columns"
          | "gives" | "or" | "fail" | "owned"
          | "to" | "do" | "end" | "if" | "else" | "loop" | "while" | "until" | "break"
-         | "case" | "of" | "otherwise" | "return" | "or_fail" | "or_return" | "or_else" | "cat" ;
+         | "case" | "of" | "otherwise" | "return" | "or_fail" | "or_return" | "or_else" | "cat"
+         | "defer" ;
 ```
 
 #para("1")[The list of #term("reserved word")s is closed. A reserved word cannot be a name.]

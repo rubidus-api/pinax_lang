@@ -18,7 +18,7 @@ static bool opens(const pnx_token *t) {
         return false;
     switch (t->word) {
     case PNX_KW_word: case PNX_KW_test: case PNX_KW_record: case PNX_KW_do: case PNX_KW_if: case PNX_KW_loop:
-    case PNX_KW_case: case PNX_KW_of: case PNX_KW_otherwise: case PNX_KW_or_else: return true;
+    case PNX_KW_case: case PNX_KW_of: case PNX_KW_otherwise: case PNX_KW_or_else: case PNX_KW_defer: return true;
     default: return false;
     }
 }

@@ -52,6 +52,7 @@ enum { USE_EACH, USE_FOLD, USE_TIMES, USE_COUNT, USE_ANY, USE_ALL, USE_FIRST, US
 #define MAX_STACK 64
 #define PNX_REX_BUF (16u + 4096u * 8u + 1024u * 32u) // the largest program
 #define MAX_BLOCKS 32
+#define MAX_DEFERS 16
 #define MAX_LOCALS 96
 #define MAX_PARAMS 16
 #define MAX_MODULES 16
@@ -113,8 +114,16 @@ typedef struct local {
     bool    stored; // `to` stored into it after it was made (a loop's element, see end_do)
     uint8_t born;   // as entry.born, for the value it holds
     bool    stale;  // a str made after a mark that was released since: it is not read
+    bool    deferred; // its owned value is given by a defer when the block is left: lent only
     uint32_t drec;  // its debug record in fn.dlocals, or NONE
 } local;
+
+// defer ... end (RFC-0017 section 3.6): code run where its block is left. The body is read
+// again at every place that leaves the block, from its first token.
+typedef struct deferred {
+    uint32_t at, line, line_start; // where the first token of the body starts
+    uint32_t block; // the block it belongs to: n_blocks when it was written (0: the word's body)
+} deferred;
 
 // Debug information of a local: the code words of its body where its register holds it.
 typedef struct dlocal {
@@ -195,6 +204,8 @@ typedef struct fn {
     vec      lines; // of uint32_t: the source line of each code word
     vec      dlocals; // of dlocal
     uint32_t start, last_check;
+    deferred defers[MAX_DEFERS];
+    uint32_t n_defers;
     // The call just emitted, when what it gives is what this word gives: a return right after
     // it becomes a tail call, which reuses the window (RFC-0001 section 5.1).
     uint32_t tail_at, tail_word, tail_base[2], tail_in[2], tail_depth;
@@ -338,6 +349,7 @@ typedef struct comp {
     uint8_t     *rx_buf;    // where rx compiles a constant pattern, PNX_REX_BUF bytes
     bool         data_only; // PINAX_LOAD_DATA: declarations, literals, stores and rows only
     bool         sink;      // the word being compiled may take an owned value off the stack
+    bool         in_defer;  // the body of a defer is being read
     name         modules[MAX_MODULES]; // the names the source writes: `use rex as rx` opens rx
     name         module_real[MAX_MODULES]; // and the modules they stand for
     uint32_t     n_modules;
@@ -1007,6 +1019,8 @@ static bool give(comp *c, uint32_t index) {
         return true;
     }
     if (e->src && f->locals[e->src - 1].state == L_OWNS) {
+        if (f->locals[e->src - 1].deferred && !c->in_defer)
+            return type_error(c, "a defer gives this owned value when the block is left; here it can only be lent");
         f->locals[e->src - 1].state = L_MOVED;
         return true;
     }
@@ -1761,6 +1775,10 @@ static bool push_results(comp *c, const sig *s, const uint32_t base[2], const ui
 }
 
 static bool emit_return(comp *c);
+static bool emit_defers(comp *c, uint32_t from);
+static bool defers_from(const fn *f, uint32_t from);
+static void save_owns(const fn *f, lstate *out);
+static void restore_owns(fn *f, const lstate *from, uint32_t count);
 static block *open_block(comp *c, uint8_t kind);
 static void snapshot(const fn *f, shot *out);
 static bool name_is_free(comp *c, name n);
@@ -1770,11 +1788,39 @@ static bool name_is_free(comp *c, name n);
 // token is the guard.
 static bool guard(comp *c, const sig *s, const uint32_t base[2], const uint32_t in[2], bool host) {
     fn *f = c->f;
+    if (c->in_defer && (is_word(c, PNX_KW_or_fail) || is_word(c, PNX_KW_or_return)))
+        return syntax(c, "a defer does not leave the word; a failure in it is taken with or_else");
     if (is_word(c, PNX_KW_or_fail)) {
         if (f->is_top || !f->sig->fails)
             return type_error(c, "or_fail passes the failure on, so this word needs `or fail` in its signature");
-        return nothing_owned(c) && emit(c, PNX_ABC(PNX_RETF, 0, 0, 0)) != NONE &&
-               push_results(c, s, base, in, host) && advance(c);
+        if (!f->n_defers)
+            return nothing_owned(c) && emit(c, PNX_ABC(PNX_RETF, 0, 0, 0)) != NONE &&
+                   push_results(c, s, base, in, host) && advance(c);
+        // with defers: on failure keep the error, run the defers, then fail with it
+        uint32_t handler = NONE, resume = NONE;
+        const uint32_t before = f->depth;
+        if (!jump_later(c, &handler) || !push_results(c, s, base, in, host) || !jump_later(c, &resume))
+            return false;
+        const uint32_t after = f->depth;
+        entry results[MAX_STACK]; // the stub below works where the results lie on the other path
+        __builtin_memcpy(results, f->stack + before, (after - before) * sizeof(entry));
+        land(c, &handler);
+        f->depth = before;
+        lstate states[MAX_LOCALS];
+        save_owns(f, states);
+        if (!push_slot(c, TY_ERR))
+            return false;
+        const uint32_t keep = slot_of(c, f->depth - 1);
+        if (emit(c, PNX_ABX(PNX_GETFAIL, keep, 0)) == NONE || !emit_defers(c, 0))
+            return false;
+        --f->depth;
+        if (!nothing_owned(c) || emit(c, PNX_ABC(PNX_FAILR, keep, 0, 0)) == NONE)
+            return false;
+        restore_owns(f, states, f->n_locals);
+        __builtin_memcpy(f->stack + before, results, (after - before) * sizeof(entry));
+        f->depth = after;
+        land(c, &resume);
+        return advance(c);
     }
     const bool returns = is_word(c, PNX_KW_or_return);
     if (!returns && !is_word(c, PNX_KW_or_else))
@@ -2274,6 +2320,8 @@ static block *open_block(comp *c, uint8_t kind) {
 
 // Locals made inside a block end with it.
 static void close_scope(fn *f, const block *b) {
+    while (f->n_defers && f->defers[f->n_defers - 1].block > (uint32_t)(b - f->blocks))
+        --f->n_defers;
     for (uint32_t k = b->locals_mark; k < f->n_locals; ++k) {
         if (f->locals[k].drec != NONE)
             ((dlocal *)f->dlocals.ptr)[f->locals[k].drec].to = f->code.n;
@@ -2445,9 +2493,30 @@ static bool do_leave(comp *c, pnx_word_id which) {
     if (!same_stack(f, &target->in))
         return error_at(c, PINAX_ERR_TYPE, at.line, at.column,
                         "where a loop is left the stack must be as it was when the loop began");
+    target->targeted = true;
+    const uint32_t from = (uint32_t)(target - f->blocks) + 1;
+    if (defers_from(f, from)) { // the defers inside the loop run on the way out
+        lstate states[MAX_LOCALS];
+        save_owns(f, states);
+        uint32_t stub = NONE, stay = NONE;
+        if (which != PNX_KW_break) { // stay: skip the jump out
+            cond_negate(&cond);
+            if (!cond_jump(c, &cond, 1) || !jump_later(c, &stub) || !jump_later(c, &stay))
+                return false;
+            land(c, &stub);
+        }
+        if (!emit_defers(c, from) || !same_owns(c, target, target->owns_in) || !jump_later(c, &target->exits))
+            return false;
+        restore_owns(f, states, f->n_locals);
+        if (which == PNX_KW_break) {
+            f->dead = true;
+            return true;
+        }
+        land(c, &stay);
+        return true;
+    }
     if (!same_owns(c, target, target->owns_in))
         return false;
-    target->targeted = true;
     if (which == PNX_KW_break) {
         f->dead = true;
         return jump_later(c, &target->exits);
@@ -2459,6 +2528,8 @@ static bool do_leave(comp *c, pnx_word_id which) {
 
 static bool end_loop(comp *c, block *b) {
     fn *f = c->f;
+    if (!f->dead && !emit_defers(c, (uint32_t)(b - f->blocks) + 1)) // the end of one turn leaves the body
+        return false;
     if (!f->dead) {
         if (!settle_all(c))
             return false;
@@ -2492,6 +2563,8 @@ static bool end_loop(comp *c, block *b) {
 // values the code can reach; operands of running blocks lie between them and do not count.
 static bool emit_return(comp *c) {
     fn *f = c->f;
+    if (f->n_defers && !emit_defers(c, 0)) // every block is left
+        return false;
     const sig *s = f->sig;
     uint32_t at[MAX_PARAMS], n = 0, count[2] = {0, 0};
     for (uint32_t k = 0; k < f->depth; ++k) {
@@ -2853,7 +2926,7 @@ static bool scan_user(comp *c, name *out, name *dst) {
             continue;
         switch (t.word) {
         case PNX_KW_do: case PNX_KW_if: case PNX_KW_loop: case PNX_KW_case:
-        case PNX_KW_of: case PNX_KW_otherwise: case PNX_KW_or_else: ++depth; break;
+        case PNX_KW_of: case PNX_KW_otherwise: case PNX_KW_or_else: case PNX_KW_defer: ++depth; break;
         case PNX_KW_end: --depth; break;
         default: break;
         }
@@ -3454,6 +3527,8 @@ static bool end_rex_block(comp *c, block *b);
 
 static bool end_do(comp *c, block *b) {
     fn *f = c->f;
+    if (!f->dead && !emit_defers(c, (uint32_t)(b - f->blocks) + 1)) // each run of the body leaves it
+        return false;
     if (b->use == USE_WITH || b->use == USE_BY)
         return end_rex_block(c, b);
     if (!f->dead) {
@@ -5561,6 +5636,119 @@ static void see_line(comp *c, uint32_t next_line) {
     c->see_line = next_line;
 }
 
+// ---- defer --------------------------------------------------------------------------------
+
+// Reads the body of a defer up to its end, at the place where the lexer stands. With `keep`
+// the code stays (a place that leaves the block); without it everything is taken back and the
+// body was only checked (where the defer is written). `taken` gets the locals whose owned
+// value the body gives.
+static bool defer_body(comp *c, bool keep, uint64_t *taken) {
+    fn *f = c->f;
+    const uint32_t depth = f->depth, floor = f->floor, n_locals = f->n_locals, n_blocks = f->n_blocks;
+    const uint8_t  nloc[2] = {f->nloc[0], f->nloc[1]}, marks = f->marks;
+    const uint32_t code_n = f->code.n, lines_n = f->lines.n, dlocals_n = f->dlocals.n, releases = f->releases;
+    const uint32_t last_check = f->last_check;
+    const bool     dead = f->dead, in_defer = c->in_defer, see = c->see;
+    lstate         states[MAX_LOCALS];
+    save_owns(f, states);
+    f->floor = depth; // the body sees nothing that was on the stack
+    f->dead = false;
+    c->in_defer = true;
+    c->see = false;
+    while (!(is_word(c, PNX_KW_end) && f->n_blocks == n_blocks)) {
+        if (c->tok.kind == PNX_T_END)
+            return syntax(c, "the defer is not closed by end");
+        if (!body_token(c))
+            return false;
+    }
+    c->in_defer = in_defer;
+    c->see = see;
+    if (f->dead)
+        return type_error(c, "a defer runs to its end; it does not leave the word or a loop");
+    if (!settle_all(c))
+        return false;
+    if (f->depth != depth)
+        return type_error(c, "a defer leaves the stack as it found it");
+    *taken = 0;
+    for (uint32_t k = 0; k < n_locals; ++k) {
+        if (states[k].state == L_OWNS && f->locals[k].state == L_MOVED)
+            *taken |= (uint64_t)1 << k;
+    }
+    for (uint32_t k = n_locals; k < f->n_locals; ++k) { // `or_else (e)` names end with the body
+        if (f->locals[k].drec != NONE)
+            ((dlocal *)f->dlocals.ptr)[f->locals[k].drec].to = f->code.n;
+    }
+    f->n_locals = n_locals;
+    f->nloc[0] = nloc[0];
+    f->nloc[1] = nloc[1];
+    f->floor = floor;
+    f->dead = dead;
+    f->def_at = NONE;
+    f->tail_at = NONE;
+    if (!keep) {
+        f->code.n = code_n;
+        f->lines.n = lines_n;
+        f->dlocals.n = dlocals_n;
+        f->marks = marks;
+        f->releases = releases;
+        f->last_check = last_check;
+        restore_owns(f, states, n_locals);
+    }
+    return true;
+}
+
+// Runs, as code here, the defers of the blocks from `from` inward (0: all of the word), the
+// last written first. The owned values they give count as given on this path.
+static bool emit_defers(comp *c, uint32_t from) {
+    fn *f = c->f;
+    for (uint32_t k = f->n_defers; k-- > 0;) {
+        const deferred *d = &f->defers[k];
+        if (d->block < from)
+            continue;
+        const pnx_lexer lx = *c->lx;
+        const pnx_token tok = c->tok;
+        c->lx->at = d->at;
+        c->lx->line = d->line;
+        c->lx->line_start = d->line_start;
+        uint64_t taken;
+        if (!advance(c) || !defer_body(c, true, &taken))
+            return false;
+        *c->lx = lx;
+        c->tok = tok;
+    }
+    return true;
+}
+
+// Whether a defer of a block from `from` inward is waiting.
+static bool defers_from(const fn *f, uint32_t from) {
+    return f->n_defers && f->defers[f->n_defers - 1].block >= from;
+}
+
+// defer ... end : written right in a word's body, a loop's body or a do block.
+static bool do_defer(comp *c) {
+    fn *f = c->f;
+    if (f->is_top)
+        return syntax(c, "defer belongs inside a definition");
+    if (f->n_blocks && f->blocks[f->n_blocks - 1].kind != B_LOOP && f->blocks[f->n_blocks - 1].kind != B_DO)
+        return syntax(c, "defer is written right in a word's body, a loop's body or a do block, not in a branch");
+    if (f->n_defers == MAX_DEFERS)
+        return syntax(c, "a word has at most 16 defers");
+    if (!advance(c))
+        return false;
+    deferred *d = &f->defers[f->n_defers];
+    *d = (deferred){.at = c->tok.start, .line = c->tok.line, .line_start = c->tok.start - (c->tok.column - 1),
+                    .block = f->n_blocks};
+    uint64_t taken;
+    if (!defer_body(c, false, &taken))
+        return false;
+    for (uint32_t k = 0; k < f->n_locals; ++k) {
+        if (taken >> k & 1u)
+            f->locals[k].deferred = true;
+    }
+    ++f->n_defers;
+    return advance(c); // past the end of the defer
+}
+
 static bool body_token(comp *c) {
     fn *f = c->f;
     if (c->see)
@@ -5618,7 +5806,12 @@ static bool body_token(comp *c) {
     case PNX_T_RESERVED: break;
     default: return syntax(c, "this token does not belong here");
     }
+    if (c->in_defer && (t.word == PNX_KW_return || t.word == PNX_KW_fail || t.word == PNX_KW_break ||
+                        t.word == PNX_KW_while || t.word == PNX_KW_until || t.word == PNX_KW_to || t.word == PNX_KW_loop ||
+                        t.word == PNX_KW_do || t.word == PNX_KW_defer || t.word == PNX_KW_case))
+        return syntax(c, "a defer holds no return, fail, break, while, until, to, loop, do, case or defer");
     switch (t.word) {
+    case PNX_KW_defer: return do_defer(c);
     case PNX_KW_true:
     case PNX_KW_false:
         return push(c, (entry){.type = TY_BOOL, .kind = E_CONST, .value = t.word == PNX_KW_true}) && advance(c);
@@ -5646,6 +5839,11 @@ static bool body_token(comp *c) {
         entry *e = &f->stack[f->depth - 1];
         if (e->type != TY_ERR)
             return type_error(c, "fail takes an error number (err.not_found, or the e of or_else)");
+        if (f->n_defers) { // the error is kept in its register while the defers run above it
+            if (!settle(c, f->depth - 1) || !emit_defers(c, 0))
+                return false;
+            e = &f->stack[f->depth - 1];
+        }
         if (!nothing_owned(c))
             return false;
         if (e->kind == E_CONST) {

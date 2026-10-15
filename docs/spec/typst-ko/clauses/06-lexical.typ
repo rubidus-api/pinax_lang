@@ -189,7 +189,8 @@ reserved = "rem" | "note" | "text" | "true" | "false" | "pinax"
          | "make" | "test" | "row" | "assign" | "big_endian" | "columns"
          | "gives" | "or" | "fail" | "owned"
          | "to" | "do" | "end" | "if" | "else" | "loop" | "while" | "until" | "break"
-         | "case" | "of" | "otherwise" | "return" | "or_fail" | "or_return" | "or_else" | "cat" ;
+         | "case" | "of" | "otherwise" | "return" | "or_fail" | "or_return" | "or_else" | "cat"
+         | "defer" ;
 ```
 
 #para("1")[#term("예약 낱말", en: "reserved word")의 목록은 닫혀 있다. 예약 낱말은 이름으로 쓰지 못한다.]

@@ -56,7 +56,7 @@ param       = [ NAME ] type ;
 type        = [ "owned" ] ( NAME [ "(" size ")" ] | "word" "(" effect ")" ) ;
 
 (* 9 to 11: the body *)
-body        = literal | NAME | PATH | store | block | cat | guard | control
+body        = literal | NAME | PATH | store | block | cat | guard | control | defer
             | "return" | "fail" | ( "while" | "until" | "break" ) [ "(" NAME ")" ] ;
 store       = "to" ( NAME | PATH | "(" NAME { "," NAME } ")" ) ;
 block       = "do" [ "(" effect ")" ] { body } "end" ;
@@ -66,6 +66,7 @@ guard       = "or_fail" | "or_return" | "or_else" [ "(" NAME ")" ] { body } "end
 control     = "if" { body } [ "else" { body } ] "end"
             | "loop" [ "(" NAME ")" ] { body } "end"
             | "case" { branch } [ "otherwise" { body } "end" ] "end" ;
+defer       = "defer" { body } "end" ;             (* 10.7 *)
 branch      = ( case-value | "(" case-value { "," case-value } ")" ) "of" { body } "end" ;
 case-value  = literal | NAME ;
 ```

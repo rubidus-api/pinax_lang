@@ -6,6 +6,7 @@
 - How does the processor make sure that something like an open file gets closed?
 - How does it know a file is closed on the paths of failures too?
 - How does a loop that makes much text spare the region?
+- How can the closing code be written once instead of on every way out?
 ]
 
 == Values that must be handed over
@@ -44,9 +45,31 @@ is an owned value as well.
 
 Bytes appended to a buffer are copied into it, so they survive giving the region back.
 
+== Deferring: `defer`
+
+`copy_lines` repeated, at each place that can fail, code that closes everything opened so far. `defer CODE end` lets
+that code be written once. It runs on every way out of its block (a word's body, one turn of a loop, a `do` block):
+at the end, through `or_fail`, through `return` or `break`. Several run in the reverse of the order they are written.
+
+#ex("manual", "09-copy-defer.pnx")
+
+After `defer src file.close end`, the defer takes `src` over. The body only lends it, as in `src file.read_line`, and
+the defer closes it on the way out. The closing code in `or_else` goes away and `or_fail` can be used as it is. A mark of
+the region works the same way.
+
+#ex("manual", "09-region-defer.pnx")
+
+#mistake[Closing at the end as well, after writing `defer`][Giving away a value that a defer took over is refused: it
+would be closed twice on the way out. Leave the closing to the defer.
+#ex("manual", "09-defer-close.pnx")]
+
+`defer` is written right in a word's body, a loop's body or a `do` block; not inside a branch of `if`. Deferred code
+leaves the stack as it found it, and a word that can fail inside it is taken with `or_else` (standard 10.7).
+
 #summary[
 - An `owned` value is handed over exactly once on every path; lending is allowed any number of times (standard 12.4).
 - It is handed over on the paths of failures (`or_fail` `or_return`) and at `return` too (11.2).
+- `defer CODE end` runs on every way out of a block; the value it takes over is only lent in the body (10.7).
 - `owned` values cannot be `dup`ed or `drop`ped (12.4).
 - On a fault the processor closes the handles (11.3).
 - Loops give the region back with `mark`/`release` (12.2).

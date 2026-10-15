@@ -165,6 +165,38 @@ fail`). 목적지가 차면 `err.full` 로 실패하고, 그때까지 쓴 것은
 
 #ex("spec", "10-map-into.pnx")
 
+== 미룬 코드 <control-defer>
+
+#part("구문")
+```ebnf
+defer = "defer" { body } "end" ;
+```
+
+#para("1")[`defer 코드 end` 는 둘러싼 블록을 떠날 때 돌 코드를 적는다. 블록은 낱말의 몸, 루프의 몸(한 바퀴마다),
+조합 낱말의 `do` 블록(한 번 돌 때마다)이다. 그 블록을 떠나는 모든 길에서 돈다: 블록의 `end`, 루프의 한 바퀴 끝,
+`break`, 루프를 떠나는 `while`·`until`, `return`, `or_return`, `or_fail`, `fail`. 여럿이면 적은 차례의 거꾸로
+돈다. 결함으로 끝날 때는 돌지 않는다(그때는 상태가 핸들을 닫는다, 19.6).]
+
+#ex("spec", "10-defer.pnx")
+
+#para("2")[미룬 코드가 소유 값을 소비하면(`m release`, `f file.close`) 그 값은 미룬 코드가 맡는다. 블록을 떠나는
+모든 길에서 소비된 것으로 치므로 실패 경로마다 닫는 코드를 따로 쓸 일이 없다. 블록 안에서는 그 값을 빌려 쓸 수
+있다.]
+
+#ex("spec", "10-defer-owned.pnx")
+
+#part("제약")
+
+#para("3")[`defer` 는 낱말의 몸, 루프의 몸, `do` 블록에 바로 쓴다. `if`·`case`·`or_else` 의 가지 안이나 정의 밖에
+쓰면 거절된다.]
+#ex("spec", "10-defer-branch.pnx")
+
+#para("4")[미룬 코드는 스택을 받은 그대로 두고 아무것도 남기지 않는다. `return` `fail` `break` `while` `until` `to`
+`loop` `do` `case` `defer` 와 `or_fail` `or_return` 을 쓸 수 없다. 실패하는 낱말은 그 안에서 `or_else` 로 다룬다.]
+
+#para("5")[미룬 코드가 맡은 소유 값을 블록 안에서 소비하면 거절된다.]
+#ex("spec", "10-defer-taken.pnx")
+
 #part("진단")
 #diag(
   ([두 갈래의 스택이 다름], "the two branches of this if leave different stacks"),
@@ -176,4 +208,10 @@ fail`). 목적지가 차면 `err.full` 로 실패하고, 그때까지 쓴 것은
   ([정의 밖의 `return`], "return belongs inside a definition"),
   ([상수가 아닌 가지의 값], "a case value is a literal or the name of a const"),
   ([줄기가 아닌 것에 조합 낱말], "only an array or a list is a stem (not a queue, a pool, a buffer or an index)"),
+  ([가지 안의 `defer`], "defer is written right in a word's body, a loop's body or a do block, not in a branch"),
+  ([정의 밖의 `defer`], "defer belongs inside a definition"),
+  ([미룬 코드가 스택을 바꿈], "a defer leaves the stack as it found it"),
+  ([미룬 코드 안의 떠나는 낱말], "a defer holds no return, fail, break, while, until, to, loop, do, case or defer"),
+  ([미룬 코드 안의 `or_fail` `or_return`], "a defer does not leave the word; a failure in it is taken with or_else"),
+  ([미룬 코드가 맡은 값을 소비], "a defer gives this owned value when the block is left; here it can only be lent"),
 )
