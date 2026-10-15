@@ -96,24 +96,31 @@ base      = "int" | "bool" | "str" ;
 #para("2")[바탕 타입의 값 뒤에 타입의 이름을 쓰면 그 타입의 값이 된다(`1500 meters`). 낱말 `raw` 는 선언한
 타입의 값을 바탕 타입의 값으로 돌린다.]
 
-#para("3")[같은 선언한 타입의 두 값은 `add` 와 `sub` 로 더하고 뺄 수 있고, 결과도 그 타입이다. 비교 낱말도
-같은 타입끼리 쓴다. 다른 산술은 `raw` 로 바꾼 뒤에 한다.]
+#para("3")[같은 선언한 타입의 두 값은 `add` 와 `sub` 로 더하고 뺄 수 있고, 결과도 그 타입이다. 비교 낱말과
+`min` `max` 도 같은 타입끼리 쓴다. 다른 산술은 `raw` 로 바꾼 뒤에 한다.]
 
 #ex("spec", "07-type.pnx")
+
+#para("3a")[`int` 위의 선언한 타입 `D` 의 값에 `int` 를 곱하거나(`D int mul`, `int D mul`) `int` 로 나누거나
+나머지를 구하면(`D int div`, `D int mod`) 결과는 `D` 다. `neg` 와 `abs` 도 `D` 를 준다. 수를 몇 배 하거나 몇으로
+나눠도 단위는 그대로이기 때문이다. 두 `D` 의 곱과 몫은 `D` 가 아니므로 이 규칙에 들지 않는다.]
+
+#ex("spec", "07-type-scale.pnx")
 
 #part("제약")
 
 #para("4")[선언한 타입의 값을 다른 타입의 자리에 주면 거절된다. 아래는 두 인자의 차례를 바꾼 것이다.]
 #ex("spec", "07-type-mixed.pnx")
 
-#para("5")[선언한 타입의 두 값에 `add` `sub` 밖의 산술 낱말을 쓰면 거절된다.]
+#para("5")[선언한 타입의 두 값에 `add` `sub` 밖의 산술 낱말을 쓰면 거절된다. 선언한 타입과 `int` 에 (3a)
+밖의 산술 낱말을 써도 거절된다.]
 #ex("spec", "07-type-arith.pnx")
 
 #part("진단")
 #diag(
   ([조건 자리에 `bool` 이 아닌 값], "a bool is expected here"),
   ([산술 낱말의 두 값의 타입이 다르거나 `int` 가 아님], "this word takes two int values, or two of the same declared type"),
-  ([선언한 타입에 `add` `sub` 밖의 산술], "values of a declared type are added and subtracted; for other arithmetic take raw"),
+  ([선언한 타입에 (3)과 (3a) 밖의 산술], "a declared type is added to and subtracted from its own type, and multiplied, divided or taken modulo by an int; for other arithmetic take raw"),
   ([인자의 타입이 서명과 다름], "an argument has another type than the word's signature asks for"),
   ([전역 등에 `str`], "stored text is str(N); a str view lives only in locals, arguments and results"),
 )

@@ -16,6 +16,8 @@ One file is one module, named after the file without `.pnx`. What is to be seen 
 
 `cents` is a #strong[declared type] over `int`: represented as an integer, it does not mix with `int`. `raw` takes the
 underlying integer out.
+Multiplying or dividing `cents` by an integer gives `cents` (`c 3 mul`): scaling keeps the unit. Only the division in
+`show`, which needs plain integers, uses `raw`.
 
 == Using a module
 

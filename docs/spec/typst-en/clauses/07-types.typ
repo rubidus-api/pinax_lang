@@ -99,23 +99,30 @@ nothing more to run, but at load it is a different type. It keeps numbers of dif
 word `raw` turns a value of a declared type back into its base type.]
 
 #para("3")[Two values of the same declared type can be added and subtracted with `add` and `sub`; the result has that
-type. Comparison words also take two values of the same type. Other arithmetic is done after `raw`.]
+type. Comparison words and `min` `max` also take two values of the same type. Other arithmetic is done after `raw`.]
 
 #ex("spec", "07-type.pnx")
+
+#para("3a")[A value of a declared type `D` over `int` multiplied by an `int` (`D int mul`, `int D mul`), divided by
+one or taken modulo one (`D int div`, `D int mod`) gives a `D`. `neg` and `abs` give a `D` too. Scaling a number up or
+down keeps its unit. The product and the quotient of two `D` values are not a `D`, so this rule does not cover them.]
+
+#ex("spec", "07-type-scale.pnx")
 
 #part("Constraints")
 
 #para("4")[A value of a declared type given where another type goes is refused. Below, the two arguments are swapped.]
 #ex("spec", "07-type-mixed.pnx")
 
-#para("5")[Arithmetic words other than `add` and `sub` on two values of a declared type are refused.]
+#para("5")[Arithmetic words other than `add` and `sub` on two values of a declared type are refused. So is any
+arithmetic word outside (3a) on a declared type and an `int`.]
 #ex("spec", "07-type-arith.pnx")
 
 #part("Diagnostics")
 #diag(
   ([A value that is not a `bool` where a condition goes], "a bool is expected here"),
   ([The two values of an arithmetic word differ in type or are not `int`], "this word takes two int values, or two of the same declared type"),
-  ([Arithmetic other than `add` `sub` on a declared type], "values of a declared type are added and subtracted; for other arithmetic take raw"),
+  ([Arithmetic outside (3) and (3a) on a declared type], "a declared type is added to and subtracted from its own type, and multiplied, divided or taken modulo by an int; for other arithmetic take raw"),
   ([An argument of another type than the signature], "an argument has another type than the word's signature asks for"),
   ([`str` for a global and the like], "stored text is str(N); a str view lives only in locals, arguments and results"),
 )

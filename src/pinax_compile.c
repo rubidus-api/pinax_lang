@@ -1433,11 +1433,18 @@ static bool arith_word(comp *c, uint32_t op) {
     if (!need(c, 2))
         return false;
     entry *a = &f->stack[f->depth - 2], *b = &f->stack[f->depth - 1];
-    const tid result = a->type;
-    if (a->type != b->type || base_of(c, a->type) != TY_INT ||
-        (a->type != TY_INT && op != PNX_ADD && op != PNX_SUB))
-        return type_error(c, a->type == b->type && base_of(c, a->type) == TY_INT
-                                 ? "values of a declared type are added and subtracted; for other arithmetic take raw"
+    // A declared type D over int (RFC-0017 section 3.1): D and D are added and subtracted; D is
+    // multiplied by a plain int from either side, divided by one and taken modulo one.
+    const bool da = a->type != TY_INT && base_of(c, a->type) == TY_INT;
+    const bool db = b->type != TY_INT && base_of(c, b->type) == TY_INT;
+    const bool scaled = (op == PNX_MUL && ((da && b->type == TY_INT) || (db && a->type == TY_INT))) ||
+                        ((op == PNX_DIV || op == PNX_MOD) && da && b->type == TY_INT);
+    const tid result = db && !da ? b->type : a->type;
+    if (!scaled && (a->type != b->type || base_of(c, a->type) != TY_INT ||
+                    (a->type != TY_INT && op != PNX_ADD && op != PNX_SUB)))
+        return type_error(c, (da || db) && (a->type == b->type || a->type == TY_INT || b->type == TY_INT)
+                                 ? "a declared type is added to and subtracted from its own type, and multiplied, divided "
+                                   "or taken modulo by an int; for other arithmetic take raw"
                                  : "this word takes two int values, or two of the same declared type");
     const uint32_t dst = slot_of(c, f->depth - 2);
     uint32_t ra, rb;
@@ -1552,7 +1559,8 @@ static bool core(comp *c, const core_word *w) {
     case C_UNARY: { // int gives int
         if (!need(c, 1))
             return false;
-        if (f->stack[f->depth - 1].type != TY_INT)
+        if (f->stack[f->depth - 1].type != TY_INT &&
+            !(w->op == PNX_ABS && base_of(c, f->stack[f->depth - 1].type) == TY_INT)) // abs keeps a declared type
             return type_error(c, "this word takes an int");
         const uint32_t dst = slot_of(c, f->depth - 1);
         if (!reg_of(c, f->depth - 1, &ra) || emit_def(c, PNX_ABC(w->op, dst, ra, 0), BANK_I) == NONE)
@@ -1640,8 +1648,8 @@ static bool core_plain(comp *c, const core_word *w) {
     default: { // C_NEG
         if (!need(c, 1))
             return false;
-        if (f->stack[f->depth - 1].type != TY_INT)
-            return type_error(c, "neg takes an int");
+        if (base_of(c, f->stack[f->depth - 1].type) != TY_INT)
+            return type_error(c, "neg takes an int, or a value of a declared type over int");
         const uint32_t dst = slot_of(c, f->depth - 1);
         uint32_t ra;
         if (!reg_of(c, f->depth - 1, &ra) || emit_def(c, PNX_ABC(PNX_NEG, dst, ra, 0), BANK_I) == NONE)
@@ -4894,8 +4902,9 @@ static bool builtin(comp *c, const struct builtin *w) {
     case BW_MIN: { // the larger or the smaller of two int values
         if (!need(c, 2))
             return false;
-        if (f->stack[f->depth - 1].type != TY_INT || f->stack[f->depth - 2].type != TY_INT)
-            return type_error(c, "this word takes two int values");
+        if (f->stack[f->depth - 1].type != f->stack[f->depth - 2].type ||
+            base_of(c, f->stack[f->depth - 1].type) != TY_INT)
+            return type_error(c, "this word takes two int values, or two of the same declared type");
         if (!settle(c, f->depth - 2) || !reg_of(c, f->depth - 1, &rb))
             return false;
         const uint32_t dst = slot_of(c, f->depth - 2);

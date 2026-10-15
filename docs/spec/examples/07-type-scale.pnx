@@ -1,0 +1,7 @@
+rem run
+use io
+use str
+type cents int
+word share (total cents, people int gives cents) total people div end
+word with_tax (c cents gives cents) c 110 mul 100 div end
+1000 cents 3 share with_tax raw str.to_str io.println
