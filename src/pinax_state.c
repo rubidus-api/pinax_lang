@@ -1320,6 +1320,27 @@ pinax_err pinax_resume(pinax_state *st, const pinax_args *results) {
     return err;
 }
 
+pinax_err pinax_abort(pinax_state *st) {
+    if (!st)
+        return PINAX_ERR_ARGUMENT;
+    if (!st->suspended || st->host_cur)
+        return fail(st, PINAX_ERR_STATE, "nothing is suspended");
+    st->suspended = false;
+    st->waiting = false;
+    st->owed = 0;
+    st->main_fault = PINAX_OK;
+    pnx_tasks_abort(st); // back to the main run; every task is freed, every token forgotten
+    handles_close(st, st->run_serial);
+    st->fault_n = 0;
+    if (st->loading) { // a load whose code ran out of budget: undone, as a failed load is
+        st->loading = false;
+        const pnx_program before = st->before_load;
+        pnx_program_restore(st, &before);
+    }
+    st->error_text = "the run was abandoned";
+    return PINAX_OK;
+}
+
 void pinax_set_budget(pinax_state *st, uint64_t instructions) {
     st->budget = instructions;
 }

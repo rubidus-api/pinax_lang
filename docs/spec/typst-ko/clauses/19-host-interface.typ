@@ -70,8 +70,13 @@ C++ 컴파일러로 읽힌다. 이 절은 그 함수들이 무엇을 하는지 �
 `pinax_resume` 이 멈춘 자리부터 잇는다. 예산은 결과를 바꾸지 않는다. 결함은 그 번호로 돌아오고, 상태는 다음 실행을
 받는다.]
 
-#para("3")[멈춘 실행(`PINAX_SUSPENDED`, `PINAX_WAITING`)이 있는 동안 새 `pinax_run` 은 `PINAX_ERR_STATE` 다. 멈춘
-실행을 버리는 함수는 없다. 호스트는 그 실행을 끝까지 잇거나, 상태를 닫고 미리 저장한 상(19.9)에서 다시 연다.]
+#para("3")[멈춘 실행(`PINAX_SUSPENDED`, `PINAX_WAITING`)이 있는 동안 새 `pinax_run` 은 `PINAX_ERR_STATE` 다. 호스트는
+그 실행을 끝까지 잇거나 `pinax_abort` 로 버린다.]
+
+#para("3a")[`pinax_abort(state)` 는 멈춘 실행을 결함으로 끝난 것처럼 끝낸다: 그 실행이 연 핸들을 닫고, 작업을 비우고,
+기다리던 표를 잊는다(그 표의 `pinax_complete` 는 `PINAX_ERR_NOT_FOUND`). 전역에 이미 넣은 값은 남는다. 멈춘 것이
+적재 코드면 그 적재를 실패한 적재처럼 되돌린다. 그 뒤 상태는 다음 실행을 받는다. 멈춘 실행이 없으면
+`PINAX_ERR_STATE` 다. 전역까지 실행 앞으로 되돌려야 하는 호스트는 실행 앞에 상(19.9)을 저장한다.]
 
 #ex("spec", "19-run.c")
 

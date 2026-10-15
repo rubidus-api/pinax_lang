@@ -71,9 +71,14 @@ module (exported or not).]
 `pinax_resume` goes on where it stopped; the budget does not change results. A fault returns its code, and the state
 takes the next run.]
 
-#para("3")[While a run is stopped (`PINAX_SUSPENDED`, `PINAX_WAITING`), a new `pinax_run` is `PINAX_ERR_STATE`. No
-function drops a stopped run: the host either continues it to its end, or closes the state and opens it again from an
-image saved earlier (19.9).]
+#para("3")[While a run is stopped (`PINAX_SUSPENDED`, `PINAX_WAITING`), a new `pinax_run` is `PINAX_ERR_STATE`. The
+host either continues it to its end or gives it up with `pinax_abort`.]
+
+#para("3a")[`pinax_abort(state)` ends a stopped run as a fault would: the handles the run opened are closed, its tasks
+are freed and its pending tokens are forgotten (`pinax_complete` with one of them is `PINAX_ERR_NOT_FOUND`). What it
+already stored in globals stays. When what stopped is the code of a load, the load is taken back as a failed one is.
+The state then takes the next run. With nothing stopped it is `PINAX_ERR_STATE`. A host that must take the globals back
+too saves an image (19.9) before the run.]
 
 #ex("spec", "19-run.c")
 

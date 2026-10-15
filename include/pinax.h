@@ -320,6 +320,12 @@ PINAX_API pinax_err pinax_run(pinax_state *state, pinax_word word, const pinax_a
 /* Continues after PINAX_SUSPENDED, or after pinax_complete() following PINAX_WAITING. results is
  * where the outputs of the original pinax_run() land; pass the same pointers again. */
 PINAX_API pinax_err pinax_resume(pinax_state *state, const pinax_args *results);
+/* Gives up a run that is suspended (PINAX_SUSPENDED) or waiting (PINAX_WAITING), as a fault
+ * would end it: the handles the run opened are closed, its tasks are freed, and pinax_complete()
+ * answers PINAX_ERR_NOT_FOUND for its pending tokens. What it already stored in globals stays. A suspended load
+ * is taken back as a failed one is. The state then takes the next pinax_run(). Answers
+ * PINAX_ERR_STATE when nothing is suspended or a host word is running. */
+PINAX_API pinax_err pinax_abort(pinax_state *state);
 PINAX_API void      pinax_set_budget(pinax_state *state, uint64_t instructions);
 
 /* ---- images and copies -------------------------------------------------------------- */

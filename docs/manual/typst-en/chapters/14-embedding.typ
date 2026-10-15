@@ -31,12 +31,14 @@ the host's resolver allows.]
 
 `config.budget` is the number of instructions run at a time. When it is used up the run stops and returns
 `PINAX_SUSPENDED`, and the host continues it with `pinax_resume` or gives up. While a run is stopped, the state takes no
-other run. So, for the case of giving up, save an #strong[image] right after loading and open the state again from it.
+other run. To give up, call `pinax_abort`: it ends the run as a fault would, closing the handles the run opened. What the
+script stored in globals until then stays.
 
 #ex("manual", "14-guard.c")
 
 #mistake[A new `pinax_run` replaces a stopped run][It does not. A new run is refused with `PINAX_ERR_STATE`. Either
-continue the stopped run to its end, or close the state and open it again.]
+continue the stopped run to its end or give it up with `pinax_abort`. When even the globals must go back to how they
+were before the run, save an image before running and open the state again from it (standard 19.9).]
 
 == More
 
