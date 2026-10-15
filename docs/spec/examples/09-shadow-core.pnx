@@ -1,0 +1,2 @@
+rem refused
+word plus (add int, n int gives int) add n add end    rem add is the local here, not the word

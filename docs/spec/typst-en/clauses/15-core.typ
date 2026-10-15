@@ -4,7 +4,8 @@
 
 #para("1")[A #term("core word") is written as a bare name, without `use`. The tables of this clause write signatures as
 in 9.2. `T` means "any one type"; it is a notation for built-in words only. The stack words (`dup` `drop` `swap` `over`
-`nip`) are in 9.3 and the combining words that take stems in 10.6.]
+`nip`) are in 9.3 and the combining words that take stems in 10.6. A core word is also written `core.NAME`, which
+calls it where a local hides the name (9.5 (1a)).]
 
 == Integers <core-int>
 

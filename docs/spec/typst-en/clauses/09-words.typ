@@ -105,14 +105,25 @@ value.]
 
 == No hiding <words-shadowing>
 
-#para("1")[A new name (a parameter, a local, the name of a loop) cannot be the same as a name visible there --- a word,
-a global, a constant, a type, a local outside. One name means one thing at one place.]
+#para("1")[A new name (a parameter, a local, the name of a loop or a block, the name of `or_else`) cannot be the same as
+a name visible there --- a word, a global, a constant, a type or a record the source defined or declared, or a local
+outside. One name means one thing at one place.]
+
+#para("1a")[Core words (clause 15) are outside this rule. A local may have the name of a core word, and while it is
+visible the bare name is the local. A core word can always be called as `core.NAME`. A name in the place of a combining
+word (`do … end count`) is the core word even when a local has that name. Core words may grow from version to version;
+a new one does not take a local's name away from an old script. `core` and `global` cannot be module names.]
+
+#ex("spec", "09-shadow-word.pnx")
 
 #part("Constraints")
 
-#para("2")[A parameter or local with the name of a visible name is refused.]
+#para("2")[A parameter or local with the name of a visible name is refused (core words: (1a)).]
 #ex("spec", "09-shadow.pnx")
-#ex("spec", "09-shadow-word.pnx")
+
+#para("3")[Where a local hiding a core word is visible, the bare name is the local, so text meant to call the word is
+usually refused because the stack does not fit.]
+#ex("spec", "09-shadow-core.pnx")
 
 == Recursion and tail calls <words-recursion>
 

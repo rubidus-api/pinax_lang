@@ -44,11 +44,18 @@ one.
 `greet` takes a `str`, and was given `42`. The check happens before running, so such a mistake always shows, whether
 that line would ever run or not.
 
-#mistake[Naming a variable after a core word][Common words such as `sum`, `count`, `first` and `add` are all names of
-core words. Pinax does not let a visible name be hidden by another (no hiding), so parameters and locals with those
-names are refused.
+Common words such as `sum`, `count`, `first` and `add` are all names of core words, yet parameters and locals may
+take them. Inside that word the bare name is the variable, and the core word is called with `core.` in front, as in
+`core.add`. Core words may grow as versions go up; the rule keeps a new one from taking an old script's variable name.
+Names the script declared --- words, globals, constants --- still cannot be hidden (no hiding).
+
+#ex("manual", "03-core-name.pnx")
+
+#mistake[Calling a core word by its bare name where a variable hides it][Inside a word with a parameter `add`, `add` is
+that variable. Text meant to add only pushes one more value, so the stack does not fit and it is refused. Write
+`core.add` there.
 #ex("manual", "03-taken-name.pnx")
-Use other names such as `total`, `n` or `items`. Reserved words such as `of`, `end` and `text` cannot be names either.]
+Reserved words such as `of`, `end` and `text` cannot be names.]
 
 == Words that call themselves
 

@@ -64,7 +64,7 @@ that is not a global.]
 declared type, a row type (the name of a table) or a handle type; not `str` (7.3).]
 
 #para("2")[A global is read by writing its name, and stored with `to global.NAME` inside a definition or `to NAME`
-outside one (9.2). Its value stays as long as the state does
+outside one (9.4). Its value stays as long as the state does
 --- after a word's run ends, and across later loads.]
 
 #ex("spec", "08-const-global.pnx")

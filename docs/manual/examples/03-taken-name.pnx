@@ -1,2 +1,2 @@
 rem refused
-word average (sum int, count int gives int) sum count div end
+word plus (add int, n int gives int) add n add end    rem add here is the parameter
