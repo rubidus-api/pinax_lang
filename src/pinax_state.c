@@ -874,6 +874,7 @@ pinax_err pnx_load_container(pinax_state *st, pinax_str bytecode, uint32_t keep)
         g->elem_bytes = rec->kind == PNX_G_TABLE || rec->kind == PNX_G_ROWS || rec->kind == PNX_G_POOL ? rec->elem_bytes : 8;
         g->capacity = rec->kind == PNX_G_INT ? 1 : rec->capacity;
         g->length = rec->kind == PNX_G_LIST || rec->kind == PNX_G_ROWS || rec->kind == PNX_G_QUEUE ? 0 : g->capacity;
+        st->qturn += rec->kind == PNX_G_QUEUE; // a new queue: a task waiting for a queue looks again
         if (rec->kind == PNX_G_POOL) { // every slot is free: slot k links to k + 1
             uint8_t *meta = g->ptr + (size_t)g->capacity * g->elem_bytes;
             for (uint32_t slot = 0; slot < g->capacity; ++slot) {
