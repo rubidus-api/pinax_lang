@@ -6,10 +6,13 @@
 
 #part("구문")
 ```ebnf
-declaration = [ "export" ] ( [ "bound" ] bindable | decl ) ;
+declaration = [ "export" ] ( [ "bound" ] bindable | "shared" shareable | decl ) ;
 bindable    = "global" NAME type
             | "array"  NAME type size
             | "buffer" NAME size ;
+shareable   = bindable
+            | "list"   NAME type size
+            | "index"  NAME NAME PATH ;
 decl        = "const"  NAME literal
             | "list"   NAME type size
             | "queue"  NAME type size
@@ -265,6 +268,31 @@ forward = "forward" ( "array" | "list" | "pool" ) NAME
 #para("1")[`bound` 를 앞에 붙인 `global` `array` `buffer` 는 저장소를 호스트가 준다. 스크립트에서는 다른
 전역과 같이 쓴다. 호스트가 묶기 전에는 상태 안의 자리를 쓴다. 묶는 법은 19.7 이 정한다.]
 
+== 공유 저장소 <decl-shared>
+
+#para("1")[`shared` 를 앞에 붙인 `global` `array` `list` `buffer` `index` 는 다른 상태의 저장소를 읽기만 한다.
+선언한 상태에는 저장소가 없고, 호스트가 다른 상태의 같은 선언을 `pinax_share` 로 준다(19.7). 같은 자료를 여러
+상태가 여러 스레드에서 한꺼번에 읽어도 복사도 잠금도 없다.]
+
+#part("제약")
+
+#para("2")[공유 전역은 아무것도 바꾸지 못한다: 넣기, `set`, `push`, `pop`, `clear`, `truncate`, `add_row`, 필드에
+넣기, `insert`, `remove`, 버퍼에 붙이는 낱말, `map_into` 와 `filter_into` 의 목적지가 모두 거절된다. 처리기는
+공유 전역을 바꾸는 바이트코드도 적재 때 거절한다.]
+#ex("spec", "08-shared-write.pnx")
+
+#para("3")[공유 모음은 모음 매개변수(9.9)나 호스트 낱말의 `buffer` 매개변수로 넘기지 않는다. 받는 쪽이 바꿀 수 있기
+때문이다. 읽기만 하는 일은 공유 전역을 이름으로 부르는 낱말에 둔다.]
+#ex("spec", "08-shared-param.pnx")
+
+#para("4")[`shared` 는 `queue` `pool` `tasks` 와 `const` `record` 앞에 오지 않는다.]
+#ex("spec", "08-shared-queue.pnx")
+
+#part("의미")
+
+#para("5")[호스트가 주기 전에는 비어 있다: 목록과 배열의 길이는 0 이고, 찾아보기는 아무것도 찾지 못하며, 스칼라와
+버퍼는 0 과 빈 바이트다. 적재의 코드는 그대로 돈다. 호스트의 실행은 공유 전역을 모두 받을 때까지 거절된다(19.7).]
+
 #part("진단")
 #diag(
   ([이미 있는 이름], "this name is already defined"),
@@ -274,4 +302,8 @@ forward = "forward" ( "array" | "list" | "pool" ) NAME
   ([`row` 의 값이 필드와 다름], "a value has another type than its field"),
   ([`owned` 줄을 넘기지 않는 경로], "an owned value in a local is not given on every path (close, free or store it)"),
   ([미리 알린 표가 없음], "a table announced by forward is never declared"),
+  ([공유 전역을 바꿈], "a shared global is read-only: nothing here may change it"),
+  ([공유 모음을 매개변수로 넘김], "a shared collection is read-only: it is not given to a word as a parameter, which may change it"),
+  ([공유 버퍼를 호스트 낱말에 넘김], "a shared buffer is read-only: it is not given to a host word, which may write it"),
+  ([`shared` 뒤에 다른 선언], "shared stands before global, array, list, buffer or index"),
 )

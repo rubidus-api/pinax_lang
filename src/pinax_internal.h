@@ -120,7 +120,22 @@ typedef struct pnx_global {
     uint32_t head;   // a queue: the cell of its oldest value; a pool: its first free slot plus one
     uint32_t key;    // an index: its key field, PNX_FIELD(table, offset, extra)
     bool     key_is_str;
+    bool     shared; // declared `shared`: another state's storage, or none until pinax_share() gives it
 } pnx_global;
+
+// The instructions that change the global they name (in BX, C, a wide form's second word or a
+// field's). None may name a shared global (RFC-0020 section 4); LCOPYR writes its BX only.
+static inline bool pnx_writes_global(uint32_t op) {
+    switch (op) {
+    case PNX_SETG: case PNX_ASET: case PNX_ASETW: case PNX_GCLEAR: case PNX_LPUSH: case PNX_LPUSHS: case PNX_LPOP:
+    case PNX_LPOPS: case PNX_FSET: case PNX_FSETS: case PNX_ADDROW: case PNX_IXPUT: case PNX_IXDEL: case PNX_BCLEAR:
+    case PNX_BPUT: case PNX_BPUTS: case PNX_BPUTW: case PNX_BPUTSW: case PNX_BCAT: case PNX_BCATI: case PNX_BENC:
+    case PNX_BENCW: case PNX_BTRUNC: case PNX_JPUTI: case PNX_JPUTIW: case PNX_JPUTS: case PNX_JPUTSW: case PNX_CPUTS:
+    case PNX_CPUTSW: case PNX_CPUTI: case PNX_CPUTIW: case PNX_LCOPYR: case PNX_QPUT: case PNX_QTAKE: case PNX_QWTAKE:
+    case PNX_QWPUT: case PNX_PALLOC: case PNX_PFREE: return true;
+    default: return false;
+    }
+}
 
 struct pinax_call {
     pinax_state *state;
@@ -252,6 +267,8 @@ struct pinax_state {
     bool     suspended;
     bool     loading;   // the suspended run is the code outside definitions of a load
     bool     from_image; // opened from an image: host words are given again by name (D0036)
+    bool     frozen;     // lent a global with pinax_share(): it neither runs nor loads again
+    bool     load_runs;  // the code of a load runs: shared globals not given yet read as empty
     pnx_program before_load; // what that load would be undone to
     void    *symbols;   // the compiler's declaration tables, kept for the next load (pinax_compile.c)
     pinax_err   fail;

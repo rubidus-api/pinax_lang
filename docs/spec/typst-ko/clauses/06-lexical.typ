@@ -186,7 +186,7 @@ token    = reserved | NAME | PATH | INT | CHAR | STRING | RAWSTRING | TEXT | BOO
 reserved = "rem" | "note" | "text" | "true" | "false" | "pinax"
          | "use" | "as" | "export"
          | "word" | "global" | "const" | "array" | "list" | "pool" | "queue" | "buffer"
-         | "tasks" | "record" | "type" | "extern" | "from" | "forward" | "index" | "bound"
+         | "tasks" | "record" | "type" | "extern" | "from" | "forward" | "index" | "bound" | "shared"
          | "make" | "test" | "row" | "assign" | "big_endian" | "columns"
          | "gives" | "or" | "fail" | "owned"
          | "to" | "do" | "end" | "if" | "else" | "loop" | "while" | "until" | "break"

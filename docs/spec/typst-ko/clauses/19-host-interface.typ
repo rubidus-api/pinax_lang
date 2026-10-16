@@ -102,6 +102,18 @@ NULL). `pinax_handle_release` 는 핸들을 돌려준다.]
 
 #ex("spec", "19-bind.c")
 
+#para("1a")[`pinax_share(state, global, source, from)` 은 `state` 에서 `shared` 로 선언한 전역(8.13)에 `source` 의
+전역 `from` 의 저장소를 준다. 복사하지 않는다. 종류, 타입, 용량이 같아야 하며, 아니면 `PINAX_ERR_SIGNATURE` 다.
+찾아보기는 해시 열쇠(19.2)도 같아야 하고, 그 표를 같은 `source` 에서 먼저 받아야 한다. 목록은 그때의 길이를 쓴다.
+표를 다시 받으면 그 표의 찾아보기도 다시 준다.]
+
+#para("1b")[저장소를 빌려준 `source` 는 얼어붙는다: 그 뒤의 `pinax_run`, `pinax_load`, `pinax_eval`, `pinax_bind` 는
+`PINAX_ERR_STATE` 다. 그래서 바이트가 바뀌지 않고, 여러 스레드의 상태가 한꺼번에 읽어도 된다. `source` 는 빌린 상태들이
+쓰는 동안 열려 있어야 한다. 공유 전역을 다 받기 전에는 실행이 `PINAX_ERR_NOT_FOUND` 로 거절된다. 상을 열거나 복제한
+뒤에는 다시 준다(19.9).]
+
+#ex("spec", "19-share.c")
+
 #para("2")[`pinax_global_find` 가 주는 `number` 는 모음 매개변수(9.9)가 있는 낱말이 그 인자로 받는 것이다. `i` 에 넣는
 정수다. 종류나 원소 크기가 다른 모음, 또는 없는 전역의 번호는 낱말이 그것을 쓰는 자리에서 결함
 `PINAX_ERR_STATE` 다.]

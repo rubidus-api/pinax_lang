@@ -34,8 +34,9 @@ forward     = "forward" ( "array" | "list" | "pool" ) NAME
             | "forward" "word" NAME "(" effect ")" ;
 
 (* 8: declarations *)
-declaration = [ "export" ] ( [ "bound" ] bindable | decl ) ;
+declaration = [ "export" ] ( [ "bound" ] bindable | "shared" shareable | decl ) ;
 bindable    = "global" NAME type | "array" NAME type size | "buffer" NAME size ;
+shareable   = bindable | "list" NAME type size | "index" NAME NAME PATH ;
 decl        = "const" NAME literal
             | "list" NAME type size | "queue" NAME type size | "pool" NAME NAME size
             | "record" NAME { field | "big_endian" } "end"

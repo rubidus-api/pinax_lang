@@ -237,6 +237,7 @@ typedef struct globalsym {
     uint8_t  strcap;   // cells are str(N): N. Stored as rows of one length byte and N bytes
     bool     forward;  // announced by `forward`, not declared yet
     bool     bound;    // `bound`: the host gives the storage with pinax_bind()
+    bool     shared;   // `shared`: another state's storage, given by pinax_share(); nothing writes it
     uint32_t capacity; // cells of an array or list
     uint32_t record;   // NONE, or the record a table holds
     uint32_t rows;     // rows written by `row` items so far
@@ -955,6 +956,12 @@ static uint32_t emit_raw(comp *c, uint32_t word) {
 
 static bool select_ref(comp *c, uint32_t reg);
 
+static bool read_only(comp *c, uint32_t global) {
+    if (global < REF_GLOBAL && global < c->globals.n && ((const globalsym *)c->globals.ptr + global)->shared)
+        return type_error(c, "a shared global is read-only: nothing here may change it");
+    return true;
+}
+
 // One word of code. A global number from REF_GLOBAL up is a collection a reference names: the
 // instruction then names PNX_GSELECTED, and a GSEL before it chooses the global (RFC-0018).
 static uint32_t emit(comp *c, uint32_t word) {
@@ -962,6 +969,10 @@ static uint32_t emit(comp *c, uint32_t word) {
     if (f->second_due) {
         f->second_due = false;
         const uint32_t first = f->code.n - 1, op = f->code.n ? ((uint32_t *)f->code.ptr)[first] & 0xffu : 0;
+        if (pnx_writes_global(op) && op != PNX_LCOPYR &&
+            !read_only(c, pnx_ops_info[op].second == PNX_X_FIELD ? word & 0xfffu
+                          : pnx_ops_info[op].second == PNX_X_GLOBAL ? word : NONE))
+            return NONE;
         if (pnx_ops_info[op].second == PNX_X_FIELD && (word & 0xfffu) >= REF_GLOBAL && (word & 0xfffu) < PNX_FSELECTED) {
             // a field of a row a reference names: the GSEL goes in before the instruction
             // (the second word of an instruction ends what emit_def may retarget, as always)
@@ -980,6 +991,9 @@ static uint32_t emit(comp *c, uint32_t word) {
     }
     const pnx_opinfo info = pnx_ops_info[word & 0xffu];
     const uint32_t bx = word >> 16;
+    if (pnx_writes_global(word & 0xffu) &&
+        !read_only(c, info.shape == PNX_F_GLOBAL ? bx : info.c == PNX_K_G ? word >> 24 : NONE))
+        return NONE;
     if (info.shape == PNX_F_GLOBAL && bx >= REF_GLOBAL && bx < PNX_GSELECTED) {
         if (!select_ref(c, bx - REF_GLOBAL))
             return NONE;
@@ -2002,6 +2016,8 @@ static bool call_args(comp *c, const sig *s, uint32_t base[2]) {
             entry *e = &f->stack[f->depth - s->n_in + k];
             if (e->type != TY_COLL || gsym(c, e->value)->kind != GK_BUFFER)
                 return type_error(c, "this host word takes a buffer here");
+            if (e->kind != E_LOCAL && gsym(c, e->value)->shared)
+                return type_error(c, "a shared buffer is read-only: it is not given to a host word, which may write it");
             if (!make_room(c, f->depth - s->n_in + k))
                 return false;
             *e = e->kind == E_LOCAL ? (entry){.type = TY_BUF, .kind = E_LOCAL, .reg = e->reg}
@@ -2015,6 +2031,9 @@ static bool call_args(comp *c, const sig *s, uint32_t base[2]) {
                 return type_error(c, "this parameter takes an array, list, queue or buffer: give its name");
             const globalsym *g = gsym(c, (uint32_t)e->value);
             const rtype     *r = (const rtype *)c->rtypes.ptr + (s->in[k] - TY_REF);
+            if (e->kind != E_LOCAL && g->shared)
+                return type_error(c, "a shared collection is read-only: it is not given to a word as a parameter, "
+                                     "which may change it");
             if (g->kind != r->kind || g->record != r->record || g->strcap != r->strcap ||
                 (r->record == NONE && r->kind != GK_BUFFER && (g->strcap ? TY_STR : g->type) != r->cell))
                 return type_error(c, "the collection given here is of another kind, or holds another type, than the "
@@ -7600,7 +7619,7 @@ static bool compile(comp *c, image *im, bool *has_top) {
                 return c->err == PINAX_OK ? syntax(c, "export stands once, before a definition or a declaration") : false;
             static const pnx_word_id may[] = {PNX_KW_word,  PNX_KW_const,  PNX_KW_global, PNX_KW_array, PNX_KW_list,
                                               PNX_KW_queue, PNX_KW_pool,   PNX_KW_type,   PNX_KW_buffer,
-                                              PNX_KW_index, PNX_KW_record, PNX_KW_forward, PNX_KW_bound,
+                                              PNX_KW_index, PNX_KW_record, PNX_KW_forward, PNX_KW_bound, PNX_KW_shared,
                                               PNX_KW_row,   PNX_KW_extern, PNX_KW_tasks};
             bool ok = false;
             for (uint32_t k = 0; k < sizeof may / sizeof may[0]; ++k)
@@ -7637,6 +7656,29 @@ static bool compile(comp *c, image *im, bool *has_top) {
             if (gi == NONE)
                 return syntax(c, "bound stands before global, array or buffer");
             ((globalsym *)c->globals.ptr + gi)->bound = true;
+        } else if (is_word(c, PNX_KW_shared) && !c->top_fn->n_blocks) {
+            // shared global | array | list | buffer | index : another state's storage, read only
+            // (RFC-0020 section 4); until the host gives it, it is empty and runs are refused
+            if (!advance(c))
+                return false;
+            const bool scalar = is_word(c, PNX_KW_global), bytes = is_word(c, PNX_KW_buffer),
+                       list = is_word(c, PNX_KW_list), index = is_word(c, PNX_KW_index);
+            if (!scalar && !bytes && !list && !index && !is_word(c, PNX_KW_array))
+                return syntax(c, "shared stands before global, array, list, buffer or index");
+            pnx_lexer peek = *c->lx;
+            pnx_token named;
+            if (!pnx_lex_next(&peek, &named))
+                named.length = 0;
+            const name shared_name = {c->lx->source + named.start, named.length};
+            if (scalar ? !declare_global(c)
+                : bytes ? !declare_buffer(c)
+                : index ? !declare_index(c)
+                        : !declare_collection(c, list ? GK_LIST : GK_ARRAY))
+                return false;
+            const uint32_t gi = find_global(c, shared_name);
+            if (gi == NONE)
+                return syntax(c, "shared stands before global, array, list, buffer or index");
+            ((globalsym *)c->globals.ptr + gi)->shared = true;
         } else if (is_word(c, PNX_KW_extern) && !c->top_fn->n_blocks) {
             if (c->data_only)
                 return syntax(c, "a data source names no C functions");
@@ -7915,6 +7957,8 @@ static bool serialize(comp *c, const image *im, uint8_t **out, size_t *out_len) 
         }
         if (g->bound)
             rec.reserved = 2; // meant to be bound by the host
+        if (g->shared)
+            rec.reserved |= 4; // given by pinax_share(); beside an index's key kind
         __builtin_memcpy(p, &rec, sizeof rec);
         p += sizeof rec;
     }
@@ -8282,6 +8326,10 @@ static pinax_err load_source(pinax_state *st, const char *file, pinax_str source
         st->error_text = "a run is suspended or a host word is running; finish it before loading";
         return PINAX_ERR_STATE;
     }
+    if (st->frozen) {
+        st->error_text = "the state lent a global with pinax_share: it does not change any more";
+        return PINAX_ERR_STATE;
+    }
     if (st->head && !st->symbols) {
         st->error_text = "a state that loaded bytecode takes no source after it";
         return PINAX_ERR_STATE;
@@ -8422,7 +8470,9 @@ static pinax_err load_source(pinax_state *st, const char *file, pinax_str source
         int64_t    ints[MAX_PARAMS];
         pinax_str  strs[MAX_PARAMS];
         pinax_args values = {.ri = ints, .rs = strs};
+        st->load_runs = true;
         err = pinax_run(st, st->head->n_words - 1, n_values ? &values : NULL);
+        st->load_runs = false;
         st->budget = budget;
         if (err == PINAX_OK && n_values) { // in the order of the stack, each bank counted on its own
             for (uint32_t k = 0, ni = 0, ns = 0; k < n_values; ++k) {

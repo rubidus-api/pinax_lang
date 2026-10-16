@@ -752,8 +752,8 @@ pinax_err pnx_execute(pinax_state *st) {
             const uint64_t gi = (uint64_t)R[OP_A(w)];
             const uint32_t elem = *pc++;
             if (gi >= st->head->n_globals || st->globals[gi].kind != OP_B(w) ||
-                (elem && st->globals[gi].elem_bytes != elem))
-                FAULT(PINAX_ERR_STATE);
+                (elem && st->globals[gi].elem_bytes != elem) || st->globals[gi].shared)
+                FAULT(PINAX_ERR_STATE); // a shared global is never a parameter: the word may write it
             st->gsel = (uint32_t)gi;
             NEXT();
         }

@@ -1,0 +1,4 @@
+rem refused
+shared list scores int 100
+word total (l list int gives int) l sum end
+word everyone (gives int) scores total end

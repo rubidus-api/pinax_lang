@@ -1,0 +1,7 @@
+rem refused
+record city
+  name str(12)
+  people int
+end
+shared list cities city 1000
+word grow (r cities) r city.people 1 add r to city.people end

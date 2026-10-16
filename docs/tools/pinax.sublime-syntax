@@ -29,7 +29,7 @@ contexts:
       scope: constant.numeric.pinax
     - match: '(?<![A-Za-z0-9_.])(true|false|none)(?![A-Za-z0-9_])'
       scope: constant.language.pinax
-    - match: '(?<![A-Za-z0-9_.])(word|global|const|array|list|pool|queue|buffer|tasks|record|type|extern|from|forward|index|bound|make|test|row|assign|big_endian|columns|gives|or|fail|owned|to|do|end|if|else|loop|while|until|break|case|of|otherwise|return|or_fail|or_return|or_else|cat|use|as|export|pinax|redefine)(?![A-Za-z0-9_])'
+    - match: '(?<![A-Za-z0-9_.])(word|global|const|array|list|pool|queue|buffer|tasks|record|type|extern|from|forward|index|bound|shared|make|test|row|assign|big_endian|columns|gives|or|fail|owned|to|do|end|if|else|loop|while|until|break|case|of|otherwise|return|or_fail|or_return|or_else|cat|use|as|export|pinax|redefine)(?![A-Za-z0-9_])'
       scope: keyword.control.pinax
     - match: '(?<![A-Za-z0-9_.])(int|bool|str|err|u8|i8|u16|i16|u32|i32|i64|regex|file|mark)(?![A-Za-z0-9_])'
       scope: storage.type.pinax

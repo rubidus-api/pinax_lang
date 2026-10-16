@@ -326,7 +326,7 @@ pinax_mem pinax_call_buffer(pinax_call *call, int64_t buffer, size_t written) {
     if (!st->head || buffer < 0 || buffer >= (int64_t)st->head->n_globals)
         return none;
     const pnx_global *g = &st->globals[buffer];
-    if (g->kind != PNX_G_BUFFER)
+    if (g->kind != PNX_G_BUFFER || g->shared)
         return none;
     uint64_t used;
     __builtin_memcpy(&used, g->ptr, 8);
@@ -474,6 +474,8 @@ static const char *check_word(const pinax_state *st, uint32_t index, span range,
             const uint32_t to_elem = sbx ? gsel_elem : st->globals[bx].elem_bytes, from_elem = sx ? gsel_elem : st->globals[x].elem_bytes;
             if (to_kind != PNX_G_ROWS || (from_kind != PNX_G_ROWS && from_kind != PNX_G_TABLE) || to_elem != from_elem)
                 return "code: rows copied between tables of another kind or size";
+            if (!sbx && st->globals[bx].shared)
+                return "code: a shared global is written";
         } else if (info.second == PNX_X_GLOBAL) { // a wide form: what its narrow form needs, of the global in x
             switch (op) {
             case PNX_AGETW: case PNX_ASETW: want = PNX_G_ARRAY; break;
@@ -509,6 +511,8 @@ static const char *check_word(const pinax_state *st, uint32_t index, span range,
                              kind != PNX_G_POOL);
             if (!ok)
                 return "code: global of the wrong kind";
+            if (!selected && pnx_writes_global(op) && st->globals[global].shared)
+                return "code: a shared global is written";
             if (selected && (want == PNX_G_INDEX || want == PNX_G_POOL || want == PNX_G_TASKS))
                 return "code: this global cannot be chosen by a reference";
             if (((op == PNX_IXGET || op == PNX_IXGETW) && st->globals[global].key_is_str) ||
@@ -726,6 +730,16 @@ pinax_err pinax_load_bytecode(pinax_state *st, pinax_str bytecode) {
 // the records after the head are read in place: the head keeps them 8-byte aligned
 static_assert(sizeof(pnx_head) % 8 == 0 && sizeof(pnx_localrec) % 8 == 0, "container records lose their alignment");
 
+// A shared global the host has not given (or no longer gives, after an image is opened): it
+// reads as empty and has no storage. The few bytes a scalar or a buffer reads are zeros here.
+static const uint64_t no_storage[2];
+static void unshared(pnx_global *g) {
+    g->ptr = g->own = (uint8_t *)(uintptr_t)no_storage; // read only: nothing writes a shared global
+    g->length = 0;
+    if (g->kind == PNX_G_INDEX)
+        g->capacity = 1; // one empty slot: every key is not found
+}
+
 pinax_err pnx_load_container(pinax_state *st, pinax_str bytecode, uint32_t keep) {
     const pnx_program before = pnx_program_now(st);
     pnx_head h;
@@ -870,10 +884,11 @@ pinax_err pnx_load_container(pinax_state *st, pinax_str bytecode, uint32_t keep)
         case PNX_G_INDEX: { // slots: a power of two; the key field must lie inside an earlier table
             const uint32_t table = rec->elem_bytes & 0xfffu, offset = (rec->elem_bytes >> 12) & 0xfffu,
                            extra = rec->elem_bytes >> 24;
-            if ((rec->capacity & (rec->capacity - 1)) != 0 || table >= k || rec->reserved > 1 ||
+            const uint32_t is_str = rec->reserved & 1u;
+            if ((rec->capacity & (rec->capacity - 1)) != 0 || table >= k || (rec->reserved & ~5u) ||
                 (st->globals[table].kind != PNX_G_TABLE && st->globals[table].kind != PNX_G_ROWS) ||
-                (rec->reserved == 0 && extra >= PNX_W_COUNT) ||
-                offset + (rec->reserved ? 1u + extra : width_bytes[extra]) > st->globals[table].elem_bytes)
+                (!is_str && extra >= PNX_W_COUNT) ||
+                offset + (is_str ? 1u + extra : width_bytes[extra]) > st->globals[table].elem_bytes)
                 goto rollback;
             bytes = (uint64_t)rec->capacity * 4;
             break;
@@ -888,6 +903,10 @@ pinax_err pnx_load_container(pinax_state *st, pinax_str bytecode, uint32_t keep)
             break;
         default: goto rollback;
         }
+        const bool shared = rec->kind == PNX_G_INDEX ? (rec->reserved & 4u) != 0
+                          : rec->kind != PNX_G_TASKS && rec->reserved == 4;
+        if (shared && (rec->kind == PNX_G_QUEUE || rec->kind == PNX_G_POOL))
+            goto rollback;
         if (k < keep) { // a global of the program being extended: its storage and state stay
             if (before.globals[k].kind != rec->kind)
                 goto rollback;
@@ -900,8 +919,8 @@ pinax_err pnx_load_container(pinax_state *st, pinax_str bytecode, uint32_t keep)
         why = "block too small for the code and its globals";
         if (bytes > SIZE_MAX / 2)
             goto rollback;
-        g->ptr = g->own = take(st, (size_t)bytes, 8);
-        if (!g->ptr)
+        g->ptr = g->own = shared ? NULL : take(st, (size_t)bytes, 8); // shared: no storage of its own
+        if (!g->ptr && !shared)
             goto rollback;
         g->kind = rec->kind;
         g->elem_bytes = rec->kind == PNX_G_TABLE || rec->kind == PNX_G_ROWS || rec->kind == PNX_G_POOL ? rec->elem_bytes : 8;
@@ -943,10 +962,13 @@ pinax_err pnx_load_container(pinax_state *st, pinax_str bytecode, uint32_t keep)
         }
         if (rec->kind == PNX_G_INDEX) {
             g->key = rec->elem_bytes;
-            g->key_is_str = rec->reserved != 0;
+            g->key_is_str = (rec->reserved & 1u) != 0;
             g->elem_bytes = 4;
         }
-        if (!first_global)
+        g->shared = shared;
+        if (shared)
+            unshared(g);
+        if (!first_global && !shared)
             first_global = g->ptr;
     }
     st->segment[PNX_SEG_GLOBAL] = first_global ? first_global : empty_bytes;
@@ -1275,8 +1297,16 @@ pinax_err pinax_run(pinax_state *st, pinax_word word, const pinax_args *args) {
         return PINAX_ERR_ARGUMENT;
     if (!st->head || st->suspended)
         return fail(st, PINAX_ERR_STATE, "no code loaded, or a suspended run must be resumed first");
+    if (st->frozen && !st->host_cur)
+        return fail(st, PINAX_ERR_STATE, "the state lent a global with pinax_share: it does not run any more");
     if (hosts_given(st) != PINAX_OK)
         return PINAX_ERR_NOT_FOUND;
+    if (!st->load_runs && !st->host_cur) { // the code of a load runs before the host can share anything
+        for (uint32_t k = 0; k < st->head->n_globals; ++k) {
+            if (st->globals[k].shared && st->globals[k].ptr == (const uint8_t *)no_storage)
+                return fail(st, PINAX_ERR_NOT_FOUND, "a shared global is not given yet: pinax_share");
+        }
+    }
     if (word >= st->head->n_words)
         return fail(st, PINAX_ERR_ARGUMENT, "not a word of this state");
     const pnx_wordrec *rec = &st->words[word];
@@ -1411,6 +1441,8 @@ pinax_err pinax_bind(pinax_state *st, const char *global, void *memory, size_t b
         pnx_global *g = &st->globals[k];
         if (recs[k].reserved != 2)
             return fail(st, PINAX_ERR_STATE, "the script did not declare this global bound");
+        if (st->frozen)
+            return fail(st, PINAX_ERR_STATE, "the state lent a global with pinax_share: its storage stays");
         const size_t want = g->kind == PNX_G_INT || g->kind == PNX_G_ARRAY ? (size_t)g->capacity * 8
                             : g->kind == PNX_G_TABLE                       ? (size_t)g->capacity * g->elem_bytes
                             : g->kind == PNX_G_BUFFER                      ? (size_t)g->capacity + 8
@@ -1429,6 +1461,62 @@ pinax_err pinax_bind(pinax_state *st, const char *global, void *memory, size_t b
         return PINAX_OK;
     }
     return fail(st, PINAX_ERR_NOT_FOUND, "no such global");
+}
+
+// The record of the global named `name`, or NULL.
+static const pnx_globalrec *global_rec(const pinax_state *st, const char *name, uint32_t *index) {
+    const pnx_globalrec *recs = (const pnx_globalrec *)(const void *)(st->words + st->head->n_words);
+    for (uint32_t k = 0; k < st->head->n_globals; ++k) {
+        if (text_equal(recs[k].name, name)) {
+            *index = k;
+            return &recs[k];
+        }
+    }
+    return NULL;
+}
+
+// RFC-0020 section 4: the target's declaration, written `shared`, reads the source's storage.
+pinax_err pinax_share(pinax_state *st, const char *global, pinax_state *source, const char *from) {
+    if (!st || !global || !source || !from || st == source)
+        return PINAX_ERR_ARGUMENT;
+    if (!st->head || !source->head)
+        return fail(st, PINAX_ERR_STATE, "no code loaded");
+    if (st->host_cur || source->host_cur || source->suspended || source->loading)
+        return fail(st, PINAX_ERR_STATE, "a run of one of the states is not finished");
+    uint32_t             ti, si;
+    const pnx_globalrec *trec = global_rec(st, global, &ti), *srec = global_rec(source, from, &si);
+    if (!trec || !srec)
+        return fail(st, PINAX_ERR_NOT_FOUND, "no such global");
+    pnx_global       *t = &st->globals[ti];
+    const pnx_global *g = &source->globals[si];
+    if (!t->shared)
+        return fail(st, PINAX_ERR_STATE, "the script did not declare this global shared");
+    const bool index = trec->kind == PNX_G_INDEX;
+    if (trec->kind != srec->kind || trec->capacity != srec->capacity ||
+        (!index && trec->elem_bytes != srec->elem_bytes) || !text_equal(trec->type, (const char *)srec->type) ||
+        (index && ((trec->elem_bytes >> 12) != (srec->elem_bytes >> 12) || t->key_is_str != g->key_is_str ||
+                   __builtin_memcmp(st->hash_key, source->hash_key, sizeof st->hash_key) != 0)))
+        return fail(st, PINAX_ERR_SIGNATURE,
+                    index ? "the index differs: its key, its size or the hash key of the states"
+                          : "the two declarations differ in kind, type or size");
+    if (g->shared && g->ptr == (const uint8_t *)no_storage)
+        return fail(st, PINAX_ERR_STATE, "the source's global is shared and not given itself");
+    if (index) { // its slots name rows of the source's table: the target's table must be that one
+        const pnx_global *table = &st->globals[t->key & 0xfffu], *from_table = &source->globals[g->key & 0xfffu];
+        if (!table->shared || table->ptr != from_table->ptr || table->length != from_table->length)
+            return fail(st, PINAX_ERR_STATE, "share the index's table first, from the same state");
+    }
+    t->ptr = g->ptr;
+    t->length = g->length;
+    t->head = g->head;
+    t->capacity = index ? trec->capacity : t->capacity;
+    for (uint32_t k = 0; !index && k < st->head->n_globals; ++k) { // an index of the old table no longer fits
+        pnx_global *x = &st->globals[k];
+        if (x->kind == PNX_G_INDEX && x->shared && (x->key & 0xfffu) == ti)
+            unshared(x);
+    }
+    source->frozen = true; // from now on its bytes stay as they are
+    return PINAX_OK;
 }
 
 // ---- declared in pinax.h, not in P0 ---------------------------------------------------------
@@ -1836,7 +1924,7 @@ static uint64_t image_layout(void) {
                               sizeof(pnx_scell), sizeof(pnx_frame), sizeof(pnx_counts), sizeof(void *),
                               offsetof(pinax_state, symbols), offsetof(pinax_state, handles),
                               offsetof(pinax_state, globals), offsetof(pinax_state, main), offsetof(pnx_task, ctx),
-                              offsetof(pnx_global, own), offsetof(pnx_host, fn), PNX_OP_COUNT, PNX_CONTAINER_VERSION,
+                              offsetof(pnx_global, own), offsetof(pnx_global, shared), offsetof(pnx_host, fn), PNX_OP_COUNT, PNX_CONTAINER_VERSION,
                               PINAX_FORMAT, pnx_static_len, PNX_SEG_COUNT, PNX_MAX_HOSTS, PNX_MAX_HANDLE_TYPES};
     uint64_t hash = 0xcbf29ce484222325u;
     for (size_t k = 0; k < sizeof parts / sizeof parts[0]; ++k)
@@ -1966,6 +2054,10 @@ pinax_err pinax_image_open(pinax_mem block, pinax_str image, const pinax_config 
         MOVE(st->imports[k]);
     for (uint32_t k = 0; st->head && k < st->head->n_globals; ++k) {
         pnx_global *g = &st->globals[k];
+        if (g->shared) { // what another state lent is not in the image: the host gives it again
+            unshared(g);
+            continue;
+        }
         MOVE(g->own);
         const uintptr_t at = (uintptr_t)g->ptr;
         g->ptr = at >= m.lo && at <= m.hi ? (uint8_t *)(at + (uintptr_t)m.by) : g->own; // bound: back on its own
@@ -2010,6 +2102,7 @@ pinax_err pinax_image_open(pinax_mem block, pinax_str image, const pinax_config 
         }
     }
     st->from_image = true;
+    st->frozen = st->load_runs = false; // what the saved state lent stays with it
     // operations a run waited for will not be completed by this process: they come back interrupted
     if (st->main_wait.token)
         (void)pinax_complete(st, st->main_wait.token, PINAX_ERR_INTERRUPTED, NULL);

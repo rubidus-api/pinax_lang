@@ -104,6 +104,18 @@ memory; the size shall match the declaration. Script and host read and write the
 
 #ex("spec", "19-bind.c")
 
+#para("1a")[`pinax_share(state, global, source, from)` gives a global that `state` declares `shared` (8.13) the
+storage of the global `from` of `source`, without copying. Kind, type and capacity must be the same, else
+`PINAX_ERR_SIGNATURE`. An index also needs the same hash key (19.2), and its table given first from the same `source`. A
+list keeps the length it has then. When a table is given again, its index is given again too.]
+
+#para("1b")[A `source` that lent storage is frozen: `pinax_run`, `pinax_load`, `pinax_eval` and `pinax_bind` on it are
+`PINAX_ERR_STATE` from then on. So its bytes do not change, and states on several threads may read them at once.
+`source` must stay open while the states that borrow from it use it. Until every shared global is given, runs are
+refused with `PINAX_ERR_NOT_FOUND`. After an image is opened or a state cloned, give them again (19.9).]
+
+#ex("spec", "19-share.c")
+
 #para("2")[The `number` that `pinax_global_find` gives is what a word with a collection parameter (9.9) takes as that
 argument, an integer in `i`. A number of a collection of another kind or another size of element, or of no global, is the
 fault `PINAX_ERR_STATE` where the word uses it.]

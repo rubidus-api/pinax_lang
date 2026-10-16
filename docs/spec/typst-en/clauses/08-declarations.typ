@@ -6,10 +6,13 @@
 
 #part("Syntax")
 ```ebnf
-declaration = [ "export" ] ( [ "bound" ] bindable | decl ) ;
+declaration = [ "export" ] ( [ "bound" ] bindable | "shared" shareable | decl ) ;
 bindable    = "global" NAME type
             | "array"  NAME type size
             | "buffer" NAME size ;
+shareable   = bindable
+            | "list"   NAME type size
+            | "index"  NAME NAME PATH ;
 decl        = "const"  NAME literal
             | "list"   NAME type size
             | "queue"  NAME type size
@@ -269,6 +272,32 @@ that holds it. The name of an announced table may be used only where a type goes
 #para("1")[`global`, `array` and `buffer` with `bound` in front get their storage from the host. Scripts use them like
 other globals. Until the host binds them they use room inside the state. 19.7 says how to bind.]
 
+== Shared storage <decl-shared>
+
+#para("1")[`global`, `array`, `list`, `buffer` and `index` with `shared` in front only read another state's storage.
+The declaring state has no storage for them; the host gives it the same declaration of another state with
+`pinax_share` (19.7). Many states may read the same data at once, on many threads, with no copy and no lock.]
+
+#part("Constraints")
+
+#para("2")[Nothing changes a shared global: storing, `set`, `push`, `pop`, `clear`, `truncate`, `add_row`, storing
+into a field, `insert`, `remove`, the words that append to a buffer, and a `map_into` or `filter_into` destination are
+all refused. The processor also refuses, at load, bytecode that changes a shared global.]
+#ex("spec", "08-shared-write.pnx")
+
+#para("3")[A shared collection is not passed as a collection parameter (9.9) or as a host word's `buffer` parameter,
+since the receiver could change it. Put reading work in words that name the shared global.]
+#ex("spec", "08-shared-param.pnx")
+
+#para("4")[`shared` does not stand before `queue`, `pool`, `tasks`, `const` or `record`.]
+#ex("spec", "08-shared-queue.pnx")
+
+#part("Semantics")
+
+#para("5")[Until the host gives it, it is empty: lists and arrays have length 0, an index finds nothing, a scalar is 0
+and a buffer has no bytes. The code of a load runs as usual. Runs of the host are refused until every shared global is
+given (19.7).]
+
 #part("Diagnostics")
 #diag(
   ([A name that exists already], "this name is already defined"),
@@ -278,4 +307,8 @@ other globals. Until the host binds them they use room inside the state. 19.7 sa
   ([A `row` value unlike its field], "a value has another type than its field"),
   ([A path that does not hand over an `owned` row], "an owned value in a local is not given on every path (close, free or store it)"),
   ([An announced table that is never declared], "a table announced by forward is never declared"),
+  ([A shared global is changed], "a shared global is read-only: nothing here may change it"),
+  ([A shared collection passed as a parameter], "a shared collection is read-only: it is not given to a word as a parameter, which may change it"),
+  ([A shared buffer passed to a host word], "a shared buffer is read-only: it is not given to a host word, which may write it"),
+  ([Another declaration after `shared`], "shared stands before global, array, list, buffer or index"),
 )

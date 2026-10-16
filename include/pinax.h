@@ -227,6 +227,18 @@ typedef struct pinax_global {
 } pinax_global;
 PINAX_API pinax_err pinax_global_find(pinax_state *state, const char *name, pinax_global *out);
 
+/* Read-only sharing between states. A global the script declares `shared` (a scalar, array, list,
+ * buffer or index) has no storage of its own: this gives it the storage of the global `from` of
+ * `source`, without copying. Kind, type and capacity must be those of that declaration (else
+ * PINAX_ERR_SIGNATURE); an index also needs the same hash_key, and its table shared first from
+ * the same source. A list keeps the length it has now. From then on `source` is frozen: it does
+ * not run or load any more (PINAX_ERR_STATE), so its bytes do not change, and states on other
+ * threads may read them at the same time. It must stay open while a state uses what it lent.
+ * Nothing a script does writes a shared global (refused at load). Until every shared global is
+ * given, runs are refused with PINAX_ERR_NOT_FOUND; the code of a load reads them as empty. After
+ * pinax_image_open() or pinax_clone(), give them again. */
+PINAX_API pinax_err pinax_share(pinax_state *state, const char *global, pinax_state *source, const char *from);
+
 /* ---- loading ----------------------------------------------------------------------- */
 
 enum {

@@ -55,9 +55,23 @@ A message is bytes. A row of records is packed with `bytes.pack` and the receive
 (chapter 11), so both sides declare the same record. When a closed channel is empty, `receive` fails with `not_found`,
 and the receiver reads that failure as the end.
 
-#qa[Can two states use the same global?][Not to write it. What states share is the messages of channels: when several
-states change the same value, the race cannot be caught at load. When every run waits for a channel and nothing is left
-to send, the loop ends those runs with `PINAX_ERR_DEADLOCK` (standard 17.4).]
+#qa[Can two states use the same global?][Not one that changes. When several states change the same value, the race
+cannot be caught at load. What changed is passed on in the messages of channels. When every run waits for a channel and
+nothing is left to send, the loop ends those runs with `PINAX_ERR_DEADLOCK` (standard 17.4).]
+
+Large data that is only read (a dictionary, a rate table, a word list and its index) is not loaded into every state;
+one copy is read by all. One state loads the data, and the states that read it write `shared` in front of the same
+declarations. When the host lends them the data state's storage with `pinax_share`, they read the same bytes without a
+copy. Code that changes a shared global is refused at load, and the state that lent its storage neither runs nor loads
+from then on. Since the bytes do not change, several threads read them together without locks.
+
+#ex("manual", "14-shared.c")
+
+An index is given after its table, since the index's slots point at the table's rows.
+
+#mistake[A shared list can be passed to a word that adds it up][It cannot. A word that takes a collection parameter can
+change that collection, so a shared collection is not passed as a parameter (standard 8.13). Put the reading in a word
+that names the shared global.]
 
 == In a web page and in node
 
@@ -87,4 +101,5 @@ and clones, and `extern` are in clauses 18 and 19 of the standard, with examples
 - While a run stopped by the budget remains, new runs are refused; go back to an image (19.5, 19.9).
 - For several cores, open several states and run them on the host loop; connect them with the messages of channels
   (17.4).
+- Data that is only read is declared `shared` and read as one copy through `pinax_share` (8.13, 19.7).
 ]
