@@ -115,6 +115,10 @@ NULL). `pinax_handle_release` 는 핸들을 돌려준다.]
 
 #ex("spec", "19-await.c")
 
+#para("2")[호스트 루프(17.4)가 돌리는 상태에서는 호스트 낱말이 `pinax_call_pending` 대신 `pinax_loop_pending` 으로
+표를 받고, 어느 스레드에서든 `pinax_loop_complete` 로 일을 끝낸다. 루프는 그 상태의 스레드에서 `pinax_complete`
+를 부르고 실행을 잇는다.]
+
 == 상과 복제 <host-image>
 
 #para("1")[#term("상", en: "image")은 상태 전체다: 코드, 선언, 전역, 칸, 구역, 멈춘 실행과 작업. `pinax_image_save`

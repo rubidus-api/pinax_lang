@@ -61,3 +61,30 @@ A missing file is `err.not_found`.]
 
 #ex("spec", "17-env.pnx")
 #ex("spec", "17-random-clock.pnx")
+
+== Channels and the host loop <host-channel>
+
+#para("1")[A #term("channel") is a line of byte messages, up to a set number of them. The host names a channel and
+registers it in a state as a module of that name (`pinax_channel_register`, library `libpinax_host`). The states that
+registered the same channel pass messages to each other. They share no memory: a message is copied in and copied out.
+#table(columns: (auto, auto, 1fr), inset: 5pt, stroke: 0.5pt + luma(170),
+  [*Word*], [*Signature*], [*Meaning*],
+  [`send`], [`(msg str or fail)`], [puts a message in; waits while the channel is full],
+  [`receive`], [`(gives msg str or fail)`], [takes the message that came first; waits while it is empty],
+  [`close`], [`()`], [no more messages go in],
+)]
+
+#para("2")[`send` fails with `err.full` when the message is longer than the channel allows, and with `err.cancelled`
+once the channel is closed. `receive` fails with `err.not_found` on a channel that is closed and empty. Messages left in
+a closed channel are still taken.]
+
+#para("3")[Only the task that called waits (14.2); the other tasks of the state go on. Only runs the host loop runs
+(`pinax_loop_start`) wait. In any other run, a `send` or `receive` that would have to wait ends the run with the fault
+`PINAX_ERR_STATE`.]
+
+#para("4")[The #term("host loop") runs states on a set number of threads. A state runs on one thread at a time. A run
+whose budget (19.5) is used up goes to the back of the line, and a run that waits gives its thread up. While the host
+waits in `pinax_loop_wait`, when every run left waits for a channel and no host operation is outstanding, the loop ends
+all of them with `PINAX_ERR_DEADLOCK`.]
+
+#ex("spec", "17-channel.c")

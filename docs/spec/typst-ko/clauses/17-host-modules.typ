@@ -60,3 +60,29 @@
 
 #ex("spec", "17-env.pnx")
 #ex("spec", "17-random-clock.pnx")
+
+== 채널과 호스트 루프 <host-channel>
+
+#para("1")[#term("채널", en: "channel")은 바이트 메시지를 정한 수까지 담는 줄이다. 호스트가 채널에 이름을 짓고 상태에
+그 이름의 모듈로 등록한다(`pinax_channel_register`, 라이브러리 `libpinax_host`). 같은 채널을 등록한 상태들이
+메시지를 주고받는다. 상태끼리 함께 쓰는 메모리는 없다: 메시지는 들어갈 때와 나올 때 복사된다.
+#table(columns: (auto, auto, 1fr), inset: 5pt, stroke: 0.5pt + luma(170),
+  [*낱말*], [*서명*], [*뜻*],
+  [`send`], [`(msg str or fail)`], [메시지를 넣는다. 채널이 차 있으면 기다린다],
+  [`receive`], [`(gives msg str or fail)`], [가장 먼저 들어온 메시지를 꺼낸다. 비어 있으면 기다린다],
+  [`close`], [`()`], [더는 넣지 못하게 한다],
+)]
+
+#para("2")[`send` 는 메시지가 채널이 정한 길이보다 길면 `err.full`, 채널이 닫힌 뒤에는 `err.cancelled` 로
+실패한다. `receive` 는 닫히고 빈 채널에서 `err.not_found` 로 실패한다. 닫힌 채널에 남은 메시지는 그대로 꺼낸다.]
+
+#para("3")[기다리는 것은 부른 작업뿐이다(14.2). 같은 상태의 다른 작업은 계속 돈다. 기다릴 수 있는 것은 호스트
+루프(`pinax_loop_start`)가 돌리는 실행뿐이다. 다른 실행에서 기다려야 하는 `send` 나 `receive` 는 결함
+`PINAX_ERR_STATE` 로 실행을 끝낸다.]
+
+#para("4")[#term("호스트 루프", en: "host loop")는 상태들을 정한 수의 스레드에서 돌린다. 한 상태는 한 번에 한 스레드에서만
+돈다. 예산(19.5)이 다한 실행은 줄의 뒤로 가고, 기다리는 실행은 스레드를 내놓는다. 호스트가 `pinax_loop_wait`
+로 기다리는 동안 남은 실행이 모두 채널을 기다리고 끝나지 않은 호스트 일이 없으면, 루프는 그 실행을 모두
+`PINAX_ERR_DEADLOCK` 으로 끝낸다.]
+
+#ex("spec", "17-channel.c")

@@ -116,7 +116,8 @@ cc -std=c99 -Iinclude host.c build/native/libpinax.a -lm -o host
 
 상태는 `block` 안에만 삽니다. Pinax 는 시스템에 메모리를 청하지 않습니다. 표준 호스트
 모듈(`io` `file` `clock` `random` `env`)은 `src/host/` 에 있는 평범한 호스트 낱말이고, 필요한
-호스트만 링크합니다.
+호스트만 링크합니다. 같은 라이브러리 `libpinax_host.a` 에는 여러 상태를 몇 개의 스레드에서 돌리는
+호스트 루프와, 상태 사이로 메시지를 나르는 채널도 있습니다(`src/host/pinax_loop.h`).
 
 ## 문서
 

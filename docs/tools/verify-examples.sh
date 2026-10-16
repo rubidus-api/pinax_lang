@@ -18,6 +18,8 @@
 #   rem hide                 an example used only by others (not run on its own)
 #   // embed                 (first line of a .c file) compiled with include/pinax.h and the
 #                            library, then run; exit 0
+#   // embed host            the same, with the host library as well (src/host: the standard
+#                            modules, the loop and its channels) and the system's threads
 # The contract lines are removed before the program runs, so the line numbers in messages
 # are those of the program as printed. Output: <tree>/build/examples-out/NAME.{src,out,kind}.
 set -u
@@ -25,6 +27,7 @@ tree=${1:?usage: verify-examples.sh spec|manual}
 root=$(pwd)
 pnx=${PNX:-$root/build/native/pnx}
 lib=${PINAX_LIB:-$root/build/native/libpinax.a}
+host_lib=${PINAX_HOST_LIB:-$root/build/native/libpinax_host.a}
 cc=${CC:-cc}
 [ -x "$pnx" ] || { echo "verify-examples: no $pnx (run ./nob first)" >&2; exit 2; }
 src_dir=$root/docs/$tree/examples
@@ -111,7 +114,12 @@ for f in "$src_dir"/*.c; do
     head -n 1 "$f" | grep -q '^// embed' || { fail "$n" "a C example starts with // embed" /dev/null; continue; }
     sed '1d' "$f" >"$out_dir/$n.src"
     exe=$run_dir/${n%.c}
-    if ! "$cc" -std=c23 -Wall -Wextra -Werror -I"$root/include" "$f" "$lib" -lm -o "$exe" 2>"$run_dir/.cc"; then
+    if head -n 1 "$f" | grep -q '^// embed host$'; then
+        set -- -I"$root/src/host" "$f" "$host_lib" "$lib" -lm -pthread
+    else
+        set -- "$f" "$lib" -lm
+    fi
+    if ! "$cc" -std=c23 -Wall -Wextra -Werror -I"$root/include" "$@" -o "$exe" 2>"$run_dir/.cc"; then
         fail "$n" "does not compile" "$run_dir/.cc"; continue
     fi
     (cd "$run_dir" && "$exe" >"$run_dir/.stdout" 2>"$run_dir/.stderr")

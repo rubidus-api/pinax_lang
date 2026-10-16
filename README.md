@@ -119,7 +119,9 @@ cc -std=c99 -Iinclude host.c build/native/libpinax.a -lm -o host
 
 The state lives entirely inside `block`; Pinax never asks the system for memory. The standard
 host modules (`io`, `file`, `clock`, `random`, `env`) are ordinary host words in
-`src/host/`, linked only by hosts that want them.
+`src/host/`, linked only by hosts that want them. The same library, `libpinax_host.a`, has a
+host loop that runs many states on a few threads and channels that carry messages between
+them (`src/host/pinax_loop.h`).
 
 ## Documentation
 

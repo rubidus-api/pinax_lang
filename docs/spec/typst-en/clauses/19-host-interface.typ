@@ -117,6 +117,10 @@ token, outcome, values)` and calls `pinax_resume`.]
 
 #ex("spec", "19-await.c")
 
+#para("2")[In a state the host loop (17.4) runs, a host word takes its token with `pinax_loop_pending` in place of
+`pinax_call_pending` and finishes the work with `pinax_loop_complete`, from any thread. The loop calls `pinax_complete`
+on the state's thread and continues the run.]
+
 == Images and clones <host-image>
 
 #para("1")[An #term("image") is a whole state: code, declarations, globals, slots, regions, stopped runs and tasks.

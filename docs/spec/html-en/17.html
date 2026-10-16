@@ -64,4 +64,96 @@ demo
 </code></pre><p class="ex-label">Output</p><pre><code data-lang="text">$ pnx 17-random-clock.pnx
 a die in 0..5
 the monotonic clock does not go back
+</code></pre></div><h3>17.4 Channels and the host loop</h3><p class="para"><p><span class="pn">(1)</span> A <strong>channel</strong> is a line of byte messages, up to a set number of them. The host names a channel and registers it in a state as a module of that name (<code>pinax_channel_register</code>, library <code>libpinax_host</code>). The states that registered the same channel pass messages to each other. They share no memory: a message is copied in and copied out.</p><table><tr><td><strong>Word</strong></td><td><strong>Signature</strong></td><td><strong>Meaning</strong></td></tr><tr><td><code>send</code></td><td><code>(msg str or fail)</code></td><td>puts a message in; waits while the channel is full</td></tr><tr><td><code>receive</code></td><td><code>(gives msg str or fail)</code></td><td>takes the message that came first; waits while it is empty</td></tr><tr><td><code>close</code></td><td><code>()</code></td><td>no more messages go in</td></tr></table></p><p class="para"><span class="pn">(2)</span> <code>send</code> fails with <code>err.full</code> when the message is longer than the channel allows, and with <code>err.cancelled</code> once the channel is closed. <code>receive</code> fails with <code>err.not_found</code> on a channel that is closed and empty. Messages left in a closed channel are still taken.</p><p class="para"><span class="pn">(3)</span> Only the task that called waits (14.2); the other tasks of the state go on. Only runs the host loop runs (<code>pinax_loop_start</code>) wait. In any other run, a <code>send</code> or <code>receive</code> that would have to wait ends the run with the fault <code>PINAX_ERR_STATE</code>.</p><p class="para"><span class="pn">(4)</span> The <strong>host loop</strong> runs states on a set number of threads. A state runs on one thread at a time. A run whose budget (19.5) is used up goes to the back of the line, and a run that waits gives its thread up. While the host waits in <code>pinax_loop_wait</code>, when every run left waits for a channel and no host operation is outstanding, the loop ends all of them with <code>PINAX_ERR_DEADLOCK</code>.</p><div class="example embed"><p class="ex-file"><code>17-channel.c</code></p><pre><code data-lang="c"><span style="color: #d73948">#include</span> <span style="color: #198810">"</span><span style="color: #198810">pinax.h</span><span style="color: #198810">"</span>
+<span style="color: #d73948">#include</span> <span style="color: #198810">"</span><span style="color: #198810">pinax_loop.h</span><span style="color: #198810">"</span>
+<span style="color: #d73948">#include</span> <span style="color: #198810">&lt;</span><span style="color: #198810">stdio.h</span><span style="color: #198810">&gt;</span>
+<span style="color: #d73948">#include</span> <span style="color: #198810">&lt;</span><span style="color: #198810">string.h</span><span style="color: #198810">&gt;</span>
+
+<span style="color: #74747c">/*</span><span style="color: #74747c"> One state sends the numbers 1 to 100 through the channel `jobs`; two others take them and</span>
+<span style="color: #74747c">   add them up. The loop runs the three on two threads. </span><span style="color: #74747c">*/</span>
+<span style="color: #d73948">static</span> <span style="color: #d73948">const</span> <span style="color: #d73948">char</span> producer[] <span style="color: #d73948">=</span>
+    <span style="color: #198810">"</span><span style="color: #198810">use jobs</span><span style="color: #1d6c76">\n</span><span style="color: #198810">use str</span><span style="color: #1d6c76">\n</span><span style="color: #198810">"</span>
+    <span style="color: #198810">"</span><span style="color: #198810">word produce (n int gives r int)</span><span style="color: #1d6c76">\n</span><span style="color: #198810">"</span>
+    <span style="color: #198810">"</span><span style="color: #198810">  1 to i</span><span style="color: #1d6c76">\n</span><span style="color: #198810">"</span>
+    <span style="color: #198810">"</span><span style="color: #198810">  loop</span><span style="color: #1d6c76">\n</span><span style="color: #198810">"</span>
+    <span style="color: #198810">"</span><span style="color: #198810">    i n gt until</span><span style="color: #1d6c76">\n</span><span style="color: #198810">"</span>
+    <span style="color: #198810">"</span><span style="color: #198810">    i str.to_str jobs.send or_else (e) -1 return end</span><span style="color: #1d6c76">\n</span><span style="color: #198810">"</span>
+    <span style="color: #198810">"</span><span style="color: #198810">    i 1 add to i</span><span style="color: #1d6c76">\n</span><span style="color: #198810">"</span>
+    <span style="color: #198810">"</span><span style="color: #198810">  end</span><span style="color: #1d6c76">\n</span><span style="color: #198810">"</span>
+    <span style="color: #198810">"</span><span style="color: #198810">  jobs.close</span><span style="color: #1d6c76">\n</span><span style="color: #198810">"</span>
+    <span style="color: #198810">"</span><span style="color: #198810">  n</span><span style="color: #1d6c76">\n</span><span style="color: #198810">"</span>
+    <span style="color: #198810">"</span><span style="color: #198810">end</span><span style="color: #1d6c76">\n</span><span style="color: #198810">"</span>;
+<span style="color: #d73948">static</span> <span style="color: #d73948">const</span> <span style="color: #d73948">char</span> consumer[] <span style="color: #d73948">=</span>
+    <span style="color: #198810">"</span><span style="color: #198810">use jobs</span><span style="color: #1d6c76">\n</span><span style="color: #198810">use str</span><span style="color: #1d6c76">\n</span><span style="color: #198810">"</span>
+    <span style="color: #198810">"</span><span style="color: #198810">word consume (n int gives r int)</span><span style="color: #1d6c76">\n</span><span style="color: #198810">"</span>
+    <span style="color: #198810">"</span><span style="color: #198810">  0 to total</span><span style="color: #1d6c76">\n</span><span style="color: #198810">"</span>
+    <span style="color: #198810">"</span><span style="color: #198810">  loop</span><span style="color: #1d6c76">\n</span><span style="color: #198810">"</span>
+    <span style="color: #198810">"</span><span style="color: #198810">    jobs.receive or_else (e) </span><span style="color: #1d6c76">\"</span><span style="color: #1d6c76">\"</span><span style="color: #198810"> end to m      rem not_found: closed and empty</span><span style="color: #1d6c76">\n</span><span style="color: #198810">"</span>
+    <span style="color: #198810">"</span><span style="color: #198810">    m str.is_empty until</span><span style="color: #1d6c76">\n</span><span style="color: #198810">"</span>
+    <span style="color: #198810">"</span><span style="color: #198810">    m str.to_int or_else (e) 0 end total add to total</span><span style="color: #1d6c76">\n</span><span style="color: #198810">"</span>
+    <span style="color: #198810">"</span><span style="color: #198810">  end</span><span style="color: #1d6c76">\n</span><span style="color: #198810">"</span>
+    <span style="color: #198810">"</span><span style="color: #198810">  total</span><span style="color: #1d6c76">\n</span><span style="color: #198810">"</span>
+    <span style="color: #198810">"</span><span style="color: #198810">end</span><span style="color: #1d6c76">\n</span><span style="color: #198810">"</span>;
+
+<span style="color: #d73948">typedef</span> <span style="color: #d73948">struct</span> worker {
+    <span style="color: #d73948">unsigned</span> <span style="color: #d73948">char</span> block[<span style="color: #b60157">1</span> <span style="color: #d73948">&lt;&lt;</span> <span style="color: #b60157">20</span>];
+    pinax_state <span style="color: #d73948">*</span>state;
+    pinax_word word;
+    <span style="color: #4b69c6">int64_t</span> in, out;
+    pinax_args args;
+    pinax_err outcome;
+} <span style="color: #4b69c6">worker</span>;
+<span style="color: #d73948">static</span> worker w[<span style="color: #b60157">3</span>];
+
+<span style="color: #d73948">static</span> <span style="color: #d73948">void</span> <span style="color: #4b69c6">done</span>(<span style="color: #d73948">void</span> <span style="color: #d73948">*</span>user, pinax_state <span style="color: #d73948">*</span>state, pinax_err outcome) {
+    (<span style="color: #d73948">void</span>)state;
+    ((worker <span style="color: #d73948">*</span>)user)-&gt;outcome <span style="color: #d73948">=</span> outcome;
+}
+
+<span style="color: #d73948">static</span> <span style="color: #d73948">int</span> <span style="color: #4b69c6">start</span>(pinax_loop <span style="color: #d73948">*</span>loop, pinax_channel <span style="color: #d73948">*</span>jobs, worker <span style="color: #d73948">*</span>x, <span style="color: #d73948">const</span> <span style="color: #d73948">char</span> <span style="color: #d73948">*</span>source, <span style="color: #d73948">const</span> <span style="color: #d73948">char</span> <span style="color: #d73948">*</span>word) {
+    pinax_config config <span style="color: #d73948">=</span> {.struct_size <span style="color: #d73948">=</span> <span style="color: #d73948">sizeof</span> config, .budget <span style="color: #d73948">=</span> <span style="color: #b60157">1000</span>};
+    <span style="color: #d73948">if</span> (<span style="color: #4b69c6">pinax_open</span>((pinax_mem){x-&gt;block, <span style="color: #d73948">sizeof</span> x-&gt;block}, <span style="color: #d73948">&amp;</span>config, <span style="color: #d73948">&amp;</span>x-&gt;state) <span style="color: #d73948">!=</span> PINAX_OK <span style="color: #d73948">||</span>
+        <span style="color: #4b69c6">pinax_channel_register</span>(x-&gt;state, jobs) <span style="color: #d73948">!=</span> PINAX_OK <span style="color: #d73948">||</span>
+        <span style="color: #4b69c6">pinax_load</span>(x-&gt;state, <span style="color: #198810">"</span><span style="color: #198810">main</span><span style="color: #198810">"</span>, (pinax_str){(<span style="color: #d73948">const</span> <span style="color: #d73948">unsigned</span> <span style="color: #d73948">char</span> <span style="color: #d73948">*</span>)source, <span style="color: #4b69c6">strlen</span>(source)}, PINAX_LOAD_CODE) <span style="color: #d73948">||</span>
+        <span style="color: #4b69c6">pinax_find</span>(x-&gt;state, word, <span style="color: #198810">"</span><span style="color: #198810">(n int gives r int)</span><span style="color: #198810">"</span>, <span style="color: #b60157">0</span>, <span style="color: #d73948">&amp;</span>x-&gt;word) <span style="color: #d73948">!=</span> PINAX_OK)
+        <span style="color: #d73948">return</span> <span style="color: #b60157">1</span>;
+    x-&gt;args <span style="color: #d73948">=</span> (pinax_args){.i <span style="color: #d73948">=</span> <span style="color: #d73948">&amp;</span>x-&gt;in, .ri <span style="color: #d73948">=</span> <span style="color: #d73948">&amp;</span>x-&gt;out};
+    <span style="color: #d73948">return</span> <span style="color: #4b69c6">pinax_loop_start</span>(loop, x-&gt;state, x-&gt;word, <span style="color: #d73948">&amp;</span>x-&gt;args, done, x) <span style="color: #d73948">!=</span> PINAX_OK;
+}
+
+<span style="color: #d73948">int</span> <span style="color: #4b69c6">main</span>(<span style="color: #d73948">void</span>) {
+    pinax_loop <span style="color: #d73948">*</span>loop;
+    pinax_channel <span style="color: #d73948">*</span>jobs;
+    <span style="color: #d73948">if</span> (<span style="color: #4b69c6">pinax_loop_open</span>(<span style="color: #b60157">2</span>, <span style="color: #d73948">&amp;</span>loop) <span style="color: #d73948">!=</span> PINAX_OK <span style="color: #d73948">||</span> <span style="color: #4b69c6">pinax_channel_open</span>(loop, <span style="color: #198810">"</span><span style="color: #198810">jobs</span><span style="color: #198810">"</span>, <span style="color: #b60157">4</span>, <span style="color: #b60157">20</span>, <span style="color: #d73948">&amp;</span>jobs) <span style="color: #d73948">!=</span> PINAX_OK)
+        <span style="color: #d73948">return</span> <span style="color: #b60157">1</span>;
+    w[<span style="color: #b60157">0</span>].in <span style="color: #d73948">=</span> <span style="color: #b60157">100</span>;
+    <span style="color: #d73948">if</span> (<span style="color: #4b69c6">start</span>(loop, jobs, <span style="color: #d73948">&amp;</span>w[<span style="color: #b60157">1</span>], consumer, <span style="color: #198810">"</span><span style="color: #198810">consume</span><span style="color: #198810">"</span>) <span style="color: #d73948">||</span> <span style="color: #4b69c6">start</span>(loop, jobs, <span style="color: #d73948">&amp;</span>w[<span style="color: #b60157">2</span>], consumer, <span style="color: #198810">"</span><span style="color: #198810">consume</span><span style="color: #198810">"</span>) <span style="color: #d73948">||</span>
+        <span style="color: #4b69c6">start</span>(loop, jobs, <span style="color: #d73948">&amp;</span>w[<span style="color: #b60157">0</span>], producer, <span style="color: #198810">"</span><span style="color: #198810">produce</span><span style="color: #198810">"</span>))
+        <span style="color: #d73948">return</span> <span style="color: #b60157">1</span>;
+    <span style="color: #4b69c6">pinax_loop_wait</span>(loop);
+    <span style="color: #4b69c6">printf</span>(<span style="color: #198810">"</span><span style="color: #198810">sent </span><span style="color: #b60157">%lld</span><span style="color: #198810">, received </span><span style="color: #b60157">%lld</span><span style="color: #1d6c76">\n</span><span style="color: #198810">"</span>, (<span style="color: #d73948">long</span> <span style="color: #d73948">long</span>)w[<span style="color: #b60157">0</span>].out, (<span style="color: #d73948">long</span> <span style="color: #d73948">long</span>)(w[<span style="color: #b60157">1</span>].out <span style="color: #d73948">+</span> w[<span style="color: #b60157">2</span>].out));
+
+    <span style="color: #74747c">/*</span><span style="color: #74747c"> the channel is closed and empty now: one more receiver ends at once </span><span style="color: #74747c">*/</span>
+    w[<span style="color: #b60157">1</span>].in <span style="color: #d73948">=</span> <span style="color: #b60157">0</span>;
+    <span style="color: #d73948">if</span> (<span style="color: #4b69c6">pinax_loop_start</span>(loop, w[<span style="color: #b60157">1</span>].state, w[<span style="color: #b60157">1</span>].word, <span style="color: #d73948">&amp;</span>w[<span style="color: #b60157">1</span>].args, done, <span style="color: #d73948">&amp;</span>w[<span style="color: #b60157">1</span>]) <span style="color: #d73948">!=</span> PINAX_OK)
+        <span style="color: #d73948">return</span> <span style="color: #b60157">1</span>;
+    <span style="color: #4b69c6">pinax_loop_wait</span>(loop);
+    <span style="color: #4b69c6">printf</span>(<span style="color: #198810">"</span><span style="color: #198810">after close: </span><span style="color: #b60157">%lld</span><span style="color: #1d6c76">\n</span><span style="color: #198810">"</span>, (<span style="color: #d73948">long</span> <span style="color: #d73948">long</span>)w[<span style="color: #b60157">1</span>].out);
+
+    <span style="color: #74747c">/*</span><span style="color: #74747c"> a receiver on a channel nobody sends to: every run left waits, so the loop ends it </span><span style="color: #74747c">*/</span>
+    pinax_channel <span style="color: #d73948">*</span>idle;
+    <span style="color: #4b69c6">pinax_close</span>(w[<span style="color: #b60157">2</span>].state);
+    <span style="color: #d73948">if</span> (<span style="color: #4b69c6">pinax_channel_open</span>(loop, <span style="color: #198810">"</span><span style="color: #198810">jobs</span><span style="color: #198810">"</span>, <span style="color: #b60157">1</span>, <span style="color: #b60157">20</span>, <span style="color: #d73948">&amp;</span>idle) <span style="color: #d73948">!=</span> PINAX_OK <span style="color: #d73948">||</span> <span style="color: #4b69c6">start</span>(loop, idle, <span style="color: #d73948">&amp;</span>w[<span style="color: #b60157">2</span>], consumer, <span style="color: #198810">"</span><span style="color: #198810">consume</span><span style="color: #198810">"</span>))
+        <span style="color: #d73948">return</span> <span style="color: #b60157">1</span>;
+    <span style="color: #4b69c6">pinax_loop_wait</span>(loop);
+    <span style="color: #4b69c6">printf</span>(<span style="color: #198810">"</span><span style="color: #198810">nobody sends: </span><span style="color: #b60157">%s</span><span style="color: #1d6c76">\n</span><span style="color: #198810">"</span>, w[<span style="color: #b60157">2</span>].outcome <span style="color: #d73948">==</span> PINAX_ERR_DEADLOCK <span style="color: #d73948">?</span> <span style="color: #198810">"</span><span style="color: #198810">deadlock</span><span style="color: #198810">"</span> <span style="color: #d73948">:</span> <span style="color: #198810">"</span><span style="color: #198810">?</span><span style="color: #198810">"</span>);
+    <span style="color: #4b69c6">pinax_loop_close</span>(loop);
+    <span style="color: #d73948">for</span> (<span style="color: #d73948">int</span> k <span style="color: #d73948">=</span> <span style="color: #b60157">0</span>; k <span style="color: #d73948">&lt;</span> <span style="color: #b60157">3</span>; <span style="color: #d73948">++</span>k)
+        <span style="color: #4b69c6">pinax_close</span>(w[k].state);
+    <span style="color: #d73948">return</span> <span style="color: #b60157">0</span>;
+}
+</code></pre><p class="ex-label">Output</p><pre><code data-lang="text">$ ./17-channel
+sent 100, received 5050
+after close: 0
+nobody sends: deadlock
 </code></pre></div></main><nav class="bottom"><a href="index.html">Start</a> · <a href="16.html">Previous</a> · <a href="18.html">Next</a> · <a href="../html-ko/17.html">한국어</a></nav></body></html>

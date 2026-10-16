@@ -40,6 +40,25 @@ script stored in globals until then stays.
 continue the stopped run to its end or give it up with `pinax_abort`. When even the globals must go back to how they
 were before the run, save an image before running and open the state again from it (standard 19.9).]
 
+== On several threads
+
+One state runs on one thread at a time. To use several cores, open several states. The host loop of the host library
+(`pinax_loop.h`) runs states on a set number of threads, and #strong[channels] carry messages between them. The host
+hands a state and a word to the loop with `pinax_loop_start` and hears that it ended through the function it gave
+there. The host names a channel and registers it as a module; the script writes `use orders` and then `orders.send`,
+`orders.receive` and `orders.close`. A task that puts into a full channel or takes from an empty one waits, and its
+thread runs other states meanwhile.
+
+#ex("manual", "14-threads.c")
+
+A message is bytes. A row of records is packed with `bytes.pack` and the receiver unpacks it with `bytes.unpack`
+(chapter 11), so both sides declare the same record. When a closed channel is empty, `receive` fails with `not_found`,
+and the receiver reads that failure as the end.
+
+#qa[Can two states use the same global?][Not to write it. What states share is the messages of channels: when several
+states change the same value, the race cannot be caught at load. When every run waits for a channel and nothing is left
+to send, the loop ends those runs with `PINAX_ERR_DEADLOCK` (standard 17.4).]
+
 == In a web page and in node
 
 `./nob wasm` builds the core as the WebAssembly module `build/wasm/pinax.wasm` and puts the JavaScript module
@@ -66,4 +85,6 @@ and clones, and `extern` are in clauses 18 and 19 of the standard, with examples
 - A failing host word is a failure with `or fail`, a fault without (19.3).
 - What a script can do outside itself is only what the host registered (13.3, 18).
 - While a run stopped by the budget remains, new runs are refused; go back to an image (19.5, 19.9).
+- For several cores, open several states and run them on the host loop; connect them with the messages of channels
+  (17.4).
 ]

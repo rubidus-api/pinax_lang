@@ -69,11 +69,17 @@ static const char *const proven_hosted[] = {
     "platform/proven_sys_random.c", "platform/proven_sys_time.c",
 };
 
-// The standard host modules and the command pnx (RFC-0015): hosted, built on pinax.h.
-static const char *const host_sources[] = {"src/host/pinax_host.c"};
+// The threads of the loop (RFC-0020) go into the host library itself, so that a host that runs
+// the loop links libpinax_host.a and libpinax.a and nothing else.
+static const char *const proven_threads[] = {"platform/proven_sys_thread.c"};
+
+// The standard host modules, the loop and its channels, and the command pnx (RFC-0015,
+// RFC-0020): hosted, built on pinax.h.
+static const char *const host_sources[] = {"src/host/pinax_host.c", "src/host/pinax_loop.c"};
 static const char *const pnx_sources[] = {"src/host/pnx_main.c", "src/host/pnx_fmt.c"};
 
 static const char *const test_sources[] = {"tests/test_main.c"};
+static const char *const loop_test_sources[] = {"tests/test_loop.c"};
 
 // Public files and directories; `git ls-files` must stay inside.
 static const char *const public_paths[] = {
@@ -211,13 +217,31 @@ static int build_lib(const target_t *t, char *lib, size_t lib_cap, char *hosted_
     if (compile_set(t, own_flags(t), "", host_sources, COUNT(host_sources), objdir, host_objs, sizeof host_objs) ||
         compile_set(t, own_flags(t), "", pnx_sources, COUNT(pnx_sources), objdir, pnx_objs, sizeof pnx_objs))
         return 1;
+    if (compile_set(t, proven_flags(t), "vendor/proven/", proven_threads, COUNT(proven_threads), objdir, host_objs,
+                    sizeof host_objs))
+        return 1;
+    // The host library is whole: a host links libpinax_host.a and then libpinax.a, nothing more.
+    // It carries the parts of proven that touch the system and, again, the portable ones they
+    // call (random calls back into the system's random): a linker reads an archive once, but
+    // goes round inside one archive until nothing more can be found there.
+    static char proven_objs[8192];
+    proven_objs[0] = '\0';
+    for (size_t k = 0; k < COUNT(proven_portable) + COUNT(proven_lib_hosted); ++k) {
+        char src[512], obj[1024];
+        snprintf(src, sizeof src, "vendor/proven/%s",
+                 k < COUNT(proven_portable) ? proven_portable[k] : proven_lib_hosted[k - COUNT(proven_portable)]);
+        object_path(obj, sizeof obj, objdir, src);
+        size_t len = strlen(proven_objs);
+        snprintf(proven_objs + len, sizeof proven_objs - len, " %s", obj);
+    }
     snprintf(host_lib, sizeof host_lib, "%s/libpinax_host.a", dir);
-    snprintf(cmd, sizeof cmd, "rm -f %s && %s rcs %s%s", host_lib, t->ar, host_lib, host_objs);
+    snprintf(cmd, sizeof cmd, "rm -f %s && %s rcs %s%s%s%s", host_lib, t->ar, host_lib, host_objs, hosted_objs,
+             proven_objs);
     if (run(cmd))
         return 1;
     snprintf(pnx, sizeof pnx, "%s/pnx%s", dir, t->exe);
-    snprintf(cmd, sizeof cmd, "%s %s -o %s%s %s%s %s %s", t->cc, t->sanitize ? "-fsanitize=address,undefined" : "", pnx,
-             pnx_objs, host_lib, hosted_objs, lib, strcmp(t->exe, ".exe") == 0 ? "-static -lbcrypt" : "-lm -ldl");
+    snprintf(cmd, sizeof cmd, "%s %s -o %s%s %s %s %s", t->cc, t->sanitize ? "-fsanitize=address,undefined" : "", pnx,
+             pnx_objs, host_lib, lib, strcmp(t->exe, ".exe") == 0 ? "-static -lbcrypt" : "-lm -ldl -pthread");
     if (run(cmd))
         return 1;
     printf("nob: built %s\n", pnx);
@@ -244,14 +268,25 @@ static int cmd_test(const target_t *t) {
     // Objects first, then the archive, so that the hosted proven objects can pull from it.
     char cmd[20000];
     snprintf(cmd, sizeof cmd, "%s %s -o %s%s%s %s %s", t->cc, t->sanitize ? "-fsanitize=address,undefined" : "", exe,
-             objs, hosted, lib, strcmp(t->exe, ".exe") == 0 ? "-static -lbcrypt" : "-lm");
+             objs, hosted, lib, strcmp(t->exe, ".exe") == 0 ? "-static -lbcrypt" : "-lm -pthread");
+    if (run(cmd))
+        return 1;
+    // the loop and its channels, with real threads: the host library as a host links it
+    char loop_exe[512];
+    snprintf(loop_exe, sizeof loop_exe, "%s/pinax_loop_tests%s", dir, t->exe);
+    objs[0] = '\0';
+    if (compile_set(t, own_flags(t), "", loop_test_sources, COUNT(loop_test_sources), objdir, objs, sizeof objs))
+        return 1;
+    snprintf(cmd, sizeof cmd, "%s %s -o %s%s %s/libpinax_host.a %s %s", t->cc,
+             t->sanitize ? "-fsanitize=address,undefined" : "", loop_exe, objs, dir, lib,
+             strcmp(t->exe, ".exe") == 0 ? "-static -lbcrypt" : "-lm -pthread");
     if (run(cmd))
         return 1;
     if (strcmp(t->name, "native") != 0) {
-        printf("nob: built %s (cross target; run it on the target)\n", exe);
+        printf("nob: built %s and %s (cross target; run them on the target)\n", exe, loop_exe);
         return 0;
     }
-    snprintf(cmd, sizeof cmd, "./%s", exe);
+    snprintf(cmd, sizeof cmd, "./%s && ./%s", exe, loop_exe);
     if (run(cmd))
         return 1;
     if (exists("tests/embed/host_min.c")) { // the embedding example: the public header and the library, nothing else
