@@ -45,13 +45,13 @@
 
 === 새 글 만들기
 
-#para("6")[결과는 구역에 쓴 새 바이트다. 수로 읽는 낱말은 실패할 수 있다.
+#para("6")[결과는 구역에 쓴 새 바이트다. 구역이 모자라면 결함 `full` 이다(12.2). 수로 읽는 낱말은 실패할 수 있다.
 #table(columns: (auto, auto, 1fr), inset: 5pt, stroke: 0.5pt + luma(170),
   [*낱말*], [*서명*], [*뜻*],
   [`upper` `lower`], [`(str gives str)`], [ASCII 대소문자 바꾸기],
-  [`repeat`], [`(s str, n int gives str)`], [`n` 번 이은 글],
+  [`repeat`], [`(s str, n int gives str)`], [`n` 번 이은 글. `n` 이 음수면 결함 `range`],
   [`replace`], [`(s str, old str, new str gives str)`], [모든 `old` 를 `new` 로],
-  [`pad_left` `pad_right`], [`(s str, width int gives str)`], [스페이스로 채워 `width` 바이트로. 이미 길면 그대로],
+  [`pad_left` `pad_right`], [`(s str, width int gives str)`], [스페이스로 채워 `width` 바이트로. 이미 길면 그대로. `width` 가 음수이거나 2#super[32] 이상이면 결함 `range`],
   [`to_str`], [`(int gives str)`], [십진 글. `dec(N)` 은 점 아래 `N` 자리까지(7.5)],
   [`to_dec`], [`(s str, N gives dec(N) or fail)`], [십진 소수로 읽기: 부호, 숫자, 점과 그 아래 `N` 자리까지(`N` 은 상수). 자리가 더 많거나 다른 꼴이면 `err.format`],
   [`to_int`], [`(str gives int or fail)`], [십진으로 읽기. 부호 하나와 숫자만 받는다(공백도 안 된다). 아니거나 64 비트를 넘으면 `err.format`],

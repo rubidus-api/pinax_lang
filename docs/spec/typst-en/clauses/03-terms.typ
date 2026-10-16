@@ -48,6 +48,13 @@ yields (clause 14).]
 #para("16")[#term("module"): a named collection of words and values: standard modules, host modules, modules written in
 Pinax (clause 13).]
 
+#para("16a")[#strong[Run] (of a word): from when the host starts a word (`pinax_run`, the code of a load, a line of
+`pinax_eval`) until that word ends or stops with a fault. Stopping on the budget and going on again is the same run
+(19.5).]
+
+#para("16b")[#term("budget"): the number of instructions one run may execute at a time. When it is used up the run
+stops and returns to the host, which goes on with it. 0 means no limit (19.2).]
+
 #para("17")[In this document "shall" and "cannot" bind programs. A program that breaks them does not conform; the
 processor refuses it (what can be known at load) or stops with a fault (what can be known only while running). Each
 rule says which. "May" is a permission.]

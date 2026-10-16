@@ -46,13 +46,14 @@ The comparison words `eq` `ne` `lt` and the rest also compare strings in byte or
 
 === Making new text
 
-#para("6")[The results are new bytes written in the region. The words that read numbers can fail.
+#para("6")[The results are new bytes written in the region; when the region is used up it is the fault `full` (12.2).
+The words that read numbers can fail.
 #table(columns: (auto, auto, 1fr), inset: 5pt, stroke: 0.5pt + luma(170),
   [*Word*], [*Signature*], [*Meaning*],
   [`upper` `lower`], [`(str gives str)`], [ASCII case changed],
-  [`repeat`], [`(s str, n int gives str)`], [`n` copies joined],
+  [`repeat`], [`(s str, n int gives str)`], [`n` copies joined; a negative `n` is the fault `range`],
   [`replace`], [`(s str, old str, new str gives str)`], [every `old` replaced by `new`],
-  [`pad_left` `pad_right`], [`(s str, width int gives str)`], [filled with spaces to `width` bytes; as it is when longer],
+  [`pad_left` `pad_right`], [`(s str, width int gives str)`], [filled with spaces to `width` bytes; as it is when longer; a `width` below 0 or from 2#super[32] up is the fault `range`],
   [`to_str`], [`(int gives str)`], [decimal text; a `dec(N)` with its `N` digits after the point (7.5)],
   [`to_dec`], [`(s str, N gives dec(N) or fail)`], [read a decimal: a sign, digits, and a point with at most `N` digits after it (`N` a constant); more digits, or anything else, `err.format`],
   [`to_int`], [`(str gives int or fail)`], [read as decimal: one sign and digits only (no spaces); otherwise, or beyond 64 bits, `err.format`],

@@ -63,8 +63,8 @@ refused. `set` writes globals only (9.4).]
 
 == Globals <decl-global>
 
-#para("1")[`global NAME type` makes a #term("global") that holds one value. The type is `int`, `bool`, `str(N)`, a
-declared type, a row type (the name of a table) or a handle type; not `str` (7.3).]
+#para("1")[`global NAME type` makes a #term("global") that holds one value. The type is `int`, `bool`, `err`,
+`dec(N)`, `str(N)`, a declared type, a row type (the name of a table) or a handle type; not `str` (7.3).]
 
 #para("2")[A global is read by writing its name and stored with `v set NAME` (9.4). Its value stays as long as the state does
 --- after a word's run ends, and across later loads.]
@@ -79,7 +79,8 @@ assign-item = "assign" NAME "(" value { "," value } ")" ;
 ```
 
 #para("1")[`array NAME type capacity` makes an #term("array") with that many cells. An array is always full: `len` is
-its capacity. The element type is `int`, `bool`, `str(N)`, a declared type or the name of a record.]
+its capacity. The element type is `int`, `bool`, `err`, `dec(N)`, `str(N)`, a declared type or the name of a
+record.]
 
 #para("2")[`i ARRAY idx` reads cell `i`; `v i set ARRAY` stores into cell `i`; a cell of a collection parameter (9.9) is stored the same way. Numbers count from 0. For an array of
 records `idx` gives a row (8.8), not a value.]
@@ -141,7 +142,7 @@ the place cut off, they would point at the wrong row. A row held in a local is c
 == Queues <decl-queue>
 
 #para("1")[`queue NAME type capacity` makes a #term("queue"): what goes in first comes out first. The element type is
-`int`, `bool` or `err`. `v QUEUE put` puts a value at the back, `QUEUE take` takes the front one off and gives it, and
+`int`, `bool`, `err` or `dec(N)`. `v QUEUE put` puts a value at the back, `QUEUE take` takes the front one off and gives it, and
 `QUEUE peek` gives the front one without taking it. All three can fail: putting into a full queue is `err.full`, taking
 from an empty one `err.range`.]
 
@@ -168,13 +169,14 @@ sees.]
 record   = "record" NAME { field | "big_endian" } "end" ;
 field    = NAME width ;
 width    = "u8" | "u16" | "u32" | "u64" | "i8" | "i16" | "i32" | "i64"
-         | "int" | "bool" | "varint" | "str" "(" size ")" | NAME ;   (* NAME: a table *)
+         | "int" | "bool" | "varint" | "dec" "(" INT ")" | "str" "(" size ")"
+         | NAME ;                                         (* NAME: a table *)
 row-item = [ "export" ] "row" NAME [ NAME ] "(" value { "," value } ")" ;
 value    = literal | NAME ;                         (* NAME: a const, a row name, none *)
 ```
 
 #para("1")[`record NAME … end` makes a #term("record") type, a sequence of fields, each with a width. An integer field
-reads as `int`, a `bool` field as `bool`, a `str(N)` field as a `str` view. A field whose type is the name of a table
+reads as `int`, a `bool` field as `bool`, a `dec(N)` field as `dec(N)` (8 bytes), a `str(N)` field as a `str` view. A field whose type is the name of a table
 holds a row of that table.]
 
 #para("2")[Records are not handled as values. One declares an array, list or pool of records (a #term("table")) and
@@ -312,6 +314,7 @@ given (19.7).]
   ([A name used before its declaration], "this name is not declared before this place"),
   ([`to` outside a definition into a name that is not a global], "outside a definition `to` makes no new local; a global is written with set"),
   ([More `assign` values than cells], "assign has more values than the array has cells"),
+  ([A queue of another element type than `int`, `bool`, `err`, `dec(N)`], "a queue holds int, bool, err or dec(N) values"),
   ([A `row` value unlike its field], "a value has another type than its field"),
   ([A path that does not hand over an `owned` row], "an owned value in a local is not given on every path (close, free or store it)"),
   ([An announced table that is never declared], "a table announced by forward is never declared"),

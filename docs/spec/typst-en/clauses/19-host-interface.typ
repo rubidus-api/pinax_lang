@@ -46,7 +46,9 @@ state's slots.]
 #para("3")[When the function returns something other than `PINAX_OK`, a word whose signature has `or fail` fails with
 that code (11.2), and a word without it ends the run with a fault.]
 
-#para("4")[A string result is copied into the caller's region unless the word has the flag `PINAX_WORD_KEEP_STR`. Room
+#para("4")[A string result is copied into the caller's region unless the word has the flag `PINAX_WORD_KEEP_STR`. With
+the flag it is not copied but pointed at; those bytes shall outlive the state and not change (static text, the
+program's arguments and the like), and there is no limit to the number of such results. Room
 for new bytes comes from `pinax_call_alloc`, in the caller's region. A parameter of type `buffer` in the signature is a
 buffer of the script: `pinax_call_buffer` gives its free room and is told how many bytes were filled.]
 
@@ -158,6 +160,11 @@ on the state's thread and continues the run.]
 `pinax_image_save` writes it and `pinax_image_open` opens it. An image that lies at the start of the block is opened in
 place, without copying. An image of another format, or of another build's memory layout, is `PINAX_ERR_FORMAT`.]
 
+#para("1a")[An image is data the host vouches for (4 (2a)): the processor checks its head, format and layout, and
+that the addresses inside it lie in the block it was saved from, but not every byte. Open only images this host or
+one it trusts saved. Strings that pointed outside the block (a host's text) and the last pattern match do not survive
+an image.]
+
 #para("2")[On an opened state the host gives host words, handle types and `extern` functions again, by name. Until all
 are given, runs are refused with `PINAX_ERR_NOT_FOUND`. Handles come back closed (without their close functions), and
 bound globals back on their own storage. `pinax_clone` saves and opens in another block in one call.]
@@ -170,5 +177,6 @@ bound globals back on their own storage. `pinax_clone` saves and opens in anothe
 instructions run. It is for choosing the block and the capacities.]
 
 #para("2")[`pinax_fault_local` gives, after a run that ended with a fault, the locals of the word the fault happened in
-with their values at that time (up to 16; text cut to its first 32 bytes). They are what `pnx` shows below a fault
+with their values at that time (up to 16; text cut to its first 32 bytes, and shown only when its bytes lie in memory
+the state can vouch for). They are what `pnx` shows below a fault
 (11.3).]

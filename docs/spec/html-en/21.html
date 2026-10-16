@@ -25,7 +25,7 @@ shareable   = bindable | "list" NAME type size | "index" NAME NAME PATH ;
 decl        = "const" NAME literal
             | "list" NAME type size | "queue" NAME type size | "pool" NAME NAME size
             | "record" NAME { field | "big_endian" } "end"
-            | "type" NAME ( "int" | "bool" | "str" )
+            | "type" NAME ( "int" | "bool" | "str" | "dec" "(" INT ")" )
             | "index" NAME NAME PATH
             | "tasks" NAME size [ size [ size ] ]
             | "extern" c-name "(" effect ")" "from" STRING [ "as" NAME ]

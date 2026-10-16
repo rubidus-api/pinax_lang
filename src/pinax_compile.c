@@ -2360,7 +2360,7 @@ static bool store_local(comp *c, name n) {
     const uint32_t g = c->path_global;
     if (g == NONE && !find_local(f, n) && find_global(c, n) != NONE)
         return type_error(c, "this name is a global; a global is written with set: value set name");
-    if (g != NONE && gsym(c, g)->kind != GK_SCALAR) { // value index to names
+    if (g != NONE && gsym(c, g)->kind != GK_SCALAR) { // value index set names
         const globalsym *sym = gsym(c, g);
         uint32_t rv, ri;
         if (!need(c, 2))
@@ -2370,7 +2370,7 @@ static bool store_local(comp *c, name n) {
         if (sym->kind != GK_ARRAY && sym->kind != GK_LIST)
             return type_error(c, "set writes a cell of an array or a list");
         if (f->stack[top].type != TY_INT || f->stack[top - 1].type != sym->type)
-            return type_error(c, "a cell is stored as: value index to names, with the value of the cell's type");
+            return type_error(c, "a cell is stored as: value index set name, with the value of the cell's type");
         if (!reg_of(c, top - 1, &rv) || !reg_of(c, top, &ri))
             return false;
         if (sym->strcap) { // the bytes are copied into the cell
@@ -2417,6 +2417,8 @@ static bool store_local(comp *c, name n) {
             f->maxloc[bank] = f->nloc[bank];
         l->state = give(c, top) ? L_OWNS : L_PLAIN;
     } else {
+        if (is_ref(l->type)) // a collection parameter names a collection: its cells are stored with set
+            return type_error(c, "this is a collection parameter; a cell of it is stored as: value index set name");
         if (l->type != e.type)
             return type_error(c, "this local variable has another type than the value stored into it");
         const bool same = f->stack[top].src == (uint8_t)(l - f->locals + 1);

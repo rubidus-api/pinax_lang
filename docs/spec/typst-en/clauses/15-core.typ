@@ -88,7 +88,7 @@ in 9.2. `T` means "any one type"; it is a notation for built-in words only. The 
   [`c capacity`], [array, list, queue, buffer], [the declared capacity],
   [`c is_empty`], [array, list, queue, buffer], [is it empty],
   [`c is_full`], [array, list, queue], [is it full],
-  [`c clear`], [array, list, queue, buffer], [empties it (an array: every cell to 0); a pool is emptied by freeing its rows],
+  [`c clear`], [array, list, queue, buffer], [empties it (an array: every cell to 0); not for a pool: free its rows one by one],
   [`i c idx`], [array, list], [cell `i`; out of range is the fault `range`],
   [`v c push` / `c pop`], [list], [put at the end / take from the end (`or fail`)],
   [`c add_row`], [list of records], [adds an empty row and gives it (`or fail`)],

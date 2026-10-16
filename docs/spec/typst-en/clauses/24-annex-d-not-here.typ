@@ -10,4 +10,5 @@ is refused at load. This document does not define their meaning until a later ed
   a `dec`, 7.5), float slots, the module `float`, `fmt.fixed`, record fields `f32` and `f64`.
 - Declarations defined by users (`make`, 6.6 (5)).
 - Records held inside records, and the field-by-field layout `columns`.
-- The compression module `deflate`.]
+- The compression module `deflate`.
+- Record fields of a declared type, of `err` or of a handle type; a field takes the widths of 8.8 only.]

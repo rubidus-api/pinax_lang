@@ -162,6 +162,7 @@ DEC      = [ sign ] digits "." digits ;   (* 지수 없음: 6.4 *)
   ([선언한 타입에 (3)과 (3a) 밖의 산술], "a declared type is added to and subtracted from its own type, and multiplied, divided or taken modulo by an int; for other arithmetic take raw"),
   ([인자의 타입이 서명과 다름], "an argument has another type than the word's signature asks for"),
   ([전역 등에 `str`], "stored text is str(N); a str view lives only in locals, arguments and results"),
+  ([레코드의 필드에 `str`], "a field holds str(N); a str view lives only in locals, arguments and results"),
   ([자리 수가 다른 `dec` 둘], "two dec values of different scales: rescale one first (d 2 rescale)"),
   ([`dec` 를 `dec` 로 나눔], "a dec is divided by an int, not by a dec; for a share, rescale first and divide by the int"),
   ([`dec(A) dec(B) mul` 이 18 자리를 넘음], "dec(A) times dec(B) is dec(A+B), and A+B is at most 18; rescale one first"),

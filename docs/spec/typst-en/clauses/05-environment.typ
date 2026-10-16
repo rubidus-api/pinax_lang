@@ -10,8 +10,9 @@ asks the operating system for no memory. When the block is too small, the operat
 nothing is written outside the block.]
 
 #para("2")[Every value of a state is in one of these places: a declared global (clause 8), a slot of the stack or of a
-local (clause 9), the region of a task (12.2). There is no other place. A value refers to another value by number (the
-number of a row, a handle).]
+local (clause 9), the region of a task (12.2), or memory the host gave and vouches for (bound and shared storage, 8.12, 8.13; strings
+passed in; `KEEP_STR` results, 19.3). There is no other place. A value refers to another value by number (the number
+of a row, a handle).]
 
 #para("3")[A state uses no global or thread-local variables. Two states can therefore run at the same time on two
 threads. One state is used by one thread at a time.]

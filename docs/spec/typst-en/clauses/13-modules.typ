@@ -67,7 +67,8 @@ data-item   = [ "export" ] ( [ "bound" ] bindable | "const" NAME literal
               | "index" NAME NAME PATH )
             | "forward" ( "array" | "list" | "pool" ) NAME
             | row-item | assign-item
-            | data-value [ data-value ] "set" ( NAME | PATH ) ;
+            | data-value [ data-value ] "set" NAME              (* a global, or a cell *)
+            | data-value NAME "to" PATH ;                      (* a field of a named row *)
 data-value  = literal | NAME ;                      (* NAME: a const or a row name *)
 ```
 
@@ -75,7 +76,8 @@ data-value  = literal | NAME ;                      (* NAME: a const or a row na
 `extern`, `test`, control, blocks and `cat` are refused. Such a source therefore cannot run any code. It is for reading
 settings, data and other text that is not trusted.]
 
-#para("2")[The second value of `value [value] to PLACE` is the index of a cell or a row (`"10.0.0.1" 0 to allow`).
+#para("2")[A value is stored with `value set NAME`, a cell with `value index set NAME` (`"10.0.0.1" 0 set allow`) and
+a field of a named row with `value ROW to RECORD.FIELD`, as in code (8.8, 9.4).
 Everything a data source declares counts as exported.]
 
 #ex("spec", "13-data-load.c")

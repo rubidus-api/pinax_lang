@@ -9,7 +9,7 @@ tasks-decl = "tasks" NAME size [ size [ size ] ] ;   (* count, call depth, regio
 
 #para("1")[A *task* is a flow of execution that takes turns with others inside one state. Tasks change only where one
 gives way on its own (`yield`, or a host word that waits). So even when two tasks use the same global, no other task
-comes in between two yields of one task. Tasks are not threads: one state always runs on one thread (5.1).]
+comes in between two yields of one task. Tasks are not threads: a state runs on one thread at a time (5.1).]
 
 #para("2")[`tasks NAME count [depth [region]]` declares a #term("task group") of up to `count` tasks. Each task has its
 own call depth (`depth`) and its own region (`region` bytes); left out, they are the processor's defaults. The name of

@@ -14,7 +14,8 @@ block   = "do" [ "(" effect ")" ] { body } "end" ;
 ```
 
 #para("1")[`end` closes the innermost open construct. The words that open one are `word` `test` `record` `do` `if`
-`loop` `case` `of` `otherwise` `or_else`.]
+`loop` `case` `of` `otherwise` `or_else` `defer`. (A `text` literal and a `note` remark close on their own tag, 6.3,
+6.5.)]
 
 #para("2")[At load a processor compares the stacks of all paths. Where paths meet again, the stack shall be the same
 whichever path was taken. A #term("leaving branch") --- one that ends with `return`, `fail`, `break` or a loop that

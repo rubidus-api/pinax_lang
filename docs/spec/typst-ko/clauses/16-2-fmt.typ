@@ -12,6 +12,7 @@
   [`zero_pad`], [`(n int, width int gives str)`], [십진을 앞에 0 을 채워 `width` 자리로. 부호도 자리를 차지한다],
   [`append_hex`], [`(n int, buf or fail)`], [십육진을 버퍼에 붙인다],
 )
-십진은 `str.to_str`, 버퍼에 붙이는 십진은 `append_int`(15.3)다.]
+십진은 `str.to_str`, 버퍼에 붙이는 십진은 `append_int`(15.3)다. `hex_pad` 와 `zero_pad` 의 `width` 가 음수이거나
+2#super[32] 이상이면 결함 `range`, 구역이 모자라면 결함 `full` 이다.]
 
 #ex("spec", "16-fmt.pnx")

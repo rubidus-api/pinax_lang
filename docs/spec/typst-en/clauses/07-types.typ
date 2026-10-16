@@ -165,6 +165,7 @@ a `dec`.]
   ([Arithmetic outside (3) and (3a) on a declared type], "a declared type is added to and subtracted from its own type, and multiplied, divided or taken modulo by an int; for other arithmetic take raw"),
   ([An argument of another type than the signature], "an argument has another type than the word's signature asks for"),
   ([`str` for a global and the like], "stored text is str(N); a str view lives only in locals, arguments and results"),
+  ([`str` for a field of a record], "a field holds str(N); a str view lives only in locals, arguments and results"),
   ([Two `dec` of different scales], "two dec values of different scales: rescale one first (d 2 rescale)"),
   ([A `dec` divided by a `dec`], "a dec is divided by an int, not by a dec; for a share, rescale first and divide by the int"),
   ([`dec(A) dec(B) mul` beyond 18 digits], "dec(A) times dec(B) is dec(A+B), and A+B is at most 18; rescale one first"),

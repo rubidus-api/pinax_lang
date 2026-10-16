@@ -9,7 +9,7 @@
 definition = [ "export" ] "word" NAME "(" effect ")" { body } "end" ;
 effect     = [ params ] [ "gives" params ] [ "or" "fail" ] ;
 params     = param { "," param } ;
-param      = [ NAME ] type ;
+param      = [ NAME ] ( type | collection-type ) ;   (* collection-type: 9.9 *)
 type       = [ "owned" ] ( NAME [ "(" size ")" ] | "word" "(" effect ")" ) ;
 ```
 
@@ -176,13 +176,13 @@ phrase = body { body } ;                   (* code that leaves one value *)
 #part("구문")
 ```ebnf
 collection-type = ( "array" | "list" | "queue" ) cell | "buffer" ;
-cell            = NAME [ "(" size ")" ] ;   (* int, bool, err, str(N), 또는 레코드 *)
+cell            = NAME [ "(" size ")" ] ;   (* int, bool, err, dec(N), str(N), 또는 레코드 *)
 ```
 
 #para("1")[타입이 `array T`, `list T`, `queue T` 나 `buffer` 인 입력은 모음을 받는다. 부르는 쪽은 그 자리에 모음의
 이름을 쓴다(`scores total`). 몸 안에서 매개변수는 그런 모음의 이름이 들어가는 모든 자리에 쓴다 --- `l len`,
 `i l idx`, `v l push`, `v i set l`, `l do … end each`, `… end l map_into`, `q take`, `s b append` 따위. 칸은 매개변수가 말하는 타입이어야
-한다: `int` `bool` `err`, `N` 이 같은 `str(N)`, 또는 레코드. 용량은 타입에 들지 않는다. 어떤 용량이든 받고,
+한다: `int` `bool` `err`, `N` 이 같은 `dec(N)` 과 `str(N)`, 또는 레코드. 용량은 타입에 들지 않는다. 어떤 용량이든 받고,
 `l capacity` 가 그 용량을 준다.]
 
 #ex("spec", "09-coll-param.pnx")
@@ -233,6 +233,7 @@ cell            = NAME [ "(" size ")" ] ;   (* int, bool, err, str(N), 또는 �
   ([종류나 칸이 다른 모음], "the collection given here is of another kind, or holds another type, than the parameter says"),
   ([모음 자리에 값], "this parameter takes an array, list, queue or buffer: give its name"),
   ([결과로 모음], "a word gives no collection; it takes one as a parameter"),
+  ([모음 매개변수에 `to`], "this is a collection parameter; a cell of it is stored as: value index set name"),
   ([남이 쥔 목록을 자르는 낱말에 줌], "this list's rows are kept by a field, a global, a named row or an index; the word it is given to truncates it"),
   ([두 표가 모두 매개변수인 줄 베끼기], "filter_into does not copy rows between two tables parameters name; walk one and add_row"),
 )

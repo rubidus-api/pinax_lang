@@ -62,7 +62,7 @@ size        = INT | NAME ;                         (* NAME: a const *)
 == 전역 <decl-global>
 
 #para("1")[`global 이름 타입` 은 값 하나를 담는 #term("전역", en: "global")을 만든다. 타입은 `int` `bool`
-`str(N)`, 선언한 타입, 줄의 타입(표의 이름), 핸들 타입이다. `str` 는 쓰지 못한다(7.3).]
+`err` `dec(N)` `str(N)`, 선언한 타입, 줄의 타입(표의 이름), 핸들 타입이다. `str` 는 쓰지 못한다(7.3).]
 
 #para("2")[전역을 읽으려면 이름을 쓰고, 넣으려면 `v set 이름` 을 쓴다(9.4). 상태가 살아 있는 동안 값이 남는다 ---
 한 낱말의 실행이 끝나도, 다음 적재가 와도 그대로다.]
@@ -77,7 +77,7 @@ assign-item = "assign" NAME "(" value { "," value } ")" ;
 ```
 
 #para("1")[`array 이름 타입 용량` 은 칸이 용량만큼 있는 #term("배열", en: "array")을 만든다. 배열은 늘
-가득 차 있다: `len` 은 용량과 같다. 원소 타입은 `int` `bool` `str(N)`, 선언한 타입, 레코드의 이름이다.]
+가득 차 있다: `len` 은 용량과 같다. 원소 타입은 `int` `bool` `err` `dec(N)` `str(N)`, 선언한 타입, 레코드의 이름이다.]
 
 #para("2")[`i 배열 idx` 는 칸 `i` 의 값을 읽는다. `v i set 배열` 은 칸 `i` 에 넣는다. 모음 매개변수(9.9)의 칸도 같은 꼴로 넣는다. 번호는 0 부터 센다.
 레코드의 배열에서 `idx` 는 값이 아니라 줄(8.8)을 낸다.]
@@ -138,7 +138,7 @@ assign-item = "assign" NAME "(" value { "," value } ")" ;
 == 큐 <decl-queue>
 
 #para("1")[`queue 이름 타입 용량` 은 먼저 넣은 것이 먼저 나오는 #term("큐", en: "queue")를 만든다. 원소 타입은 `int`
-`bool` `err` 다.
+`bool` `err` `dec(N)` 이다.
 `v 큐 put` 은 뒤에 넣고, `큐 take` 는 앞에서 빼서 주며, `큐 peek` 은 빼지 않고 앞의 것을 준다. 셋 다 실패할
 수 있다: 가득 찬 큐에 넣으면 `err.full`, 빈 큐에서 꺼내면 `err.range` 다.]
 
@@ -164,13 +164,15 @@ assign-item = "assign" NAME "(" value { "," value } ")" ;
 record   = "record" NAME { field | "big_endian" } "end" ;
 field    = NAME width ;
 width    = "u8" | "u16" | "u32" | "u64" | "i8" | "i16" | "i32" | "i64"
-         | "int" | "bool" | "varint" | "str" "(" size ")" | NAME ;   (* NAME: a table *)
+         | "int" | "bool" | "varint" | "dec" "(" INT ")" | "str" "(" size ")"
+         | NAME ;                                         (* NAME: a table *)
 row-item = [ "export" ] "row" NAME [ NAME ] "(" value { "," value } ")" ;
 value    = literal | NAME ;                         (* NAME: a const, a row name, none *)
 ```
 
 #para("1")[`record 이름 … end` 는 필드의 나열인 #term("레코드", en: "record") 타입을 만든다. 필드마다 폭을
-적는다. 정수 필드는 읽으면 `int`, `bool` 필드는 `bool`, `str(N)` 필드는 `str` 뷰가 된다. 필드의 타입에 표의
+적는다. 정수 필드는 읽으면 `int`, `bool` 필드는 `bool`, `dec(N)` 필드는 `dec(N)`(8 바이트), `str(N)` 필드는
+`str` 뷰가 된다. 필드의 타입에 표의
 이름을 쓰면 그 표의 줄을 담는다.]
 
 #para("2")[레코드는 값으로 다루지 않는다. 레코드를 원소로 하는 배열·목록·풀(#term("표", en: "table"))을
@@ -305,6 +307,7 @@ forward = "forward" ( "array" | "list" | "pool" ) NAME
   ([선언 앞에서 쓴 이름], "this name is not declared before this place"),
   ([정의 밖의 `to` 가 전역이 아닌 이름에], "outside a definition `to` makes no new local; a global is written with set"),
   ([`assign` 의 값이 칸보다 많음], "assign has more values than the array has cells"),
+  ([큐의 원소 타입이 `int` `bool` `err` `dec(N)` 밖], "a queue holds int, bool, err or dec(N) values"),
   ([`row` 의 값이 필드와 다름], "a value has another type than its field"),
   ([`owned` 줄을 넘기지 않는 경로], "an owned value in a local is not given on every path (close, free or store it)"),
   ([미리 알린 표가 없음], "a table announced by forward is never declared"),

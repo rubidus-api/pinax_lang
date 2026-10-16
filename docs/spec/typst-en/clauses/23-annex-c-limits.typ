@@ -26,3 +26,23 @@ this implementation's values. Default capacities differ between processors (4 (5
   [default handles alive at once], [---], [64],
   [default call depth / region of a task], [---], [16 / 1024 bytes],
 )]
+
+#para("2")[These are the limits this implementation puts on a source (informative). Going beyond one is refused at
+load, and the message names the limit. Another processor may have other values.
+#table(columns: (1fr, auto), inset: 5pt, stroke: 0.5pt + luma(170),
+  [*Item*], [*This implementation*],
+  [Stack depth inside a definition (values)], [64],
+  [Blocks, branches and loops open inside each other], [32],
+  [Block values inside block values], [4],
+  [Locals of one word], [96],
+  [Inputs / results of a signature], [16 / 16],
+  [Modules one source uses], [16],
+  [Values of one `case` branch], [32],
+  [N of `str(N)` (bytes)], [255],
+  [Size of one record (bytes)], [4095],
+  [Length of a signature text (bytes)], [71],
+  [`mark`s of one word], [255],
+  [Sources of a state], [256],
+  [Tasks of a set / region of one task], [4096 / 16 MiB],
+  [Instructions of a `rex` program / nesting of groups], [4096 / 64],
+)]

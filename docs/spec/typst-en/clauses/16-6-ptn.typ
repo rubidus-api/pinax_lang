@@ -36,7 +36,9 @@
 
 #para("4")[A pattern that begins with `^` is tried at the start only, so `matches` and `replace` match at most once.]
 
-#para("5")[The last match `capture` reads belongs to each run (task) separately; another `match` changes it.]
+#para("5")[The last match `capture` reads belongs to each run (task) separately; another `match` changes it. A run the
+host starts begins with no match: the match of an earlier run is not seen, since its captures are views of text that
+run matched, which may be gone.]
 
 #ex("spec", "16-ptn.pnx")
 

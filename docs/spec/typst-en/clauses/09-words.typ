@@ -9,7 +9,7 @@
 definition = [ "export" ] "word" NAME "(" effect ")" { body } "end" ;
 effect     = [ params ] [ "gives" params ] [ "or" "fail" ] ;
 params     = param { "," param } ;
-param      = [ NAME ] type ;
+param      = [ NAME ] ( type | collection-type ) ;   (* collection-type: 9.9 *)
 type       = [ "owned" ] ( NAME [ "(" size ")" ] | "word" "(" effect ")" ) ;
 ```
 
@@ -180,14 +180,14 @@ processor adds up the length first and writes once.]
 #part("Syntax")
 ```ebnf
 collection-type = ( "array" | "list" | "queue" ) cell | "buffer" ;
-cell            = NAME [ "(" size ")" ] ;   (* int, bool, err, str(N), or a record *)
+cell            = NAME [ "(" size ")" ] ;   (* int, bool, err, dec(N), str(N), or a record *)
 ```
 
 #para("1")[An input of type `array T`, `list T` or `queue T`, or of type `buffer`, takes a collection: the caller writes
 the collection's name there (`scores total`). In the body the parameter is used wherever the name of such a collection
 goes --- `l len`, `i l idx`, `v l push`, `v i set l`, `l do … end each`, `… end l map_into`, `q take`, `s b append` and
 so on. The cells shall
-be of the type the parameter says: `int` `bool` `err`, `str(N)` with the same `N`, or a record. The capacity is not part
+be of the type the parameter says: `int` `bool` `err`, `dec(N)` and `str(N)` with the same `N`, or a record. The capacity is not part
 of the type; any capacity is taken, and `l capacity` gives the one it has.]
 
 #ex("spec", "09-coll-param.pnx")
@@ -240,6 +240,7 @@ with `add_row`.]
   ([A collection of another kind or cells], "the collection given here is of another kind, or holds another type, than the parameter says"),
   ([A value where a collection goes], "this parameter takes an array, list, queue or buffer: give its name"),
   ([A collection as a result], "a word gives no collection; it takes one as a parameter"),
+  ([`to` into a collection parameter], "this is a collection parameter; a cell of it is stored as: value index set name"),
   ([A kept list given to a word that truncates it], "this list's rows are kept by a field, a global, a named row or an index; the word it is given to truncates it"),
   ([Rows copied between two tables parameters name], "filter_into does not copy rows between two tables parameters name; walk one and add_row"),
 )

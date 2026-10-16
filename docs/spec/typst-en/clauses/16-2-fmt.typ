@@ -12,6 +12,7 @@ There is no small language of formats (such as `%08x`). Results are written in t
   [`zero_pad`], [`(n int, width int gives str)`], [decimal filled with leading zeros to `width`; the sign takes a place],
   [`append_hex`], [`(n int, buf or fail)`], [appends the hexadecimal to a buffer],
 )
-Decimal is `str.to_str`; decimal appended to a buffer is `append_int` (15.3).]
+Decimal is `str.to_str`; decimal appended to a buffer is `append_int` (15.3). A `width` of `hex_pad` or `zero_pad`
+below 0 or from 2#super[32] up is the fault `range`; when the region is used up it is the fault `full`.]
 
 #ex("spec", "16-fmt.pnx")
