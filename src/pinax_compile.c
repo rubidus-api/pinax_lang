@@ -8178,7 +8178,8 @@ void pnx_symbols_move(void *symbols, const void *from, ptrdiff_t by) {
 uint64_t pnx_symbols_layout(uint64_t hash) {
     const uint64_t parts[] = {sizeof(symtab), sizeof(wordsym), sizeof(constant), sizeof(globalsym), sizeof(record),
                               sizeof(field), sizeof(sig), sizeof(dtype), sizeof(name), sizeof(externsym), sizeof(rtype),
-                              offsetof(wordsym, sig), offsetof(globalsym, record), offsetof(field, offset),
+                              offsetof(wordsym, sig), offsetof(wordsym, writes), offsetof(globalsym, record),
+                              offsetof(field, offset),
                               offsetof(symtab, bytes), MAX_PARAMS};
     for (size_t k = 0; k < sizeof parts / sizeof parts[0]; ++k)
         hash = (hash ^ parts[k]) * 0x100000001b3u;
