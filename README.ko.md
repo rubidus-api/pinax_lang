@@ -43,6 +43,7 @@ C23 컴파일러로 짓습니다.
 cc -std=c23 -o nob nob.c
 ./nob build          # build/native/libpinax.a, libpinax_host.a, 명령 pnx
 ./nob dist           # build/dist/pinax.h 와 pinax.c: 핵 전체를 두 파일로
+./nob wasm           # build/wasm/pinax.wasm 과 pinax.mjs: 브라우저와 node 용(clang, wasm-ld)
 ```
 
 첫 스크립트 `hello.pnx` 입니다. 인자를 먼저 쓰고 그것을 받는 낱말을 뒤에 씁니다. 리터럴 밖의

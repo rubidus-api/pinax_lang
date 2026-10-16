@@ -46,6 +46,7 @@ Build with any C23 compiler:
 cc -std=c23 -o nob nob.c
 ./nob build          # build/native/libpinax.a, libpinax_host.a and the command pnx
 ./nob dist           # build/dist/pinax.h and pinax.c: the whole core as two files
+./nob wasm           # build/wasm/pinax.wasm and pinax.mjs, for browsers and node (clang, wasm-ld)
 ```
 
 A first script, `hello.pnx`. Arguments come before the word that takes them, and the only

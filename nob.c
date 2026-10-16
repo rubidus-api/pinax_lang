@@ -7,6 +7,9 @@
 //   ./nob check               the public header compiles as C99, C23 and C++17; public files
 //                             are ASCII, inside the public list and free of local paths
 //   ./nob freestanding        compile the portable part with -ffreestanding
+//   ./nob wasm                build/wasm/pinax.wasm and pinax.mjs: the freestanding part and
+//                             src/wasm/ for browsers and node ($PINAX_WASM_CC, default clang,
+//                             which needs wasm-ld)
 //   ./nob all                 check + freestanding + test
 //   ./nob clean               remove build/
 //   options: --target=win64   cross-compile with MinGW-w64 ($PINAX_WIN64_CC, default
@@ -431,6 +434,38 @@ static int cmd_freestanding(void) {
     return 0;
 }
 
+// The freestanding part as a WebAssembly module, with the glue of src/wasm/: no C library, the
+// module io printing through an import, exports that src/wasm/pinax.mjs drives (P3).
+static int cmd_wasm(void) {
+    const char *objdir = "build/wasm/obj";
+    mkdirs(objdir);
+    static char cc[512];
+    snprintf(cc, sizeof cc, "%s --target=wasm32 -nostdlib", getenv("PINAX_WASM_CC") ? getenv("PINAX_WASM_CC") : "clang");
+    target_t t = {.name = "wasm", .cc = cc};
+    const char *fs = "-ffreestanding -DPROVEN_FREESTANDING -DPROVEN_FMT_NO_FLOAT -DPROVEN_NO_U16STR";
+    char own[1024], prov[1024];
+    snprintf(own, sizeof own, "-std=c23 -Wall -Wextra -pedantic -Werror -O2 %s -Iinclude -Isrc -Ivendor/proven/include", fs);
+    snprintf(prov, sizeof prov, "-std=c23 -Wall -Wextra -Werror -O2 %s -Ivendor/proven/include -Ivendor/proven/platform",
+             fs);
+    static const char *const glue[] = {"src/wasm/pinax_wasm.c"};
+    static char objs[16384];
+    objs[0] = '\0';
+    if (compile_set(&t, own, "", core_sources, core_count, objdir, objs, sizeof objs) ||
+        compile_set(&t, prov, "vendor/proven/", proven_portable, COUNT(proven_portable), objdir, objs, sizeof objs) ||
+        compile_set(&t, own, "", glue, COUNT(glue), objdir, objs, sizeof objs))
+        return 1;
+    // a stack of 1 MB: the compiler recurses into nested blocks
+    static char cmd[20000];
+    snprintf(cmd, sizeof cmd,
+             "%s -Wl,--no-entry -Wl,-z,stack-size=1048576 -Wl,--strip-all -o build/wasm/pinax.wasm%s && "
+             "cp src/wasm/pinax.mjs build/wasm/pinax.mjs",
+             cc, objs);
+    if (run(cmd))
+        return 1;
+    printf("nob: wrote build/wasm/pinax.wasm and build/wasm/pinax.mjs\n");
+    return 0;
+}
+
 // ---------------------------------------------------------------------------------------
 // Checks
 // ---------------------------------------------------------------------------------------
@@ -554,7 +589,7 @@ int main(int argc, char **argv) {
             command = a;
         } else {
             fprintf(stderr, "nob: unknown option %s\n"
-                            "usage: ./nob [build|test|check|freestanding|dist|all|clean] "
+                            "usage: ./nob [build|test|check|freestanding|wasm|dist|all|clean] "
                             "[--target=native|win64] [--sanitize] [--debug]\n", a);
             return 2;
         }
@@ -573,6 +608,8 @@ int main(int argc, char **argv) {
         return cmd_freestanding();
     if (strcmp(command, "dist") == 0)
         return cmd_dist(&t);
+    if (strcmp(command, "wasm") == 0)
+        return cmd_wasm();
     if (strcmp(command, "all") == 0)
         return cmd_check() || cmd_freestanding() || cmd_test(&t) || cmd_dist(&t);
     if (strcmp(command, "clean") == 0)

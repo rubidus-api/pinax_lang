@@ -40,6 +40,22 @@ script stored in globals until then stays.
 continue the stopped run to its end or give it up with `pinax_abort`. When even the globals must go back to how they
 were before the run, save an image before running and open the state again from it (standard 19.9).]
 
+== In a web page and in node
+
+`./nob wasm` builds the core as the WebAssembly module `build/wasm/pinax.wasm` and puts the JavaScript module
+`pinax.mjs` beside it. It needs clang and wasm-ld and nothing else; no C library is used. `createPinax(bytes, { write })`
+of `pinax.mjs` opens the module, and `run(source, name)` of the object it gives loads the source into a fresh state and
+runs the code outside definitions. It gives `{ ok: true }` on success and `{ ok: false, error }` otherwise.
+`write(stream, text)` receives what `io.print` and `io.println` print on stream 1, and `io.eprint`, load errors and a
+fault's line and locals on stream 2, in the same form as `pnx`.
+
+In this edition the WebAssembly host registers one module, `io`; `io.read_line` always fails with `not_found`. There is
+no `file`, `clock`, `random`, `env` or `extern`. The modules of the core (`str`, `json`, `csv`, `rex` and the rest) and
+tasks run as everywhere.
+
+#mistake[On WebAssembly, tasks run on several cores][They do not. Tasks run one after the other inside one state,
+everywhere (chapter 13). The WebAssembly build uses the same core, and the same script prints the same thing.]
+
 == More
 
 Handles (giving a script a C object to hold), binding (host memory as globals), host words that finish later, images
