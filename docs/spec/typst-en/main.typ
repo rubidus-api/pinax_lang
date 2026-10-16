@@ -2,7 +2,7 @@
 #show: document-setup.with(
   title: "The Pinax Standard",
   subtitle: "The definition of the embeddable scripting language Pinax",
-  version: "Draft 0.1",
+  version: "Edition 0.4.0",
   date: "October 2026")
 
 #include "clauses/01-scope.typ"
