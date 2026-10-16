@@ -69,9 +69,13 @@ from then on. Since the bytes do not change, several threads read them together 
 
 An index is given after its table, since the index's slots point at the table's rows.
 
-#mistake[A shared list can be passed to a word that adds it up][It cannot. A word that takes a collection parameter can
-change that collection, so a shared collection is not passed as a parameter (standard 8.13). Put the reading in a word
-that names the shared global.]
+Programs that run as several processes share a file instead. The program that makes the data writes it with
+`pinax_share_save`; each process maps it with `pinax_map_file` and gives its states the globals with
+`pinax_share_file`. The operating system keeps one copy of the file's pages for all of them (standard 19.7).
+
+#mistake[A shared list cannot be passed to a word that adds it up][It can, as long as the word only reads that
+parameter. The processor sees whether a word changes a collection parameter, itself or through the words it passes it
+to, and refuses only a shared collection given to such a word (standard 8.13).]
 
 == In a web page and in node
 
@@ -102,4 +106,5 @@ and clones, and `extern` are in clauses 18 and 19 of the standard, with examples
 - For several cores, open several states and run them on the host loop; connect them with the messages of channels
   (17.4).
 - Data that is only read is declared `shared` and read as one copy through `pinax_share` (8.13, 19.7).
+- Several processes map one file written with `pinax_share_save` (`pinax_map_file`) and read it together (19.7).
 ]

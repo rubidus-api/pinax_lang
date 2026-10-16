@@ -278,12 +278,18 @@ forward = "forward" ( "array" | "list" | "pool" ) NAME
 
 #para("2")[공유 전역은 아무것도 바꾸지 못한다: 넣기, `set`, `push`, `pop`, `clear`, `truncate`, `add_row`, 필드에
 넣기, `insert`, `remove`, 버퍼에 붙이는 낱말, `map_into` 와 `filter_into` 의 목적지가 모두 거절된다. 처리기는
-공유 전역을 바꾸는 바이트코드도 적재 때 거절한다.]
+공유 전역을 바꾸는 바이트코드도 적재 때 거절하고, 매개변수로 받은 공유 전역을 바꾸려는 바이트코드는 실행 때 결함
+`state` 로 끝낸다.]
 #ex("spec", "08-shared-write.pnx")
 
-#para("3")[공유 모음은 모음 매개변수(9.9)나 호스트 낱말의 `buffer` 매개변수로 넘기지 않는다. 받는 쪽이 바꿀 수 있기
-때문이다. 읽기만 하는 일은 공유 전역을 이름으로 부르는 낱말에 둔다.]
+#para("3")[공유 모음은 그 매개변수를 읽기만 하는 낱말의 모음 매개변수(9.9)로 넘길 수 있다. 낱말이 매개변수를
+바꾸는 명령을 쓰거나, 매개변수를 바꾸는 낱말이나 호스트 낱말의 `buffer` 매개변수로 넘기면 그 매개변수를 바꾸는
+낱말이다. 처리기는 원본을 다 읽은 뒤에 판단하므로 `forward` 로 알린 낱말에도, 앞선 적재의 낱말에도 같다.]
 #ex("spec", "08-shared-param.pnx")
+#ex("spec", "08-shared-change.pnx")
+
+#para("3a")[공유 모음은 호스트 낱말의 `buffer` 매개변수와 블록 값이 부르는 낱말(`call`)의 매개변수로는 넘기지 않는다.
+받는 쪽이 무엇을 하는지 적재 때 모르기 때문이다. `redefine` 은 읽기만 하던 매개변수를 바꾸는 낱말로 만들지 못한다.]
 
 #para("4")[`shared` 는 `queue` `pool` `tasks` 와 `const` `record` 앞에 오지 않는다.]
 #ex("spec", "08-shared-queue.pnx")
@@ -303,7 +309,9 @@ forward = "forward" ( "array" | "list" | "pool" ) NAME
   ([`owned` 줄을 넘기지 않는 경로], "an owned value in a local is not given on every path (close, free or store it)"),
   ([미리 알린 표가 없음], "a table announced by forward is never declared"),
   ([공유 전역을 바꿈], "a shared global is read-only: nothing here may change it"),
-  ([공유 모음을 매개변수로 넘김], "a shared collection is read-only: it is not given to a word as a parameter, which may change it"),
+  ([공유 모음을 그것을 바꾸는 낱말에 넘김], "a shared collection is read-only: the word it is given to changes this parameter"),
+  ([공유 모음을 블록 값의 낱말에 넘김], "a shared collection is read-only: it is not given to the word a block value names, which may change it"),
+  ([`redefine` 이 읽던 매개변수를 바꿈], "redefine cannot make the word change a collection parameter the old one only read: shared collections may have been given to it"),
   ([공유 버퍼를 호스트 낱말에 넘김], "a shared buffer is read-only: it is not given to a host word, which may write it"),
   ([`shared` 뒤에 다른 선언], "shared stands before global, array, list, buffer or index"),
 )

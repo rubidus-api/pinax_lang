@@ -110,6 +110,7 @@ typedef struct wordsym {
     uint16_t module;   // the source module it was declared in (set when the load is done)
     bool     exported; // visible to other modules as module.name
     uint16_t truncs;   // the list parameters it truncates, directly or through a word it gives them to
+    uint16_t writes;   // the collection parameters it changes, directly or through a word it gives them to
 } wordsym;
 
 typedef struct local {
@@ -313,7 +314,8 @@ typedef struct trunc_site {
     uint32_t word, param; // NONE: truncated here; else the word called and its parameter
 } trunc_site;
 
-// A word gives its list parameter to a parameter of another word: if that one truncates, so does it.
+// A word gives its collection parameter to a parameter of another word: if that one truncates
+// or changes it, so does it.
 typedef struct trunc_edge {
     uint32_t word, param, callee, callee_param;
 } trunc_edge;
@@ -372,6 +374,7 @@ typedef struct comp {
     uint32_t     path_global; // to module.name : the global the path names, for store_local
     vec          truncs;    // trunc_site: lists cut back by truncate, checked when the source is read
     vec          tedges;    // trunc_edge
+    vec          lends;     // trunc_site: shared collections given to collection parameters, which must only read them
     vec          dtypes;   // dtype
     vec          localrecs; // pnx_localrec: the locals of the words of this load
     uint8_t     *rx_buf;    // where rx compiles a constant pattern, PNX_REX_BUF bytes
@@ -956,9 +959,16 @@ static uint32_t emit_raw(comp *c, uint32_t word) {
 
 static bool select_ref(comp *c, uint32_t reg);
 
+// Before an instruction that changes `global`: a shared global is refused; a collection parameter
+// is marked as one the word changes (a shared collection may be given only to a word that reads it).
 static bool read_only(comp *c, uint32_t global) {
     if (global < REF_GLOBAL && global < c->globals.n && ((const globalsym *)c->globals.ptr + global)->shared)
         return type_error(c, "a shared global is read-only: nothing here may change it");
+    if (global >= REF_GLOBAL && global < PNX_FSELECTED && c->f == c->word_fn) {
+        const local *l = ref_local(c, global - REF_GLOBAL);
+        if (l)
+            ((wordsym *)c->words.ptr + c->def_index)->writes |= (uint16_t)(1u << (l - c->f->locals));
+    }
     return true;
 }
 
@@ -1040,7 +1050,7 @@ static uint32_t emit_g(comp *c, uint32_t op, uint32_t a, uint32_t b, uint32_t gl
     if (global <= 255)
         return emit(c, PNX_ABC(op, a, b, global));
     if (global >= REF_GLOBAL) { // through a reference: the wide form names the global GSEL chose
-        if (!select_ref(c, global - REF_GLOBAL))
+        if ((pnx_writes_global(wide_of(op)) && !read_only(c, global)) || !select_ref(c, global - REF_GLOBAL))
             return NONE;
         global = PNX_GSELECTED;
     }
@@ -2009,7 +2019,9 @@ static bool make_room(comp *c, uint32_t p) {
     return true;
 }
 
-static bool call_args(comp *c, const sig *s, uint32_t base[2]) {
+// `lent`: the word called is known here and checked when the source is read: a shared
+// collection may go to a parameter it only reads (call_word records the site).
+static bool call_args(comp *c, const sig *s, uint32_t base[2], bool lent) {
     fn *f = c->f;
     for (uint32_t k = 0; k < s->n_in && f->depth - f->floor >= s->n_in; ++k) {
         if (s->in[k] == TY_BUF) { // a buffer goes to a host word as its number
@@ -2018,6 +2030,8 @@ static bool call_args(comp *c, const sig *s, uint32_t base[2]) {
                 return type_error(c, "this host word takes a buffer here");
             if (e->kind != E_LOCAL && gsym(c, e->value)->shared)
                 return type_error(c, "a shared buffer is read-only: it is not given to a host word, which may write it");
+            if (e->kind == E_LOCAL && !read_only(c, (uint32_t)e->value)) // the host word may change the parameter
+                return false;
             if (!make_room(c, f->depth - s->n_in + k))
                 return false;
             *e = e->kind == E_LOCAL ? (entry){.type = TY_BUF, .kind = E_LOCAL, .reg = e->reg}
@@ -2031,9 +2045,9 @@ static bool call_args(comp *c, const sig *s, uint32_t base[2]) {
                 return type_error(c, "this parameter takes an array, list, queue or buffer: give its name");
             const globalsym *g = gsym(c, (uint32_t)e->value);
             const rtype     *r = (const rtype *)c->rtypes.ptr + (s->in[k] - TY_REF);
-            if (e->kind != E_LOCAL && g->shared)
-                return type_error(c, "a shared collection is read-only: it is not given to a word as a parameter, "
-                                     "which may change it");
+            if (e->kind != E_LOCAL && g->shared && !lent)
+                return type_error(c, "a shared collection is read-only: it is not given to the word a block value "
+                                     "names, which may change it");
             if (g->kind != r->kind || g->record != r->record || g->strcap != r->strcap ||
                 (r->record == NONE && r->kind != GK_BUFFER && (g->strcap ? TY_STR : g->type) != r->cell))
                 return type_error(c, "the collection given here is of another kind, or holds another type, than the "
@@ -2218,9 +2232,17 @@ static bool call_word(comp *c, const sig *sp, uint32_t index) {
     const sig s = *sp;
     uint32_t base[2], in[2], out[2];
     fn *const g = c->f;
-    for (uint32_t k = 0; k < s.n_in && g->depth >= s.n_in; ++k) { // lists given to list parameters (RFC-0018)
+    for (uint32_t k = 0; k < s.n_in && g->depth >= s.n_in; ++k) { // collections given to parameters (RFC-0018)
         const entry e = g->stack[g->depth - s.n_in + k];
-        if (!is_ref(s.in[k]) || e.type != TY_COLL || gsym(c, (uint32_t)e.value)->kind != GK_LIST)
+        if (!is_ref(s.in[k]) || e.type != TY_COLL)
+            continue;
+        if (e.value < REF_GLOBAL && gsym(c, (uint32_t)e.value)->shared) { // the word must only read it
+            trunc_site *t = vec_push(c, &c->lends, sizeof *t);
+            if (!t)
+                return false;
+            *t = (trunc_site){(uint32_t)e.value, c->tok.line, c->tok.column, index, k};
+        }
+        if (e.value < REF_GLOBAL && gsym(c, (uint32_t)e.value)->kind != GK_LIST)
             continue;
         if (e.value < REF_GLOBAL) {
             trunc_site *t = vec_push(c, &c->truncs, sizeof *t);
@@ -2234,7 +2256,7 @@ static bool call_word(comp *c, const sig *sp, uint32_t index) {
             *t = (trunc_edge){c->def_index, (uint32_t)(ref_local(c, (uint32_t)e.value - REF_GLOBAL) - g->locals), index, k};
         }
     }
-    if (!call_args(c, &s, base) || (s.fails && !settle_all(c)))
+    if (!call_args(c, &s, base, true) || (s.fails && !settle_all(c)))
         return false;
     count_sig(&s, in, out);
     (void)top_slot(c, BANK_I, in[0] > out[0] ? in[0] : out[0]);
@@ -2280,7 +2302,7 @@ static bool call_host(comp *c, uint32_t host) {
         import = c->imports.n - 1;
     }
     uint32_t base[2], in[2], out[2];
-    if (!call_args(c, &s, base) || (s.fails && !settle_all(c)))
+    if (!call_args(c, &s, base, false) || (s.fails && !settle_all(c)))
         return false;
     count_sig(&s, in, out);
     (void)top_slot(c, BANK_I, in[0] + out[0]);
@@ -5130,7 +5152,7 @@ static bool builtin(comp *c, const struct builtin *w) {
         const uint32_t which = slot_of(c, f->depth - 1);
         --f->depth;
         uint32_t base[2], in[2], out[2];
-        if (!call_args(c, &bs, base) || (bs.fails && !settle_all(c)))
+        if (!call_args(c, &bs, base, false) || (bs.fails && !settle_all(c)))
             return false;
         count_sig(&bs, in, out);
         (void)top_slot(c, BANK_I, (in[0] > out[0] ? in[0] : out[0]) + 1);
@@ -8280,7 +8302,7 @@ static uint32_t called(const comp *c, uint32_t index) {
 
 static bool truncs_ok(comp *c) {
     wordsym *words = c->words.ptr;
-    for (bool changed = true; changed;) { // a word that gives its list on to one that truncates it truncates it too
+    for (bool changed = true; changed;) { // a word that gives its list on to one that truncates (changes) it does too
         changed = false;
         for (uint32_t k = 0; k < c->tedges.n; ++k) {
             const trunc_edge e = ((const trunc_edge *)c->tedges.ptr)[k];
@@ -8289,11 +8311,25 @@ static bool truncs_ok(comp *c) {
                 words[e.word].truncs |= (uint16_t)(1u << e.param);
                 changed = true;
             }
+            if (callee != NONE && (words[callee].writes >> e.callee_param & 1u) && !(words[e.word].writes >> e.param & 1u)) {
+                words[e.word].writes |= (uint16_t)(1u << e.param);
+                changed = true;
+            }
         }
     }
     if (c->redefine_new != NONE && (words[c->redefine_new].truncs & ~words[c->redefine_old].truncs))
         return error(c, PINAX_ERR_TYPE, "redefine cannot make the word truncate a list parameter the old one did not "
                                         "truncate: the lists given to it were checked against the old one");
+    if (c->redefine_new != NONE && (words[c->redefine_new].writes & ~words[c->redefine_old].writes))
+        return error(c, PINAX_ERR_TYPE, "redefine cannot make the word change a collection parameter the old one only "
+                                        "read: shared collections may have been given to it");
+    for (uint32_t k = 0; k < c->lends.n; ++k) {
+        const trunc_site t = ((const trunc_site *)c->lends.ptr)[k];
+        const uint32_t   callee = called(c, t.word);
+        if (callee == NONE || (words[callee].writes >> t.param & 1u))
+            return error_at(c, PINAX_ERR_TYPE, t.line, t.column,
+                            "a shared collection is read-only: the word it is given to changes this parameter");
+    }
     for (uint32_t k = 0; k < c->truncs.n; ++k) {
         const trunc_site t = ((const trunc_site *)c->truncs.ptr)[k];
         if (t.word != NONE && (called(c, t.word) == NONE || !(words[called(c, t.word)].truncs >> t.param & 1u)))

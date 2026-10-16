@@ -1,4 +1,7 @@
-rem refused
+rem run
+use io
+use str
 shared list scores int 100
-word total (l list int gives int) l sum end
-word everyone (gives int) scores total end
+word total (l list int gives int) l sum end       rem reads its parameter only
+word everyone (gives int) scores total end        rem so a shared list may be given to it
+scores total str.to_str io.println                rem not given yet: empty

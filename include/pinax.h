@@ -239,6 +239,18 @@ PINAX_API pinax_err pinax_global_find(pinax_state *state, const char *name, pina
  * pinax_image_open() or pinax_clone(), give them again. */
 PINAX_API pinax_err pinax_share(pinax_state *state, const char *global, pinax_state *source, const char *from);
 
+/* The same from a file, for states in several processes. pinax_share_save() writes every global
+ * of `source` that can be shared (not those it declares `shared` itself) into one file without
+ * addresses; pinax_share_size() is its length. A process maps the file read-only (the host
+ * library's pinax_map_file()) and gives a shared global from it with pinax_share_file(), with
+ * the checks of pinax_share() (the hash_key is the file's). The file's head, the size of each
+ * global, the lengths and every slot of an index are checked (PINAX_ERR_FORMAT); its bytes are
+ * otherwise trusted as an image is. `file` starts 16-byte aligned and outlives the states that
+ * read it; nothing is frozen. */
+PINAX_API size_t    pinax_share_size(const pinax_state *source);
+PINAX_API pinax_err pinax_share_save(const pinax_state *source, pinax_mem out, size_t *written);
+PINAX_API pinax_err pinax_share_file(pinax_state *state, const char *global, pinax_str file, const char *from);
+
 /* ---- loading ----------------------------------------------------------------------- */
 
 enum {

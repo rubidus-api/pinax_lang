@@ -6,6 +6,7 @@
 
 #include "proven/fs.h"
 #include "proven/heap.h"
+#include "proven/mmap.h"
 #include "proven/random.h"
 #include "proven/sysio.h"
 #include "proven/time.h"
@@ -442,4 +443,58 @@ pinax_err pinax_host_register_all(pinax_state *state) {
             return err;
     }
     return PINAX_OK;
+}
+
+// ---- a file mapped read-only, for pinax_share_file() (RFC-0020 section 4.2) ----
+
+struct pinax_mapping {
+    proven_mmap_t map;
+};
+
+pinax_err pinax_map_file(const char *path, pinax_str *bytes, pinax_mapping **out) {
+    if (!path || !bytes || !out)
+        return PINAX_ERR_ARGUMENT;
+    *out = NULL;
+    *bytes = (pinax_str){0};
+    proven_allocator_t         heap = proven_heap_allocator();
+    size_t                     len = 0;
+    while (path[len])
+        ++len;
+    const proven_result_file_t opened = proven_fs_open(heap, (proven_u8str_view_t){(const unsigned char *)path, len},
+                                                       PROVEN_FS_READ);
+    if (opened.err != PROVEN_OK)
+        return from(opened.err);
+    const proven_result_size_t length = proven_fs_size(opened.value);
+    if (length.err != PROVEN_OK || length.value == 0) { // nothing to map: no share file either
+        (void)proven_fs_close(opened.value);
+        return length.err != PROVEN_OK ? from(length.err) : PINAX_ERR_FORMAT;
+    }
+    // shared: every process that maps the file reads the same pages
+    const proven_result_mmap_t mapped = proven_mmap_create(opened.value, 0, 0, PROVEN_MMAP_READ, PROVEN_MMAP_SHARED);
+    if (mapped.err != PROVEN_OK) {
+        (void)proven_fs_close(opened.value);
+        return from(mapped.err);
+    }
+    const proven_result_mem_mut_t room = heap.alloc_fn(heap.ctx, sizeof(pinax_mapping), _Alignof(pinax_mapping));
+    if (room.err != PROVEN_OK) {
+        proven_mmap_t m = mapped.value;
+        (void)proven_mmap_destroy(&m);
+        (void)proven_fs_close(opened.value);
+        return PINAX_ERR_FULL;
+    }
+    pinax_mapping *m = (pinax_mapping *)(void *)room.value.ptr;
+    m->map = mapped.value;
+    *bytes = (pinax_str){(const unsigned char *)m->map.ptr, (size_t)m->map.size};
+    *out = m;
+    return PINAX_OK;
+}
+
+void pinax_unmap_file(pinax_mapping *mapping) {
+    if (!mapping)
+        return;
+    const proven_file_t file = mapping->map.file;
+    (void)proven_mmap_destroy(&mapping->map);
+    (void)proven_fs_close(file);
+    proven_allocator_t heap = proven_heap_allocator();
+    heap.free_fn(heap.ctx, mapping);
 }

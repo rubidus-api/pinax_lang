@@ -114,6 +114,17 @@ NULL). `pinax_handle_release` 는 핸들을 돌려준다.]
 
 #ex("spec", "19-share.c")
 
+#para("1c")[여러 프로세스는 파일로 공유한다. `pinax_share_save(source, out, &written)` 은 `source` 의 공유할 수 있는
+전역(스칼라, 배열, 목록, 버퍼, 찾아보기; 스스로 `shared` 로 선언한 것은 빼고)을 주소 없는 파일 하나로 쓴다. 길이는
+`pinax_share_size` 다. 저장은 복사이므로 `source` 는 얼지 않는다. 호스트 라이브러리의 `pinax_map_file(path, &bytes,
+&map)` 은 파일을 읽기 전용으로, 같은 파일을 사상한 프로세스들이 같은 쪽을 쓰도록 사상한다. `pinax_share_file(state,
+global, bytes, from)` 은 (1a) 와 같은 검사로 파일의 전역 `from` 을 준다. 찾아보기의 해시 열쇠는 파일의 것과 같아야 하고,
+그 표는 같은 파일에서 먼저 받아야 한다. 파일의 머리, 전역마다의 크기와 길이, 찾아보기의 칸은 검사하며 맞지 않으면
+`PINAX_ERR_FORMAT` 이다. 그 밖의 바이트는 상(19.9)처럼 믿는다. `bytes` 는 16바이트 경계에서 시작하고, 그것을 읽는
+상태들보다 오래 있어야 한다. `pinax_unmap_file` 은 그 상태들을 닫은 뒤에 부른다.]
+
+#ex("spec", "19-share-file.c")
+
 #para("2")[`pinax_global_find` 가 주는 `number` 는 모음 매개변수(9.9)가 있는 낱말이 그 인자로 받는 것이다. `i` 에 넣는
 정수다. 종류나 원소 크기가 다른 모음, 또는 없는 전역의 번호는 낱말이 그것을 쓰는 자리에서 결함
 `PINAX_ERR_STATE` 다.]

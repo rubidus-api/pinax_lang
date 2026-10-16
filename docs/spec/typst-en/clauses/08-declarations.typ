@@ -282,12 +282,20 @@ The declaring state has no storage for them; the host gives it the same declarat
 
 #para("2")[Nothing changes a shared global: storing, `set`, `push`, `pop`, `clear`, `truncate`, `add_row`, storing
 into a field, `insert`, `remove`, the words that append to a buffer, and a `map_into` or `filter_into` destination are
-all refused. The processor also refuses, at load, bytecode that changes a shared global.]
+all refused. The processor also refuses, at load, bytecode that changes a shared global, and ends with the fault
+`state` bytecode that would change a shared global it was given as a parameter.]
 #ex("spec", "08-shared-write.pnx")
 
-#para("3")[A shared collection is not passed as a collection parameter (9.9) or as a host word's `buffer` parameter,
-since the receiver could change it. Put reading work in words that name the shared global.]
+#para("3")[A shared collection may be passed as a collection parameter (9.9) of a word that only reads that parameter.
+A word changes its parameter when it uses an instruction that changes it, or passes it to a word that changes that
+parameter or to a host word's `buffer` parameter. The processor decides once the whole source is read, so the same
+holds for a word announced with `forward` and for a word of an earlier load.]
 #ex("spec", "08-shared-param.pnx")
+#ex("spec", "08-shared-change.pnx")
+
+#para("3a")[A shared collection is not passed as a host word's `buffer` parameter or as a parameter of the word a block
+value names (`call`), since what the receiver does is not known at load. `redefine` cannot make a word change a
+parameter it only read.]
 
 #para("4")[`shared` does not stand before `queue`, `pool`, `tasks`, `const` or `record`.]
 #ex("spec", "08-shared-queue.pnx")
@@ -308,7 +316,9 @@ given (19.7).]
   ([A path that does not hand over an `owned` row], "an owned value in a local is not given on every path (close, free or store it)"),
   ([An announced table that is never declared], "a table announced by forward is never declared"),
   ([A shared global is changed], "a shared global is read-only: nothing here may change it"),
-  ([A shared collection passed as a parameter], "a shared collection is read-only: it is not given to a word as a parameter, which may change it"),
+  ([A shared collection passed to a word that changes it], "a shared collection is read-only: the word it is given to changes this parameter"),
+  ([A shared collection passed to a block value's word], "a shared collection is read-only: it is not given to the word a block value names, which may change it"),
+  ([`redefine` makes a read parameter changed], "redefine cannot make the word change a collection parameter the old one only read: shared collections may have been given to it"),
   ([A shared buffer passed to a host word], "a shared buffer is read-only: it is not given to a host word, which may write it"),
   ([Another declaration after `shared`], "shared stands before global, array, list, buffer or index"),
 )

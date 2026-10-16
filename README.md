@@ -122,7 +122,8 @@ host modules (`io`, `file`, `clock`, `random`, `env`) are ordinary host words in
 `src/host/`, linked only by hosts that want them. The same library, `libpinax_host.a`, has a
 host loop that runs many states on a few threads and channels that carry messages between
 them (`src/host/pinax_loop.h`); data that is only read is declared `shared` and lent to many
-states at once with `pinax_share`, without a copy.
+states at once with `pinax_share`, without a copy; several processes map one file written with
+`pinax_share_save` (`pinax_map_file`) and read it together.
 
 ## Documentation
 

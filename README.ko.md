@@ -118,7 +118,8 @@ cc -std=c99 -Iinclude host.c build/native/libpinax.a -lm -o host
 모듈(`io` `file` `clock` `random` `env`)은 `src/host/` 에 있는 평범한 호스트 낱말이고, 필요한
 호스트만 링크합니다. 같은 라이브러리 `libpinax_host.a` 에는 여러 상태를 몇 개의 스레드에서 돌리는
 호스트 루프와, 상태 사이로 메시지를 나르는 채널도 있습니다(`src/host/pinax_loop.h`). 읽기만 하는
-자료는 `shared` 로 선언하고 `pinax_share` 로 여러 상태에 복사 없이 빌려줍니다.
+자료는 `shared` 로 선언하고 `pinax_share` 로 여러 상태에 복사 없이 빌려줍니다. 여러 프로세스라면
+`pinax_share_save` 로 쓴 파일을 각자 `pinax_map_file` 로 사상해 함께 읽습니다.
 
 ## 문서
 

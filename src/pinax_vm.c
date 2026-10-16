@@ -750,10 +750,12 @@ pinax_err pnx_execute(pinax_state *st) {
         }
         CASE(GSEL) { // the global a reference names, for the instruction after this one
             const uint64_t gi = (uint64_t)R[OP_A(w)];
-            const uint32_t elem = *pc++;
+            const uint32_t elem = *pc++, next = *pc; // the loader keeps the instruction after a GSEL in the word
+            // a shared global is chosen only to be read: LCOPYR writes the one in its BX
+            const bool writes = pnx_writes_global(next & 0xffu) && ((next & 0xffu) != PNX_LCOPYR || OP_BX(next) == PNX_GSELECTED);
             if (gi >= st->head->n_globals || st->globals[gi].kind != OP_B(w) ||
-                (elem && st->globals[gi].elem_bytes != elem) || st->globals[gi].shared)
-                FAULT(PINAX_ERR_STATE); // a shared global is never a parameter: the word may write it
+                (elem && st->globals[gi].elem_bytes != elem) || (writes && st->globals[gi].shared))
+                FAULT(PINAX_ERR_STATE);
             st->gsel = (uint32_t)gi;
             NEXT();
         }

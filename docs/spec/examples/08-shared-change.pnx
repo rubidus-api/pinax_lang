@@ -1,0 +1,5 @@
+rem refused
+shared list scores int 100
+word reset (l list int) l clear end
+word keep (l list int) l reset end                rem gives it to a word that changes it
+word start () scores keep end

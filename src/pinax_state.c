@@ -1475,6 +1475,22 @@ static const pnx_globalrec *global_rec(const pinax_state *st, const char *name, 
     return NULL;
 }
 
+// Points shared global `ti` at storage that stays as it is. An index of a table given anew no
+// longer fits that table: it waits to be given again.
+static void give_shared(pinax_state *st, uint32_t ti, uint8_t *ptr, uint32_t length, uint32_t head, uint32_t capacity) {
+    pnx_global *t = &st->globals[ti];
+    const bool  index = t->kind == PNX_G_INDEX;
+    t->ptr = ptr;
+    t->length = length;
+    t->head = head;
+    t->capacity = index ? capacity : t->capacity;
+    for (uint32_t k = 0; !index && k < st->head->n_globals; ++k) {
+        pnx_global *x = &st->globals[k];
+        if (x->kind == PNX_G_INDEX && x->shared && (x->key & 0xfffu) == ti)
+            unshared(x);
+    }
+}
+
 // RFC-0020 section 4: the target's declaration, written `shared`, reads the source's storage.
 pinax_err pinax_share(pinax_state *st, const char *global, pinax_state *source, const char *from) {
     if (!st || !global || !source || !from || st == source)
@@ -1506,16 +1522,193 @@ pinax_err pinax_share(pinax_state *st, const char *global, pinax_state *source, 
         if (!table->shared || table->ptr != from_table->ptr || table->length != from_table->length)
             return fail(st, PINAX_ERR_STATE, "share the index's table first, from the same state");
     }
-    t->ptr = g->ptr;
-    t->length = g->length;
-    t->head = g->head;
-    t->capacity = index ? trec->capacity : t->capacity;
-    for (uint32_t k = 0; !index && k < st->head->n_globals; ++k) { // an index of the old table no longer fits
-        pnx_global *x = &st->globals[k];
-        if (x->kind == PNX_G_INDEX && x->shared && (x->key & 0xfffu) == ti)
-            unshared(x);
-    }
+    give_shared(st, ti, g->ptr, g->length, g->head, trec->capacity);
     source->frozen = true; // from now on its bytes stay as they are
+    return PINAX_OK;
+}
+
+// ---- the shareable globals as one file without addresses (RFC-0020 section 4.2) ------------
+
+// The file: this head, one entry per global, then each global's bytes, 16-byte aligned. Nothing in
+// it is an address, so every process maps it where it likes.
+typedef struct pnx_share_head {
+    char          magic[4]; // "PNXS"
+    uint32_t      format, order, count;
+    uint64_t      length;   // of the whole file
+    unsigned char hash_key[16];
+    uint8_t       reserved[24];
+} pnx_share_head;
+typedef struct pnx_share_entry {
+    pnx_globalrec rec;           // as the source declared it; reserved: an index's key kind only
+    uint32_t      length, table; // cells in use; an index: the entry of its table
+    uint64_t      offset, bytes; // from the start of the file
+    uint64_t      reserved;      // 0
+} pnx_share_entry;
+static_assert(sizeof(pnx_share_head) == 64 && sizeof(pnx_share_entry) % 16 == 0, "share file records lose their alignment");
+
+// What a global keeps in its storage, by kind; 0 for a kind that is not shared.
+static uint64_t share_bytes(uint32_t kind, uint64_t capacity, uint64_t elem_bytes) {
+    switch (kind) {
+    case PNX_G_INT: return 8;
+    case PNX_G_ARRAY: case PNX_G_LIST: return capacity * 8;
+    case PNX_G_BUFFER: return capacity + 8;
+    case PNX_G_TABLE: case PNX_G_ROWS: return capacity * elem_bytes;
+    case PNX_G_INDEX: return capacity * 4;
+    default: return 0;
+    }
+}
+
+static bool share_saved(const pinax_state *st, uint32_t k) {
+    const pnx_global *g = &st->globals[k];
+    if (g->shared || !share_bytes(g->kind, g->capacity, g->elem_bytes))
+        return false;
+    return g->kind != PNX_G_INDEX || !st->globals[g->key & 0xfffu].shared; // an index goes with its table
+}
+
+size_t pinax_share_size(const pinax_state *st) {
+    if (!st || !st->head)
+        return 0;
+    uint64_t count = 0, data = 0;
+    for (uint32_t k = 0; k < st->head->n_globals; ++k) {
+        if (share_saved(st, k)) {
+            const pnx_global *g = &st->globals[k];
+            ++count;
+            data += (share_bytes(g->kind, g->capacity, g->elem_bytes) + 15u) & ~(uint64_t)15u;
+        }
+    }
+    return (size_t)(sizeof(pnx_share_head) + count * sizeof(pnx_share_entry) + data);
+}
+
+pinax_err pinax_share_save(const pinax_state *st, pinax_mem out, size_t *written) {
+    if (!st || !out.ptr || !written)
+        return PINAX_ERR_ARGUMENT;
+    *written = 0;
+    if (!st->head)
+        return PINAX_ERR_STATE;
+    if (st->host_cur || st->nest || st->loading || st->suspended) // its bytes may be half changed
+        return PINAX_ERR_STATE;
+    const size_t size = pinax_share_size(st);
+    if (out.len < size)
+        return PINAX_ERR_NO_ROOM;
+    const pnx_globalrec *recs = (const pnx_globalrec *)(const void *)(st->words + st->head->n_words);
+    uint8_t             *file = out.ptr;
+    pnx_share_head       head = {.magic = {'P', 'N', 'X', 'S'}, .format = PINAX_FORMAT, .order = PNX_ORDER_MARK,
+                                 .length = size};
+    __builtin_memcpy(head.hash_key, st->hash_key, sizeof head.hash_key);
+    for (uint32_t k = 0; k < st->head->n_globals; ++k)
+        head.count += share_saved(st, k);
+    __builtin_memset(file, 0, size);
+    __builtin_memcpy(file, &head, sizeof head);
+    uint64_t at = sizeof head + (uint64_t)head.count * sizeof(pnx_share_entry);
+    uint32_t n = 0;
+    for (uint32_t k = 0; k < st->head->n_globals; ++k) {
+        if (!share_saved(st, k))
+            continue;
+        const pnx_global *g = &st->globals[k];
+        pnx_share_entry   e = {.rec = recs[k], .length = g->length, .table = UINT32_MAX, .offset = at,
+                               .bytes = share_bytes(g->kind, g->capacity, g->elem_bytes)};
+        e.rec.reserved = g->kind == PNX_G_INDEX ? recs[k].reserved & 1u : 0;
+        for (uint32_t j = 0, m = 0; g->kind == PNX_G_INDEX && j < k; ++j) { // the entry its table got
+            if (j == (g->key & 0xfffu))
+                e.table = m;
+            m += share_saved(st, j);
+        }
+        __builtin_memcpy(file + sizeof head + (size_t)n * sizeof e, &e, sizeof e);
+        __builtin_memcpy(file + at, g->ptr, (size_t)e.bytes);
+        at += (e.bytes + 15u) & ~(uint64_t)15u;
+        ++n;
+    }
+    *written = size;
+    return PINAX_OK;
+}
+
+// The entry `k` of a share file whose head was checked, itself checked: inside the file, aligned,
+// of the size its declaration gives, with no more cells in use than it holds.
+static const pnx_share_entry *share_entry(pinax_str file, uint32_t k) {
+    const pnx_share_head *head = (const pnx_share_head *)(const void *)file.ptr;
+    const pnx_share_entry *e = (const pnx_share_entry *)(const void *)(file.ptr + sizeof *head) + k;
+    const uint64_t start = sizeof *head + (uint64_t)head->count * sizeof *e;
+    const uint64_t want = share_bytes(e->rec.kind, e->rec.capacity, e->rec.elem_bytes);
+    if (!terminated(e->rec.name, sizeof e->rec.name) || !terminated(e->rec.type, sizeof e->rec.type) || !want ||
+        e->rec.capacity == 0 || e->bytes != want || e->offset % 16 || e->offset < start || e->offset > file.len ||
+        e->bytes > file.len - e->offset || e->length > e->rec.capacity || e->reserved)
+        return NULL;
+    const uint8_t *bytes = file.ptr + e->offset;
+    uint64_t       used;
+    switch (e->rec.kind) {
+    case PNX_G_INT: case PNX_G_ARRAY: case PNX_G_TABLE: // always full
+        return e->length == (e->rec.kind == PNX_G_INT ? 1u : e->rec.capacity) ? e : NULL;
+    case PNX_G_BUFFER:
+        __builtin_memcpy(&used, bytes, 8);
+        return used <= e->rec.capacity ? e : NULL;
+    case PNX_G_INDEX: { // a power of two of slots, each empty, removed or a row of its table
+        if (e->rec.capacity & (e->rec.capacity - 1) || e->table >= k || (e->rec.reserved & ~1u))
+            return NULL;
+        const pnx_share_entry *table = share_entry(file, e->table);
+        if (!table || (table->rec.kind != PNX_G_TABLE && table->rec.kind != PNX_G_ROWS))
+            return NULL;
+        const uint32_t offset = (e->rec.elem_bytes >> 12) & 0xfffu, extra = e->rec.elem_bytes >> 24;
+        if (offset + ((e->rec.reserved & 1u) ? 1u + extra : extra < PNX_W_COUNT ? width_bytes[extra] : UINT32_MAX) >
+            table->rec.elem_bytes)
+            return NULL;
+        for (uint32_t slot = 0; slot < e->rec.capacity; ++slot) {
+            uint32_t row;
+            __builtin_memcpy(&row, bytes + (size_t)slot * 4, 4);
+            if (row != UINT32_MAX && row > table->length) // all ones: a removed entry
+                return NULL;
+        }
+        return e;
+    }
+    default: return e;
+    }
+}
+
+pinax_err pinax_share_file(pinax_state *st, const char *global, pinax_str file, const char *from) {
+    if (!st || !global || !from || !file.ptr)
+        return PINAX_ERR_ARGUMENT;
+    if (!st->head)
+        return fail(st, PINAX_ERR_STATE, "no code loaded");
+    if (st->host_cur)
+        return fail(st, PINAX_ERR_STATE, "a run of the state is not finished");
+    if ((uintptr_t)file.ptr % 16)
+        return fail(st, PINAX_ERR_ARGUMENT, "the file's bytes must start 16-byte aligned (a mapping always does)");
+    pnx_share_head head;
+    if (file.len < sizeof head)
+        return fail(st, PINAX_ERR_FORMAT, "not a share file");
+    __builtin_memcpy(&head, file.ptr, sizeof head);
+    if (__builtin_memcmp(head.magic, "PNXS", 4) != 0 || head.format != PINAX_FORMAT || head.order != PNX_ORDER_MARK ||
+        head.length != file.len || head.count > (file.len - sizeof head) / sizeof(pnx_share_entry))
+        return fail(st, PINAX_ERR_FORMAT, "not a share file of this format and byte order, or cut short");
+    uint32_t             ti, fi = UINT32_MAX;
+    const pnx_globalrec *trec = global_rec(st, global, &ti);
+    const pnx_share_entry *entries = (const pnx_share_entry *)(const void *)(file.ptr + sizeof head);
+    for (uint32_t k = 0; fi == UINT32_MAX && k < head.count; ++k) {
+        if (terminated(entries[k].rec.name, sizeof entries[k].rec.name) && text_equal(entries[k].rec.name, from))
+            fi = k;
+    }
+    if (!trec || fi == UINT32_MAX)
+        return fail(st, PINAX_ERR_NOT_FOUND, "no such global");
+    const pnx_share_entry *e = share_entry(file, fi);
+    if (!e)
+        return fail(st, PINAX_ERR_FORMAT, "the file's entry for this global is damaged");
+    pnx_global *t = &st->globals[ti];
+    if (!t->shared)
+        return fail(st, PINAX_ERR_STATE, "the script did not declare this global shared");
+    const bool index = trec->kind == PNX_G_INDEX;
+    if (trec->kind != e->rec.kind || trec->capacity != e->rec.capacity ||
+        (!index && trec->elem_bytes != e->rec.elem_bytes) || !text_equal(trec->type, e->rec.type) ||
+        (index && ((trec->elem_bytes >> 12) != (e->rec.elem_bytes >> 12) || t->key_is_str != (e->rec.reserved & 1u) ||
+                   __builtin_memcmp(st->hash_key, head.hash_key, sizeof st->hash_key) != 0)))
+        return fail(st, PINAX_ERR_SIGNATURE,
+                    index ? "the index differs: its key, its size or the hash key of the state and the file"
+                          : "the two declarations differ in kind, type or size");
+    if (index) { // its slots name rows of the file's table: the state's table must be that one
+        const pnx_share_entry *table = &entries[e->table];
+        const pnx_global      *mine = &st->globals[t->key & 0xfffu];
+        if (!mine->shared || mine->ptr != file.ptr + table->offset || mine->length != table->length)
+            return fail(st, PINAX_ERR_STATE, "share the index's table first, from the same file");
+    }
+    give_shared(st, ti, (uint8_t *)(uintptr_t)(file.ptr + e->offset), e->length, 0, trec->capacity);
     return PINAX_OK;
 }
 
