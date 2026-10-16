@@ -53,6 +53,14 @@ error: line 1: div_zero
     8      longest max to longest                       | (empty)
     9    end each                                       | (empty)
    10    n longest                                      | int int
+</code></pre></div><p class="para"><span class="pn">(1a)</span> 소스가 거절되면 <code>pnx see</code> 는 거절된 자리 앞의 줄들을 보이고, 거절 진단을 내고, 1 로 끝난다.</p><div class="example see-refused"><p class="ex-file"><code>20-see-refused.pnx</code></p><pre><code data-lang="pinax"><span style="color: #d73948">word</span> f (n <span style="color: #d73948">int</span> <span style="color: #d73948">gives</span> <span style="color: #d73948">int</span>)
+  n <span style="color: #b60157">1</span> add
+  n
+<span style="color: #d73948">end</span>
+</code></pre><p class="ex-label">목록과 거절</p><pre><code data-lang="text">$ pnx see 20-see-refused.pnx
+    2    n 1 add                                        | int
+    3    n                                              | int int
+20-see-refused.pnx:4:1: the stack does not hold exactly the results of the signature here
 </code></pre></div><p class="para"><span class="pn">(2)</span> <code>pnx fmt file.pnx</code> 는 들여쓰기와 공백만 고친 글을 표준 출력에 쓴다. 토큰과 줄바꿈의 자리, 주석은 그대로다. 고친 글을 다시 고쳐도 같다.</p><div class="example fmt"><p class="ex-file"><code>20-fmt.pnx</code></p><pre><code data-lang="pinax"><span style="color: #d73948">use</span> io
 <span style="color: #d73948">word</span> sign (n <span style="color: #d73948">int</span> <span style="color: #d73948">gives</span> r <span style="color: #d73948">int</span>)
 n <span style="color: #b60157">0</span> gt <span style="color: #d73948">if</span>

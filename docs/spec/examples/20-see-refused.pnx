@@ -1,0 +1,5 @@
+rem see-refused
+word f (n int gives int)
+  n 1 add
+  n
+end

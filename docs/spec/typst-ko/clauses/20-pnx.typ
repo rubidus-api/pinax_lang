@@ -57,6 +57,10 @@ test = "test" NAME { body } "end" ;
 
 #ex("spec", "20-see.pnx")
 
+#para("1a")[소스가 거절되면 `pnx see` 는 거절된 자리 앞의 줄들을 보이고, 거절 진단을 내고, 1 로 끝난다.]
+
+#ex("spec", "20-see-refused.pnx")
+
 #para("2")[`pnx fmt file.pnx` 는 들여쓰기와 공백만 고친 글을 표준 출력에 쓴다. 토큰과 줄바꿈의 자리, 주석은
 그대로다. 고친 글을 다시 고쳐도 같다.]
 

@@ -1,0 +1,9 @@
+rem refused
+use json
+record point
+  x int
+  y int
+end
+list points point 2
+buffer out 64
+word write (p points) p out json.pack end   rem pack fails when the buffer is full: no guard

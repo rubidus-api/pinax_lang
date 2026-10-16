@@ -32,12 +32,34 @@ its value, and the rest.
 
 #ex("manual", "11-json-read.pnx")
 
+Look at the three things `json.next` gives, one token at a time. `s json.next` gives `(kind int, value str, rest str)`:
+the kind of the token, its text (a view), and the text left after it. Giving what is left to `json.next` again, over and
+over, walks the whole text once from the front. At the end of the text `json.next` fails, and that failure ends the
+loop.
+
+#ex("manual", "11-json-tokens.pnx")
+
+#trace(
+  ("rest json.next", "json.object \"{\" …", [Reads `{`: kind `json.object`; what is left is `"name": …`.]),
+  ([`or_else (e) break end`], "json.object \"{\" …", [It did not fail, so the body is skipped.]),
+  ("to (kind, value, rest)", "—", [The three go into names; the rightmost, `rest`, takes the top value.]),
+)
+
+A kind is a module constant like `json.object`, so it is compared with `eq`, not `case` (chapter 4). Only the work for
+each kind has to be chosen, so the values needed can be picked out at any depth; `11-json-read.pnx` added up the
+`json.number` tokens only.
+
 == Bytes
 
 The module `bytes` writes and reads fixed widths in a given byte order. With `big_endian` in a record, `bytes.pack` writes
 the most significant byte first. A `varint` field writes small numbers in few bytes.
 
 #ex("manual", "11-binary.pnx")
+
+The writing words (`pack`, `put_…`, `encode.…_encode`) fail when the buffer is full, so a guard word always follows
+them.
+
+#ex("manual", "11-pack-unguarded.pnx")
 
 #qa[Does the record lie in memory in big-endian order too?][No. `big_endian` sets only the order of the bytes that
 `pack` and `unpack` use. The layout in memory is the processor's, and a script cannot see it.]

@@ -12,6 +12,7 @@
 #   rem test-fail            pnx test; a test fails (exit 1)
 #   rem repl                 the rest of the file is typed into pnx repl
 #   rem fmt | rem see        the output of pnx fmt or pnx see
+#   rem see-refused          pnx see on a source it refuses: the listing up to the place, then the message
 #   rem args: A B            arguments after the file name
 #   rem stdin: NAME.in       standard input (a file beside the example)
 #   rem with: OTHER.pnx      another example the program uses (copied beside it)
@@ -43,7 +44,7 @@ for f in "$src_dir"/*.pnx; do
     [ -e "$f" ] || continue
     n=$(basename "$f")
     awk 'BEGIN { head = 1 }
-         head && /^rem (run|fault|refused|test|test-fail|repl|fmt|see|hide)$/ { next }
+         head && /^rem (run|fault|refused|test|test-fail|repl|fmt|see|see-refused|hide)$/ { next }
          head && /^rem (args|stdin|with):/ { next }
          { head = 0; print }' "$f" >"$run_dir/$n"
     cp "$run_dir/$n" "$out_dir/$n.src"
@@ -63,7 +64,7 @@ for f in "$src_dir"/*.pnx; do
     fi
     total=$((total + 1))
     kind=run
-    for k in fault refused test test-fail repl fmt see; do
+    for k in fault refused test test-fail repl fmt see see-refused; do
         [ "$(contract "$f" "$k")" = yes ] && kind=$k
     done
     args=$(contract "$f" args)
@@ -81,6 +82,8 @@ for f in "$src_dir"/*.pnx; do
             (cd "$run_dir" && "$pnx" repl <"$n" >"$o" 2>"$e") ;;
         fmt|see) cmd="pnx $kind $n"
             (cd "$run_dir" && "$pnx" "$kind" "$n" <"$input" >"$o" 2>"$e") ;;
+        see-refused) cmd="pnx see $n"
+            (cd "$run_dir" && "$pnx" see "$n" <"$input" >"$o" 2>"$e") ;;
     esac
     status=$?
     case $kind in
@@ -98,6 +101,10 @@ for f in "$src_dir"/*.pnx; do
             [ $status = 1 ] || { fail "$n" "exit $status, wanted 1 (a fault)" "$o"; continue; }
             grep -q ':[0-9]*: ' "$e" || { fail "$n" "no fault message" "$e"; continue; }
             { echo "\$ $cmd"; cat "$o" "$e"; } >"$out" ;;
+        see-refused)
+            [ $status = 1 ] || { fail "$n" "exit $status, wanted 1 (refused)" "$o"; continue; }
+            grep -q "^$n:[0-9]*:[0-9]*: " "$e" || { fail "$n" "no load diagnostic" "$e"; continue; }
+            { echo "\$ $cmd"; cat "$o"; grep -v "^$n: [a-z][a-z ]*\$" "$e"; } >"$out" ;;
         refused)
             [ $status = 1 ] || { fail "$n" "exit $status, wanted 1 (refused)" "$o"; continue; }
             [ -s "$o" ] && { fail "$n" "printed output, so it was not refused at load" "$o"; continue; }

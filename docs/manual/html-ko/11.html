@@ -19,7 +19,32 @@ price 7.00
 <span style="color: #b60157">5</span> money.pad2 drop
 </code></pre><p class="ex-label">거절</p><pre><code data-lang="text">$ pnx 10-private.pnx
 10-private.pnx:2:3: the module exports nothing of this name
-</code></pre></div><div class="box mistake"><p class="box-title">흔한 오해: <code>cents</code> 도 결국 정수니까 더해도 된다</p><code>cents</code> 와 <code>int</code> 를 더하면 거절된다. 같은 선언한 타입끼리만 더하고 뺀다. 단위가 다른 수를 섞는 실수를 막으려고 타입을 나눈 것이다.<div class="example refused"><p class="ex-file"><code>10-mixed.pnx</code></p><pre><code data-lang="pinax"><span style="color: #d73948">use</span> money
+</code></pre></div><p>모듈은 낱말 말고도 상수, 전역, 타입, 레코드를 내보낼 수 있다. 쓰는 꼴은 이렇다.</p><table><thead><tr><th><strong>내보낸 것</strong></th><th><strong>읽기·부르기</strong></th><th><strong>비고</strong></th></tr></thead><tbody><tr><td>낱말</td><td><code>모듈.낱말</code></td><td>서명은 모듈 안과 같다</td></tr><tr><td>상수 (<code>const</code>)</td><td><code>모듈.이름</code></td><td></td></tr><tr><td>전역 (<code>global</code> 과 모음)</td><td><code>모듈.이름</code></td><td>넣을 때는 <code>값 set 모듈.이름</code></td></tr><tr><td>타입, 레코드, 표의 줄 타입</td><td>이름만</td><td><code>cents</code> 처럼 경로 없이 쓴다</td></tr></tbody></table><p>아래 모듈 <code>tally</code> 는 상수 하나, 전역 하나, 낱말 하나를 내보낸다. 전역을 바꾸는 것은 대개 모듈 자신의 낱말(<code>bump</code>)이 맡지만, 밖에서도 <code>set tally.hits</code> 로 넣을 수 있다.</p><div class="example module"><p class="ex-file"><code>tally.pnx</code></p><pre><code data-lang="pinax"><span style="color: #74747c">rem A module that keeps a count: an exported constant, an exported global and a word.</span>
+<span style="color: #d73948">export</span> <span style="color: #d73948">const</span> limit <span style="color: #b60157">3</span>
+<span style="color: #d73948">export</span> <span style="color: #d73948">global</span> hits <span style="color: #d73948">int</span>
+<span style="color: #d73948">export</span> <span style="color: #d73948">word</span> bump (<span style="color: #d73948">gives</span> <span style="color: #d73948">bool</span>)          <span style="color: #74747c">rem true while hits is still under the limit</span>
+  hits limit lt <span style="color: #d73948">if</span> hits <span style="color: #b60157">1</span> add set hits <span style="color: #d73948">true</span> <span style="color: #d73948">else</span> <span style="color: #d73948">false</span> <span style="color: #d73948">end</span>
+<span style="color: #d73948">end</span>
+</code></pre></div><div class="example run"><p class="ex-file"><code>10-tally.pnx</code></p><pre><code data-lang="pinax"><span style="color: #d73948">use</span> io
+<span style="color: #d73948">use</span> tally
+<span style="color: #d73948">word</span> try_once ()
+  tally.bump <span style="color: #d73948">if</span> <span style="color: #198810">"counted"</span> <span style="color: #d73948">else</span> <span style="color: #198810">"limit reached"</span> <span style="color: #d73948">end</span> io.println
+<span style="color: #d73948">end</span>
+try_once try_once try_once try_once                 <span style="color: #74747c">rem the fourth time the limit is reached</span>
+<span style="color: #d73948">cat</span> (<span style="color: #198810">"hits "</span>, tally.hits, <span style="color: #198810">" of "</span>, tally.limit) io.println   <span style="color: #74747c">rem read an exported global and constant</span>
+<span style="color: #b60157">0</span> set tally.hits                                    <span style="color: #74747c">rem an exported global is written with set module.name</span>
+<span style="color: #d73948">cat</span> (<span style="color: #198810">"hits after reset "</span>, tally.hits) io.println
+</code></pre><p class="ex-label">출력</p><pre><code data-lang="text">$ pnx 10-tally.pnx
+counted
+counted
+counted
+limit reached
+hits 3 of 3
+hits after reset 0
+</code></pre></div><p><code>use</code> 한 모듈을 찾지 못하면 적재 때 거절된다. <code>pnx</code> 는 표준 모듈과 호스트 모듈을 먼저 보고, 없으면 프로그램 파일 옆의 <code>이름.pnx</code> 를 찾는다.</p><div class="example refused"><p class="ex-file"><code>10-unknown-module.pnx</code></p><pre><code data-lang="pinax"><span style="color: #d73948">use</span> maths                                           <span style="color: #74747c">rem no maths.pnx beside the program, no such module</span>
+</code></pre><p class="ex-label">거절</p><pre><code data-lang="text">$ pnx 10-unknown-module.pnx
+10-unknown-module.pnx:1:5: no module of this name is registered or loaded
+</code></pre></div><div class="box qa"><p class="box-title">문답</p><p><strong>물음. 모듈의 이름은 누가 정하는가?</strong></p><p>답. 적재하는 쪽이다. <code>pnx</code> 는 파일 이름에서 <code>.pnx</code> 를 뗀 것을 쓰고, C 호스트는 <code>pinax_load</code> 에 이름을 준다. 그래서 파일 안에는 모듈의 이름을 적는 줄이 없다. 이름이 같은 모듈 둘은 한 상태에 함께 있지 못한다.</p></div><div class="box mistake"><p class="box-title">흔한 오해: <code>cents</code> 도 결국 정수니까 더해도 된다</p><code>cents</code> 와 <code>int</code> 를 더하면 거절된다. 같은 선언한 타입끼리만 더하고 뺀다. 단위가 다른 수를 섞는 실수를 막으려고 타입을 나눈 것이다.<div class="example refused"><p class="ex-file"><code>10-mixed.pnx</code></p><pre><code data-lang="pinax"><span style="color: #d73948">use</span> money
 <span style="color: #b60157">12</span> money.of_won <span style="color: #b60157">3</span> add drop
 </code></pre><p class="ex-label">거절</p><pre><code data-lang="text">$ pnx 10-mixed.pnx
 10-mixed.pnx:2:19: a declared type is added to and subtracted from its own type, and multiplied, divided or taken modulo by an int; for other arithmetic take raw
@@ -56,4 +81,4 @@ price 7.00
 </code></pre><p class="ex-label">출력</p><pre><code data-lang="text">$ ./10-data
 port: 8080
 refused: a data source defines no words and uses no modules
-</code></pre></div><p><code>pnx</code> 는 자료 적재를 하지 않는다. 자료 적재는 호스트의 일이다(14장).</p><div class="box summary"><p class="box-title">정리</p><ul><li>파일 하나가 모듈이고, <code>export</code> 한 것만 밖에서 보인다(표준 13.1, 13.2).</li><li><code>use 모듈 [as 별명]</code> 뒤에 <code>모듈.이름</code> 으로 쓴다(13.1).</li><li>선언한 타입은 같은 타입끼리만 더하고 뺀다(7.4).</li><li>자료 적재는 선언과 값만 받는다(13.4).</li></ul></div></main><nav class="bottom"><a href="index.html">처음</a> · <a href="10.html">앞</a> · <a href="12.html">다음</a> · <a href="../html-en/11.html">English</a></nav></body></html>
+</code></pre></div><p><code>pnx</code> 는 자료 적재를 하지 않는다. 자료 적재는 호스트의 일이다(14장).</p><div class="box summary"><p class="box-title">정리</p><ul><li>파일 하나가 모듈이고, <code>export</code> 한 것만 밖에서 보인다(표준 13.1, 13.2).</li><li><code>use 모듈 [as 별명]</code> 뒤에 <code>모듈.이름</code> 으로 쓴다(13.1).</li><li>낱말, 상수, 전역은 경로로, 타입과 레코드는 이름만으로 쓴다. 내보낸 전역에는 <code>set 모듈.이름</code> 으로 넣는다(13.2).</li><li>선언한 타입은 같은 타입끼리만 더하고 뺀다(7.4).</li><li>자료 적재는 선언과 값만 받는다(13.4).</li></ul></div></main><nav class="bottom"><a href="index.html">처음</a> · <a href="10.html">앞</a> · <a href="12.html">다음</a> · <a href="../html-en/11.html">English</a></nav></body></html>

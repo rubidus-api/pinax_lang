@@ -1,0 +1,7 @@
+rem hide
+rem A module that keeps a count: an exported constant, an exported global and a word.
+export const limit 3
+export global hits int
+export word bump (gives bool)          rem true while hits is still under the limit
+  hits limit lt if hits 1 add set hits true else false end
+end

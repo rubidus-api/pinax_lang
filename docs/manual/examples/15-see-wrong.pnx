@@ -1,0 +1,6 @@
+rem see-refused
+word price_label (cents int gives str)
+  cents 100 div
+  "won" swap
+  cat (cents, " cents")
+end

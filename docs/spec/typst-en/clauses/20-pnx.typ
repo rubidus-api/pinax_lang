@@ -59,6 +59,11 @@ same signature; code that calls it calls the new one).]
 
 #ex("spec", "20-see.pnx")
 
+#para("1a")[When the source is refused, `pnx see` shows the lines before the place of the refusal, gives the
+diagnostic, and exits with 1.]
+
+#ex("spec", "20-see-refused.pnx")
+
 #para("2")[`pnx fmt file.pnx` writes the text with only indentation and spaces changed to standard output. Tokens, line
 breaks and remarks stay where they are. Formatting the result again changes nothing.]
 

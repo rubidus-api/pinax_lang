@@ -19,7 +19,32 @@ price 7.00
 <span style="color: #b60157">5</span> money.pad2 drop
 </code></pre><p class="ex-label">Refused</p><pre><code data-lang="text">$ pnx 10-private.pnx
 10-private.pnx:2:3: the module exports nothing of this name
-</code></pre></div><div class="box mistake"><p class="box-title">Common mistake: <code>cents</code> is just an integer, so it can be added to one</p>Adding <code>cents</code> and <code>int</code> is refused. Only two values of the same declared type are added and subtracted; the types are kept apart to stop numbers of different units from being mixed.<div class="example refused"><p class="ex-file"><code>10-mixed.pnx</code></p><pre><code data-lang="pinax"><span style="color: #d73948">use</span> money
+</code></pre></div><p>Besides words, a module can export constants, globals, types and records. They are used like this.</p><table><thead><tr><th><strong>Exported</strong></th><th><strong>Read or call</strong></th><th><strong>Note</strong></th></tr></thead><tbody><tr><td>word</td><td><code>module.word</code></td><td>the signature is the same as inside the module</td></tr><tr><td>constant (<code>const</code>)</td><td><code>module.name</code></td><td></td></tr><tr><td>global (<code>global</code> and collections)</td><td><code>module.name</code></td><td>stored with <code>value set module.name</code></td></tr><tr><td>type, record, row type of a table</td><td>the name alone</td><td>written without a path, like <code>cents</code></td></tr></tbody></table><p>The module <code>tally</code> below exports a constant, a global and a word. Changing the global is usually the job of the module’s own word (<code>bump</code>), but it can also be stored from outside with <code>set tally.hits</code>.</p><div class="example module"><p class="ex-file"><code>tally.pnx</code></p><pre><code data-lang="pinax"><span style="color: #74747c">rem A module that keeps a count: an exported constant, an exported global and a word.</span>
+<span style="color: #d73948">export</span> <span style="color: #d73948">const</span> limit <span style="color: #b60157">3</span>
+<span style="color: #d73948">export</span> <span style="color: #d73948">global</span> hits <span style="color: #d73948">int</span>
+<span style="color: #d73948">export</span> <span style="color: #d73948">word</span> bump (<span style="color: #d73948">gives</span> <span style="color: #d73948">bool</span>)          <span style="color: #74747c">rem true while hits is still under the limit</span>
+  hits limit lt <span style="color: #d73948">if</span> hits <span style="color: #b60157">1</span> add set hits <span style="color: #d73948">true</span> <span style="color: #d73948">else</span> <span style="color: #d73948">false</span> <span style="color: #d73948">end</span>
+<span style="color: #d73948">end</span>
+</code></pre></div><div class="example run"><p class="ex-file"><code>10-tally.pnx</code></p><pre><code data-lang="pinax"><span style="color: #d73948">use</span> io
+<span style="color: #d73948">use</span> tally
+<span style="color: #d73948">word</span> try_once ()
+  tally.bump <span style="color: #d73948">if</span> <span style="color: #198810">"counted"</span> <span style="color: #d73948">else</span> <span style="color: #198810">"limit reached"</span> <span style="color: #d73948">end</span> io.println
+<span style="color: #d73948">end</span>
+try_once try_once try_once try_once                 <span style="color: #74747c">rem the fourth time the limit is reached</span>
+<span style="color: #d73948">cat</span> (<span style="color: #198810">"hits "</span>, tally.hits, <span style="color: #198810">" of "</span>, tally.limit) io.println   <span style="color: #74747c">rem read an exported global and constant</span>
+<span style="color: #b60157">0</span> set tally.hits                                    <span style="color: #74747c">rem an exported global is written with set module.name</span>
+<span style="color: #d73948">cat</span> (<span style="color: #198810">"hits after reset "</span>, tally.hits) io.println
+</code></pre><p class="ex-label">Output</p><pre><code data-lang="text">$ pnx 10-tally.pnx
+counted
+counted
+counted
+limit reached
+hits 3 of 3
+hits after reset 0
+</code></pre></div><p>A module that <code>use</code> cannot find is refused at load. <code>pnx</code> looks at the standard and host modules first, then for <code>NAME.pnx</code> beside the program file.</p><div class="example refused"><p class="ex-file"><code>10-unknown-module.pnx</code></p><pre><code data-lang="pinax"><span style="color: #d73948">use</span> maths                                           <span style="color: #74747c">rem no maths.pnx beside the program, no such module</span>
+</code></pre><p class="ex-label">Refused</p><pre><code data-lang="text">$ pnx 10-unknown-module.pnx
+10-unknown-module.pnx:1:5: no module of this name is registered or loaded
+</code></pre></div><div class="box qa"><p class="box-title">Q&amp;A</p><p><strong>Q. Who decides a module’s name?</strong></p><p>A. Whoever loads it. <code>pnx</code> uses the file name without <code>.pnx</code>, and a C host gives the name to <code>pinax_load</code>. So there is no line in the file that names its module. Two modules of the same name cannot be in one state together.</p></div><div class="box mistake"><p class="box-title">Common mistake: <code>cents</code> is just an integer, so it can be added to one</p>Adding <code>cents</code> and <code>int</code> is refused. Only two values of the same declared type are added and subtracted; the types are kept apart to stop numbers of different units from being mixed.<div class="example refused"><p class="ex-file"><code>10-mixed.pnx</code></p><pre><code data-lang="pinax"><span style="color: #d73948">use</span> money
 <span style="color: #b60157">12</span> money.of_won <span style="color: #b60157">3</span> add drop
 </code></pre><p class="ex-label">Refused</p><pre><code data-lang="text">$ pnx 10-mixed.pnx
 10-mixed.pnx:2:19: a declared type is added to and subtracted from its own type, and multiplied, divided or taken modulo by an int; for other arithmetic take raw
@@ -56,4 +81,4 @@ price 7.00
 </code></pre><p class="ex-label">Output</p><pre><code data-lang="text">$ ./10-data
 port: 8080
 refused: a data source defines no words and uses no modules
-</code></pre></div><p><code>pnx</code> does not do data loads; they are the host’s business (chapter 14).</p><div class="box summary"><p class="box-title">Summary</p><ul><li>One file is one module, and only what is <code>export</code>ed is seen outside (standard 13.1, 13.2).</li><li>After <code>use MODULE [as ALIAS]</code> its parts are written <code>MODULE.NAME</code> (13.1).</li><li>Values of a declared type are added and subtracted only with the same type (7.4).</li><li>A data load accepts declarations and values only (13.4).</li></ul></div></main><nav class="bottom"><a href="index.html">Start</a> · <a href="10.html">Previous</a> · <a href="12.html">Next</a> · <a href="../html-ko/11.html">한국어</a></nav></body></html>
+</code></pre></div><p><code>pnx</code> does not do data loads; they are the host’s business (chapter 14).</p><div class="box summary"><p class="box-title">Summary</p><ul><li>One file is one module, and only what is <code>export</code>ed is seen outside (standard 13.1, 13.2).</li><li>After <code>use MODULE [as ALIAS]</code> its parts are written <code>MODULE.NAME</code> (13.1).</li><li>Words, constants and globals are used by path, types and records by name alone; an exported global is stored with <code>set module.name</code> (13.2).</li><li>Values of a declared type are added and subtracted only with the same type (7.4).</li><li>A data load accepts declarations and values only (13.4).</li></ul></div></main><nav class="bottom"><a href="index.html">Start</a> · <a href="10.html">Previous</a> · <a href="12.html">Next</a> · <a href="../html-ko/11.html">한국어</a></nav></body></html>

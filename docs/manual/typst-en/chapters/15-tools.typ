@@ -40,6 +40,19 @@ think.
 
 #ex("manual", "15-see.pnx")
 
+Right of the line number is the code of that line; right of `|` is the stack where the line ends, the bottom on the left
+and the top on the right --- as in the trace tables of this book. It is most useful when standard modules or `cat`
+make the stack hard to follow.
+
+`pnx see` also works on a source it refuses. It shows the stack after each line up to the place of the refusal, then
+gives the message. So what is left on the stack can be seen before the message is read.
+
+#ex("manual", "15-see-wrong.pnx")
+
+The signature promised one `str`, but the stack after the last line is `str int str`. The `swap` of line 3 sent
+`"won"` down, and the result of line 2 (an `int`) was used by nothing. Removing lines 2 and 3 leaves only the result of
+`cat`.
+
 `pnx fmt` changes only indentation and spaces. Tokens, the places of lines and remarks stay as they are.
 
 #ex("manual", "15-fmt.pnx")
@@ -47,5 +60,6 @@ think.
 #summary[
 - `test … end` and `pnx test`; a failed test makes the exit status 1 (standard 20.2).
 - `pnx repl` shows what each line leaves (20.3).
-- `pnx see` shows the stack of each line, `pnx fmt` makes indentation even (20.4).
+- `pnx see` shows the stack after each line; on a refused source, up to the place, then the message (20.4).
+- `pnx fmt` changes only indentation and spaces (20.4).
 ]

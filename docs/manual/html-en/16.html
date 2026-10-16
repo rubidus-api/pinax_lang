@@ -46,7 +46,17 @@ error: line 1: div_zero
     2    a b add                                        | int
     3    c add                                          | int
     4    3 div                                          | int
-</code></pre></div><p><code>pnx fmt</code> changes only indentation and spaces. Tokens, the places of lines and remarks stay as they are.</p><div class="example fmt"><p class="ex-file"><code>15-fmt.pnx</code></p><pre><code data-lang="pinax"><span style="color: #d73948">use</span> io
+</code></pre></div><p>Right of the line number is the code of that line; right of <code>|</code> is the stack where the line ends, the bottom on the left and the top on the right — as in the trace tables of this book. It is most useful when standard modules or <code>cat</code> make the stack hard to follow.</p><p><code>pnx see</code> also works on a source it refuses. It shows the stack after each line up to the place of the refusal, then gives the message. So what is left on the stack can be seen before the message is read.</p><div class="example see-refused"><p class="ex-file"><code>15-see-wrong.pnx</code></p><pre><code data-lang="pinax"><span style="color: #d73948">word</span> price_label (cents <span style="color: #d73948">int</span> <span style="color: #d73948">gives</span> <span style="color: #d73948">str</span>)
+  cents <span style="color: #b60157">100</span> div
+  <span style="color: #198810">"won"</span> swap
+  <span style="color: #d73948">cat</span> (cents, <span style="color: #198810">" cents"</span>)
+<span style="color: #d73948">end</span>
+</code></pre><p class="ex-label">Listing, then the refusal</p><pre><code data-lang="text">$ pnx see 15-see-wrong.pnx
+    2    cents 100 div                                  | int
+    3    "won" swap                                     | str int
+    4    cat (cents, " cents")                          | str int str
+15-see-wrong.pnx:5:1: the stack does not hold exactly the results of the signature here
+</code></pre></div><p>The signature promised one <code>str</code>, but the stack after the last line is <code>str int str</code>. The <code>swap</code> of line 3 sent <code>"won"</code> down, and the result of line 2 (an <code>int</code>) was used by nothing. Removing lines 2 and 3 leaves only the result of <code>cat</code>.</p><p><code>pnx fmt</code> changes only indentation and spaces. Tokens, the places of lines and remarks stay as they are.</p><div class="example fmt"><p class="ex-file"><code>15-fmt.pnx</code></p><pre><code data-lang="pinax"><span style="color: #d73948">use</span> io
 <span style="color: #d73948">word</span> fizz (n <span style="color: #d73948">int</span> <span style="color: #d73948">gives</span> <span style="color: #d73948">str</span>)
 n <span style="color: #b60157">15</span> mod <span style="color: #b60157">0</span> eq <span style="color: #d73948">if</span> <span style="color: #198810">"FizzBuzz"</span> <span style="color: #d73948">return</span> <span style="color: #d73948">end</span>
    n <span style="color: #b60157">3</span> mod <span style="color: #b60157">0</span> eq <span style="color: #d73948">if</span> <span style="color: #198810">"Fizz"</span> <span style="color: #d73948">return</span> <span style="color: #d73948">end</span>
@@ -59,4 +69,4 @@ word fizz (n int gives str)
   n 3 mod 0 eq if "Fizz" return end
   n 5 mod 0 eq if "Buzz" else cat (n) end
 end
-</code></pre></div><div class="box summary"><p class="box-title">Summary</p><ul><li><code>test … end</code> and <code>pnx test</code>; a failed test makes the exit status 1 (standard 20.2).</li><li><code>pnx repl</code> shows what each line leaves (20.3).</li><li><code>pnx see</code> shows the stack of each line, <code>pnx fmt</code> makes indentation even (20.4).</li></ul></div></main><nav class="bottom"><a href="index.html">Start</a> · <a href="15.html">Previous</a> · <a href="17.html">Next</a> · <a href="../html-ko/16.html">한국어</a></nav></body></html>
+</code></pre></div><div class="box summary"><p class="box-title">Summary</p><ul><li><code>test … end</code> and <code>pnx test</code>; a failed test makes the exit status 1 (standard 20.2).</li><li><code>pnx repl</code> shows what each line leaves (20.3).</li><li><code>pnx see</code> shows the stack after each line; on a refused source, up to the place, then the message (20.4).</li><li><code>pnx fmt</code> changes only indentation and spaces (20.4).</li></ul></div></main><nav class="bottom"><a href="index.html">Start</a> · <a href="15.html">Previous</a> · <a href="17.html">Next</a> · <a href="../html-ko/16.html">한국어</a></nav></body></html>

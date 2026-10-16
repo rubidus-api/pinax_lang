@@ -1,0 +1,22 @@
+rem run
+use io
+use json
+rem The tokens of a JSON text, one at a time: what json.next gives for each.
+word kind_name (k int gives str)       rem module constants are compared with eq, not case
+  k json.object eq if "object" return end
+  k json.object_end eq if "object end" return end
+  k json.array eq if "array" return end
+  k json.array_end eq if "array end" return end
+  k json.key eq if "key" return end
+  k json.string eq if "string" return end
+  k json.number eq if "number" return end
+  "other"
+end
+word show_tokens (s str)
+  s to rest
+  loop
+    rest json.next or_else (e) break end to (kind, value, rest)   rem fails at the end: leave the loop
+    cat (kind kind_name, " [", value, "]") io.println
+  end
+end
+"{\"name\": \"Pinax\", \"sizes\": [8, 16]}" show_tokens

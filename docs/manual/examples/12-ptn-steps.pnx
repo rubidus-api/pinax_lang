@@ -1,0 +1,11 @@
+rem run
+use io
+use ptn
+word say (ok bool, what str) cat (ok if "yes " else "no  " end, what) io.println end
+"order 66" "%d+" ptn.is_match "%d+: a digit, one or more" say
+"order 66" "^%d+" ptn.is_match "^%d+: digits at the start, and it starts with a letter" say
+"order 66" "%a+ %d+$" ptn.is_match "%a+ %d+$: letters, a space, digits at the end" say
+"grey" "gr[ae]y" ptn.is_match "gr[ae]y on grey: [ae] is a or e" say
+"colour" "colou?r" ptn.is_match "colou?r on colour: ? makes the u optional" say
+"x=" "x=%d*" ptn.is_match "x=%d* on x=: * allows none at all" say
+"3.14" "%d%.%d" ptn.is_match "%d%.%d on 3.14: %. is a real point" say

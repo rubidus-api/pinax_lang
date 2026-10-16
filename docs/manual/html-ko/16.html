@@ -46,7 +46,17 @@ error: line 1: div_zero
     2    a b add                                        | int
     3    c add                                          | int
     4    3 div                                          | int
-</code></pre></div><p><code>pnx fmt</code> 은 들여쓰기와 공백만 고친다. 토큰과 줄의 자리, 주석은 그대로 둔다.</p><div class="example fmt"><p class="ex-file"><code>15-fmt.pnx</code></p><pre><code data-lang="pinax"><span style="color: #d73948">use</span> io
+</code></pre></div><p>줄 번호 오른쪽은 그 줄의 코드, <code>|</code> 오른쪽은 그 줄이 끝난 자리의 스택이다. 아래가 왼쪽, 맨 위가 오른쪽이다 — 이 책의 추적 표와 같다. 표준 모듈이나 <code>cat</code> 이 섞여 스택이 헷갈릴 때 특히 쓸모 있다.</p><p>거절되는 소스에도 <code>pnx see</code> 를 쓸 수 있다. 거절되는 자리까지의 줄마다 스택을 보이고, 끝에 거절 메시지를 낸다. 그래서 “스택에 무엇이 남았는가” 를 메시지보다 먼저 눈으로 볼 수 있다.</p><div class="example see-refused"><p class="ex-file"><code>15-see-wrong.pnx</code></p><pre><code data-lang="pinax"><span style="color: #d73948">word</span> price_label (cents <span style="color: #d73948">int</span> <span style="color: #d73948">gives</span> <span style="color: #d73948">str</span>)
+  cents <span style="color: #b60157">100</span> div
+  <span style="color: #198810">"won"</span> swap
+  <span style="color: #d73948">cat</span> (cents, <span style="color: #198810">" cents"</span>)
+<span style="color: #d73948">end</span>
+</code></pre><p class="ex-label">목록과 거절</p><pre><code data-lang="text">$ pnx see 15-see-wrong.pnx
+    2    cents 100 div                                  | int
+    3    "won" swap                                     | str int
+    4    cat (cents, " cents")                          | str int str
+15-see-wrong.pnx:5:1: the stack does not hold exactly the results of the signature here
+</code></pre></div><p>서명은 <code>str</code> 하나를 약속했는데, 마지막 줄의 스택은 <code>str int str</code> 이다. 3째 줄의 <code>swap</code> 이 <code>"won"</code> 을 아래로 보냈고, 2째 줄의 몫(<code>int</code>)은 아무도 쓰지 않았다. 둘째와 셋째 줄을 지우면 <code>cat</code> 의 결과 하나만 남는다.</p><p><code>pnx fmt</code> 은 들여쓰기와 공백만 고친다. 토큰과 줄의 자리, 주석은 그대로 둔다.</p><div class="example fmt"><p class="ex-file"><code>15-fmt.pnx</code></p><pre><code data-lang="pinax"><span style="color: #d73948">use</span> io
 <span style="color: #d73948">word</span> fizz (n <span style="color: #d73948">int</span> <span style="color: #d73948">gives</span> <span style="color: #d73948">str</span>)
 n <span style="color: #b60157">15</span> mod <span style="color: #b60157">0</span> eq <span style="color: #d73948">if</span> <span style="color: #198810">"FizzBuzz"</span> <span style="color: #d73948">return</span> <span style="color: #d73948">end</span>
    n <span style="color: #b60157">3</span> mod <span style="color: #b60157">0</span> eq <span style="color: #d73948">if</span> <span style="color: #198810">"Fizz"</span> <span style="color: #d73948">return</span> <span style="color: #d73948">end</span>
@@ -59,4 +69,4 @@ word fizz (n int gives str)
   n 3 mod 0 eq if "Fizz" return end
   n 5 mod 0 eq if "Buzz" else cat (n) end
 end
-</code></pre></div><div class="box summary"><p class="box-title">정리</p><ul><li><code>test … end</code> 와 <code>pnx test</code>, 실패한 시험은 종료 코드 1(표준 20.2).</li><li><code>pnx repl</code> 은 줄마다 남긴 값을 보인다(20.3).</li><li><code>pnx see</code> 는 줄마다의 스택, <code>pnx fmt</code> 은 들여쓰기를 보인다(20.4).</li></ul></div></main><nav class="bottom"><a href="index.html">처음</a> · <a href="15.html">앞</a> · <a href="17.html">다음</a> · <a href="../html-en/16.html">English</a></nav></body></html>
+</code></pre></div><div class="box summary"><p class="box-title">정리</p><ul><li><code>test … end</code> 와 <code>pnx test</code>, 실패한 시험은 종료 코드 1(표준 20.2).</li><li><code>pnx repl</code> 은 줄마다 남긴 값을 보인다(20.3).</li><li><code>pnx see</code> 는 줄마다의 스택을 보인다. 거절되는 소스에서는 그 자리까지 보이고 메시지를 낸다(20.4).</li><li><code>pnx fmt</code> 은 들여쓰기와 공백만 고친다(20.4).</li></ul></div></main><nav class="bottom"><a href="index.html">처음</a> · <a href="15.html">앞</a> · <a href="17.html">다음</a> · <a href="../html-en/16.html">English</a></nav></body></html>

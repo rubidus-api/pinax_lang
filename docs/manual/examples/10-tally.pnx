@@ -1,0 +1,10 @@
+rem run
+use io
+use tally
+word try_once ()
+  tally.bump if "counted" else "limit reached" end io.println
+end
+try_once try_once try_once try_once                 rem the fourth time the limit is reached
+cat ("hits ", tally.hits, " of ", tally.limit) io.println   rem read an exported global and constant
+0 set tally.hits                                    rem an exported global is written with set module.name
+cat ("hits after reset ", tally.hits) io.println

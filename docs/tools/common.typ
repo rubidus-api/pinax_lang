@@ -90,6 +90,7 @@
   refused: tr("거절", "Refused"), fault: tr("결함으로 멈춤", "Fault"),
   repl: tr("대화", "Session"), fmt: tr("정리한 모양", "Formatted"),
   see: tr("목록", "Listing"), embed: tr("출력", "Output"),
+  see-refused: tr("목록과 거절", "Listing, then the refusal"),
 ).at(kind, default: kind)
 
 // An example: the program from <tree>/examples/<name> and what running it printed, both read
@@ -130,8 +131,8 @@
         #block(width: 100%, inset: 7pt, fill: luma(248), stroke: 0.5pt + luma(190), radius: 2pt,
                breakable: true)[#raw(src, block: true, lang: lang-of)]
         #v(-0.4em)
-        #text(font: ("Noto Sans CJK KR", "Noto Sans"), size: 0.85em, fill: if kind in ("refused", "fault") { rgb("#9c3b2e") } else { luma(90) })[#out-label(kind)]
-        #block(width: 100%, inset: 7pt, fill: if kind in ("refused", "fault") { rgb("#fbf3f1") } else { white },
+        #text(font: ("Noto Sans CJK KR", "Noto Sans"), size: 0.85em, fill: if kind in ("refused", "fault", "see-refused") { rgb("#9c3b2e") } else { luma(90) })[#out-label(kind)]
+        #block(width: 100%, inset: 7pt, fill: if kind in ("refused", "fault", "see-refused") { rgb("#fbf3f1") } else { white },
                stroke: 0.5pt + luma(190), radius: 2pt, breakable: true)[#raw(out, block: true, lang: "text")]
       ]
     }

@@ -60,7 +60,38 @@ bad row: Daejeon,lots,false
 sum_numbers <span style="color: #d73948">str</span>.to_str io.println
 </code></pre><p class="ex-label">Output</p><pre><code data-lang="text">$ pnx 11-json-read.pnx
 15
-</code></pre></div><h3>11.2 Bytes</h3><p>The module <code>bytes</code> writes and reads fixed widths in a given byte order. With <code>big_endian</code> in a record, <code>bytes.pack</code> writes the most significant byte first. A <code>varint</code> field writes small numbers in few bytes.</p><div class="example run"><p class="ex-file"><code>11-binary.pnx</code></p><pre><code data-lang="pinax"><span style="color: #d73948">use</span> io
+</code></pre></div><p>Look at the three things <code>json.next</code> gives, one token at a time. <code>s json.next</code> gives <code>(kind int, value str, rest str)</code>: the kind of the token, its text (a view), and the text left after it. Giving what is left to <code>json.next</code> again, over and over, walks the whole text once from the front. At the end of the text <code>json.next</code> fails, and that failure ends the loop.</p><div class="example run"><p class="ex-file"><code>11-json-tokens.pnx</code></p><pre><code data-lang="pinax"><span style="color: #d73948">use</span> io
+<span style="color: #d73948">use</span> json
+<span style="color: #74747c">rem The tokens of a JSON text, one at a time: what json.next gives for each.</span>
+<span style="color: #d73948">word</span> kind_name (k <span style="color: #d73948">int</span> <span style="color: #d73948">gives</span> <span style="color: #d73948">str</span>)       <span style="color: #74747c">rem module constants are compared with eq, not case</span>
+  k json.object eq <span style="color: #d73948">if</span> <span style="color: #198810">"object"</span> <span style="color: #d73948">return</span> <span style="color: #d73948">end</span>
+  k json.object_end eq <span style="color: #d73948">if</span> <span style="color: #198810">"object end"</span> <span style="color: #d73948">return</span> <span style="color: #d73948">end</span>
+  k json.array eq <span style="color: #d73948">if</span> <span style="color: #198810">"array"</span> <span style="color: #d73948">return</span> <span style="color: #d73948">end</span>
+  k json.array_end eq <span style="color: #d73948">if</span> <span style="color: #198810">"array end"</span> <span style="color: #d73948">return</span> <span style="color: #d73948">end</span>
+  k json.key eq <span style="color: #d73948">if</span> <span style="color: #198810">"key"</span> <span style="color: #d73948">return</span> <span style="color: #d73948">end</span>
+  k json.string eq <span style="color: #d73948">if</span> <span style="color: #198810">"string"</span> <span style="color: #d73948">return</span> <span style="color: #d73948">end</span>
+  k json.number eq <span style="color: #d73948">if</span> <span style="color: #198810">"number"</span> <span style="color: #d73948">return</span> <span style="color: #d73948">end</span>
+  <span style="color: #198810">"other"</span>
+<span style="color: #d73948">end</span>
+<span style="color: #d73948">word</span> show_tokens (s <span style="color: #d73948">str</span>)
+  s <span style="color: #d73948">to</span> rest
+  <span style="color: #d73948">loop</span>
+    rest json.next <span style="color: #d73948">or_else</span> (e) <span style="color: #d73948">break</span> <span style="color: #d73948">end</span> <span style="color: #d73948">to</span> (kind, value, rest)   <span style="color: #74747c">rem fails at the end: leave the loop</span>
+    <span style="color: #d73948">cat</span> (kind kind_name, <span style="color: #198810">" ["</span>, value, <span style="color: #198810">"]"</span>) io.println
+  <span style="color: #d73948">end</span>
+<span style="color: #d73948">end</span>
+<span style="color: #198810">"{</span><span style="color: #1d6c76">\"</span><span style="color: #198810">name</span><span style="color: #1d6c76">\"</span><span style="color: #198810">: </span><span style="color: #1d6c76">\"</span><span style="color: #198810">Pinax</span><span style="color: #1d6c76">\"</span><span style="color: #198810">, </span><span style="color: #1d6c76">\"</span><span style="color: #198810">sizes</span><span style="color: #1d6c76">\"</span><span style="color: #198810">: [8, 16]}"</span> show_tokens
+</code></pre><p class="ex-label">Output</p><pre><code data-lang="text">$ pnx 11-json-tokens.pnx
+object [{]
+key [name]
+string [Pinax]
+key [sizes]
+array [[]
+number [8]
+number [16]
+array end []]
+object end [}]
+</code></pre></div><table><thead><tr><th><strong>Token</strong></th><th><strong>Stack after it</strong></th><th><strong>What happened</strong></th></tr></thead><tbody><tr><td><code>rest json.next</code></td><td><code>json.object "{" …</code></td><td>Reads <code>{</code>: kind <code>json.object</code>; what is left is <code>"name": …</code>.</td></tr><tr><td><code>or_else (e) break end</code></td><td><code>json.object "{" …</code></td><td>It did not fail, so the body is skipped.</td></tr><tr><td><code>to (kind, value, rest)</code></td><td><code>—</code></td><td>The three go into names; the rightmost, <code>rest</code>, takes the top value.</td></tr></tbody></table><p>A kind is a module constant like <code>json.object</code>, so it is compared with <code>eq</code>, not <code>case</code> (chapter 4). Only the work for each kind has to be chosen, so the values needed can be picked out at any depth; <code>11-json-read.pnx</code> added up the <code>json.number</code> tokens only.</p><h3>11.2 Bytes</h3><p>The module <code>bytes</code> writes and reads fixed widths in a given byte order. With <code>big_endian</code> in a record, <code>bytes.pack</code> writes the most significant byte first. A <code>varint</code> field writes small numbers in few bytes.</p><div class="example run"><p class="ex-file"><code>11-binary.pnx</code></p><pre><code data-lang="pinax"><span style="color: #d73948">use</span> io
 <span style="color: #d73948">use</span> bytes
 <span style="color: #d73948">use</span> encode
 <span style="color: #d73948">use</span> hash
@@ -90,4 +121,14 @@ demo <span style="color: #d73948">or_else</span> (e) e err_text io.println <span
 </code></pre><p class="ex-label">Output</p><pre><code data-lang="text">$ pnx 11-binary.pnx
 bytes: 50494e580001ac02, crc32: 31d80bed
 read back: version 1, length 300
+</code></pre></div><p>The writing words (<code>pack</code>, <code>put_…</code>, <code>encode.…_encode</code>) fail when the buffer is full, so a guard word always follows them.</p><div class="example refused"><p class="ex-file"><code>11-pack-unguarded.pnx</code></p><pre><code data-lang="pinax"><span style="color: #d73948">use</span> json
+<span style="color: #d73948">record</span> point
+  x <span style="color: #d73948">int</span>
+  y <span style="color: #d73948">int</span>
+<span style="color: #d73948">end</span>
+<span style="color: #d73948">list</span> points point <span style="color: #b60157">2</span>
+<span style="color: #d73948">buffer</span> out <span style="color: #b60157">64</span>
+<span style="color: #d73948">word</span> write (p points) p out json.pack <span style="color: #d73948">end</span>   <span style="color: #74747c">rem pack fails when the buffer is full: no guard</span>
+</code></pre><p class="ex-label">Refused</p><pre><code data-lang="text">$ pnx 11-pack-unguarded.pnx
+11-pack-unguarded.pnx:8:39: a word that can fail is followed by or_fail, or_return or or_else
 </code></pre></div><div class="box qa"><p class="box-title">Q&amp;A</p><p><strong>Q. Does the record lie in memory in big-endian order too?</strong></p><p>A. No. <code>big_endian</code> sets only the order of the bytes that <code>pack</code> and <code>unpack</code> use. The layout in memory is the processor’s, and a script cannot see it.</p></div><h3>11.3 Other conversions</h3><p><code>fmt</code> turns numbers into hexadecimal, binary and zero-padded text. <code>hash</code> gives CRC-32, FNV-1a and SipHash; <code>encode</code> gives Base64, hexadecimal and URL percent-encoding. Words that write their results into a buffer fail when the buffer is full. The full lists are in clause 16 of the standard.</p><div class="box summary"><p class="box-title">Summary</p><ul><li><code>json.next</code> and <code>csv.fields</code> read one token, one field at a time; no tree is built (standard 16.8, 16.9).</li><li><code>pack</code> writes into a buffer; <code>unpack</code> writes into the row only when all is right (16.5, 16.8, 16.9).</li><li><code>big_endian</code> sets only the byte order (16.5).</li><li>Lists of records have no <code>pop</code> (15.3).</li></ul></div></main><nav class="bottom"><a href="index.html">Start</a> · <a href="11.html">Previous</a> · <a href="13.html">Next</a> · <a href="../html-ko/12.html">한국어</a></nav></body></html>

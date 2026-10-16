@@ -20,6 +20,32 @@ WARN at 10h02: disk 91% full
 no match: garbage
 [1][22][333]
 &lt;hello&gt; &lt;world&gt;
+</code></pre></div><p>패턴은 작은 조각을 늘어놓은 것이다. 자주 쓰는 조각은 이렇다(전체 목록은 표준 16.6).</p><table><thead><tr><th><strong>조각</strong></th><th><strong>맞는 것</strong></th></tr></thead><tbody><tr><td><code>a</code> 처럼 보통 글자</td><td>그 바이트 하나</td></tr><tr><td><code>.</code></td><td>아무 바이트 하나</td></tr><tr><td><code>%d</code> <code>%a</code> <code>%s</code> <code>%w</code></td><td>숫자, 글자, 공백, 글자나 숫자 하나. 대문자(<code>%D</code> …)는 그 밖의 것</td></tr><tr><td><code>%.</code> <code>%%</code></td><td>점, <code>%</code> 그 자체</td></tr><tr><td><code>[ae]</code> <code>[a-z]</code> <code>[^0-9]</code></td><td>넣은 것 가운데 하나, 범위 가운데 하나, 넣지 않은 것 하나</td></tr><tr><td>조각 뒤의 <code>+</code> <code>*</code> <code>?</code></td><td>한 번 이상, 0 번 이상, 0 번이나 한 번</td></tr><tr><td><code>^</code> 와 <code>$</code></td><td>패턴 처음에 쓰면 글의 처음, 끝에 쓰면 글의 끝에서만</td></tr><tr><td><code>( … )</code></td><td>맞은 부분을 갈무리한다. <code>n ptn.capture</code> 로 읽는다</td></tr></tbody></table><p>패턴 하나씩 시험해 보면 조각의 뜻이 잘 보인다.</p><div class="example run"><p class="ex-file"><code>12-ptn-steps.pnx</code></p><pre><code data-lang="pinax"><span style="color: #d73948">use</span> io
+<span style="color: #d73948">use</span> ptn
+<span style="color: #d73948">word</span> say (ok <span style="color: #d73948">bool</span>, what <span style="color: #d73948">str</span>) <span style="color: #d73948">cat</span> (ok <span style="color: #d73948">if</span> <span style="color: #198810">"yes "</span> <span style="color: #d73948">else</span> <span style="color: #198810">"no  "</span> <span style="color: #d73948">end</span>, what) io.println <span style="color: #d73948">end</span>
+<span style="color: #198810">"order 66"</span> <span style="color: #198810">"%d+"</span> ptn.is_match <span style="color: #198810">"%d+: a digit, one or more"</span> say
+<span style="color: #198810">"order 66"</span> <span style="color: #198810">"^%d+"</span> ptn.is_match <span style="color: #198810">"^%d+: digits at the start, and it starts with a letter"</span> say
+<span style="color: #198810">"order 66"</span> <span style="color: #198810">"%a+ %d+$"</span> ptn.is_match <span style="color: #198810">"%a+ %d+$: letters, a space, digits at the end"</span> say
+<span style="color: #198810">"grey"</span> <span style="color: #198810">"gr[ae]y"</span> ptn.is_match <span style="color: #198810">"gr[ae]y on grey: [ae] is a or e"</span> say
+<span style="color: #198810">"colour"</span> <span style="color: #198810">"colou?r"</span> ptn.is_match <span style="color: #198810">"colou?r on colour: ? makes the u optional"</span> say
+<span style="color: #198810">"x="</span> <span style="color: #198810">"x=%d*"</span> ptn.is_match <span style="color: #198810">"x=%d* on x=: * allows none at all"</span> say
+<span style="color: #198810">"3.14"</span> <span style="color: #198810">"%d%.%d"</span> ptn.is_match <span style="color: #198810">"%d%.%d on 3.14: %. is a real point"</span> say
+</code></pre><p class="ex-label">출력</p><pre><code data-lang="text">$ pnx 12-ptn-steps.pnx
+yes %d+: a digit, one or more
+no  ^%d+: digits at the start, and it starts with a letter
+yes %a+ %d+$: letters, a space, digits at the end
+yes gr[ae]y on grey: [ae] is a or e
+yes colou?r on colour: ? makes the u optional
+yes x=%d* on x=: * allows none at all
+yes %d%.%d on 3.14: %. is a real point
+</code></pre></div><p><code>ptn.capture</code> 가 읽는 것은 <strong>이 실행의</strong> 마지막 맞음이다. 맞은 적이 없는데 읽으면 결함 <code>range</code> 다. 다른 실행에서 맞힌 것은 보이지 않는다 — 그 글은 이미 사라졌을 수 있기 때문이다.</p><div class="example fault"><p class="ex-file"><code>12-capture-none.pnx</code></p><pre><code data-lang="pinax"><span style="color: #d73948">use</span> io
+<span style="color: #d73948">use</span> ptn
+<span style="color: #d73948">word</span> first_number (<span style="color: #d73948">gives</span> <span style="color: #d73948">str</span>)
+  <span style="color: #b60157">1</span> ptn.capture                               <span style="color: #74747c">rem no match in this run yet: there is nothing to read</span>
+<span style="color: #d73948">end</span>
+first_number io.println
+</code></pre><p class="ex-label">결함으로 멈춤</p><pre><code data-lang="text">$ pnx 12-capture-none.pnx
+12-capture-none.pnx:4: index out of range
 </code></pre></div><h3>12.2 정규 표현식: <code>rex</code></h3><p><code>rex</code> 는 고르기, 횟수(<code>{n,m}</code>), 낱말 경계(<code>\b</code>), 플래그(<code>(?i)</code> 등)가 있는 정규 표현식이다. 되돌아가지 않는 방식으로 맞추므로 어떤 패턴도 글의 길이에 비례하는 시간 안에 끝난다. 패턴은 <code>rex.rx</code> 로 프로그램을 만들어 쓰고, <code>matches</code> 의 블록은 묶음을 매개변수로 받는다.</p><div class="example run"><p class="ex-file"><code>12-rex.pnx</code></p><pre><code data-lang="pinax"><span style="color: #d73948">use</span> io
 <span style="color: #d73948">use</span> rex
 <span style="color: #d73948">use</span> <span style="color: #d73948">str</span>
@@ -78,4 +104,4 @@ main
 </code></pre><p class="ex-label">출력</p><pre><code data-lang="text">$ pnx 12-compile.pnx [0-9]+
 matches of [0-9]+: 3
 bad pattern: format
-</code></pre></div><div class="box qa"><p class="box-title">문답</p><p><strong>물음. <code>ptn</code> 과 <code>rex</code> 는 어느 것을 쓰는가?</strong></p><p>답. 짧은 패턴, 갈무리 몇 개면 <code>ptn</code> 이 가볍다. 고르기나 횟수가 필요하거나, 밖에서 온 패턴이거나, 아주 긴 글이면 <code>rex</code> 를 쓴다. <code>ptn</code> 은 되돌아가며 찾으므로 나쁜 패턴은 걸음의 한계에 걸려 결함으로 멈춘다.</p></div><div class="box summary"><p class="box-title">정리</p><ul><li><code>ptn</code> 은 Lua 크기의 패턴이고, 갈무리는 <code>ptn.capture</code> 로 읽는다(표준 16.6).</li><li><code>rex</code> 는 되돌아가지 않는 정규 표현식이고, 묶음은 블록의 매개변수가 된다(16.7).</li><li>패턴은 리터럴이나 <code>const</code> 다. 돌 때 만드는 것은 <code>rex.compile</code>(16.6, 16.7).</li><li>정규 표현식은 날 문자열에 적는다(6.5).</li></ul></div></main><nav class="bottom"><a href="index.html">처음</a> · <a href="12.html">앞</a> · <a href="14.html">다음</a> · <a href="../html-en/13.html">English</a></nav></body></html>
+</code></pre></div><div class="box qa"><p class="box-title">문답</p><p><strong>물음. <code>ptn</code> 과 <code>rex</code> 는 어느 것을 쓰는가?</strong></p><p>답. 짧은 패턴, 갈무리 몇 개면 <code>ptn</code> 이 가볍다. 고르기나 횟수가 필요하거나, 밖에서 온 패턴이거나, 아주 긴 글이면 <code>rex</code> 를 쓴다. <code>ptn</code> 은 되돌아가며 찾으므로 나쁜 패턴은 걸음의 한계에 걸려 결함으로 멈춘다.</p></div><div class="box summary"><p class="box-title">정리</p><ul><li><code>ptn</code> 은 Lua 크기의 패턴이고, 갈무리는 <code>ptn.capture</code> 로 읽는다. 그 실행에 맞음이 없으면 결함 <code>range</code>(표준 16.6).</li><li><code>rex</code> 는 되돌아가지 않는 정규 표현식이고, 묶음은 블록의 매개변수가 된다(16.7).</li><li>패턴은 리터럴이나 <code>const</code> 다. 돌 때 만드는 것은 <code>rex.compile</code>(16.6, 16.7).</li><li>정규 표현식은 날 문자열에 적는다(6.5).</li></ul></div></main><nav class="bottom"><a href="index.html">처음</a> · <a href="12.html">앞</a> · <a href="14.html">다음</a> · <a href="../html-en/13.html">English</a></nav></body></html>
