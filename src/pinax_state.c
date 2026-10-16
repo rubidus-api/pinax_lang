@@ -461,9 +461,18 @@ static const char *check_word(const pinax_state *st, uint32_t index, span range,
         default: break;
         }
         if (op == PNX_LCOPYR) { // a row of table x copied into list BX: rows of one size
-            if (x >= head->n_globals || bx >= head->n_globals || st->globals[bx].kind != PNX_G_ROWS ||
-                (st->globals[x].kind != PNX_G_ROWS && st->globals[x].kind != PNX_G_TABLE) ||
-                st->globals[x].elem_bytes != st->globals[bx].elem_bytes)
+            // one of the two may be the table a GSEL right before chose (RFC-0018)
+            const bool sx = x == PNX_GSELECTED, sbx = bx == PNX_GSELECTED;
+            if (sx && sbx)
+                return "code: rows copied between two chosen tables";
+            if ((sx || sbx) && heads[i] != 2)
+                return "code: a selected global without its GSEL";
+            const uint32_t gsel_kind = sx || sbx ? (code[i - 2] >> 16) & 0xffu : 0, gsel_elem = sx || sbx ? code[i - 1] : 0;
+            if ((!sx && x >= head->n_globals) || (!sbx && bx >= head->n_globals))
+                return "code: global outside its table";
+            const uint32_t to_kind = sbx ? gsel_kind : st->globals[bx].kind, from_kind = sx ? gsel_kind : st->globals[x].kind;
+            const uint32_t to_elem = sbx ? gsel_elem : st->globals[bx].elem_bytes, from_elem = sx ? gsel_elem : st->globals[x].elem_bytes;
+            if (to_kind != PNX_G_ROWS || (from_kind != PNX_G_ROWS && from_kind != PNX_G_TABLE) || to_elem != from_elem)
                 return "code: rows copied between tables of another kind or size";
         } else if (info.second == PNX_X_GLOBAL) { // a wide form: what its narrow form needs, of the global in x
             switch (op) {
@@ -481,8 +490,8 @@ static const char *check_word(const pinax_state *st, uint32_t index, span range,
         const bool selected = global == PNX_GSELECTED ||
                               (info.second == PNX_X_FIELD && (x & 0xfffu) == PNX_FSELECTED);
         uint32_t sel_kind = PNX_G_COUNT, sel_elem = 0;
-        if (selected || (op == PNX_LCOPYR && (x == PNX_GSELECTED || bx == PNX_GSELECTED))) {
-            if (heads[i] != 2 || op == PNX_LCOPYR || want == PNX_G_COUNT)
+        if (selected) {
+            if (heads[i] != 2 || want == PNX_G_COUNT)
                 return "code: a selected global without its GSEL";
             sel_kind = (code[i - 2] >> 16) & 0xffu;
             sel_elem = code[i - 1];

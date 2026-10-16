@@ -197,7 +197,7 @@ xs minimum <span style="color: #d73948">or_else</span> (e) <span style="color: #
 12
 -1
 3
-</code></pre></div><p class="para"><span class="pn">(3)</span> <code>map_into</code> and <code>filter_into</code> make no new storage; they write into the destination. A list destination is pushed onto and nothing is given. An array destination is written from cell 0, and the number of cells written is given (<code>gives n int or fail</code>). When the destination is full, they fail with <code>err.full</code>; what was written stays.</p><div class="example run"><p class="ex-file"><code>10-map-into.pnx</code></p><pre><code data-lang="pinax"><span style="color: #d73948">use</span> io
+</code></pre></div><p class="para"><span class="pn">(3)</span> <code>map_into</code> and <code>filter_into</code> make no new storage; they write into the destination. A list destination is pushed onto and nothing is given. An array destination is written from cell 0, and the number of cells written is given (<code>gives n int or fail</code>). When the destination is full, they fail with <code>err.full</code>; what was written stays. The destination may be a collection parameter (9.9).</p><div class="example run"><p class="ex-file"><code>10-map-into.pnx</code></p><pre><code data-lang="pinax"><span style="color: #d73948">use</span> io
 <span style="color: #d73948">use</span> <span style="color: #d73948">str</span>
 <span style="color: #d73948">array</span> xs <span style="color: #d73948">int</span> <span style="color: #b60157">4</span>
 <span style="color: #d73948">assign</span> xs (<span style="color: #b60157">1</span>, <span style="color: #b60157">2</span>, <span style="color: #b60157">3</span>, <span style="color: #b60157">4</span>)

@@ -167,7 +167,7 @@ cell            = NAME [ "(" size ")" ] ;   (* int, bool, err, str(N), 또는 �
 
 #para("1")[타입이 `array T`, `list T`, `queue T` 나 `buffer` 인 입력은 모음을 받는다. 부르는 쪽은 그 자리에 모음의
 이름을 쓴다(`scores total`). 몸 안에서 매개변수는 그런 모음의 이름이 들어가는 모든 자리에 쓴다 --- `l len`,
-`i l idx`, `v l push`, `v i set l`, `l do … end each`, `q take`, `s b append` 따위. 칸은 매개변수가 말하는 타입이어야
+`i l idx`, `v l push`, `v i set l`, `l do … end each`, `… end l map_into`, `q take`, `s b append` 따위. 칸은 매개변수가 말하는 타입이어야
 한다: `int` `bool` `err`, `N` 이 같은 `str(N)`, 또는 레코드. 용량은 타입에 들지 않는다. 어떤 용량이든 받고,
 `l capacity` 가 그 용량을 준다.]
 
@@ -177,6 +177,11 @@ cell            = NAME [ "(" size ")" ] ;   (* int, bool, err, str(N), 또는 �
 `l` 로 얻은 줄은 그 낱말 안에서 쓴다: 지역 변수, 필드, 고리의 블록에서.]
 
 #ex("spec", "09-coll-param-rows.pnx")
+
+#para("2a")[`map_into` 와 `filter_into`(10.6)는 매개변수가 가리키는 목록이나 배열에 담고, 매개변수가 가리키는 표에서
+줄을 베낀다.]
+
+#ex("spec", "09-coll-param-fill.pnx")
 
 #para("3")[넘기는 것은 모음 그 자체이고 복사본이 아니다. 모음은 전역이므로 매개변수를 `yield` 와 14.3 의 기다림을
 건너 쥐고 있어도 된다.]
@@ -193,6 +198,9 @@ cell            = NAME [ "(" size ")" ] ;   (* int, bool, err, str(N), 또는 �
 #para("6")[목록 매개변수를 자르는(8.5 (2a)) 낱말, 또는 자르는 낱말에 그것을 넘기는 낱말은 받은 목록을 자른다. 그러면
 그 낱말을 부르는 자리에서 그 목록에 8.5 (2b) 의 규칙이 적용된다.]
 #ex("spec", "09-coll-param-truncate.pnx")
+
+#para("7")[`filter_into` 는 두 표가 모두 매개변수일 때 줄을 베끼지 않는다. 한쪽을 `each` 로 돌며 `add_row` 로 담는다.]
+#ex("spec", "09-coll-param-copy.pnx")
 
 #part("진단")
 #diag(
@@ -211,4 +219,5 @@ cell            = NAME [ "(" size ")" ] ;   (* int, bool, err, str(N), 또는 �
   ([모음 자리에 값], "this parameter takes an array, list, queue or buffer: give its name"),
   ([결과로 모음], "a word gives no collection; it takes one as a parameter"),
   ([남이 쥔 목록을 자르는 낱말에 줌], "this list's rows are kept by a field, a global, a named row or an index; the word it is given to truncates it"),
+  ([두 표가 모두 매개변수인 줄 베끼기], "filter_into does not copy rows between two tables parameters name; walk one and add_row"),
 )

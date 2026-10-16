@@ -3687,14 +3687,15 @@ static bool do_block(comp *c) {
     }
     uint32_t init = NONE, dst = NONE;
     if (use == USE_MAP || use == USE_FILTER) { // the list the results are pushed into
-        dst = find_global(c, dst_name);
+        const local *dl = find_local(f, dst_name); // or one a collection parameter names
+        dst = dl && is_ref(dl->type) ? REF_GLOBAL + dl->reg : dl ? NONE : find_global(c, dst_name);
         const globalsym *g = dst == NONE ? NULL : gsym(c, dst);
         // filter_into a list of records: the rows that pass are copied, from a list or an array
         // of the same record
         const uint32_t from = is_row(element) ? row_global(element) : NONE;
-        if (from != NONE && from >= REF_GLOBAL && g && g->record != NONE)
+        if (from != NONE && from >= REF_GLOBAL && dst >= REF_GLOBAL && dst != NONE && g && g->record != NONE)
             return error_at(c, PINAX_ERR_TYPE, at.line, at.column,
-                            "filter_into does not copy rows of a table a parameter names yet; walk it and add_row");
+                            "filter_into does not copy rows between two tables parameters name; walk one and add_row");
         const bool rows = g && g->kind == GK_LIST && g->record != NONE && use == USE_FILTER && from != NONE &&
                           gsym(c, from)->record == g->record &&
                           gsym(c, from)->kind != GK_POOL;
@@ -3867,6 +3868,17 @@ static bool array_put(comp *c, block *b, uint32_t value) {
 
 static bool end_rex_block(comp *c, block *b);
 
+// LCOPYR: row `row` of table `from` appended to the list of records `dst`. One of the two may be
+// a table a parameter names; the GSEL before the copy chooses it.
+static bool copy_row(comp *c, uint32_t row, uint32_t dst, uint32_t from) {
+    if (from >= REF_GLOBAL) {
+        if (!select_ref(c, from - REF_GLOBAL))
+            return false;
+        from = PNX_GSELECTED;
+    }
+    return emit(c, PNX_ABX(PNX_LCOPYR, row, dst)) != NONE && emit(c, from) != NONE;
+}
+
 static bool end_do(comp *c, block *b) {
     fn *f = c->f;
     if (!f->dead && !emit_defers(c, (uint32_t)(b - f->blocks) + 1)) // each run of the body leaves it
@@ -3923,13 +3935,16 @@ static bool end_do(comp *c, block *b) {
             if (emit(c, PNX_ABX(push, made, b->dst)) == NONE || !jump_later(c, &b->full))
                 return false;
         } else if (b->use == USE_FILTER && gsym(c, b->dst)->record != NONE) {
-            cond_negate(&verdict); // a row that passes is copied: its table rides in the second word
-            if (!cond_jump(c, &verdict, 3) || emit(c, PNX_ABX(PNX_LCOPYR, b->val, b->dst)) == NONE ||
-                emit(c, row_global(b->element)) == NONE || !jump_later(c, &b->full))
+            // a row that passes is copied: its table rides in the second word; a table a parameter
+            // names, on either side, is chosen by a GSEL before the copy (two words more)
+            const uint32_t from = row_global(b->element);
+            cond_negate(&verdict);
+            if (!cond_jump(c, &verdict, from >= REF_GLOBAL || b->dst >= REF_GLOBAL ? 5 : 3) ||
+                !copy_row(c, b->val, b->dst, from) || !jump_later(c, &b->full))
                 return false;
         } else if (b->use == USE_FILTER) { // pushed when the verdict is true
             cond_negate(&verdict);
-            if (!cond_jump(c, &verdict, 2) || emit(c, PNX_ABX(push, b->val, b->dst)) == NONE ||
+            if (!cond_jump(c, &verdict, b->dst >= REF_GLOBAL ? 4 : 2) || emit(c, PNX_ABX(push, b->val, b->dst)) == NONE ||
                 !jump_later(c, &b->full))
                 return false;
         } else if (b->use == USE_COUNT) { // one more when the verdict is true

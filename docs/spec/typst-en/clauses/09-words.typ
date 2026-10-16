@@ -170,7 +170,8 @@ cell            = NAME [ "(" size ")" ] ;   (* int, bool, err, str(N), or a reco
 
 #para("1")[An input of type `array T`, `list T` or `queue T`, or of type `buffer`, takes a collection: the caller writes
 the collection's name there (`scores total`). In the body the parameter is used wherever the name of such a collection
-goes --- `l len`, `i l idx`, `v l push`, `v i set l`, `l do … end each`, `q take`, `s b append` and so on. The cells shall
+goes --- `l len`, `i l idx`, `v l push`, `v i set l`, `l do … end each`, `… end l map_into`, `q take`, `s b append` and
+so on. The cells shall
 be of the type the parameter says: `int` `bool` `err`, `str(N)` with the same `N`, or a record. The capacity is not part
 of the type; any capacity is taken, and `l capacity` gives the one it has.]
 
@@ -181,6 +182,11 @@ name of a declared table is (8.8). A row reached through `l` is used in that wor
 blocks of its loops.]
 
 #ex("spec", "09-coll-param-rows.pnx")
+
+#para("2a")[`map_into` and `filter_into` (10.6) fill a list or an array a parameter names, and copy rows from a table a
+parameter names.]
+
+#ex("spec", "09-coll-param-fill.pnx")
 
 #para("3")[What is passed is the collection itself, not a copy. Collections are globals, so a parameter may be held
 across `yield` and the waits of 14.3.]
@@ -197,6 +203,10 @@ parameter of a block (`word (…)`). Pools and indexes are not taken.]
 #para("6")[A word that truncates a list parameter (8.5 (2a)), or gives it to a word that does, truncates the list given
 to it. The rule of 8.5 (2b) then holds for that list, where the word is called.]
 #ex("spec", "09-coll-param-truncate.pnx")
+
+#para("7")[`filter_into` does not copy rows when both tables are parameters. Walk one with `each` and fill the other
+with `add_row`.]
+#ex("spec", "09-coll-param-copy.pnx")
 
 #part("Diagnostics")
 #diag(
@@ -215,4 +225,5 @@ to it. The rule of 8.5 (2b) then holds for that list, where the word is called.]
   ([A value where a collection goes], "this parameter takes an array, list, queue or buffer: give its name"),
   ([A collection as a result], "a word gives no collection; it takes one as a parameter"),
   ([A kept list given to a word that truncates it], "this list's rows are kept by a field, a global, a named row or an index; the word it is given to truncates it"),
+  ([Rows copied between two tables parameters name], "filter_into does not copy rows between two tables parameters name; walk one and add_row"),
 )

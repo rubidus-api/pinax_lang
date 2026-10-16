@@ -1,0 +1,7 @@
+rem refused
+record city
+  name str(12)
+end
+word keep (src list city, dst list city or fail)
+  src do (r src gives bool) true end dst filter_into or_fail    rem both tables are parameters
+end

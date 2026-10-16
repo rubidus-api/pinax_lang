@@ -1,0 +1,26 @@
+rem run
+use io
+record city
+  name str(12)
+  people i32
+end
+list cities city 4
+row cities ("seoul", 9)
+row cities ("busan", 3)
+row cities ("ulsan", 1)
+list big city 4
+list counts int 4
+list high int 4
+word above (l list int, n int, out list int or fail)
+  l do (x int gives bool) x n gt end out filter_into or_fail
+end
+word large (l list city, n int or fail)
+  l do (r l gives bool) r city.people n gt end big filter_into or_fail    rem rows of l copied
+end
+word demo (or fail)
+  cities do (r cities gives int) r city.people end counts map_into or_fail
+  counts 2 high above or_fail
+  cities 2 large or_fail
+  cat (high len, " ", big len, " ", 0 big idx city.name) io.println
+end
+demo or_else (e) e err_text io.println end

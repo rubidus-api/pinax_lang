@@ -83,7 +83,7 @@ go <span style="color: #d73948">or_else</span> (e) e err_text io.println <span s
 </code></pre><p class="ex-label">출력</p><pre><code data-lang="text">$ pnx 06-map-filter.pnx
 cheap: 3 items, the first 450
 with tax, 6 cells written, the first 1320
-</code></pre></div><h3>6.5 모음을 낱말에 넘기기</h3><p>낱말은 모음을 매개변수로 받을 수 있다. 모음의 종류와 칸이 담는 것을 쓰고 — <code>list int</code>, <code>array city</code>, <code>queue int</code>, <code>list str(8)</code> — 또는 <code>buffer</code> 라고 쓰고, 낱말을 부를 때 그 자리에 모음의 이름을 준다. 안에서 매개변수는 모음의 이름이 쓰이는 모든 자리에 쓰인다. 이제 같은 낱말이 그런 종류의 목록 모두에, 용량에 상관없이 쓰인다.</p><div class="example run"><p class="ex-file"><code>06-coll-param.pnx</code></p><pre><code data-lang="pinax"><span style="color: #d73948">use</span> io
+</code></pre></div><h3>6.5 모음을 낱말에 넘기기</h3><p>낱말은 모음을 매개변수로 받을 수 있다. 모음의 종류와 칸이 담는 것을 쓰고 — <code>list int</code>, <code>array city</code>, <code>queue int</code>, <code>list str(8)</code> — 또는 <code>buffer</code> 라고 쓰고, 낱말을 부를 때 그 자리에 모음의 이름을 준다. 안에서 매개변수는 모음의 이름이 쓰이는 모든 자리에 쓰인다(<code>map_into</code> 의 목적지까지). 이제 같은 낱말이 그런 종류의 목록 모두에, 용량에 상관없이 쓰인다.</p><div class="example run"><p class="ex-file"><code>06-coll-param.pnx</code></p><pre><code data-lang="pinax"><span style="color: #d73948">use</span> io
 <span style="color: #d73948">list</span> morning <span style="color: #d73948">int</span> <span style="color: #b60157">8</span>
 <span style="color: #d73948">list</span> evening <span style="color: #d73948">int</span> <span style="color: #b60157">8</span>
 <span style="color: #d73948">word</span> record_all (l <span style="color: #d73948">list</span> <span style="color: #d73948">int</span>, a <span style="color: #d73948">int</span>, b <span style="color: #d73948">int</span>, c <span style="color: #d73948">int</span>)

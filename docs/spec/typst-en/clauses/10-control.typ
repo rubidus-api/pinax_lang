@@ -165,7 +165,8 @@ combining word right after it shall take it. Together they make one loop. These 
 
 #para("3")[`map_into` and `filter_into` make no new storage; they write into the destination. A list destination is
 pushed onto and nothing is given. An array destination is written from cell 0, and the number of cells written is
-given (`gives n int or fail`). When the destination is full, they fail with `err.full`; what was written stays.]
+given (`gives n int or fail`). When the destination is full, they fail with `err.full`; what was written stays. The
+destination may be a collection parameter (9.9).]
 
 #ex("spec", "10-map-into.pnx")
 

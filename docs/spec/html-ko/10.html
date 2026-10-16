@@ -197,7 +197,7 @@ xs minimum <span style="color: #d73948">or_else</span> (e) <span style="color: #
 12
 -1
 3
-</code></pre></div><p class="para"><span class="pn">(3)</span> <code>map_into</code> 와 <code>filter_into</code> 는 새 저장소를 만들지 않고 목적지에 쓴다. 목적지가 목록이면 끝에 <code>push</code> 하고 아무것도 주지 않는다. 목적지가 배열이면 0 번 칸부터 쓰고 쓴 칸의 수를 준다(<code>gives n int or<br>fail</code>). 목적지가 차면 <code>err.full</code> 로 실패하고, 그때까지 쓴 것은 남는다.</p><div class="example run"><p class="ex-file"><code>10-map-into.pnx</code></p><pre><code data-lang="pinax"><span style="color: #d73948">use</span> io
+</code></pre></div><p class="para"><span class="pn">(3)</span> <code>map_into</code> 와 <code>filter_into</code> 는 새 저장소를 만들지 않고 목적지에 쓴다. 목적지가 목록이면 끝에 <code>push</code> 하고 아무것도 주지 않는다. 목적지가 배열이면 0 번 칸부터 쓰고 쓴 칸의 수를 준다(<code>gives n int or<br>fail</code>). 목적지가 차면 <code>err.full</code> 로 실패하고, 그때까지 쓴 것은 남는다. 목적지는 모음 매개변수여도 된다(9.9).</p><div class="example run"><p class="ex-file"><code>10-map-into.pnx</code></p><pre><code data-lang="pinax"><span style="color: #d73948">use</span> io
 <span style="color: #d73948">use</span> <span style="color: #d73948">str</span>
 <span style="color: #d73948">array</span> xs <span style="color: #d73948">int</span> <span style="color: #b60157">4</span>
 <span style="color: #d73948">assign</span> xs (<span style="color: #b60157">1</span>, <span style="color: #b60157">2</span>, <span style="color: #b60157">3</span>, <span style="color: #b60157">4</span>)

@@ -61,7 +61,7 @@ from cell 0, and the number of cells written is given. When the destination is f
 
 A word can take a collection as a parameter. Write its kind and what its cells hold --- `list int`, `array city`,
 `queue int`, `list str(8)` --- or `buffer`, and give the collection's name where you call the word. Inside, the parameter
-works wherever a collection's name does. The same word now serves every list of that kind, whatever its capacity.
+works wherever a collection's name does (even as the destination of `map_into`). The same word now serves every list of that kind, whatever its capacity.
 
 #ex("manual", "06-coll-param.pnx")
 

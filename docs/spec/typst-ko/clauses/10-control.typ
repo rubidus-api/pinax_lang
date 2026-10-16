@@ -161,7 +161,7 @@ block   = "do" [ "(" effect ")" ] { body } "end" ;
 
 #para("3")[`map_into` 와 `filter_into` 는 새 저장소를 만들지 않고 목적지에 쓴다. 목적지가 목록이면 끝에
 `push` 하고 아무것도 주지 않는다. 목적지가 배열이면 0 번 칸부터 쓰고 쓴 칸의 수를 준다(`gives n int or
-fail`). 목적지가 차면 `err.full` 로 실패하고, 그때까지 쓴 것은 남는다.]
+fail`). 목적지가 차면 `err.full` 로 실패하고, 그때까지 쓴 것은 남는다. 목적지는 모음 매개변수여도 된다(9.9).]
 
 #ex("spec", "10-map-into.pnx")
 
