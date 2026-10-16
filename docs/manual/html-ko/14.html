@@ -10,11 +10,10 @@
     i <span style="color: #b60157">1</span> add <span style="color: #d73948">to</span> i
   <span style="color: #d73948">end</span>
 <span style="color: #d73948">end</span>
-<span style="color: #d73948">global</span> who <span style="color: #d73948">int</span>
 <span style="color: #d73948">word</span> demo ()
-  <span style="color: #d73948">do</span> <span style="color: #198810">"ping"</span> <span style="color: #b60157">3</span> count_to <span style="color: #d73948">end</span> workers spawn <span style="color: #d73948">or_else</span> (e) <span style="color: #d73948">return</span> <span style="color: #d73948">end</span> drop
-  <span style="color: #d73948">do</span> <span style="color: #198810">"pong"</span> <span style="color: #b60157">2</span> count_to <span style="color: #d73948">end</span> workers spawn <span style="color: #d73948">or_else</span> (e) <span style="color: #d73948">return</span> <span style="color: #d73948">end</span> drop
-  workers run_all
+  <span style="color: #d73948">do</span> <span style="color: #198810">"ping"</span> <span style="color: #b60157">3</span> count_to <span style="color: #d73948">end</span> workers spawn <span style="color: #d73948">or_else</span> (e) <span style="color: #d73948">return</span> <span style="color: #d73948">end</span> drop   <span style="color: #74747c">rem spawn gives the task; not needed here</span>
+  <span style="color: #d73948">do</span> <span style="color: #198810">"pong"</span> <span style="color: #b60157">2</span> count_to <span style="color: #d73948">end</span> workers spawn <span style="color: #d73948">or_else</span> (e) <span style="color: #d73948">return</span> <span style="color: #d73948">end</span> drop   <span style="color: #74747c">rem nothing runs yet: both wait for a turn</span>
+  workers run_all                                                      <span style="color: #74747c">rem now they run, until both are done</span>
 <span style="color: #d73948">end</span>
 demo
 </code></pre><p class="ex-label">출력</p><pre><code data-lang="text">$ pnx 13-turns.pnx
@@ -23,7 +22,7 @@ pong 1
 ping 2
 pong 2
 ping 3
-</code></pre></div><h3>13.2 큐로 잇기</h3><p>작업 사이의 자료는 선언된 저장소로 주고받는다. 큐가 가장 흔하다. <code>큐 wait_take</code> 는 큐에서 꺼내고 <code>v 큐 wait_put</code> 은 넣는다. 큐가 비어(차) 있는 동안 작업은 양보하고, 다음 차례에 다시 본다.</p><div class="example run"><p class="ex-file"><code>13-pipeline.pnx</code></p><pre><code data-lang="pinax"><span style="color: #d73948">use</span> io
+</code></pre></div><p><code>spawn</code> 은 작업을 만들기만 하고 돌리지 않는다. <code>run_all</code> 이 묶음의 작업에 차례로 한 번씩 돌 기회를 주고, 작업은 <code>yield</code> 에서 차례를 내놓는다. 출력이 번갈아 나오는 까닭을 차례마다 적으면 이렇다.</p><table><thead><tr><th><strong>차례</strong></th><th><strong>도는 작업</strong></th><th><strong>출력</strong></th><th><strong>그다음</strong></th></tr></thead><tbody><tr><td>1</td><td>ping</td><td><code>ping 1</code></td><td><code>yield</code>: 차례를 내놓는다</td></tr><tr><td>2</td><td>pong</td><td><code>pong 1</code></td><td><code>yield</code></td></tr><tr><td>3</td><td>ping</td><td><code>ping 2</code></td><td><code>yield</code></td></tr><tr><td>4</td><td>pong</td><td><code>pong 2</code></td><td><code>yield</code></td></tr><tr><td>5</td><td>ping</td><td><code>ping 3</code></td><td><code>yield</code></td></tr><tr><td>6</td><td>pong</td><td>(없음)</td><td><code>i</code> 가 3 이 되어 <code>until</code> 로 떠난다. 작업이 끝난다</td></tr><tr><td>7</td><td>ping</td><td>(없음)</td><td><code>i</code> 가 4. 작업이 끝난다. 모두 끝났으므로 <code>run_all</code> 이 돌아온다</td></tr></tbody></table><p>각 작업은 자기 지역 변수(<code>name</code>, <code>n</code>, <code>i</code>)와 자기 스택을 따로 갖는다. 그래서 <code>yield</code> 로 갔다가 돌아와도 하던 자리 그대로 이어서 돈다.</p><h3>13.2 큐로 잇기</h3><p>작업 사이의 자료는 선언된 저장소로 주고받는다. 큐가 가장 흔하다. <code>큐 wait_take</code> 는 큐에서 꺼내고 <code>v 큐 wait_put</code> 은 넣는다. 큐가 비어(차) 있는 동안 작업은 양보하고, 다음 차례에 다시 본다.</p><div class="example run"><p class="ex-file"><code>13-pipeline.pnx</code></p><pre><code data-lang="pinax"><span style="color: #d73948">use</span> io
 <span style="color: #74747c">rem Three stages linked by queues: numbers -&gt; squares -&gt; total.</span>
 <span style="color: #d73948">tasks</span> stages <span style="color: #b60157">3</span>
 <span style="color: #d73948">queue</span> numbers <span style="color: #d73948">int</span> <span style="color: #b60157">2</span>

@@ -18,6 +18,23 @@ ended.
 
 #ex("manual", "13-turns.pnx")
 
+`spawn` only makes a task; it does not run it. `run_all` gives each task of the set one turn after another, and a task
+gives its turn up at `yield`. Turn by turn, this is why the output alternates.
+
+#table(columns: (auto, auto, auto, 1fr), inset: 5pt, stroke: 0.5pt + luma(170),
+  table.header([*Turn*], [*Task*], [*Prints*], [*Then*]),
+  [1], [ping], [`ping 1`], [`yield`: gives the turn up],
+  [2], [pong], [`pong 1`], [`yield`],
+  [3], [ping], [`ping 2`], [`yield`],
+  [4], [pong], [`pong 2`], [`yield`],
+  [5], [ping], [`ping 3`], [`yield`],
+  [6], [pong], [(nothing)], [`i` is 3: `until` leaves the loop and the task ends],
+  [7], [ping], [(nothing)], [`i` is 4: the task ends. All have ended, so `run_all` returns],
+)
+
+Each task has its own locals (`name`, `n`, `i`) and its own stack. So after going away at `yield` and coming back, it
+goes on exactly where it was.
+
 == Linking with queues
 
 Tasks pass data through declared storage, most often queues. `q wait_take` takes from a queue and `v q wait_put` puts

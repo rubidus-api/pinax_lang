@@ -1,0 +1,3 @@
+rem refused
+list scores int 3
+word add_score (n int) n scores push end   rem push can fail: what then? the guard is missing

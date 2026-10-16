@@ -59,10 +59,24 @@ type       = [ "owned" ] ( NAME [ "(" size ")" ] | "word" "(" effect ")" ) ;
 
 #ex("spec", "09-stack-words.pnx")
 
+#note[스택을 처음 보는 사람을 위해 `2 3 add 4 mul` 을 한 토큰씩 따라가면 이렇다(맨 위는 오른쪽).
+#trace(
+  ("2", "2", [값을 올린다.]),
+  ("3", "2 3", [값을 올린다.]),
+  ("add", "5", [두 값을 내려 합을 올린다.]),
+  ("4", "5 4", [값을 올린다.]),
+  ("mul", "20", [두 값을 내려 곱을 올린다.]),
+)
+처리기는 적재 때 이 표의 둘째 칸(깊이와 타입)을 모든 자리에서 미리 안다. 그래서 (3) 과 (3a) 의 잘못은 돌기 전에 드러난다.]
+
 #part("제약")
 
 #para("3")[낱말이 받을 값이 스택에 모자라면 거절된다. 스택의 깊이는 돌 때 달라지지 않는다.]
 #ex("spec", "09-stack-short.pnx")
+
+#para("3a")[정의 밖의 코드(5.2)가 끝날 때, 곧 소스의 끝에서 스택에 값이 남으면 거절된다. 낱말의 몸이 끝날 때의 스택은
+9.2 가 정한다.]
+#ex("spec", "09-leftover.pnx")
 
 #para("4")[정의되지 않은 이름을 쓰면 거절된다.]
 #ex("spec", "09-unknown-word.pnx")
@@ -207,6 +221,7 @@ cell            = NAME [ "(" size ")" ] ;   (* int, bool, err, str(N), 또는 �
   ([입력에 이름 있는 것과 없는 것이 섞임], "inputs are all named or all bare types, not a mix"),
   ([끝나는 자리의 스택이 결과와 다름], "the stack does not hold exactly the results of the signature here"),
   ([스택의 값이 모자람], "the stack does not hold enough values for this word"),
+  ([소스의 끝에 값이 남음], "values are left on the stack at the end of the source"),
   ([정의되지 않은 이름], "this name is not declared before this place"),
   ([지역 변수의 타입이 바뀜], "this local variable has another type than the value stored into it"),
   ([`to` 의 이름이 전역], "this name is a global; a global is written with set: value set name"),

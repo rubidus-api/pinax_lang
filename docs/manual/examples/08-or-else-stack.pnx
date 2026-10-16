@@ -1,0 +1,9 @@
+rem run
+use io
+use str
+word to_number (s str gives int)
+  s str.to_int                        rem on success: one int on the stack
+    or_else (e) 0 end                 rem on failure: the block gives one int instead
+end                                   rem so after or_else the stack is the same either way
+"42" to_number str.to_str io.println
+"forty" to_number str.to_str io.println

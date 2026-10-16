@@ -1,0 +1,5 @@
+rem refused
+use io
+use str
+1 2 add str.to_str io.println
+1 2                                           rem two values that nothing takes

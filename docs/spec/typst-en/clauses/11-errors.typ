@@ -105,5 +105,5 @@ fault happened in.]
   ([No guard after a word that can fail], "a word that can fail is followed by or_fail, or_return or or_else"),
   ([`or_fail` in a word without `or fail`], "or_fail passes the failure on, so this word needs `or fail` in its signature"),
   ([`fail` in a word without `or fail`], "fail needs `or fail` in the signature of this word"),
-  ([The body of `or_else` leaves other values], "the body of or_else must leave what the word would have given, or leave"),
+  ([The body of `or_else` leaves other values], "the body of or_else must leave what the word would have given, or leave the word or the loop"),
 )

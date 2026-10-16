@@ -1,0 +1,12 @@
+rem run
+use io
+word sign (n int gives str)
+  n 0 lt if                     rem lt leaves a bool; if takes it off the stack
+    "negative"                  rem this way leaves one str
+  else
+    n 0 eq if "zero" else "positive" end   rem and so does this way, whichever inner way it takes
+  end                           rem both ways meet here with one str on the stack
+end
+-4 sign io.println
+0 sign io.println
+9 sign io.println

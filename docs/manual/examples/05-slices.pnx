@@ -1,0 +1,12 @@
+rem run
+use io
+use str
+word show ()
+  "Hello, Pinax world" to s         rem s is a view of the 18 bytes of the literal
+  s 5 str.take to head              rem the first 5 bytes: "Hello", no copy
+  s 7 str.skip to tail              rem all but the first 7: "Pinax world", no copy
+  tail 0 5 str.slice to name        rem bytes 0 up to 5 of tail: "Pinax"
+  cat ("[", head, "] [", tail, "] [", name, "]") io.println   rem cat makes new bytes, in the region
+  cat ("lengths: ", s str.len, " ", head str.len, " ", name str.len) io.println
+end
+show

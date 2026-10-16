@@ -357,6 +357,28 @@ static bool reg_ok(uint32_t kind, uint32_t value, const pnx_wordrec *word, uint3
     }
 }
 
+// Where a jump goes, or -1 for an instruction that does not jump.
+static int64_t jump_of(const uint32_t *code, uint32_t i) {
+    const uint32_t w = code[i];
+    const pnx_opinfo info = opinfo[w & 0xffu];
+    if (info.shape == PNX_F_AX)
+        return (int64_t)i + 1 + ((int32_t)w >> 8);
+    if (info.shape == PNX_F_ABC && info.c == PNX_K_J)
+        return (int64_t)i + 1 + (int8_t)(w >> 24);
+    return -1;
+}
+
+// An instruction that can make code run again: a jump back, a call (the callee may call again),
+// a tail call. The budget is charged by a CHECK right before each, so that no run goes on for
+// ever: a hand-made container without them would never be suspended.
+static bool repeats(const uint32_t *code, uint32_t i) {
+    const uint32_t op = code[i] & 0xffu;
+    if (op == PNX_CALL || op == PNX_CALLR || op == PNX_TCALL)
+        return true;
+    const int64_t target = jump_of(code, i);
+    return target >= 0 && target <= (int64_t)i;
+}
+
 // Checks the shape of one word's code: every register inside the window, every index inside
 // its table, every jump onto an instruction of the same word, a failure word after every
 // operation that can fail. Types are not checked here (P1).
@@ -434,6 +456,11 @@ static const char *check_word(const pinax_state *st, uint32_t index, span range,
             if (target < range.begin || target >= range.end || heads[target] != 1)
                 return "code: jump outside the word or into an instruction";
         }
+        if (repeats(code, i) && (i == range.begin || heads[i - 1] != 1 || (code[i - 1] & 0xffu) != PNX_CHECK ||
+                                 code[i - 1] >> 16 == 0))
+            return "code: a jump back or a call without a CHECK that charges the budget right before it";
+        if (target >= 0 && repeats(code, (uint32_t)target))
+            return "code: a jump onto a jump back or a call, past its CHECK";
 
         // what each instruction needs of the global it names
         uint32_t want = PNX_G_COUNT, global = 0;
@@ -544,6 +571,27 @@ static const char *check_word(const pinax_state *st, uint32_t index, span range,
             return "code: a decimal scale outside 0 to 18";
         if (info.second == PNX_X_SREG && x >= word->str_cells)
             return "code: register outside the window";
+        { // string registers an instruction changes in place, or more than one it writes, are all
+          // different from its other string registers: the instruction keeps pointers into them
+            uint32_t regs[4], n = 0, changes = 0;
+            bool     in_place = false;
+            const uint32_t kinds[3] = {info.a, info.b, info.c}, values[3] = {a, b, c};
+            for (unsigned k = 0; k < 3; ++k) {
+                if (kinds[k] != PNX_K_S)
+                    continue;
+                regs[n++] = values[k];
+                changes += info.roles[k] == 'w' || info.roles[k] == 'm';
+                in_place = in_place || info.roles[k] == 'm';
+            }
+            if (info.second == PNX_X_SREG)
+                regs[n++] = x;
+            for (uint32_t p = 0; (in_place || changes > 1) && p < n; ++p) {
+                for (uint32_t q = p + 1; q < n; ++q) {
+                    if (regs[p] == regs[q])
+                        return "code: an instruction that changes a string register names it twice";
+                }
+            }
+        }
 
         if (info.second == PNX_X_WORD) {
             if (x >= head->n_words)
@@ -552,6 +600,10 @@ static const char *check_word(const pinax_state *st, uint32_t index, span range,
                 fails = st->word_counts[x].fails;
             else if (st->word_counts[x].fails != counts.fails)
                 return "code: tail call between a failing and a non-failing word";
+            // the callee's results are this word's: what it leaves unwritten would be read as a result
+            else if (st->word_counts[x].int_results != counts.int_results ||
+                     st->word_counts[x].str_results != counts.str_results)
+                return "code: tail call to a word with other results";
         }
         if (info.second == PNX_X_COUNTS) { // a call through a register: its arguments and results fit the window
             fails = x >> 31 != 0;
@@ -569,8 +621,9 @@ static const char *check_word(const pinax_state *st, uint32_t index, span range,
                 b + hc.str_args + hc.str_results > word->str_cells)
                 return "code: host call outside the window";
         }
-        if (fails && (next >= range.end || !is_failure_word(code[next] & 0xffu)))
-            return "code: no failure word after an operation that can fail";
+        // success skips the failure word (one code word): something must follow it in the word
+        if (fails && (next + 1 >= range.end || !is_failure_word(code[next] & 0xffu)))
+            return "code: no failure word after an operation that can fail, or nothing after it";
         if ((op == PNX_RETOK || op == PNX_RETF || op == PNX_FAIL || op == PNX_FAILR) && !counts.fails)
             return "code: failure return in a word without `or fail`";
         if (op == PNX_RET && counts.fails)
@@ -1145,6 +1198,22 @@ static void fault_place(pinax_state *st, pinax_err err) {
     out[n] = '\0';
 }
 
+// Whether the first `n` bytes of a string cell lie in memory the state knows: its block, the
+// interpreter's own texts, or a host string of this run.
+static bool cell_readable(const pinax_state *st, pnx_scell cell, uint32_t n) {
+    if (cell.segment >= PNX_SEG_COUNT || cell.segment == PNX_SEG_EMPTY || cell.offset > UINT32_MAX)
+        return false;
+    if (cell.segment == PNX_SEG_KEPT) // a host word vouched that these bytes outlive the state
+        return true;
+    if (cell.segment >= PNX_SEG_HOST)
+        return cell.segment < PNX_SEG_HOST + st->host_segments &&
+               cell.offset + n <= st->host_len[cell.segment - PNX_SEG_HOST];
+    if (cell.segment == PNX_SEG_STATIC)
+        return cell.offset + n <= pnx_static_len;
+    const uintptr_t at = (uintptr_t)st->segment[cell.segment] + (uintptr_t)cell.offset, lo = (uintptr_t)st->block;
+    return at >= lo && at <= lo + st->used && n <= lo + st->used - at;
+}
+
 // Copies the locals of the word the last fault happened in, by the local records, while the
 // registers still hold them: a load that faults is undone right after, records and all.
 static void fault_locals(pinax_state *st) {
@@ -1167,10 +1236,12 @@ static void fault_locals(pinax_state *st) {
         const uint32_t name_len = (uint32_t)__builtin_strlen(rec.name), type_len = (uint32_t)__builtin_strlen(rec.type);
         uint32_t text_len = 0;
         pnx_scell cell = {0};
-        if (rec.bank) { // the first bytes of a str
+        if (rec.bank) { // the first bytes of a str, when they are bytes this state can vouch for: the
+            // local records are not checked against the code, so the register may hold a cell left
+            // by an earlier run (whose host string may be gone)
             cell = st->sbank[reg];
-            text_len = cell.segment >= PNX_SEG_COUNT ? 0 : cell.length < 32 ? cell.length : 32;
-            if (cell.segment == PNX_SEG_REGION && (cell.offset > st->region_len || text_len > st->region_len - cell.offset))
+            text_len = cell.length < 32 ? cell.length : 32;
+            if (!cell_readable(st, cell, text_len))
                 text_len = 0;
         }
         if (name_len + type_len + text_len > sizeof st->fault_pool - st->fault_used)
@@ -1325,6 +1396,7 @@ pinax_err pinax_run(pinax_state *st, pinax_word word, const pinax_args *args) {
     if (rec->str_cells > st->str_peak)
         st->str_peak = rec->str_cells;
     st->region_used = 0; // results of the previous run end here
+    st->ptn = (pnx_ptn_found){0}; // and its last match: a capture is a view of what that run matched
     st->host_segments = n.str_args;
     for (uint32_t k = 0; k < n.int_args; ++k)
         st->ibank[k] = args->i[k];
@@ -1332,6 +1404,7 @@ pinax_err pinax_run(pinax_state *st, pinax_word word, const pinax_args *args) {
         if (args->s[k].len > UINT32_MAX)
             return fail(st, PINAX_ERR_ARGUMENT, "a string argument is longer than 4 GiB");
         st->segment[PNX_SEG_HOST + k] = args->s[k].len ? args->s[k].ptr : empty_bytes;
+        st->host_len[k] = (uint32_t)args->s[k].len;
         st->sbank[k] = (pnx_scell){PNX_SEG_HOST + k, (uint32_t)args->s[k].len, 0};
     }
     st->top_word = word;

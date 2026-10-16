@@ -20,3 +20,4 @@ Learning and using the embeddable scripting language Pinax — Draft 0.1, Octobe
 14. [13 Tasks](14.md)
 15. [14 Embedding in a C program](15.md)
 16. [15 Tools](16.md)
+17. [16 Messages you will meet](17.md)

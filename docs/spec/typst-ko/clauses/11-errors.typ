@@ -101,5 +101,5 @@ guard = "or_fail" | "or_return" | "or_else" [ "(" NAME ")" ] { body } "end" ;
   ([실패할 수 있는 낱말 뒤에 지킴이 없음], "a word that can fail is followed by or_fail, or_return or or_else"),
   ([`or fail` 없는 낱말의 `or_fail`], "or_fail passes the failure on, so this word needs `or fail` in its signature"),
   ([`or fail` 없는 낱말의 `fail`], "fail needs `or fail` in the signature of this word"),
-  ([`or_else` 의 몸이 남기는 값이 다름], "the body of or_else must leave what the word would have given, or leave"),
+  ([`or_else` 의 몸이 남기는 값이 다름], "the body of or_else must leave what the word would have given, or leave the word or the loop"),
 )

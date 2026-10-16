@@ -74,6 +74,16 @@
         table.header([*#tr("조건", "Condition")*], [*#tr("메시지", "Message")*]), ..cells)
 }
 
+// The stack, step by step: one row a token, the stack after it (the top on the right; `—` an
+// empty stack) and what the token did. For readers new to a stack machine.
+#let trace(..rows) = {
+  let code(x) = if type(x) == str { raw(x) } else { x } // text in brackets: a remark, not code
+  let cells = rows.pos().map(r => (code(r.at(0)), code(r.at(1)), if r.len() > 2 { r.at(2) } else { [] })).flatten()
+  table(columns: (auto, auto, 1fr), inset: 5pt, stroke: 0.5pt + luma(170),
+        table.header([*#tr("토큰", "Token")*], [*#tr("그 뒤의 스택", "Stack after it")*],
+                     [*#tr("일어난 일", "What happened")*]), ..cells)
+}
+
 // Kinds of example outputs and their labels.
 #let out-label(kind) = (
   run: tr("출력", "Output"), test: tr("시험 결과", "Test run"),

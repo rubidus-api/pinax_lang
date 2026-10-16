@@ -21,3 +21,4 @@
 #include "chapters/13-tasks.typ"
 #include "chapters/14-embedding.typ"
 #include "chapters/15-tools.typ"
+#include "chapters/16-messages.typ"

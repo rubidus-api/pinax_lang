@@ -10,11 +10,10 @@
     i <span style="color: #b60157">1</span> add <span style="color: #d73948">to</span> i
   <span style="color: #d73948">end</span>
 <span style="color: #d73948">end</span>
-<span style="color: #d73948">global</span> who <span style="color: #d73948">int</span>
 <span style="color: #d73948">word</span> demo ()
-  <span style="color: #d73948">do</span> <span style="color: #198810">"ping"</span> <span style="color: #b60157">3</span> count_to <span style="color: #d73948">end</span> workers spawn <span style="color: #d73948">or_else</span> (e) <span style="color: #d73948">return</span> <span style="color: #d73948">end</span> drop
-  <span style="color: #d73948">do</span> <span style="color: #198810">"pong"</span> <span style="color: #b60157">2</span> count_to <span style="color: #d73948">end</span> workers spawn <span style="color: #d73948">or_else</span> (e) <span style="color: #d73948">return</span> <span style="color: #d73948">end</span> drop
-  workers run_all
+  <span style="color: #d73948">do</span> <span style="color: #198810">"ping"</span> <span style="color: #b60157">3</span> count_to <span style="color: #d73948">end</span> workers spawn <span style="color: #d73948">or_else</span> (e) <span style="color: #d73948">return</span> <span style="color: #d73948">end</span> drop   <span style="color: #74747c">rem spawn gives the task; not needed here</span>
+  <span style="color: #d73948">do</span> <span style="color: #198810">"pong"</span> <span style="color: #b60157">2</span> count_to <span style="color: #d73948">end</span> workers spawn <span style="color: #d73948">or_else</span> (e) <span style="color: #d73948">return</span> <span style="color: #d73948">end</span> drop   <span style="color: #74747c">rem nothing runs yet: both wait for a turn</span>
+  workers run_all                                                      <span style="color: #74747c">rem now they run, until both are done</span>
 <span style="color: #d73948">end</span>
 demo
 </code></pre><p class="ex-label">Output</p><pre><code data-lang="text">$ pnx 13-turns.pnx
@@ -23,7 +22,7 @@ pong 1
 ping 2
 pong 2
 ping 3
-</code></pre></div><h3>13.2 Linking with queues</h3><p>Tasks pass data through declared storage, most often queues. <code>q wait_take</code> takes from a queue and <code>v q wait_put</code> puts into one; while the queue is empty (or full) the task yields and looks again on its next turn.</p><div class="example run"><p class="ex-file"><code>13-pipeline.pnx</code></p><pre><code data-lang="pinax"><span style="color: #d73948">use</span> io
+</code></pre></div><p><code>spawn</code> only makes a task; it does not run it. <code>run_all</code> gives each task of the set one turn after another, and a task gives its turn up at <code>yield</code>. Turn by turn, this is why the output alternates.</p><table><thead><tr><th><strong>Turn</strong></th><th><strong>Task</strong></th><th><strong>Prints</strong></th><th><strong>Then</strong></th></tr></thead><tbody><tr><td>1</td><td>ping</td><td><code>ping 1</code></td><td><code>yield</code>: gives the turn up</td></tr><tr><td>2</td><td>pong</td><td><code>pong 1</code></td><td><code>yield</code></td></tr><tr><td>3</td><td>ping</td><td><code>ping 2</code></td><td><code>yield</code></td></tr><tr><td>4</td><td>pong</td><td><code>pong 2</code></td><td><code>yield</code></td></tr><tr><td>5</td><td>ping</td><td><code>ping 3</code></td><td><code>yield</code></td></tr><tr><td>6</td><td>pong</td><td>(nothing)</td><td><code>i</code> is 3: <code>until</code> leaves the loop and the task ends</td></tr><tr><td>7</td><td>ping</td><td>(nothing)</td><td><code>i</code> is 4: the task ends. All have ended, so <code>run_all</code> returns</td></tr></tbody></table><p>Each task has its own locals (<code>name</code>, <code>n</code>, <code>i</code>) and its own stack. So after going away at <code>yield</code> and coming back, it goes on exactly where it was.</p><h3>13.2 Linking with queues</h3><p>Tasks pass data through declared storage, most often queues. <code>q wait_take</code> takes from a queue and <code>v q wait_put</code> puts into one; while the queue is empty (or full) the task yields and looks again on its next turn.</p><div class="example run"><p class="ex-file"><code>13-pipeline.pnx</code></p><pre><code data-lang="pinax"><span style="color: #d73948">use</span> io
 <span style="color: #74747c">rem Three stages linked by queues: numbers -&gt; squares -&gt; total.</span>
 <span style="color: #d73948">tasks</span> stages <span style="color: #b60157">3</span>
 <span style="color: #d73948">queue</span> numbers <span style="color: #d73948">int</span> <span style="color: #b60157">2</span>

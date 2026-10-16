@@ -16,6 +16,16 @@
 전역에 넣거나, `owned` 결과로 돌려준다. `owned` 없이 받는 낱말(`file.write`, `file.read_line`)에는 몇 번이든 #strong[빌려줄]
 수 있다.
 
+두 가지 쓰임을 표로 견주면 이렇다.
+
+#table(columns: (auto, 1fr, 1fr), inset: 5pt, stroke: 0.5pt + luma(170),
+  table.header([], [*빌려주기*], [*넘겨주기*]),
+  [받는 쪽의 서명], [`(f file …)`: `owned` 가 없다], [`(f owned file …)`, 또는 `owned` 결과],
+  [몇 번], [몇 번이든], [모든 경로에서 정확히 한 번],
+  [넘긴 뒤], [그대로 쓸 수 있다], [더는 쓰지 못한다],
+  [예], [`f file.write`, `f file.read_line`], [`f file.close`, 전역에 넣기, 돌려주기],
+)
+
 #ex("manual", "09-copy-file.pnx")
 
 `copy_lines` 에는 파일이 둘이고, 떠나는 길이 넷이다. 둘째 파일을 못 열면 첫째를 닫고 실패한다. 쓰다 실패하면 둘 다 닫고
@@ -32,7 +42,8 @@
 결함이 아닌 경로들만 본다.]
 
 #mistake[`dup` 으로 하나 더 만들어 두면 편하다][`owned` 값은 `dup` 으로 늘리거나 `drop` 으로 버리지 못한다. 늘리면 두
-번 닫게 되고, 버리면 닫지 못한다. 지역 변수에 넣고 이름으로 빌려준다.]
+번 닫게 되고, 버리면 닫지 못한다. 지역 변수에 넣고 이름으로 빌려준다.
+#ex("manual", "09-drop-owned.pnx")]
 
 == 구역을 아껴 쓰기
 

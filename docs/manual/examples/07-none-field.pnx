@@ -1,0 +1,10 @@
+rem fault
+use io
+forward list nodes
+record node
+  value int
+  next nodes                           rem a row of nodes, or none
+end
+list nodes node 4
+row nodes last (3)                     rem its next is none: nothing was given
+last node.next node.value drop         rem reading a field of none ends the run

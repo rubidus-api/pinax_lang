@@ -81,7 +81,7 @@ assign-item = "assign" NAME "(" value { "," value } ")" ;
 #para("1")[`array NAME type capacity` makes an #term("array") with that many cells. An array is always full: `len` is
 its capacity. The element type is `int`, `bool`, `str(N)`, a declared type or the name of a record.]
 
-#para("2")[`i ARRAY idx` reads cell `i`; `v i to ARRAY` stores into cell `i`. Numbers count from 0. For an array of
+#para("2")[`i ARRAY idx` reads cell `i`; `v i set ARRAY` stores into cell `i`; a cell of a collection parameter (9.9) is stored the same way. Numbers count from 0. For an array of
 records `idx` gives a row (8.8), not a value.]
 
 #para("3")[`assign ARRAY (value, …)` fills an array from cell 0, outside definitions. With fewer values than cells the

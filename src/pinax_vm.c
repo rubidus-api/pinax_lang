@@ -156,14 +156,8 @@ static pinax_err host_call(pinax_state *st, const pnx_host *h, int64_t *ia, pnx_
             *cell = (pnx_scell){PNX_SEG_EMPTY, 0, 0};
         } else if (rs[k].ptr >= st->region && rs[k].ptr + len <= st->region + st->region_used) {
             *cell = (pnx_scell){PNX_SEG_REGION, len, (uint64_t)(rs[k].ptr - st->region)};
-        } else if (h->flags & PINAX_WORD_KEEP_STR) {
-            if (PNX_SEG_HOST + st->host_segments >= PNX_SEG_COUNT) {
-                *fault = true;
-                return PINAX_ERR_FULL;
-            }
-            uint32_t segment = PNX_SEG_HOST + st->host_segments++;
-            st->segment[segment] = rs[k].ptr;
-            *cell = (pnx_scell){segment, len, 0};
+        } else if (h->flags & PINAX_WORD_KEEP_STR) { // the bytes outlive the state: no copy, no slot
+            *cell = (pnx_scell){PNX_SEG_KEPT, len, (uint64_t)((uintptr_t)rs[k].ptr - (uintptr_t)st->segment[PNX_SEG_KEPT])};
         } else {
             uint8_t *copy = pnx_region_alloc(st, len);
             if (!copy) {

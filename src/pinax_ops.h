@@ -943,7 +943,8 @@ PNX_OP(RCATW) { // a minus sign stays in front of the zeros
     const uint32_t n = pnx_format_int(R[OP_B(w)], digits);
     if (n && digits[0] == '-') {
         const int r = pnx_region_append(st, &S[OP_A(w)], digits, 1);
-        return r != PNX_R_OK ? r : pnx_append_padded(st, &S[OP_A(w)], digits + 1, n - 1, R[OP_C(w)] - 1, '0', false);
+        const int64_t width = R[OP_C(w)];
+        return r != PNX_R_OK ? r : pnx_append_padded(st, &S[OP_A(w)], digits + 1, n - 1, width > 0 ? width - 1 : width, '0', false);
     }
     return pnx_append_padded(st, &S[OP_A(w)], digits, n, R[OP_C(w)], '0', false);
 }

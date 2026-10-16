@@ -60,10 +60,25 @@ There are no deeper words (`rot` `pick` `roll` `depth`). When three or more valu
 
 #ex("spec", "09-stack-words.pnx")
 
+#note[For a reader new to a stack, here is `2 3 add 4 mul` one token at a time (the top on the right).
+#trace(
+  ("2", "2", [A value goes on.]),
+  ("3", "2 3", [A value goes on.]),
+  ("add", "5", [Two values come off; their sum goes on.]),
+  ("4", "5 4", [A value goes on.]),
+  ("mul", "20", [Two values come off; their product goes on.]),
+)
+At load the processor knows the second column of this table (depth and types) at every place in advance. That is why
+the mistakes of (3) and (3a) show before anything runs.]
+
 #part("Constraints")
 
 #para("3")[A word given fewer values than it takes is refused. The depth of the stack does not change while running.]
 #ex("spec", "09-stack-short.pnx")
+
+#para("3a")[When the code outside definitions (5.2) ends, at the end of the source, values left on the stack are
+refused. The stack at the end of a word's body is 9.2's.]
+#ex("spec", "09-leftover.pnx")
 
 #para("4")[Using a name that is not defined is refused.]
 #ex("spec", "09-unknown-word.pnx")
@@ -213,6 +228,7 @@ with `add_row`.]
   ([Named and bare inputs mixed], "inputs are all named or all bare types, not a mix"),
   ([The stack at the end unlike the results], "the stack does not hold exactly the results of the signature here"),
   ([Too few values on the stack], "the stack does not hold enough values for this word"),
+  ([Values left at the end of the source], "values are left on the stack at the end of the source"),
   ([A name that is not defined], "this name is not declared before this place"),
   ([A local given another type], "this local variable has another type than the value stored into it"),
   ([`to` with the name of a global], "this name is a global; a global is written with set: value set name"),

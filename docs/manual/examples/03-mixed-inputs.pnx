@@ -1,0 +1,2 @@
+rem refused
+word scale (n int, int gives int) n mul end       rem one input named, the other bare

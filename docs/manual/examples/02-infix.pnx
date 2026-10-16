@@ -1,0 +1,11 @@
+rem run
+use io
+use str
+rem (8 - 3) * (2 + 4): each bracket first, then the operation after its two values
+8 3 sub 2 4 add mul str.to_str io.println          rem 5 * 6 = 30
+rem 100 - 4 * 5 * 2: the multiplications first, as in arithmetic
+100 4 5 mul 2 mul sub str.to_str io.println        rem 100 - 40 = 60
+rem (1 + 2 + 3 + 4) / 2: add as you go
+1 2 add 3 add 4 add 2 div str.to_str io.println     rem 10 / 2 = 5
+rem 12 * 12 + 1: dup copies 12 instead of writing it twice
+12 dup mul 1 add str.to_str io.println              rem 145

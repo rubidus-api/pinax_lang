@@ -1,0 +1,11 @@
+rem run
+use io
+use str
+word minus (a int, b int gives int) a b sub end   rem a - b
+10 3 minus str.to_str io.println                  rem 10 was pushed first, so a = 10 and b = 3: 7
+3 10 minus str.to_str io.println                  rem the other way round: -7
+word half_of_sum (a int, b int gives int)
+  a b add                                         rem the body starts with an empty stack
+  2 div                                           rem and must end holding one int
+end
+4 8 half_of_sum str.to_str io.println             rem (4 + 8) / 2 = 6

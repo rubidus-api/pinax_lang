@@ -21,6 +21,20 @@ outside definitions, and can name it. Adding rows while running is `add_row`.
 
 #ex("manual", "07-add-row.pnx")
 
+Here are the words for rows together, with remarks. The `r` that `add_row` gives is a number inside the table; a field
+is stored with `value row to record.field`, and read with `row record.field`, which takes one row off and puts the
+field's value on.
+
+#ex("manual", "07-row-steps.pnx")
+
+#trace(
+  ("cart add_row", "1", [Adds a row at the end and puts its number on (it can fail: `or_fail` follows).]),
+  ("to r", "—", [Keeps the number in `r`.]),
+  ("n r", "\"eraser\" 1", [The value to store, and the row.]),
+  ("to item.name", "—", [Stores into the `name` field of row 1; both come off.]),
+  ("r item.price", "80", [Takes one row off and puts its `price` on.]),
+)
+
 #qa[Is a row the address of a record?][No. A row is a #strong[number] within its table, and its range is checked on
 every use. So holding the wrong row cannot damage memory; at worst it stops with a fault.]
 
@@ -31,6 +45,11 @@ how a tree is built without pointers. Since the record refers to the table that 
 with `forward`.
 
 #ex("manual", "07-tree.pnx")
+
+Reading or storing a field of the "none" row is a fault. When following rows, ask `is_none` first (as the first line
+of `show` above does).
+
+#ex("manual", "07-none-field.pnx")
 
 == Pools: taking and giving back
 

@@ -1,0 +1,4 @@
+rem refused
+record person
+  name str                          rem a view cannot be kept in a field: write str(N)
+end

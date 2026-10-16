@@ -13,6 +13,7 @@
 #define PNX_TASK_STRS 4
 #define PNX_MAX_HANDLE_TYPES 16
 #define PNX_MAX_STR_ARGS 8
+static_assert(PNX_SEG_HOST + PNX_MAX_STR_ARGS <= PNX_SEG_KEPT, "every string argument of a run has a segment");
 #define PNX_MAX_STR_RESULTS 4
 
 // A string value: bytes `offset .. offset + length` of a segment. Never an address, so the
@@ -224,6 +225,7 @@ struct pinax_state {
     pnx_global         *globals;
 
     const uint8_t *segment[PNX_SEG_COUNT];
+    uint32_t       host_len[PNX_SEG_KEPT - PNX_SEG_HOST]; // the bytes of each string argument of this run
     uint32_t       host_segments; // segments past PNX_SEG_HOST in use for this run
 
     uint64_t budget, left, instructions;

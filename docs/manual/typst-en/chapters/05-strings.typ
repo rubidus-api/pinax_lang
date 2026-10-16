@@ -16,7 +16,20 @@ A `str` value is a #term("view"). It points at where some bytes are and how many
 
 #ex("manual", "05-views.pnx")
 
-This program splits settings text into lines, trims each line and cuts it in two at `=`. Bytes move only when they are
+First a small example of what a view is. `head`, `tail` and `name` below all point at the bytes of the same literal.
+New bytes appear only when `cat` makes the text to print.
+
+#ex("manual", "05-slices.pnx")
+
+#table(columns: (auto, auto, auto), inset: 5pt, stroke: 0.5pt + luma(170),
+  table.header([*View*], [*Points at*], [*Length*]),
+  [`s`], [the literal, from byte 0], [18],
+  [`head`], [the same place, from byte 0], [5],
+  [`tail`], [the same literal, from byte 7], [11],
+  [`name`], [byte 0 of `tail`, that is byte 7 of the literal], [5],
+)
+
+`05-views.pnx` above splits settings text into lines, trims each line and cuts it in two at `=`. Bytes move only when they are
 printed. `str.try_cut` fails when there is no `=`, so it is taken with `or_else`. `str.cut`, which does not fail, gives
 an empty text after the separator when there is none.
 
@@ -28,6 +41,20 @@ bytes put into it. Reading it gives a view of that room.
 
 #ex("manual", "05-stored.pnx")
 #ex("manual", "05-global-view.pnx")
+
+Which one to use depends on #strong[how long the text lives].
+
+#table(columns: (auto, 1fr, 1fr), inset: 5pt, stroke: 0.5pt + luma(170),
+  table.header([], [*`str` (view)*], [*`str(N)` (stored text)*]),
+  [Where], [locals, arguments, results], [globals, cells of arrays and lists, fields of records],
+  [Bytes], [none of its own: it points at bytes elsewhere], [room for N bytes of its own],
+  [Storing], [copies nothing], [copies; longer than N is a fault],
+  [Lives], [as long as the bytes it points at (one run, or until `release`)], [as long as its place],
+)
+
+A view in a field is refused at load, and the message says to write `str(N)`.
+
+#ex("manual", "05-field-view.pnx")
 
 #mistake[Text longer than `str(N)` is cut to fit][It is not. Putting text longer than the room stops with a fault. To
 store part of it, cut it first with `str.take`.
@@ -64,6 +91,7 @@ and `str.chars`. `str.chars` yields a view of each character (not a code point n
 
 #summary[
 - `str` is a view; cutting and splitting copy nothing (standard 7.3, 16.1).
+- A view cannot be kept in a long-lived place (global, cell, field) (7.3).
 - Long-lived places use `str(N)`; putting text there copies it, and text too long is a fault (7.3).
 - New bytes go into the region; `mark`/`release` gives them back, and views made in between are refused after
   (12.2, 12.3).

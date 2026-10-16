@@ -2992,7 +2992,8 @@ static bool emit_return(comp *c) {
         }
         const uint32_t word = f->tail_word;
         f->tail_at = NONE;
-        return emit(c, PNX_ABC(PNX_TCALL, 0, 0, 0)) != NONE && emit(c, word) != NONE;
+        // the loader wants the budget charged right before a tail call, as before every call
+        return check_before_call(c) && emit(c, PNX_ABC(PNX_TCALL, 0, 0, 0)) != NONE && emit(c, word) != NONE;
     }
     // One result of a bank goes straight from where it is. Several are first all put into
     // their stack registers, which lie above the targets, and then moved down in rising order.
@@ -3025,7 +3026,7 @@ static bool end_orelse(comp *c, block *b) {
         if (!settle_all(c))
             return false;
         if (!same_stack(f, &b->out))
-            return type_error(c, "the body of or_else must leave what the word would have given, or leave");
+            return type_error(c, "the body of or_else must leave what the word would have given, or leave the word or the loop");
         if (!same_owns(c, b, b->owns_in))
             return false;
     }

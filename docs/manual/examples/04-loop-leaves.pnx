@@ -1,0 +1,9 @@
+rem refused
+word count_up (n int gives int)
+  0 to i
+  loop
+    i n ge until
+    i 1 add                     rem a new value each turn, and nothing takes it
+  end
+  i
+end

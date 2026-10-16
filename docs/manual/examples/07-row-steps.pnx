@@ -1,0 +1,25 @@
+rem run
+use io
+record item
+  name str(12)                         rem stored text: 12 bytes inside the row
+  price int
+end
+list cart item 4                       rem a table: room for 4 rows of item
+word add_item (n str, p int or fail)
+  cart add_row or_fail to r            rem a new row at the end; r is its number in the table
+  n r to item.name                     rem value, row, to record.field: store a field
+  p r to item.price
+end
+word total (gives int)
+  0 to acc
+  cart do (r cart) acc r item.price add to acc end each   rem each row of the table in turn
+  acc
+end
+word main ()
+  "pencil" 120 add_item or_else (e) end
+  "eraser" 80 add_item or_else (e) end
+  1 cart idx to second                 rem the row with number 1
+  cat (second item.name, " costs ", second item.price) io.println
+  cat ("total ", total) io.println
+end
+main

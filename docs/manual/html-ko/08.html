@@ -36,7 +36,34 @@ path <span style="color: #d73948">do</span> (p path) <span style="color: #d73948
 <span style="color: #198810">""</span> io.println
 </code></pre><p class="ex-label">출력</p><pre><code data-lang="text">$ pnx 07-add-row.pnx
 (0, 0)(3, 4)(6, 0)
-</code></pre></div><div class="box qa"><p class="box-title">문답</p><p><strong>물음. 줄은 레코드의 주소인가?</strong></p><p>답. 아니다. 줄은 표 안의 <strong>번호</strong>다. 쓸 때마다 범위를 검사한다. 그래서 줄을 잘못 들고 있어도 메모리를 망가뜨리지 못하고, 기껏해야 결함으로 멈춘다.</p></div><h3>7.2 줄로 잇기</h3><p>레코드의 필드가 표의 이름을 타입으로 가지면 그 표의 줄을 담는다. 처음 값은 “없음” 이고 <code>is_none</code> 으로 묻는다. 이렇게 포인터 없이 나무를 만든다. 레코드가 자기를 담을 표를 가리키므로, 표를 <code>forward</code> 로 먼저 알린다.</p><div class="example run"><p class="ex-file"><code>07-tree.pnx</code></p><pre><code data-lang="pinax"><span style="color: #d73948">use</span> io
+</code></pre></div><p>줄을 다루는 낱말을 주석과 함께 한 번에 보자. <code>add_row</code> 가 준 <code>r</code> 은 표 안의 번호이고, 필드에 넣는 꼴은 <code>값 줄 to<br>레코드.필드</code> 다. 읽는 꼴은 <code>줄 레코드.필드</code> 이고, 줄 하나를 내려 필드의 값을 올린다.</p><div class="example run"><p class="ex-file"><code>07-row-steps.pnx</code></p><pre><code data-lang="pinax"><span style="color: #d73948">use</span> io
+<span style="color: #d73948">record</span> item
+  name <span style="color: #d73948">str</span>(<span style="color: #b60157">12</span>)                         <span style="color: #74747c">rem stored text: 12 bytes inside the row</span>
+  price <span style="color: #d73948">int</span>
+<span style="color: #d73948">end</span>
+<span style="color: #d73948">list</span> cart item <span style="color: #b60157">4</span>                       <span style="color: #74747c">rem a table: room for 4 rows of item</span>
+<span style="color: #d73948">word</span> add_item (n <span style="color: #d73948">str</span>, p <span style="color: #d73948">int</span> <span style="color: #d73948">or</span> <span style="color: #d73948">fail</span>)
+  cart add_row <span style="color: #d73948">or_fail</span> <span style="color: #d73948">to</span> r            <span style="color: #74747c">rem a new row at the end; r is its number in the table</span>
+  n r <span style="color: #d73948">to</span> item.name                     <span style="color: #74747c">rem value, row, to record.field: store a field</span>
+  p r <span style="color: #d73948">to</span> item.price
+<span style="color: #d73948">end</span>
+<span style="color: #d73948">word</span> total (<span style="color: #d73948">gives</span> <span style="color: #d73948">int</span>)
+  <span style="color: #b60157">0</span> <span style="color: #d73948">to</span> acc
+  cart <span style="color: #d73948">do</span> (r cart) acc r item.price add <span style="color: #d73948">to</span> acc <span style="color: #d73948">end</span> each   <span style="color: #74747c">rem each row of the table in turn</span>
+  acc
+<span style="color: #d73948">end</span>
+<span style="color: #d73948">word</span> main ()
+  <span style="color: #198810">"pencil"</span> <span style="color: #b60157">120</span> add_item <span style="color: #d73948">or_else</span> (e) <span style="color: #d73948">end</span>
+  <span style="color: #198810">"eraser"</span> <span style="color: #b60157">80</span> add_item <span style="color: #d73948">or_else</span> (e) <span style="color: #d73948">end</span>
+  <span style="color: #b60157">1</span> cart idx <span style="color: #d73948">to</span> second                 <span style="color: #74747c">rem the row with number 1</span>
+  <span style="color: #d73948">cat</span> (second item.name, <span style="color: #198810">" costs "</span>, second item.price) io.println
+  <span style="color: #d73948">cat</span> (<span style="color: #198810">"total "</span>, total) io.println
+<span style="color: #d73948">end</span>
+main
+</code></pre><p class="ex-label">출력</p><pre><code data-lang="text">$ pnx 07-row-steps.pnx
+eraser costs 80
+total 200
+</code></pre></div><table><thead><tr><th><strong>토큰</strong></th><th><strong>그 뒤의 스택</strong></th><th><strong>일어난 일</strong></th></tr></thead><tbody><tr><td><code>cart add_row</code></td><td><code>1</code></td><td>새 줄을 끝에 더하고 그 번호를 올린다(실패할 수 있어 뒤에 <code>or_fail</code>).</td></tr><tr><td><code>to r</code></td><td><code>—</code></td><td>번호를 <code>r</code> 에 담는다.</td></tr><tr><td><code>n r</code></td><td><code>"eraser" 1</code></td><td>넣을 값과 줄.</td></tr><tr><td><code>to item.name</code></td><td><code>—</code></td><td>줄 1 의 <code>name</code> 필드에 넣는다. 둘 다 내려간다.</td></tr><tr><td><code>r item.price</code></td><td><code>80</code></td><td>줄 하나를 내리고 그 줄의 <code>price</code> 를 올린다.</td></tr></tbody></table><div class="box qa"><p class="box-title">문답</p><p><strong>물음. 줄은 레코드의 주소인가?</strong></p><p>답. 아니다. 줄은 표 안의 <strong>번호</strong>다. 쓸 때마다 범위를 검사한다. 그래서 줄을 잘못 들고 있어도 메모리를 망가뜨리지 못하고, 기껏해야 결함으로 멈춘다.</p></div><h3>7.2 줄로 잇기</h3><p>레코드의 필드가 표의 이름을 타입으로 가지면 그 표의 줄을 담는다. 처음 값은 “없음” 이고 <code>is_none</code> 으로 묻는다. 이렇게 포인터 없이 나무를 만든다. 레코드가 자기를 담을 표를 가리키므로, 표를 <code>forward</code> 로 먼저 알린다.</p><div class="example run"><p class="ex-file"><code>07-tree.pnx</code></p><pre><code data-lang="pinax"><span style="color: #d73948">use</span> io
 <span style="color: #d73948">use</span> <span style="color: #d73948">str</span>
 <span style="color: #74747c">rem A binary search tree in a pool: rows point to rows by number, never by address.</span>
 <span style="color: #d73948">forward</span> <span style="color: #d73948">pool</span> nodes
@@ -74,6 +101,17 @@ root show
 <span style="color: #198810">""</span> io.println
 </code></pre><p class="ex-label">출력</p><pre><code data-lang="text">$ pnx 07-tree.pnx
 20 30 40 50 70 
+</code></pre></div><p>“없음” 줄의 필드를 읽거나 넣으면 결함이다. 줄을 따라갈 때는 <code>is_none</code> 으로 먼저 묻는다(위 <code>show</code> 의 첫 줄처럼).</p><div class="example fault"><p class="ex-file"><code>07-none-field.pnx</code></p><pre><code data-lang="pinax"><span style="color: #d73948">use</span> io
+<span style="color: #d73948">forward</span> <span style="color: #d73948">list</span> nodes
+<span style="color: #d73948">record</span> node
+  value <span style="color: #d73948">int</span>
+  next nodes                           <span style="color: #74747c">rem a row of nodes, or none</span>
+<span style="color: #d73948">end</span>
+<span style="color: #d73948">list</span> nodes node <span style="color: #b60157">4</span>
+<span style="color: #d73948">row</span> nodes last (<span style="color: #b60157">3</span>)                     <span style="color: #74747c">rem its next is none: nothing was given</span>
+last node.next node.value drop         <span style="color: #74747c">rem reading a field of none ends the run</span>
+</code></pre><p class="ex-label">결함으로 멈춤</p><pre><code data-lang="text">$ pnx 07-none-field.pnx
+07-none-field.pnx:9: index out of range
 </code></pre></div><h3>7.3 풀: 얻고 돌려주기</h3><p><code>pool</code> 은 줄을 얻고(<code>alloc</code>) 돌려주는(<code>free</code>) 표다. <code>alloc</code> 이 준 줄은 <strong>한 번만 쓰는 값</strong>이다. 모든 경로에서 정확히 한 번, 필드나 전역에 넣거나 <code>free</code> 에 줘야 한다. 처리기가 적재 때 그것을 검사한다.</p><div class="example refused"><p class="ex-file"><code>07-pool-leak.pnx</code></p><pre><code data-lang="pinax"><span style="color: #d73948">record</span> node
   key <span style="color: #d73948">int</span>
 <span style="color: #d73948">end</span>

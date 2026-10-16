@@ -1,0 +1,4 @@
+rem refused
+use io
+use str
+1 2 3 rot add add str.to_str io.println       rem there is no rot: name the values instead

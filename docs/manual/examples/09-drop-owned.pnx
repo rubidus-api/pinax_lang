@@ -1,0 +1,6 @@
+rem refused
+use file
+word glance (path str or fail)
+  path file.open_read or_fail         rem an owned file on the stack
+  drop                                rem thrown away: it would never be closed
+end

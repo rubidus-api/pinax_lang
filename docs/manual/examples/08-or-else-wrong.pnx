@@ -1,0 +1,5 @@
+rem refused
+use str
+word to_number (s str gives int)
+  s str.to_int or_else (e) "none" end  rem success gives an int, this block a str
+end

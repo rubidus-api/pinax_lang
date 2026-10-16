@@ -1,0 +1,14 @@
+rem run
+use io
+use str
+rem dup: a          becomes a a
+7 dup mul str.to_str io.println               rem 7 * 7 = 49
+rem drop: a b       becomes a
+1 2 drop str.to_str io.println                rem 2 is thrown away; 1 is printed
+rem swap: a b       becomes b a
+1 2 swap sub str.to_str io.println            rem 2 - 1 = 1
+rem over: a b       becomes a b a
+5 8 over sub str.to_str io.println            rem 8 - 5 = 3 is printed; 5 is still there
+drop                                          rem so it is thrown away here
+rem nip: a b        becomes b
+5 8 nip str.to_str io.println                 rem 8

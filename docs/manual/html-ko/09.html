@@ -35,6 +35,23 @@ skipped "choi, 140": range
 noted 1
 noted 2
 noted 3
+</code></pre></div><p>지킴 낱말 뒤의 스택은 성공했을 때와 실패했을 때가 같아야 한다. 실패한 낱말은 결과를 하나도 남기지 않으므로, <code>or_else … end</code> 의 몸이 성공했을 때의 결과와 같은 타입의 값을 만들어 그 자리를 채운다.</p><div class="example run"><p class="ex-file"><code>08-or-else-stack.pnx</code></p><pre><code data-lang="pinax"><span style="color: #d73948">use</span> io
+<span style="color: #d73948">use</span> <span style="color: #d73948">str</span>
+<span style="color: #d73948">word</span> to_number (s <span style="color: #d73948">str</span> <span style="color: #d73948">gives</span> <span style="color: #d73948">int</span>)
+  s <span style="color: #d73948">str</span>.to_int                        <span style="color: #74747c">rem on success: one int on the stack</span>
+    <span style="color: #d73948">or_else</span> (e) <span style="color: #b60157">0</span> <span style="color: #d73948">end</span>                 <span style="color: #74747c">rem on failure: the block gives one int instead</span>
+<span style="color: #d73948">end</span>                                   <span style="color: #74747c">rem so after or_else the stack is the same either way</span>
+<span style="color: #198810">"42"</span> to_number <span style="color: #d73948">str</span>.to_str io.println
+<span style="color: #198810">"forty"</span> to_number <span style="color: #d73948">str</span>.to_str io.println
+</code></pre><p class="ex-label">출력</p><pre><code data-lang="text">$ pnx 08-or-else-stack.pnx
+42
+0
+</code></pre></div><table><thead><tr><th><strong>토큰</strong></th><th><strong>그 뒤의 스택</strong></th><th><strong>일어난 일</strong></th></tr></thead><tbody><tr><td><code>s</code></td><td><code>"forty"</code></td><td>글을 올린다.</td></tr><tr><td><code>str.to_int</code></td><td><code>—</code></td><td>수로 읽지 못해 실패한다. 결과는 없다.</td></tr><tr><td><code>or_else (e) 0 end</code></td><td><code>0</code></td><td>실패의 길: 까닭을 <code>e</code> 에 받고, 몸이 <code>0</code> 을 올린다. 성공했다면 이 몸을 건너뛰고 수가 남는다.</td></tr></tbody></table><p>몸이 다른 타입을 남기면 거절된다. <code>or_else</code> 뒤의 코드는 어느 길로 왔는지 모르기 때문이다(4장의 <code>if</code> 와 같은 규칙).</p><div class="example refused"><p class="ex-file"><code>08-or-else-wrong.pnx</code></p><pre><code data-lang="pinax"><span style="color: #d73948">use</span> <span style="color: #d73948">str</span>
+<span style="color: #d73948">word</span> to_number (s <span style="color: #d73948">str</span> <span style="color: #d73948">gives</span> <span style="color: #d73948">int</span>)
+  s <span style="color: #d73948">str</span>.to_int <span style="color: #d73948">or_else</span> (e) <span style="color: #198810">"none"</span> <span style="color: #d73948">end</span>  <span style="color: #74747c">rem success gives an int, this block a str</span>
+<span style="color: #d73948">end</span>
+</code></pre><p class="ex-label">거절</p><pre><code data-lang="text">$ pnx 08-or-else-wrong.pnx
+08-or-else-wrong.pnx:3:35: the body of or_else must leave what the word would have given, or leave the word or the loop
 </code></pre></div><div class="example refused"><p class="ex-file"><code>08-guard-missing.pnx</code></p><pre><code data-lang="pinax"><span style="color: #d73948">use</span> <span style="color: #d73948">str</span>
 <span style="color: #d73948">word</span> twice (s <span style="color: #d73948">str</span> <span style="color: #d73948">gives</span> <span style="color: #d73948">int</span>) s <span style="color: #d73948">str</span>.to_int <span style="color: #b60157">2</span> mul <span style="color: #d73948">end</span>
 </code></pre><p class="ex-label">거절</p><pre><code data-lang="text">$ pnx 08-guard-missing.pnx
@@ -72,4 +89,4 @@ show
 08-assert.pnx:3: failed
   part int = 3
   whole int = 0
-</code></pre></div><div class="box qa"><p class="box-title">문답</p><p><strong>물음. 무엇을 실패로, 무엇을 결함으로 할지 어떻게 고르는가?</strong></p><p>답. 바깥에서 온 자료 때문에 일어나는 일(사용자의 입력, 파일, 네트워크)은 실패다. 프로그램을 고쳐야만 사라지는 일(잘못 계산한 번호, 지키지 않은 약속)은 결함이다.</p></div><div class="box summary"><p class="box-title">정리</p><ul><li>실패할 수 있는 낱말 뒤에는 <code>or_fail</code> <code>or_return</code> <code>or_else</code> 가 와야 한다(표준 11.2).</li><li><code>or_fail</code> 과 <code>fail</code> 은 <code>or fail</code> 서명 안에서만, 정의 밖에서는 <code>or_else</code> 만 쓴다(11.2).</li><li>결함은 실행을 멈추고, 실행이 연 핸들은 처리기가 닫는다(11.3).</li><li>넘침과 0 으로 나눔을 실패로 받으려면 <code>chk_</code> 낱말을 쓴다(15.1).</li></ul></div></main><nav class="bottom"><a href="index.html">처음</a> · <a href="08.html">앞</a> · <a href="10.html">다음</a> · <a href="../html-en/09.html">English</a></nav></body></html>
+</code></pre></div><div class="box qa"><p class="box-title">문답</p><p><strong>물음. 무엇을 실패로, 무엇을 결함으로 할지 어떻게 고르는가?</strong></p><p>답. 바깥에서 온 자료 때문에 일어나는 일(사용자의 입력, 파일, 네트워크)은 실패다. 프로그램을 고쳐야만 사라지는 일(잘못 계산한 번호, 지키지 않은 약속)은 결함이다.</p></div><div class="box summary"><p class="box-title">정리</p><ul><li>실패할 수 있는 낱말 뒤에는 <code>or_fail</code> <code>or_return</code> <code>or_else</code> 가 와야 한다(표준 11.2).</li><li><code>or_else</code> 의 몸은 성공했을 때의 결과를 대신 남긴다(11.2).</li><li><code>or_fail</code> 과 <code>fail</code> 은 <code>or fail</code> 서명 안에서만, 정의 밖에서는 <code>or_else</code> 만 쓴다(11.2).</li><li>결함은 실행을 멈추고, 실행이 연 핸들은 처리기가 닫는다(11.3).</li><li>넘침과 0 으로 나눔을 실패로 받으려면 <code>chk_</code> 낱말을 쓴다(15.1).</li></ul></div></main><nav class="bottom"><a href="index.html">처음</a> · <a href="08.html">앞</a> · <a href="10.html">다음</a> · <a href="../html-en/09.html">English</a></nav></body></html>

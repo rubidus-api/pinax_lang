@@ -10,10 +10,9 @@ word count_to (name str, n int)
     i 1 add to i
   end
 end
-global who int
 word demo ()
-  do "ping" 3 count_to end workers spawn or_else (e) return end drop
-  do "pong" 2 count_to end workers spawn or_else (e) return end drop
-  workers run_all
+  do "ping" 3 count_to end workers spawn or_else (e) return end drop   rem spawn gives the task; not needed here
+  do "pong" 2 count_to end workers spawn or_else (e) return end drop   rem nothing runs yet: both wait for a turn
+  workers run_all                                                      rem now they run, until both are done
 end
 demo

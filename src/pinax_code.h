@@ -389,7 +389,9 @@ enum {
 enum {
     PNX_SEG_EMPTY, PNX_SEG_CONST, PNX_SEG_GLOBAL, PNX_SEG_REGION,
     PNX_SEG_STATIC, // texts built into the interpreter (error names)
-    PNX_SEG_HOST,
+    PNX_SEG_HOST,   // from here: the string arguments of this run, one segment each
+    PNX_SEG_KEPT = 15, // strings a PINAX_WORD_KEEP_STR host word gave: their offset is their address,
+                       // from a base that never moves, so the cell stays good from run to run
     PNX_SEG_COUNT = 16
 };
 

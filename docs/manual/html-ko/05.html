@@ -9,7 +9,7 @@
 <span style="color: #b60157">3</span> <span style="color: #b60157">9</span> <span style="color: #b60157">6</span> describe io.println
 </code></pre><p class="ex-label">출력</p><pre><code data-lang="text">$ pnx 04-locals.pnx
 total 18, mean 6, largest 9
-</code></pre></div><p>지역 변수가 보이는 범위는 처음 넣은 자리부터 그것을 감싼 가지, 루프, 블록의 끝까지다. 가지 안에서 처음 만든 이름은 가지 밖에서 읽지 못한다. 다른 가지로 왔다면 값이 없기 때문이다.</p><div class="example refused"><p class="ex-file"><code>04-scope.pnx</code></p><pre><code data-lang="pinax"><span style="color: #d73948">use</span> io
+</code></pre></div><p><code>to</code> 는 스택의 맨 위 값을 <strong>내려서</strong> 이름에 담는다. 이름을 쓰면 그 값이 다시 올라간다. 값을 스택에 오래 들고 있지 않고 이름에 넣어 두었다가 필요할 때 꺼내 쓰는 것이다.</p><table><thead><tr><th><strong>토큰</strong></th><th><strong>그 뒤의 스택</strong></th><th><strong>일어난 일</strong></th></tr></thead><tbody><tr><td><code>a b add</code></td><td><code>12</code></td><td><code>a</code> 는 3, <code>b</code> 는 9.</td></tr><tr><td><code>c add</code></td><td><code>18</code></td><td><code>c</code> 는 6.</td></tr><tr><td><code>to total</code></td><td><code>—</code></td><td>18 을 내려 새 지역 변수 <code>total</code> 에 담는다. 스택이 빈다.</td></tr><tr><td><code>total 3 div</code></td><td><code>6</code></td><td><code>total</code> 을 쓰면 18 이 올라가고, 3 으로 나눈다.</td></tr><tr><td><code>to mean</code></td><td><code>—</code></td><td>6 을 <code>mean</code> 에 담는다.</td></tr></tbody></table><p>지역 변수가 보이는 범위는 처음 넣은 자리부터 그것을 감싼 가지, 루프, 블록의 끝까지다. 가지 안에서 처음 만든 이름은 가지 밖에서 읽지 못한다. 다른 가지로 왔다면 값이 없기 때문이다.</p><div class="example refused"><p class="ex-file"><code>04-scope.pnx</code></p><pre><code data-lang="pinax"><span style="color: #d73948">use</span> io
 <span style="color: #d73948">word</span> f (n <span style="color: #d73948">int</span> <span style="color: #d73948">gives</span> <span style="color: #d73948">int</span>)
   n <span style="color: #b60157">0</span> gt <span style="color: #d73948">if</span> n <span style="color: #b60157">2</span> mul <span style="color: #d73948">to</span> doubled <span style="color: #d73948">end</span>
   doubled
@@ -41,7 +41,22 @@ total 7
 A
 B
 F
-</code></pre></div><p><code>else</code> 가 없는 <code>if</code> 는 스택을 그대로 둬야 한다. 값 하나를 남기는 <code>if</code> 에 <code>else</code> 를 빠뜨리면 거절된다.</p><div class="example refused"><p class="ex-file"><code>04-if-unequal.pnx</code></p><pre><code data-lang="pinax"><span style="color: #d73948">use</span> io
+</code></pre></div><p><code>if</code> 는 맨 위의 <code>bool</code> 을 <strong>내리고</strong> 갈 길을 고른다. 두 갈래가 같은 스택을 남겨야 하는 까닭은, <code>end</code> 뒤의 코드가 어느 갈래에서 왔는지 모르기 때문이다. 어느 길로 왔든 스택이 같아야 처리기가 그다음을 검사할 수 있다.</p><div class="example run"><p class="ex-file"><code>04-sign.pnx</code></p><pre><code data-lang="pinax"><span style="color: #d73948">use</span> io
+<span style="color: #d73948">word</span> sign (n <span style="color: #d73948">int</span> <span style="color: #d73948">gives</span> <span style="color: #d73948">str</span>)
+  n <span style="color: #b60157">0</span> lt <span style="color: #d73948">if</span>                     <span style="color: #74747c">rem lt leaves a bool; if takes it off the stack</span>
+    <span style="color: #198810">"negative"</span>                  <span style="color: #74747c">rem this way leaves one str</span>
+  <span style="color: #d73948">else</span>
+    n <span style="color: #b60157">0</span> eq <span style="color: #d73948">if</span> <span style="color: #198810">"zero"</span> <span style="color: #d73948">else</span> <span style="color: #198810">"positive"</span> <span style="color: #d73948">end</span>   <span style="color: #74747c">rem and so does this way, whichever inner way it takes</span>
+  <span style="color: #d73948">end</span>                           <span style="color: #74747c">rem both ways meet here with one str on the stack</span>
+<span style="color: #d73948">end</span>
+<span style="color: #b60157">-4</span> sign io.println
+<span style="color: #b60157">0</span> sign io.println
+<span style="color: #b60157">9</span> sign io.println
+</code></pre><p class="ex-label">출력</p><pre><code data-lang="text">$ pnx 04-sign.pnx
+negative
+zero
+positive
+</code></pre></div><table><thead><tr><th><strong>토큰</strong></th><th><strong>그 뒤의 스택</strong></th><th><strong>일어난 일</strong></th></tr></thead><tbody><tr><td><code>n 0 lt</code></td><td><code>true</code></td><td><code>n</code> 이 −4 이면 비교가 <code>true</code> 를 남긴다.</td></tr><tr><td><code>if</code></td><td><code>—</code></td><td><code>bool</code> 을 내리고 첫 갈래로 간다.</td></tr><tr><td><code>"negative"</code></td><td><code>"negative"</code></td><td>이 갈래는 <code>str</code> 하나를 남긴다.</td></tr><tr><td><code>end</code></td><td><code>"negative"</code></td><td><code>else</code> 갈래도 <code>str</code> 하나를 남기므로 두 길이 맞는다.</td></tr></tbody></table><p><code>else</code> 가 없는 <code>if</code> 는 스택을 그대로 둬야 한다. 값 하나를 남기는 <code>if</code> 에 <code>else</code> 를 빠뜨리면 거절된다.</p><div class="example refused"><p class="ex-file"><code>04-if-unequal.pnx</code></p><pre><code data-lang="pinax"><span style="color: #d73948">use</span> io
 <span style="color: #d73948">word</span> label (n <span style="color: #d73948">int</span> <span style="color: #d73948">gives</span> <span style="color: #d73948">str</span>) n <span style="color: #b60157">0</span> lt <span style="color: #d73948">if</span> <span style="color: #198810">"negative"</span> <span style="color: #d73948">end</span> <span style="color: #d73948">end</span>
 </code></pre><p class="ex-label">거절</p><pre><code data-lang="text">$ pnx 04-if-unequal.pnx
 04-if-unequal.pnx:2:51: an if without else must leave the stack as it found it
@@ -58,7 +73,32 @@ F
 <span style="color: #d73948">cat</span> (<span style="color: #198810">"27 takes "</span>, <span style="color: #b60157">27</span> collatz, <span style="color: #198810">" steps"</span>) io.println
 </code></pre><p class="ex-label">출력</p><pre><code data-lang="text">$ pnx 04-loop.pnx
 27 takes 111 steps
-</code></pre></div><p>루프에 이름을 붙이면 안쪽 루프에서 바깥 루프까지 한 번에 떠날 수 있다.</p><div class="example run"><p class="ex-file"><code>04-named-loop.pnx</code></p><pre><code data-lang="pinax"><span style="color: #d73948">use</span> io
+</code></pre></div><p>한 바퀴가 스택을 그대로 둬야 하는 까닭도 같다. 루프의 머리는 처음 들어올 때와 한 바퀴 돌고 돌아올 때 모두 같은 스택을 봐야 한다. 바퀴마다 값이 하나씩 쌓이면 몇 바퀴 돌지 모르는 처리기가 스택의 깊이를 정할 수 없다. 그래서 루프가 만드는 값은 지역 변수에 모은다.</p><div class="example run"><p class="ex-file"><code>04-loop-sum.pnx</code></p><pre><code data-lang="pinax"><span style="color: #d73948">use</span> io
+<span style="color: #d73948">use</span> <span style="color: #d73948">str</span>
+<span style="color: #d73948">word</span> sum_to (n <span style="color: #d73948">int</span> <span style="color: #d73948">gives</span> <span style="color: #d73948">int</span>)
+  <span style="color: #b60157">0</span> <span style="color: #d73948">to</span> total                    <span style="color: #74747c">rem what the loop builds lives in locals, not on the stack</span>
+  <span style="color: #b60157">1</span> <span style="color: #d73948">to</span> i
+  <span style="color: #d73948">loop</span>
+    i n gt <span style="color: #d73948">until</span>                <span style="color: #74747c">rem leave once i passes n</span>
+    total i add <span style="color: #d73948">to</span> total        <span style="color: #74747c">rem the stack is empty again at the end of the turn</span>
+    i <span style="color: #b60157">1</span> add <span style="color: #d73948">to</span> i
+  <span style="color: #d73948">end</span>
+  total
+<span style="color: #d73948">end</span>
+<span style="color: #b60157">10</span> sum_to <span style="color: #d73948">str</span>.to_str io.println
+</code></pre><p class="ex-label">출력</p><pre><code data-lang="text">$ pnx 04-loop-sum.pnx
+55
+</code></pre></div><div class="example refused"><p class="ex-file"><code>04-loop-leaves.pnx</code></p><pre><code data-lang="pinax"><span style="color: #d73948">word</span> count_up (n <span style="color: #d73948">int</span> <span style="color: #d73948">gives</span> <span style="color: #d73948">int</span>)
+  <span style="color: #b60157">0</span> <span style="color: #d73948">to</span> i
+  <span style="color: #d73948">loop</span>
+    i n ge <span style="color: #d73948">until</span>
+    i <span style="color: #b60157">1</span> add                     <span style="color: #74747c">rem a new value each turn, and nothing takes it</span>
+  <span style="color: #d73948">end</span>
+  i
+<span style="color: #d73948">end</span>
+</code></pre><p class="ex-label">거절</p><pre><code data-lang="text">$ pnx 04-loop-leaves.pnx
+04-loop-leaves.pnx:6:3: one turn of a loop must leave the stack as it found it
+</code></pre></div><p><code>count_up</code> 은 바퀴마다 <code>i 1 add</code> 로 값을 하나 만들지만 아무도 가져가지 않는다. <code>to i</code> 를 붙이면 그 값이 <code>i</code> 에 담기고 스택은 바퀴의 처음과 같아진다.</p><p>루프에 이름을 붙이면 안쪽 루프에서 바깥 루프까지 한 번에 떠날 수 있다.</p><div class="example run"><p class="ex-file"><code>04-named-loop.pnx</code></p><pre><code data-lang="pinax"><span style="color: #d73948">use</span> io
 <span style="color: #d73948">word</span> is_prime (n <span style="color: #d73948">int</span> <span style="color: #d73948">gives</span> <span style="color: #d73948">bool</span>)
   n <span style="color: #b60157">2</span> lt <span style="color: #d73948">if</span> <span style="color: #d73948">false</span> <span style="color: #d73948">return</span> <span style="color: #d73948">end</span>
   <span style="color: #b60157">2</span> <span style="color: #d73948">to</span> d
@@ -121,4 +161,4 @@ day 4: 18
 day 5: 7
 day 6: 14
 distance from 10, added up: 34
-</code></pre></div><p><code>lo hi range</code> 도 줄기다(<code>hi</code> 는 들지 않는다). <code>fold</code> 는 첫 값을 줄기 앞에 두고, 블록이 (지금까지의 값, 원소)를 받아 새 값을 준다.</p><div class="box summary"><p class="box-title">정리</p><ul><li><code>to 이름</code> 은 지역 변수에, <code>set 이름</code> 은 전역에 넣는다(표준 9.4).</li><li>가지 안에서 만든 이름은 가지 밖에서 보이지 않는다(9.4).</li><li><code>if</code> 의 두 갈래와 <code>case</code> 의 가지는 같은 스택을, 루프의 한 바퀴는 들어올 때의 스택을 남긴다(10).</li><li>이름 붙은 루프는 <code>until (이름)</code> 으로 한 번에 떠난다(10.2).</li><li>배열과 목록은 줄기로 훑는다: <code>each</code> <code>each_index</code> <code>count</code> <code>fold</code> <code>sum</code> …(10.6).</li></ul></div></main><nav class="bottom"><a href="index.html">처음</a> · <a href="04.html">앞</a> · <a href="06.html">다음</a> · <a href="../html-en/05.html">English</a></nav></body></html>
+</code></pre></div><p><code>lo hi range</code> 도 줄기다(<code>hi</code> 는 들지 않는다). <code>fold</code> 는 첫 값을 줄기 앞에 두고, 블록이 (지금까지의 값, 원소)를 받아 새 값을 준다.</p><div class="box summary"><p class="box-title">정리</p><ul><li><code>to 이름</code> 은 지역 변수에, <code>set 이름</code> 은 전역에 넣는다(표준 9.4).</li><li>가지 안에서 만든 이름은 가지 밖에서 보이지 않는다(9.4).</li><li><code>to</code> 는 맨 위 값을 내려 이름에 담고, 이름을 쓰면 값이 다시 올라간다(9.4).</li><li><code>if</code> 의 두 갈래와 <code>case</code> 의 가지는 같은 스택을, 루프의 한 바퀴는 들어올 때의 스택을 남긴다(10).</li><li>이름 붙은 루프는 <code>until (이름)</code> 으로 한 번에 떠난다(10.2).</li><li>배열과 목록은 줄기로 훑는다: <code>each</code> <code>each_index</code> <code>count</code> <code>fold</code> <code>sum</code> …(10.6).</li></ul></div></main><nav class="bottom"><a href="index.html">처음</a> · <a href="04.html">앞</a> · <a href="06.html">다음</a> · <a href="../html-en/05.html">English</a></nav></body></html>

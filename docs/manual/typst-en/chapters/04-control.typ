@@ -15,6 +15,17 @@ made; there is no separate line that declares it.
 
 #ex("manual", "04-locals.pnx")
 
+`to` #strong[takes] the top value off the stack and keeps it in the name. Using the name puts the value back on. Instead
+of holding values on the stack for long, keep them in names and take them out when needed.
+
+#trace(
+  ("a b add", "12", [`a` is 3, `b` is 9.]),
+  ("c add", "18", [`c` is 6.]),
+  ("to total", "—", [Takes 18 off and keeps it in a new local `total`. The stack is empty.]),
+  ("total 3 div", "6", [Using `total` puts 18 on; it is divided by 3.]),
+  ("to mean", "—", [Keeps 6 in `mean`.]),
+)
+
 A local is visible from where it is first stored to the end of the branch, loop or block around it. A name first made
 inside a branch cannot be read outside it: coming by the other branch, it would hold no value.
 
@@ -36,6 +47,19 @@ branch that leaves with `return` does not need to match.
 
 #ex("manual", "04-if.pnx")
 
+`if` #strong[takes] the `bool` off the top and chooses the way. The two branches have to leave the same stack because the
+code after `end` does not know which branch it came from. Whichever way it came, the stack must be the same for the
+processor to check what follows.
+
+#ex("manual", "04-sign.pnx")
+
+#trace(
+  ("n 0 lt", "true", [With `n` at -4 the comparison leaves `true`.]),
+  ("if", "—", [Takes the `bool` off and goes to the first branch.]),
+  ("\"negative\"", "\"negative\"", [This branch leaves one `str`.]),
+  ("end", "\"negative\"", [The `else` branch also leaves one `str`, so the two ways agree.]),
+)
+
 An `if` without `else` shall leave the stack as it was. Leaving out the `else` of an `if` that leaves a value is
 refused.
 
@@ -48,6 +72,17 @@ false, and `break` without a condition. One turn shall leave the stack as it fou
 gathered in locals.
 
 #ex("manual", "04-loop.pnx")
+
+One turn leaves the stack as it found it for the same reason. The head of the loop sees the stack both when the loop
+is first entered and when a turn comes back, and both must be the same. If each turn piled up one more value, the
+processor, which cannot know how many turns there will be, could not fix the depth of the stack. So the values a loop
+makes are gathered in locals.
+
+#ex("manual", "04-loop-sum.pnx")
+#ex("manual", "04-loop-leaves.pnx")
+
+`count_up` makes a value with `i 1 add` every turn, and nothing takes it. With `to i` after it the value goes into `i`
+and the stack is as it was at the start of the turn.
 
 A named loop can be left all at once from an inner loop.
 
@@ -80,6 +115,7 @@ is expanded in place, so it can use the locals around it.
 #summary[
 - `to NAME` stores into a local, `set NAME` into a global (standard 9.4).
 - A name made inside a branch is not visible outside it (9.4).
+- `to` takes the top value off into a name; using the name puts it back on (9.4).
 - The two branches of `if` and the branches of `case` leave the same stack; one turn of a loop leaves the stack it found
   (10).
 - A named loop is left at once with `until (NAME)` (10.2).

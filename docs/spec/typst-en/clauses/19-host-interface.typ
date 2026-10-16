@@ -58,6 +58,13 @@ buffer of the script: `pinax_call_buffer` gives its free room and is told how ma
 `PINAX_LOAD_CODE` and `PINAX_LOAD_DATA` (13.4). A refusal is `PINAX_ERR_SYNTAX` or `PINAX_ERR_TYPE`, and the diagnostic
 arrives at `config.diag` as (file, line, column, text).]
 
+#para("1a")[`pinax_load_bytecode(state, bytes)` loads a bytecode container made by the processor into an empty state. The
+shape of a container is the processor's (1 (3)). The processor does not trust a container; it checks it, and refuses
+with `PINAX_ERR_FORMAT` one that could break 4 (2a). Among what this implementation refuses: registers outside the
+window, jumps out of the word, a register read before it is written, a jump back or a call that does not charge the
+budget, a tail call to a word with other results, an operation that can fail without a failure word after it or with
+nothing after that, and an instruction that changes a string register and names it twice.]
+
 #para("2")[`pinax_eval(state, text)` runs one line as a session does. All lines form one module (the session). What a
 line leaves is read with `pinax_eval_count` and `pinax_eval_value`.]
 

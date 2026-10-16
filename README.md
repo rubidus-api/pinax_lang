@@ -6,7 +6,7 @@ A small, fast scripting language to embed in C programs, with fixed, flat memory
 
 > **Status: early, and it runs.** Source files compile and run, from the command `pnx` and
 > from a C program. The language is not complete (no floating point
-> yet), the current release is 0.3.0, and the bytecode format carries no promise.
+> yet), the current release is 0.4.0, and the bytecode format carries no promise.
 
 Pinax is meant to live inside a host program. The host hands it one block of memory,
 registers the functions it may call, and runs scripts in it. Every value has a type and a
@@ -24,6 +24,9 @@ collector and no pointers at run time.
   records are packed and unpacked by code generated from their declaration.
 - **Predictable.** Capacities are declared up front and checked at load. Running out of
   room is an error value, not a crash, and there are no collection pauses.
+- **Safe to run untrusted code.** No source, and no bytecode the loader accepts, reads or writes outside the memory the
+  host gave it; with an instruction budget every run comes back. A wrong program is refused at load or stops with a
+  fault, and never brings the host down.
 
 ## Not goals
 

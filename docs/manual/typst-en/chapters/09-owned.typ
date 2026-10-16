@@ -16,6 +16,16 @@ value]. Whoever receives it shall #strong[hand it over] exactly once on every pa
 `owned` (`file.close`), store it in a global, or return it as an `owned` result. It can be #strong[lent] any number of
 times to words that take it without `owned` (`file.write`, `file.read_line`).
 
+Side by side, the two uses compare like this.
+
+#table(columns: (auto, 1fr, 1fr), inset: 5pt, stroke: 0.5pt + luma(170),
+  table.header([], [*Lending*], [*Giving*]),
+  [The receiver's signature], [`(f file …)`: no `owned`], [`(f owned file …)`, or an `owned` result],
+  [How often], [any number of times], [exactly once on every path],
+  [Afterwards], [still usable], [no longer usable],
+  [Examples], [`f file.write`, `f file.read_line`], [`f file.close`, storing into a global, returning it],
+)
+
 #ex("manual", "09-copy-file.pnx")
 
 `copy_lines` has two files and four ways out. When the second file does not open, it closes the first and fails. When
@@ -33,7 +43,8 @@ on the path of success either. The processor points at where `f` was made.
 So the `owned` check looks only at paths that are not faults.]
 
 #mistake[Keeping a `dup` of it is handy][An `owned` value cannot be doubled with `dup` or dropped with `drop`. Doubled,
-it would be closed twice; dropped, never. Put it into a local and lend it by name.]
+it would be closed twice; dropped, never. Put it into a local and lend it by name.
+#ex("manual", "09-drop-owned.pnx")]
 
 == Sparing the region
 

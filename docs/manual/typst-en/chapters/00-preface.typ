@@ -18,4 +18,9 @@ language. The output of a refused program is the processor's message, word for w
 There are no exercises. The #strong[Q&A] boxes in the text answer, on the spot, a question likely to come up while
 reading. The #strong[Common mistake] boxes are the places where people new to the language really do stumble.
 
+A stack machine is new to many readers, so the book often follows a line of code through a table: each row is one
+token, the stack after it (the top on the right) and what happened. Chapter 2 explains the stack from the ground up; if
+the order of values and words ever seems backwards, go back to it. The remarks in the examples (after `rem`) say what
+each line does. Chapter 16 lists the messages you are most likely to meet, with what they mean and how to fix them.
+
 The examples are in `docs/manual/examples/` of the repository; run one with `pnx FILE`.

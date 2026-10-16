@@ -20,7 +20,21 @@
 [name] = [Pinax]
 [version] = [1]
 no '=' in: broken line
-</code></pre></div><p>이 프로그램은 설정 글을 줄로 가르고, 줄을 다듬고, <code>=</code> 에서 둘로 자른다. 바이트를 옮기는 일은 출력할 때뿐이다. <code>str.try_cut</code> 은 <code>=</code> 가 없으면 실패하므로 <code>or_else</code> 로 받았다. 실패하지 않는 <code>str.cut</code> 은 <code>=</code> 가 없으면 뒤를 빈 글로 준다.</p><h3>5.2 저장된 글</h3><p>뷰는 자기가 가리키는 바이트보다 오래 살 수 없다. 그래서 전역, 배열의 칸, 레코드의 필드처럼 오래 사는 자리에는 뷰를 둘 수 없고, <strong>저장된 글</strong> <code>str(N)</code> 을 쓴다. <code>str(N)</code> 은 N 바이트의 자리를 차지하고, 넣을 때 바이트를 복사한다. 읽으면 그 자리를 가리키는 뷰가 된다.</p><div class="example run"><p class="ex-file"><code>05-stored.pnx</code></p><pre><code data-lang="pinax"><span style="color: #d73948">use</span> io
+</code></pre></div><p>뷰가 무엇인지 작은 예로 먼저 보자. 아래의 <code>head</code>, <code>tail</code>, <code>name</code> 은 모두 같은 리터럴의 바이트를 가리킨다. 새 바이트는 <code>cat</code> 이 출력할 글을 만들 때 처음 생긴다.</p><div class="example run"><p class="ex-file"><code>05-slices.pnx</code></p><pre><code data-lang="pinax"><span style="color: #d73948">use</span> io
+<span style="color: #d73948">use</span> <span style="color: #d73948">str</span>
+<span style="color: #d73948">word</span> show ()
+  <span style="color: #198810">"Hello, Pinax world"</span> <span style="color: #d73948">to</span> s         <span style="color: #74747c">rem s is a view of the 18 bytes of the literal</span>
+  s <span style="color: #b60157">5</span> <span style="color: #d73948">str</span>.take <span style="color: #d73948">to</span> head              <span style="color: #74747c">rem the first 5 bytes: "Hello", no copy</span>
+  s <span style="color: #b60157">7</span> <span style="color: #d73948">str</span>.skip <span style="color: #d73948">to</span> tail              <span style="color: #74747c">rem all but the first 7: "Pinax world", no copy</span>
+  tail <span style="color: #b60157">0</span> <span style="color: #b60157">5</span> <span style="color: #d73948">str</span>.slice <span style="color: #d73948">to</span> name        <span style="color: #74747c">rem bytes 0 up to 5 of tail: "Pinax"</span>
+  <span style="color: #d73948">cat</span> (<span style="color: #198810">"["</span>, head, <span style="color: #198810">"] ["</span>, tail, <span style="color: #198810">"] ["</span>, name, <span style="color: #198810">"]"</span>) io.println   <span style="color: #74747c">rem cat makes new bytes, in the region</span>
+  <span style="color: #d73948">cat</span> (<span style="color: #198810">"lengths: "</span>, s <span style="color: #d73948">str</span>.len, <span style="color: #198810">" "</span>, head <span style="color: #d73948">str</span>.len, <span style="color: #198810">" "</span>, name <span style="color: #d73948">str</span>.len) io.println
+<span style="color: #d73948">end</span>
+show
+</code></pre><p class="ex-label">출력</p><pre><code data-lang="text">$ pnx 05-slices.pnx
+[Hello] [Pinax world] [Pinax]
+lengths: 18 5 5
+</code></pre></div><table><thead><tr><th><strong>뷰</strong></th><th><strong>가리키는 곳</strong></th><th><strong>길이</strong></th></tr></thead><tbody><tr><td><code>s</code></td><td>리터럴의 0 번 바이트부터</td><td>18</td></tr><tr><td><code>head</code></td><td>같은 자리, 0 번부터</td><td>5</td></tr><tr><td><code>tail</code></td><td>같은 리터럴의 7 번부터</td><td>11</td></tr><tr><td><code>name</code></td><td><code>tail</code> 의 0 번, 곧 리터럴의 7 번부터</td><td>5</td></tr></tbody></table><p>위의 <code>05-views.pnx</code> 는 설정 글을 줄로 가르고, 줄을 다듬고, <code>=</code> 에서 둘로 자른다. 바이트를 옮기는 일은 출력할 때뿐이다. <code>str.try_cut</code> 은 <code>=</code> 가 없으면 실패하므로 <code>or_else</code> 로 받았다. 실패하지 않는 <code>str.cut</code> 은 <code>=</code> 가 없으면 뒤를 빈 글로 준다.</p><h3>5.2 저장된 글</h3><p>뷰는 자기가 가리키는 바이트보다 오래 살 수 없다. 그래서 전역, 배열의 칸, 레코드의 필드처럼 오래 사는 자리에는 뷰를 둘 수 없고, <strong>저장된 글</strong> <code>str(N)</code> 을 쓴다. <code>str(N)</code> 은 N 바이트의 자리를 차지하고, 넣을 때 바이트를 복사한다. 읽으면 그 자리를 가리키는 뷰가 된다.</p><div class="example run"><p class="ex-file"><code>05-stored.pnx</code></p><pre><code data-lang="pinax"><span style="color: #d73948">use</span> io
 <span style="color: #d73948">use</span> <span style="color: #d73948">str</span>
 <span style="color: #d73948">global</span> longest <span style="color: #d73948">str</span>(<span style="color: #b60157">16</span>)                     <span style="color: #74747c">rem stored text: 16 bytes, copied in</span>
 <span style="color: #d73948">word</span> keep_longest (w <span style="color: #d73948">str</span>) w <span style="color: #d73948">str</span>.len longest <span style="color: #d73948">str</span>.len gt <span style="color: #d73948">if</span> w set longest <span style="color: #d73948">end</span> <span style="color: #d73948">end</span>
@@ -31,6 +45,11 @@ longest word: quick
 </code></pre></div><div class="example refused"><p class="ex-file"><code>05-global-view.pnx</code></p><pre><code data-lang="pinax"><span style="color: #d73948">global</span> name <span style="color: #d73948">str</span>
 </code></pre><p class="ex-label">거절</p><pre><code data-lang="text">$ pnx 05-global-view.pnx
 05-global-view.pnx:2:1: stored text is str(N); a str view lives only in locals, arguments and results
+</code></pre></div><p>어느 것을 쓸지는 그 글이 <strong>얼마나 오래 사는가</strong>로 고른다.</p><table><thead><tr><th></th><th><strong><code>str</code>(뷰)</strong></th><th><strong><code>str(N)</code>(저장된 글)</strong></th></tr></thead><tbody><tr><td>쓰는 자리</td><td>지역 변수, 인자, 결과</td><td>전역, 배열과 목록의 칸, 레코드의 필드</td></tr><tr><td>바이트</td><td>갖지 않는다. 다른 곳의 바이트를 가리킨다</td><td>N 바이트의 자리를 갖는다</td></tr><tr><td>넣을 때</td><td>복사하지 않는다</td><td>복사한다. N 보다 길면 결함</td></tr><tr><td>사는 동안</td><td>가리키는 바이트가 사는 동안(실행 하나, 또는 <code>release</code> 까지)</td><td>그 자리가 사는 동안</td></tr></tbody></table><p>필드에 뷰를 두려고 하면 적재 때 거절되고, 메시지가 <code>str(N)</code> 을 쓰라고 알려 준다.</p><div class="example refused"><p class="ex-file"><code>05-field-view.pnx</code></p><pre><code data-lang="pinax"><span style="color: #d73948">record</span> person
+  name <span style="color: #d73948">str</span>                          <span style="color: #74747c">rem a view cannot be kept in a field: write str(N)</span>
+<span style="color: #d73948">end</span>
+</code></pre><p class="ex-label">거절</p><pre><code data-lang="text">$ pnx 05-field-view.pnx
+05-field-view.pnx:3:1: a field holds str(N); a str view lives only in locals, arguments and results
 </code></pre></div><div class="box mistake"><p class="box-title">흔한 오해: <code>str(N)</code> 보다 긴 글은 잘려서 들어간다</p>잘리지 않는다. 자리보다 긴 글을 넣으면 결함으로 멈춘다. 잘라서 넣으려면 <code>str.take</code> 로 먼저 자른다.<div class="example fault"><p class="ex-file"><code>05-too-long.pnx</code></p><pre><code data-lang="pinax"><span style="color: #d73948">use</span> io
 <span style="color: #d73948">global</span> name <span style="color: #d73948">str</span>(<span style="color: #b60157">8</span>)
 <span style="color: #198810">"Pinax"</span> set name
@@ -92,4 +111,4 @@ show
 </code></pre><p class="ex-label">출력</p><pre><code data-lang="text">$ pnx 05-chars.pnx
 bytes 9, characters 5
 &lt;한&gt;&lt;글&gt;&lt; &gt;&lt;o&gt;&lt;k&gt;
-</code></pre></div><div class="box summary"><p class="box-title">정리</p><ul><li><code>str</code> 는 뷰다. 자르고 가르는 낱말은 복사하지 않는다(표준 7.3, 16.1).</li><li>오래 사는 자리에는 <code>str(N)</code> 을 쓴다. 넣을 때 복사되고, 길면 결함이다(7.3).</li><li>새 바이트는 구역에 놓이고, <code>mark</code>/<code>release</code> 로 되돌린다. 되돌린 뒤의 뷰는 거절된다(12.2, 12.3).</li><li>버퍼는 글을 이어 붙이는 자리다. 차면 실패한다(8.7).</li><li>길이는 바이트다. 글자는 <code>char_count</code>, <code>chars</code>(16.1).</li></ul></div></main><nav class="bottom"><a href="index.html">처음</a> · <a href="05.html">앞</a> · <a href="07.html">다음</a> · <a href="../html-en/06.html">English</a></nav></body></html>
+</code></pre></div><div class="box summary"><p class="box-title">정리</p><ul><li><code>str</code> 는 뷰다. 자르고 가르는 낱말은 복사하지 않는다(표준 7.3, 16.1).</li><li>오래 사는 자리(전역, 칸, 필드)에는 뷰를 둘 수 없다(7.3).</li><li>오래 사는 자리에는 <code>str(N)</code> 을 쓴다. 넣을 때 복사되고, 길면 결함이다(7.3).</li><li>새 바이트는 구역에 놓이고, <code>mark</code>/<code>release</code> 로 되돌린다. 되돌린 뒤의 뷰는 거절된다(12.2, 12.3).</li><li>버퍼는 글을 이어 붙이는 자리다. 차면 실패한다(8.7).</li><li>길이는 바이트다. 글자는 <code>char_count</code>, <code>chars</code>(16.1).</li></ul></div></main><nav class="bottom"><a href="index.html">처음</a> · <a href="05.html">앞</a> · <a href="07.html">다음</a> · <a href="../html-en/06.html">English</a></nav></body></html>

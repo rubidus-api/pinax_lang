@@ -1,0 +1,7 @@
+rem run
+use io
+use str
+10 3 sub str.to_str io.println                rem 10 - 3 = 7: the value pushed first is on the left
+10 3 div str.to_str io.println                rem 10 / 3 = 3 (whole numbers: the rest is cut off)
+10 3 mod str.to_str io.println                rem the rest of 10 / 3 is 1
+3 10 lt if "3 is less than 10" io.println end  rem lt asks: first < second?

@@ -1,0 +1,3 @@
+rem refused
+use io
+word double (n int) n 2 mul end                   rem the signature gives nothing, yet a value is left

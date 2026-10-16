@@ -19,6 +19,17 @@ writes it to standard output and ends the line.
 Pinax code reads in this order: #strong[values, then the word]. Values pile up on the stack; a word takes off what it
 needs, does its work and puts its results back. This is called #term("postfix") notation.
 
+Follow the order in which the processor reads these two lines. It reads one token at a time from the left: a value
+goes onto the stack, a word is set to work. The top of the stack is written on the right, and `—` is an empty stack.
+
+#trace(
+  ("use io", "—", [Opens the module `io`. The stack is not touched.]),
+  ("\"Hello, Pinax!\"", "\"Hello, Pinax!\"", [One string value goes onto the stack.]),
+  ("io.println", "—", [Takes the string off the top, prints it and ends the line. The stack is empty again.]),
+)
+
+Note that the stack is empty when the program ends. A program that leaves values on it is refused (chapter 2).
+
 #qa[Is there no start function like `main`?][No. Code written outside word definitions runs once, from top to bottom,
 when the file is loaded; that is where a program starts. A larger program gathers its work into words and calls one of
 them at the very end.]
@@ -38,6 +49,19 @@ where the offending token starts.
 only the characters of names and `( ) , .`. Addition is the word `add`, written after the values.
 #ex("manual", "01-plus.pnx")
 A sign attached to a number, as in `-7`, is part of the number and fine. Only a `+` or `-` standing apart is not.]
+
+== Remarks and line breaks
+
+A line that starts with `rem` is a remark. `rem` after code makes the rest of the line a remark. The examples of this
+book use remarks to say what each line does.
+
+#ex("manual", "01-comments.pnx")
+
+A line break is the same as a space. The code of one call may run over two lines, and one line may hold several pieces
+of work. Indentation and line breaks are for the reader; `pnx fmt` evens them out (chapter 15).
+
+#qa[Why `rem` and not `//` or `#`?][Outside literals and remarks, Pinax allows only the characters of names and
+`( ) , .`. So a remark also opens with a word-like `rem`. `rem` is reserved and cannot be a name.]
 
 == Making words
 

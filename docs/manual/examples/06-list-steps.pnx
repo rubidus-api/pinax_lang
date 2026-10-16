@@ -1,0 +1,14 @@
+rem run
+use io
+use str
+list scores int 3                          rem room for 3; it starts empty
+word show () cat ("length ", scores len, " of ", scores capacity) io.println end
+show                                       rem length 0 of 3
+70 scores push or_else (e) end             rem push can fail (full), so its guard follows it
+85 scores push or_else (e) end
+show                                       rem length 2 of 3
+cat ("first ", 0 scores idx, ", second ", 1 scores idx) io.println   rem i list idx reads cell i
+90 1 set scores                            rem v i set list puts v into cell i
+cat ("second is now ", 1 scores idx) io.println
+scores pop or_else (e) -1 end str.to_str io.println    rem the last one comes off: 90
+show                                       rem length 1 of 3

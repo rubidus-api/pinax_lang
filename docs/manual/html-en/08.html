@@ -36,7 +36,34 @@ path <span style="color: #d73948">do</span> (p path) <span style="color: #d73948
 <span style="color: #198810">""</span> io.println
 </code></pre><p class="ex-label">Output</p><pre><code data-lang="text">$ pnx 07-add-row.pnx
 (0, 0)(3, 4)(6, 0)
-</code></pre></div><div class="box qa"><p class="box-title">Q&amp;A</p><p><strong>Q. Is a row the address of a record?</strong></p><p>A. No. A row is a <strong>number</strong> within its table, and its range is checked on every use. So holding the wrong row cannot damage memory; at worst it stops with a fault.</p></div><h3>7.2 Linking by rows</h3><p>A field whose type is the name of a table holds a row of that table. It starts as “none”, asked with <code>is_none</code>. That is how a tree is built without pointers. Since the record refers to the table that holds it, the table is announced first with <code>forward</code>.</p><div class="example run"><p class="ex-file"><code>07-tree.pnx</code></p><pre><code data-lang="pinax"><span style="color: #d73948">use</span> io
+</code></pre></div><p>Here are the words for rows together, with remarks. The <code>r</code> that <code>add_row</code> gives is a number inside the table; a field is stored with <code>value row to record.field</code>, and read with <code>row record.field</code>, which takes one row off and puts the field’s value on.</p><div class="example run"><p class="ex-file"><code>07-row-steps.pnx</code></p><pre><code data-lang="pinax"><span style="color: #d73948">use</span> io
+<span style="color: #d73948">record</span> item
+  name <span style="color: #d73948">str</span>(<span style="color: #b60157">12</span>)                         <span style="color: #74747c">rem stored text: 12 bytes inside the row</span>
+  price <span style="color: #d73948">int</span>
+<span style="color: #d73948">end</span>
+<span style="color: #d73948">list</span> cart item <span style="color: #b60157">4</span>                       <span style="color: #74747c">rem a table: room for 4 rows of item</span>
+<span style="color: #d73948">word</span> add_item (n <span style="color: #d73948">str</span>, p <span style="color: #d73948">int</span> <span style="color: #d73948">or</span> <span style="color: #d73948">fail</span>)
+  cart add_row <span style="color: #d73948">or_fail</span> <span style="color: #d73948">to</span> r            <span style="color: #74747c">rem a new row at the end; r is its number in the table</span>
+  n r <span style="color: #d73948">to</span> item.name                     <span style="color: #74747c">rem value, row, to record.field: store a field</span>
+  p r <span style="color: #d73948">to</span> item.price
+<span style="color: #d73948">end</span>
+<span style="color: #d73948">word</span> total (<span style="color: #d73948">gives</span> <span style="color: #d73948">int</span>)
+  <span style="color: #b60157">0</span> <span style="color: #d73948">to</span> acc
+  cart <span style="color: #d73948">do</span> (r cart) acc r item.price add <span style="color: #d73948">to</span> acc <span style="color: #d73948">end</span> each   <span style="color: #74747c">rem each row of the table in turn</span>
+  acc
+<span style="color: #d73948">end</span>
+<span style="color: #d73948">word</span> main ()
+  <span style="color: #198810">"pencil"</span> <span style="color: #b60157">120</span> add_item <span style="color: #d73948">or_else</span> (e) <span style="color: #d73948">end</span>
+  <span style="color: #198810">"eraser"</span> <span style="color: #b60157">80</span> add_item <span style="color: #d73948">or_else</span> (e) <span style="color: #d73948">end</span>
+  <span style="color: #b60157">1</span> cart idx <span style="color: #d73948">to</span> second                 <span style="color: #74747c">rem the row with number 1</span>
+  <span style="color: #d73948">cat</span> (second item.name, <span style="color: #198810">" costs "</span>, second item.price) io.println
+  <span style="color: #d73948">cat</span> (<span style="color: #198810">"total "</span>, total) io.println
+<span style="color: #d73948">end</span>
+main
+</code></pre><p class="ex-label">Output</p><pre><code data-lang="text">$ pnx 07-row-steps.pnx
+eraser costs 80
+total 200
+</code></pre></div><table><thead><tr><th><strong>Token</strong></th><th><strong>Stack after it</strong></th><th><strong>What happened</strong></th></tr></thead><tbody><tr><td><code>cart add_row</code></td><td><code>1</code></td><td>Adds a row at the end and puts its number on (it can fail: <code>or_fail</code> follows).</td></tr><tr><td><code>to r</code></td><td><code>—</code></td><td>Keeps the number in <code>r</code>.</td></tr><tr><td><code>n r</code></td><td><code>"eraser" 1</code></td><td>The value to store, and the row.</td></tr><tr><td><code>to item.name</code></td><td><code>—</code></td><td>Stores into the <code>name</code> field of row 1; both come off.</td></tr><tr><td><code>r item.price</code></td><td><code>80</code></td><td>Takes one row off and puts its <code>price</code> on.</td></tr></tbody></table><div class="box qa"><p class="box-title">Q&amp;A</p><p><strong>Q. Is a row the address of a record?</strong></p><p>A. No. A row is a <strong>number</strong> within its table, and its range is checked on every use. So holding the wrong row cannot damage memory; at worst it stops with a fault.</p></div><h3>7.2 Linking by rows</h3><p>A field whose type is the name of a table holds a row of that table. It starts as “none”, asked with <code>is_none</code>. That is how a tree is built without pointers. Since the record refers to the table that holds it, the table is announced first with <code>forward</code>.</p><div class="example run"><p class="ex-file"><code>07-tree.pnx</code></p><pre><code data-lang="pinax"><span style="color: #d73948">use</span> io
 <span style="color: #d73948">use</span> <span style="color: #d73948">str</span>
 <span style="color: #74747c">rem A binary search tree in a pool: rows point to rows by number, never by address.</span>
 <span style="color: #d73948">forward</span> <span style="color: #d73948">pool</span> nodes
@@ -74,6 +101,17 @@ root show
 <span style="color: #198810">""</span> io.println
 </code></pre><p class="ex-label">Output</p><pre><code data-lang="text">$ pnx 07-tree.pnx
 20 30 40 50 70 
+</code></pre></div><p>Reading or storing a field of the “none” row is a fault. When following rows, ask <code>is_none</code> first (as the first line of <code>show</code> above does).</p><div class="example fault"><p class="ex-file"><code>07-none-field.pnx</code></p><pre><code data-lang="pinax"><span style="color: #d73948">use</span> io
+<span style="color: #d73948">forward</span> <span style="color: #d73948">list</span> nodes
+<span style="color: #d73948">record</span> node
+  value <span style="color: #d73948">int</span>
+  next nodes                           <span style="color: #74747c">rem a row of nodes, or none</span>
+<span style="color: #d73948">end</span>
+<span style="color: #d73948">list</span> nodes node <span style="color: #b60157">4</span>
+<span style="color: #d73948">row</span> nodes last (<span style="color: #b60157">3</span>)                     <span style="color: #74747c">rem its next is none: nothing was given</span>
+last node.next node.value drop         <span style="color: #74747c">rem reading a field of none ends the run</span>
+</code></pre><p class="ex-label">Fault</p><pre><code data-lang="text">$ pnx 07-none-field.pnx
+07-none-field.pnx:9: index out of range
 </code></pre></div><h3>7.3 Pools: taking and giving back</h3><p>A <code>pool</code> is a table whose rows are taken (<code>alloc</code>) and given back (<code>free</code>). The row <code>alloc</code> gives is an <strong>owned value</strong>: on every path it shall be stored into a field or global, or given to <code>free</code>, exactly once. The processor checks this at load.</p><div class="example refused"><p class="ex-file"><code>07-pool-leak.pnx</code></p><pre><code data-lang="pinax"><span style="color: #d73948">record</span> node
   key <span style="color: #d73948">int</span>
 <span style="color: #d73948">end</span>

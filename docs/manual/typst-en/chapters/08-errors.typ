@@ -32,6 +32,22 @@ Right after a word that can fail comes one #strong[guard]:
 
 #ex("manual", "08-or-return.pnx")
 
+After a guard word the stack shall be the same on success and on failure. A word that failed leaves no results, so the
+body of `or_else … end` makes a value of the type success would have given, to take its place.
+
+#ex("manual", "08-or-else-stack.pnx")
+
+#trace(
+  ("s", "\"forty\"", [The text goes on.]),
+  ("str.to_int", "—", [It does not read as a number and fails. No result.]),
+  ("or_else (e) 0 end", "0", [The way of the failure: the reason goes into `e`, and the body puts `0` on. On success the body is skipped and the number stays.]),
+)
+
+A body that leaves another type is refused: the code after `or_else` does not know which way it came (the same rule as
+for `if` in chapter 4).
+
+#ex("manual", "08-or-else-wrong.pnx")
+
 #ex("manual", "08-guard-missing.pnx")
 
 #mistake[Using `or_fail` at the outermost level of a file][Code outside definitions counts as having no `or fail`
@@ -60,6 +76,7 @@ a fault.]
 
 #summary[
 - After a word that can fail comes `or_fail`, `or_return` or `or_else` (standard 11.2).
+- The body of `or_else` leaves, in place of the results of success, values of the same types (11.2).
 - `or_fail` and `fail` only inside an `or fail` signature; outside definitions only `or_else` (11.2).
 - A fault stops the run, and the processor closes the handles the run opened (11.3).
 - To receive overflow and division by zero as failures, use the `chk_` words (15.1).

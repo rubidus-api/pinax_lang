@@ -15,6 +15,13 @@ program means (11.3).]
 + reports the kind of a fault (annex B) and the line where it happened;
 + accepts the minimum sizes of annex C.]
 
+#para("2a")[For every source, conforming or not, and for every bytecode container it accepts
+(`pinax_load_bytecode`), a conforming processor reads and writes no memory outside the state's block and the memory the
+host gave it (strings passed in, bound globals, shared storage), and the run of a word with a budget other than 0
+returns after a bounded number of instructions (19.5). A container that could do otherwise is refused at load
+(`PINAX_ERR_FORMAT`). Images (19.9), share files (19.7) and bound memory are data the host vouches for: the processor
+checks their shape, not every byte.]
+
 #para("3")[The sentences of the diagnostics (the English messages in the tables of this document) are those of this
 implementation. Another processor may word them differently. What it refuses shall be the same, and the place it points
 at shall lie inside the offending token (this implementation points at the start of the token, or at the byte inside it

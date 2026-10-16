@@ -14,7 +14,7 @@ No storage grows while running. So "how much can it hold" is always written in t
 == Arrays
 
 `array NAME type capacity` is a row of cells that is always full. Every cell starts at zero, and `len` is always the
-capacity. A cell is read with `i ARRAY idx` and stored with `value i to ARRAY`. `assign` fills it from the first cell,
+capacity. A cell is read with `i ARRAY idx` and stored with `value i set ARRAY` (the same `set` that stores into a global). `assign` fills it from the first cell,
 outside definitions.
 
 #ex("manual", "06-array.pnx")
@@ -30,10 +30,29 @@ end. Only indexes below the length may be used.
 
 #ex("manual", "06-list.pnx")
 
+Here are the words for lists in one place, with remarks saying what each line does.
+
+#ex("manual", "06-list-steps.pnx")
+
+#table(columns: (auto, auto, 1fr), inset: 5pt, stroke: 0.5pt + luma(170),
+  table.header([*Written*], [*Stack*], [*What it does*]),
+  [`LIST len`], [`— → int`], [the length now],
+  [`LIST capacity`], [`— → int`], [the declared capacity],
+  [`i LIST idx`], [`int → value`], [reads cell `i`; outside the length the fault `range`],
+  [`v i set LIST`], [`value int → —`], [stores into cell `i`; outside the length the fault `range`],
+  [`v LIST push`], [`value → —`], [adds at the end; fails with `full` when full],
+  [`LIST pop`], [`— → value`], [takes from the end; fails with `range` when empty],
+)
+
 `push` and `pop` can fail: a `push` into a full list fails with `full`, a `pop` from an empty list with `range`. A
 `push` that fails does not change the list.
 
 #ex("manual", "06-list-full.pnx")
+
+Because they can fail, `push` and `pop` are always followed by a guard word (chapter 8); leaving it out is refused at
+load. To ignore the failure, write `or_else (e) end`, so that the source says it is ignored.
+
+#ex("manual", "06-push-unguarded.pnx")
 
 #qa[Isn't a generous capacity a waste of memory?][It is. But the amount is in the source and fixed at load. Instead of
 a program stopping when memory runs out, it shows as a failing `push`, and that failure has to be handled before the

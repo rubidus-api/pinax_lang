@@ -1,0 +1,7 @@
+rem run
+rem A line that starts with rem is a comment: Pinax reads nothing on it.
+use io
+"one" io.println          rem rem after code: the rest of the line is a comment
+"two"
+  io.println              rem a line break is only a space: one call over two lines
+"three" io.println "four" io.println    rem two calls on one line

@@ -1,0 +1,4 @@
+rem refused
+use io
+"done" io.println
+1 2 add                                       rem a value that nothing takes
