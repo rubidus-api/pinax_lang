@@ -19,6 +19,18 @@ C++ 컴파일러로 읽힌다. 이 절은 그 함수들이 무엇을 하는지 �
 
 #para("2")[`pinax_error_text` 는 마지막 실패를 글로 준다. 결함이면 `모듈:줄: 이름` 꼴이다.]
 
+#para("3")[인터페이스의 실패는 어느 함수에서나 같은 뜻이다.
+#table(columns: (auto, 1fr), inset: 5pt, stroke: 0.5pt + luma(170),
+  [*번호*], [*뜻*],
+  [`PINAX_ERR_ARGUMENT`], [널 포인터, 없는 낱말 번호, 선언과 다른 크기처럼 인자가 틀렸다],
+  [`PINAX_ERR_NO_ROOM`], [덩이에 자리가 없다. `pinax_needed` 가 얼마나 더 필요한지 말한다(19.3)],
+  [`PINAX_ERR_SYNTAX` `PINAX_ERR_TYPE`], [소스가 거절되었다. 자리와 까닭은 `diag` 와 `pinax_error_text` 에],
+  [`PINAX_ERR_NOT_FOUND`], [그 이름의 낱말, 전역, 모듈, 호스트 낱말이 없다. 상에서 연 상태에 아직 안 준 호스트 낱말도],
+  [`PINAX_ERR_SIGNATURE`], [서명이 다르다: 찾는 낱말, 등록하는 호스트 낱말, 공유하는 전역의 선언],
+  [`PINAX_ERR_FORMAT`], [컨테이너, 상, 공유 파일이 이 처리기의 꼴이 아니거나 검사에 걸렸다],
+  [`PINAX_ERR_STATE`], [지금은 할 수 없는 호출: 멈춘 실행이 있다, 호스트 낱말 안이다, 코드가 없다, 상태가 얼었다],
+)]
+
 == 열기와 닫기 <host-open>
 
 #para("1")[`pinax_open(block, config, &state)` 은 덩이 `block` 안에 상태를 연다. `config` 의 0 인 칸은 처리기의

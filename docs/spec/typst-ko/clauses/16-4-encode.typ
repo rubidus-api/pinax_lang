@@ -1,5 +1,4 @@
 #import "/tools/common.typ": *
-// shape: failures only; no load-time constraint of its own
 
 == `encode` --- 바이트를 글로 <std-encode>
 
@@ -14,3 +13,13 @@
 
 #ex("spec", "16-encode.pnx")
 #ex("spec", "16-encode-bad.pnx")
+
+#part("제약")
+
+#para("2")[`str` 와 버퍼가 아닌 값을 주면 거절된다. 수를 바꾸려면 먼저 글이나 바이트로 만든다(16.1, 16.5).]
+#ex("spec", "16-encode-type.pnx")
+
+#part("진단")
+#diag(
+  ([`str` 와 버퍼가 아닌 값], "this word takes a str and a buffer, as: s buf encode.base64_encode"),
+)

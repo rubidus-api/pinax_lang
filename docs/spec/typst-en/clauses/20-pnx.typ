@@ -20,8 +20,13 @@ registered, it first loads `MODULE.pnx` from beside the file (13.1). The file is
 without `.pnx`; when that name is not written like a word (it begins with a digit or contains `-`), the module has no
 name.]
 
-#para("2")[On success it exits with 0. A refusal writes `file:line:column: reason` to standard error and exits with 1;
-a fault writes `file:line: kind` and the locals of the word, and exits with 1.]
+#para("2")[There are three exit statuses.
+#table(columns: (auto, 1fr), inset: 5pt, stroke: 0.5pt + luma(170),
+  [*Status*], [*When*],
+  [0], [the load code ran to its end; for `pnx test`, every test passed],
+  [1], [a refusal: `file:line:column: reason` on standard error; a fault: `file:line: kind` and the locals of the word; for `pnx test`, a test failed],
+  [2], [the command line is wrong (the usage is shown), the file cannot be read, a library of `--lib` cannot be opened],
+)]
 
 #para("3")[`--lib NAME=PATH` opens the shared library at `PATH` so that the resolver finds its functions for
 `extern … from "NAME"` (clause 18). It finds only the functions that library defines (not those it imports). Without

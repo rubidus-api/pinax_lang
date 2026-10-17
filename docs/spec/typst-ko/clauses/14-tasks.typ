@@ -84,6 +84,9 @@ tasks-decl = "tasks" NAME size [ size [ size ] ] ;   (* count, call depth, regio
 큐를 쓴다.]
 #ex("spec", "14-spawn-refused.pnx")
 
+#para("2a")[`spawn` 의 블록은 받는 것도 주는 것도 없어야 한다. 매개변수가 있는 블록은 거절된다.]
+#ex("spec", "14-spawn-block.pnx")
+
 #part("결함")
 
 #para("3")[작업 안의 결함은 그 실행 전체와 모든 작업을 끝낸다. 결함은 주 실행의 결함처럼 호스트에게 간다.
@@ -92,3 +95,14 @@ tasks-decl = "tasks" NAME size [ size [ size ] ] ;   (* count, call depth, regio
 
 #para("4")[두 작업이 같은 구역을 쓰는 일은 12.3 의 검사가 보지 않는다. 작업마다 자기 구역이 있으므로 보통은
 일어나지 않는다.]
+
+#part("진단")
+#diag(
+  ([매개변수나 결과가 있는 블록을 `spawn` 에 줌], "spawn takes a block that takes and gives nothing, and a set of tasks: do ... end workers spawn"),
+  ([작업이 아닌 값에 `resume` `is_done` `cancel`], "this word takes a task"),
+  ([작업 묶음이 아닌 모음(배열, 목록)에 `run_all`], "run_all takes a set of tasks"),
+  ([`tasks` 의 수가 4096 을 넘음], "a set holds at most 4096 tasks"),
+  ([작업의 호출 깊이가 1 부터 4096 밖], "the call depth of a task is 1 to 4096"),
+  ([작업의 구역이 16 MiB 를 넘음], "the region of a task is at most 16 MiB"),
+  ([자료 소스의 `tasks`], "a data source runs no code and declares no tasks"),
+)

@@ -85,6 +85,9 @@ failure and ends in its own way. Cancelling does not stop a task by force.]
 through globals and queues.]
 #ex("spec", "14-spawn-refused.pnx")
 
+#para("2a")[The block of `spawn` takes nothing and gives nothing. A block with parameters is refused.]
+#ex("spec", "14-spawn-block.pnx")
+
 #part("Faults")
 
 #para("3")[A fault inside a task ends the whole run and every task. The fault goes to the host like a fault of the main
@@ -93,3 +96,14 @@ run. The state remains and takes the next run.]
 
 #para("4")[Two tasks using the same region are not followed by the check of 12.3. Each task has a region of its own, so
 this does not normally happen.]
+
+#part("Diagnostics")
+#diag(
+  ([a block with parameters or results given to `spawn`], "spawn takes a block that takes and gives nothing, and a set of tasks: do ... end workers spawn"),
+  ([`resume`, `is_done` or `cancel` on a value that is not a task], "this word takes a task"),
+  ([`run_all` on a collection that is not a set of tasks (an array, a list)], "run_all takes a set of tasks"),
+  ([a `tasks` count above 4096], "a set holds at most 4096 tasks"),
+  ([a call depth of a task outside 1 to 4096], "the call depth of a task is 1 to 4096"),
+  ([a region of a task above 16 MiB], "the region of a task is at most 16 MiB"),
+  ([`tasks` in a data source], "a data source runs no code and declares no tasks"),
+)

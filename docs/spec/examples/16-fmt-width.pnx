@@ -1,0 +1,4 @@
+rem fault
+use fmt
+use io
+255 -1 fmt.hex_pad io.println

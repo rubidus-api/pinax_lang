@@ -75,7 +75,8 @@ Perl or Python.]
 #part("Faults")
 
 #para("10")[The work space of a search is borrowed from the end of the region on every call. A region too small is the
-fault `full`.]
+fault `full`. The search below comes after the region was nearly filled.]
+#ex("spec", "16-rex-full.pnx")
 
 #part("Diagnostics")
 #diag(

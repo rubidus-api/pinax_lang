@@ -19,6 +19,18 @@ interface itself: `ARGUMENT`, `NO_ROOM` (the block is too small), `SYNTAX`, `TYP
 
 #para("2")[`pinax_error_text` gives the last failure as text; for a fault, in the form `module:line: name`.]
 
+#para("3")[A failure of the interface means the same in every function.
+#table(columns: (auto, 1fr), inset: 5pt, stroke: 0.5pt + luma(170),
+  [*Code*], [*Meaning*],
+  [`PINAX_ERR_ARGUMENT`], [an argument is wrong: a null pointer, a word number that is none, a size other than the declaration's],
+  [`PINAX_ERR_NO_ROOM`], [the block has no room; `pinax_needed` says how much more it needs (19.3)],
+  [`PINAX_ERR_SYNTAX` `PINAX_ERR_TYPE`], [the source was refused; the place and the reason are in `diag` and `pinax_error_text`],
+  [`PINAX_ERR_NOT_FOUND`], [no word, global, module or host word of that name; also a host word not yet given again to a state opened from an image],
+  [`PINAX_ERR_SIGNATURE`], [the signature differs: of the word looked for, of the host word registered, of the global shared],
+  [`PINAX_ERR_FORMAT`], [a container, image or share file is not of this processor's form, or failed its checks],
+  [`PINAX_ERR_STATE`], [a call not possible now: a run is suspended, a host word is running, no code is loaded, the state is frozen],
+)]
+
 == Opening and closing <host-open>
 
 #para("1")[`pinax_open(block, config, &state)` opens a state inside `block`. Fields of `config` that are 0 take the

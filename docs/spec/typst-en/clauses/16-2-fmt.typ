@@ -1,5 +1,4 @@
 #import "/tools/common.typ": *
-// shape: no constraint of its own; the words take int as clause 15 says
 
 == `fmt` --- numbers as text <std-fmt>
 
@@ -16,3 +15,23 @@ Decimal is `str.to_str`; decimal appended to a buffer is `append_int` (15.3). A 
 below 0 or from 2#super[32] up is the fault `range`; when the region is used up it is the fault `full`.]
 
 #ex("spec", "16-fmt.pnx")
+
+#part("Constraints")
+
+#para("2")[The words of `fmt` take an `int`. A value of another type is refused. A `dec(N)` is written by `str.to_str`
+and `cat` (7.5).]
+#ex("spec", "16-fmt-type.pnx")
+
+#part("Faults")
+
+#para("3")[A `width` of `hex_pad` or `zero_pad` below 0 or from 2#super[32] up is the fault `range`.]
+#ex("spec", "16-fmt-width.pnx")
+
+#para("4")[A result that does not fit in the region is the fault `full`. The width below is allowed, but larger than
+the region.]
+#ex("spec", "16-fmt-full.pnx")
+
+#part("Diagnostics")
+#diag(
+  ([a value that is not an `int`], "this word takes an int"),
+)

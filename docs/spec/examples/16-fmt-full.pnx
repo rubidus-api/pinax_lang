@@ -1,0 +1,5 @@
+rem fault
+use fmt
+use str
+use io
+7 4294967295 fmt.zero_pad str.len str.to_str io.println

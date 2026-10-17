@@ -1,0 +1,4 @@
+rem refused
+use fmt
+use io
+"abc" fmt.hex io.println

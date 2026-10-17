@@ -1,0 +1,4 @@
+rem refused
+use encode
+buffer out 8
+5 out encode.hex_encode or_else (e) end

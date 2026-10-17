@@ -1,5 +1,4 @@
 #import "/tools/common.typ": *
-// shape: failures only; no load-time constraint of its own
 
 == `encode` --- bytes as text <std-encode>
 
@@ -14,3 +13,14 @@ fail with `err.full` when there is not enough room, or `err.format` when the inp
 
 #ex("spec", "16-encode.pnx")
 #ex("spec", "16-encode-bad.pnx")
+
+#part("Constraints")
+
+#para("2")[A value that is not a `str` and a buffer is refused. To encode a number, make text or bytes of it first
+(16.1, 16.5).]
+#ex("spec", "16-encode-type.pnx")
+
+#part("Diagnostics")
+#diag(
+  ([a value that is not a `str` and a buffer], "this word takes a str and a buffer, as: s buf encode.base64_encode"),
+)

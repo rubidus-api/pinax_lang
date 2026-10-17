@@ -13,6 +13,11 @@ host words.
 
 #ex("spec", "16-hash.pnx")
 
+#para("1a")[Check values: the `crc32` of the empty string is 0, and that of `"123456789"` is `cbf43926` (the standard
+check value of CRC-32). The `fnv1a` of the empty string is FNV's offset basis `cbf29ce484222325`. Another processor
+shall give the same values.]
+#ex("spec", "16-hash-vectors.pnx")
+
 #part("Constraints")
 
 #para("2")[The hash of a value that is not a `str` is refused. To hash a number, make bytes of it first (16.5).]

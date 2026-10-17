@@ -5191,7 +5191,7 @@ static bool builtin(comp *c, const struct builtin *w) {
         if (!need_coll(c, &g, &gi) || !need(c, 1))
             return false;
         if (g->kind != GK_BUFFER || f->stack[f->depth - 1].type != TY_STR)
-            return type_error(c, "this word takes a str and a buffer: s buf encode.base64_encode");
+            return type_error(c, "this word takes a str and a buffer, as: s buf encode.base64_encode");
         if (!settle(c, f->depth - 1))
             return false;
         ra = slot_of(c, f->depth - 1);
