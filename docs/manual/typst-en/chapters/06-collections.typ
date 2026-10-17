@@ -34,6 +34,17 @@ Here are the words for lists in one place, with remarks saying what each line do
 
 #ex("manual", "06-list-steps.pnx")
 
+One `push` and one `pop`, followed on the stack. Both can fail, so a guard follows each.
+
+#trace(
+  ("70", "70", [The value to put in.]),
+  ("scores push", "—", [Puts it at the end. Had the list been full, it would fail and leave nothing.]),
+  ([`or_else (e) end`], "—", [Skipped, since it succeeded. On failure the body runs; it is empty, so nothing is left.]),
+  ("scores pop", "90", [Takes the last value off.]),
+  ([`or_else (e) -1 end`], "90", [Success: skipped. On failure `-1` would fill the place.]),
+  ("str.to_str io.println", "—", [Prints it.]),
+)
+
 #table(columns: (auto, auto, 1fr), inset: 5pt, stroke: 0.5pt + luma(170),
   table.header([*Written*], [*Stack*], [*What it does*]),
   [`LIST len`], [`— → int`], [the length now],
@@ -87,6 +98,10 @@ works wherever a collection's name does (even as the destination of `map_into`).
 #mistake[A table's name as a parameter type takes the table][Written as a parameter type, the name of a table of records
 means #emph[one row] of it (chapter 7). To take the whole table, write `list RECORD` or `array RECORD`.
 #ex("manual", "06-coll-param-row.pnx")]
+
+#qa[How do I empty a list, or make it shorter?][`LIST clear` sets its length to 0 and `n LIST truncate` to `n`. The
+cells keep their values, but past the length they are not seen. An array is always full, so it cannot be emptied;
+its cells are written one by one with `set`.]
 
 #summary[
 - A word takes a collection as `list T`, `array T`, `queue T` or `buffer` (9.9).

@@ -1,0 +1,15 @@
+rem run
+use io
+use fmt
+use hash
+use bytes
+record pair
+  a u16
+  b int
+end
+array pairs pair 1
+word demo ()
+  cat ("crc32 ", "pinax" hash.crc32 fmt.hex, ", fnv1a ", "pinax" hash.fnv1a fmt.hex) io.println
+  cat ("a pair packs into ", 0 pairs idx bytes.packed_size, " bytes") io.println
+end
+demo

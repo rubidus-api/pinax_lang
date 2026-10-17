@@ -1,0 +1,14 @@
+rem run
+use io
+use str
+rem span cuts off the run of one class of bytes at the front; to_dec reads a decimal.
+word demo ()
+  "42abc" str.digit str.span to (digits, rest)
+  cat ("[", digits, "] [", rest, "]") io.println
+  "   x" str.space str.span to (blanks, after)
+  cat (blanks str.len, " blanks, then ", after) io.println
+  "12.50" 2 str.to_dec or_else (e) 0.00 end to price
+  cat ("price ", price) io.println
+  "12.505" 2 str.to_dec or_else (e) cat ("not a dec(2): ", e err_text) io.println 0.00 end drop
+end
+demo

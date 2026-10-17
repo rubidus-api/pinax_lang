@@ -70,6 +70,31 @@ definitions, calls and control. So reading an untrusted settings file cannot run
 
 `pnx` does not do data loads; they are the host's business (chapter 14).
 
+== Modules the host lends
+
+`io` `file` `clock` `random` `env` are not standard modules but #strong[host modules]: they are not part of the
+language, and exist only when the host registers them (chapter 14). `pnx` registers all five. So the host decides the
+ways to files, the clock and the environment --- a script that is not trusted is given no `file`.
+
+#ex("manual", "10-host-modules.pnx")
+
+#word("env.arg_count") and #word("env.arg") are the arguments of the command line (0 is the program file);
+#word("env.getenv") reads an environment variable. After #word("random.seed"), #word("random.random_below") gives the
+same numbers for the same seed, which suits tests. #word("clock.monotonic_ns") never goes back, so it measures how
+long something took; `clock.now_ms` is the calendar time, and `clock.sleep` pauses for that many milliseconds.
+`random.random` is a 64-bit random number without a range (not for cryptography).
+
+#trace(
+  ("1", "1", [Which argument.]),
+  ("env.arg", "\"alpha\"", [That argument; a number past the last fails.]),
+  ([`or_else (e) "?" end`], "\"alpha\"", [Skipped on success. On failure `"?"` takes the place.]),
+  ("io.println", "—", [Prints it.]),
+)
+
+#qa[May a module file use `io.println`?][Yes, with `use io` in the module too. But when the host that loads the module
+has not registered `io`, the module is refused. A module meant for many hosts is better off returning results than
+depending on a host module.]
+
 #summary[
 - One file is one module, and only what is `export`ed is seen outside (standard 13.1, 13.2).
 - After `use MODULE [as ALIAS]` its parts are written `MODULE.NAME` (13.1).

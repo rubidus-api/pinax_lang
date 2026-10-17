@@ -111,4 +111,36 @@ show
 </code></pre><p class="ex-label">출력</p><pre><code data-lang="text">$ pnx 05-chars.pnx
 bytes 9, characters 5
 &lt;한&gt;&lt;글&gt;&lt; &gt;&lt;o&gt;&lt;k&gt;
-</code></pre></div><div class="box summary"><p class="box-title">정리</p><ul><li><code>str</code> 는 뷰다. 자르고 가르는 낱말은 복사하지 않는다(표준 7.3, 16.1).</li><li>오래 사는 자리(전역, 칸, 필드)에는 뷰를 둘 수 없다(7.3).</li><li>오래 사는 자리에는 <code>str(N)</code> 을 쓴다. 넣을 때 복사되고, 길면 결함이다(7.3).</li><li>새 바이트는 구역에 놓이고, <code>mark</code>/<code>release</code> 로 되돌린다. 되돌린 뒤의 뷰는 거절된다(12.2, 12.3).</li><li>버퍼는 글을 이어 붙이는 자리다. 차면 실패한다(8.7).</li><li>길이는 바이트다. 글자는 <code>char_count</code>, <code>chars</code>(16.1).</li></ul></div></main><nav class="bottom"><a href="index.html">처음</a> · <a href="05.html">앞</a> · <a href="07.html">다음</a> · <a href="../html-en/06.html">English</a></nav></body></html>
+</code></pre></div><h3>5.6 글자 부류와 수 읽기</h3><p>글의 앞에서 “숫자가 이어지는 만큼” 을 떼려면 <code>str.span</code> 을 쓴다. 부류는 상수 <code>str.digit</code> <code>str.alpha</code> <code>str.alnum</code> <code>str.space</code> <code>str.upper_case</code> <code>str.lower_case</code> <code>str.hex_digit</code> <code>str.punct</code> 다(모두 ASCII). 소수점이 있는 수는 <code>str.to_dec</code> 가 <code>dec(N)</code> 으로 읽는다(2장). 점 아래 자리가 <code>N</code> 보다 많으면 실패다.</p><div class="example run"><p class="ex-file"><code>05-classes.pnx</code></p><pre><code data-lang="pinax"><span style="color: #d73948">use</span> io
+<span style="color: #d73948">use</span> <span style="color: #d73948">str</span>
+<span style="color: #74747c">rem span cuts off the run of one class of bytes at the front; to_dec reads a decimal.</span>
+<span style="color: #d73948">word</span> demo ()
+  <span style="color: #198810">"42abc"</span> <span style="color: #d73948">str</span>.digit <span style="color: #d73948">str</span>.span <span style="color: #d73948">to</span> (digits, rest)
+  <span style="color: #d73948">cat</span> (<span style="color: #198810">"["</span>, digits, <span style="color: #198810">"] ["</span>, rest, <span style="color: #198810">"]"</span>) io.println
+  <span style="color: #198810">"   x"</span> <span style="color: #d73948">str</span>.space <span style="color: #d73948">str</span>.span <span style="color: #d73948">to</span> (blanks, after)
+  <span style="color: #d73948">cat</span> (blanks <span style="color: #d73948">str</span>.len, <span style="color: #198810">" blanks, then "</span>, after) io.println
+  <span style="color: #198810">"12.50"</span> <span style="color: #b60157">2</span> <span style="color: #d73948">str</span>.to_dec <span style="color: #d73948">or_else</span> (e) <span style="color: #b60157">0</span>.00 <span style="color: #d73948">end</span> <span style="color: #d73948">to</span> price
+  <span style="color: #d73948">cat</span> (<span style="color: #198810">"price "</span>, price) io.println
+  <span style="color: #198810">"12.505"</span> <span style="color: #b60157">2</span> <span style="color: #d73948">str</span>.to_dec <span style="color: #d73948">or_else</span> (e) <span style="color: #d73948">cat</span> (<span style="color: #198810">"not a dec(2): "</span>, e err_text) io.println <span style="color: #b60157">0</span>.00 <span style="color: #d73948">end</span> drop
+<span style="color: #d73948">end</span>
+demo
+</code></pre><p class="ex-label">출력</p><pre><code data-lang="text">$ pnx 05-classes.pnx
+[42] [abc]
+3 blanks, then x
+price 12.50
+not a dec(2): format
+</code></pre></div><table><thead><tr><th><strong>토큰</strong></th><th><strong>그 뒤의 스택</strong></th><th><strong>일어난 일</strong></th></tr></thead><tbody><tr><td><code>"42abc" str.digit</code></td><td><code>"42abc" 48</code></td><td>글과 부류(부류는 작은 정수다).</td></tr><tr><td><code>str.span</code></td><td><code>"42" "abc"</code></td><td>앞의 숫자 부분과 나머지. 둘 다 같은 글을 가리키는 뷰다.</td></tr><tr><td><code>to (digits, rest)</code></td><td><code>—</code></td><td>오른쪽 이름이 맨 위 값을 받는다.</td></tr></tbody></table><p>조각을 이어 붙이거나 바꾼 글을 버퍼에 바로 쓰는 낱말도 있다. <code>str.join_into</code> 는 줄기의 조각을 사이 글로 이어 버퍼에 붙이고, <code>str.replace_into</code> 는 바꾼 글을 버퍼에 붙이며 바꾼 횟수를 준다. 둘 다 버퍼가 차면 실패한다. <code>join_into</code> 는 줄기를 맨 뒤에 둔다 — 줄기는 바로 뒤의 낱말이 받기 때문이다(4장).</p><div class="example run"><p class="ex-file"><code>05-join.pnx</code></p><pre><code data-lang="pinax"><span style="color: #d73948">use</span> io
+<span style="color: #d73948">use</span> <span style="color: #d73948">str</span>
+<span style="color: #d73948">buffer</span> joined <span style="color: #b60157">64</span>
+<span style="color: #d73948">buffer</span> fixed <span style="color: #b60157">64</span>
+<span style="color: #d73948">word</span> demo (<span style="color: #d73948">or</span> <span style="color: #d73948">fail</span>)
+  <span style="color: #198810">", "</span> joined <span style="color: #198810">"alpha beta gamma"</span> <span style="color: #d73948">str</span>.words <span style="color: #d73948">str</span>.join_into <span style="color: #d73948">or_fail</span>   <span style="color: #74747c">rem the stem comes last</span>
+  joined contents io.println
+  <span style="color: #198810">"hello world"</span> <span style="color: #198810">"o"</span> <span style="color: #198810">"0"</span> fixed <span style="color: #d73948">str</span>.replace_into <span style="color: #d73948">or_fail</span> <span style="color: #d73948">to</span> n
+  <span style="color: #d73948">cat</span> (n, <span style="color: #198810">" replaced: "</span>, fixed contents) io.println
+<span style="color: #d73948">end</span>
+demo <span style="color: #d73948">or_else</span> (e) e err_text io.println <span style="color: #d73948">end</span>
+</code></pre><p class="ex-label">출력</p><pre><code data-lang="text">$ pnx 05-join.pnx
+alpha, beta, gamma
+2 replaced: hell0 w0rld
+</code></pre></div><div class="box qa"><p class="box-title">문답</p><p><strong>물음. 글자 부류는 한글이나 다른 유니코드 글자도 아는가?</strong></p><p>답. 모른다. 부류는 ASCII 범위만 본다. 한글 한 글자는 <code>str.alpha</code> 에 들지 않는다. 바이트가 아닌 글자 단위가 필요하면 <code>str.chars</code> 로 글자를 하나씩 받아 직접 견준다.</p></div><div class="box summary"><p class="box-title">정리</p><ul><li><code>str</code> 는 뷰다. 자르고 가르는 낱말은 복사하지 않는다(표준 7.3, 16.1).</li><li>오래 사는 자리(전역, 칸, 필드)에는 뷰를 둘 수 없다(7.3).</li><li>오래 사는 자리에는 <code>str(N)</code> 을 쓴다. 넣을 때 복사되고, 길면 결함이다(7.3).</li><li>새 바이트는 구역에 놓이고, <code>mark</code>/<code>release</code> 로 되돌린다. 되돌린 뒤의 뷰는 거절된다(12.2, 12.3).</li><li>버퍼는 글을 이어 붙이는 자리다. 차면 실패한다(8.7).</li><li>길이는 바이트다. 글자는 <code>char_count</code>, <code>chars</code>(16.1).</li></ul></div></main><nav class="bottom"><a href="index.html">처음</a> · <a href="05.html">앞</a> · <a href="07.html">다음</a> · <a href="../html-en/06.html">English</a></nav></body></html>

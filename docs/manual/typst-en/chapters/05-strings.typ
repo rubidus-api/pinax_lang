@@ -89,6 +89,32 @@ and `str.chars`. `str.chars` yields a view of each character (not a code point n
 
 #ex("manual", "05-chars.pnx")
 
+== Character classes, and reading a decimal
+
+To take "as many digits as there are" off the front of a text, use #word("str.span"). The classes are the constants
+`str.digit` `str.alpha` `str.alnum` `str.space` `str.upper_case` `str.lower_case` `str.hex_digit` `str.punct` (all
+ASCII). A number with a point is read as a `dec(N)` by #word("str.to_dec") (chapter 2); more digits after the point
+than `N` is a failure.
+
+#ex("manual", "05-classes.pnx")
+
+#trace(
+  ("\"42abc\" str.digit", "\"42abc\" 48", [The text and the class (a class is a small integer).]),
+  ("str.span", "\"42\" \"abc\"", [The digits at the front and the rest, both views of the same text.]),
+  ("to (digits, rest)", "—", [The right-hand name takes the top value.]),
+)
+
+Two words write joined or replaced text straight into a buffer: #word("str.join_into") joins the pieces of a stem
+with a separator, #word("str.replace_into") appends the replaced text and gives the number of replacements. Both fail
+when the buffer is full. `join_into` takes the stem last, because a stem is taken by the word right after it
+(chapter 4).
+
+#ex("manual", "05-join.pnx")
+
+#qa[Do the character classes know Korean or other Unicode letters?][No. A class covers ASCII only; a Korean syllable is
+not in `str.alpha`. When characters rather than bytes matter, take them one by one with `str.chars` and compare them
+yourself.]
+
 #summary[
 - `str` is a view; cutting and splitting copy nothing (standard 7.3, 16.1).
 - A view cannot be kept in a long-lived place (global, cell, field) (7.3).

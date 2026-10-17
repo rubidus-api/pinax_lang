@@ -1,0 +1,12 @@
+rem run
+use io
+use str
+buffer joined 64
+buffer fixed 64
+word demo (or fail)
+  ", " joined "alpha beta gamma" str.words str.join_into or_fail   rem the stem comes last
+  joined contents io.println
+  "hello world" "o" "0" fixed str.replace_into or_fail to n
+  cat (n, " replaced: ", fixed contents) io.println
+end
+demo or_else (e) e err_text io.println end

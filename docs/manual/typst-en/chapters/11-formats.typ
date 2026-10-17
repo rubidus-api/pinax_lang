@@ -49,6 +49,19 @@ A kind is a module constant like `json.object`, so it is compared with `eq`, not
 each kind has to be chosen, so the values needed can be picked out at any depth; `11-json-read.pnx` added up the
 `json.number` tokens only.
 
+A value of no interest is skipped in one go with #word("json.skip"); an object or an array is skipped with everything
+inside it, so there is no depth to count. The kinds are the constants `json.object` `json.object_end` `json.array`
+`json.array_end` `json.key` `json.string` `json.number` `json.boolean` `json.null`. The other way round, one object
+fills a row of a record with #word("json.unpack"): the row is written only when every field fits, else it fails.
+
+#ex("manual", "11-json-skip.pnx")
+
+CSV is written one field at a time. #word("csv.put") appends text (quoted when it holds a comma, a quote or a line
+break), `csv.put_int` `csv.put_dec` `csv.put_bool` numbers and booleans, and #word("csv.end_line") the end of the line;
+the commas between fields are the words' business. One row of a record as one line is `csv.pack`.
+
+#ex("manual", "11-csv-write.pnx")
+
 == Bytes
 
 The module `bytes` writes and reads fixed widths in a given byte order. With `big_endian` in a record, `bytes.pack` writes
@@ -69,6 +82,15 @@ them.
 `fmt` turns numbers into hexadecimal, binary and zero-padded text. `hash` gives CRC-32, FNV-1a and SipHash; `encode`
 gives Base64, hexadecimal and URL percent-encoding. Words that write their results into a buffer fail when the buffer is
 full. The full lists are in clause 16 of the standard.
+
+A hash takes text and gives an `int`. #word("hash.crc32") is a checksum; `hash.fnv1a` and `hash.hash64` mix keys. How
+many bytes one row of a record becomes under `bytes.pack` is told in advance by #word("bytes.packed_size"), which
+helps in sizing a buffer.
+
+#ex("manual", "11-hash.pnx")
+
+#qa[Can the JSON writer indent, or add line breaks?][No. The writing words of `json` append one line. When a layout for
+people is needed, the receiving side makes it. The reading side accepts spaces and line breaks as they come.]
 
 #summary[
 - `json.next` and `csv.fields` read one token, one field at a time; no tree is built (standard 16.8, 16.9).

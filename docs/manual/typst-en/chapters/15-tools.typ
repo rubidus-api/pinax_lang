@@ -33,6 +33,17 @@ ones. A line that is refused or ends with a fault leaves nothing behind.
 The last line, `cube cube`, was refused because the stack was empty. The message of a refusal goes to standard error,
 so it is not in the output above.
 
+What each line leaves on the stack, followed. The values left at the end of a line are what is shown; the next line
+starts from an empty stack again.
+
+#trace(
+  ("2 3 add", "5", [Shows the value left, `5`.]),
+  ("word cube … end", "—", [A definition leaves no value.]),
+  ("4 cube", "64", [Uses the definition of the line before.]),
+  ("1 0 div", "—", [A line that ends with a fault leaves nothing.]),
+  ("cube cube", "—", [Refused: no `int` to take from an empty stack.]),
+)
+
 == Seeing the stack, and formatting
 
 `pnx see` shows, for each line of a definition, the stack where that line ends. Use it when the stack is not what you
@@ -56,6 +67,14 @@ The signature promised one `str`, but the stack after the last line is `str int 
 `pnx fmt` changes only indentation and spaces. Tokens, the places of lines and remarks stay as they are.
 
 #ex("manual", "15-fmt.pnx")
+
+#qa[Do tests go in a file of their own, or beside the words?][Either. `pnx test FILE` loads the file and then runs only
+the tests in it. Beside the words, a test is in sight when the word is changed. When there are many, a test file of its
+own brings the module in with `use`.]
+
+#qa[Why does the stack of `pnx see` show types only, and no values?][`see` loads and does not run. At load the processor
+knows the depth and types of the stack, nothing more; values exist only when the program runs. To see values, run a line
+at a time in `pnx repl`.]
 
 #summary[
 - `test … end` and `pnx test`; a failed test makes the exit status 1 (standard 20.2).

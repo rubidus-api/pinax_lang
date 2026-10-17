@@ -88,6 +88,29 @@
 
 #ex("manual", "05-chars.pnx")
 
+== 글자 부류와 수 읽기
+
+글의 앞에서 "숫자가 이어지는 만큼" 을 떼려면 #word("str.span") 을 쓴다. 부류는 상수 `str.digit` `str.alpha` `str.alnum`
+`str.space` `str.upper_case` `str.lower_case` `str.hex_digit` `str.punct` 다(모두 ASCII). 소수점이 있는 수는
+#word("str.to_dec") 가 `dec(N)` 으로 읽는다(2장). 점 아래 자리가 `N` 보다 많으면 실패다.
+
+#ex("manual", "05-classes.pnx")
+
+#trace(
+  ("\"42abc\" str.digit", "\"42abc\" 48", [글과 부류(부류는 작은 정수다).]),
+  ("str.span", "\"42\" \"abc\"", [앞의 숫자 부분과 나머지. 둘 다 같은 글을 가리키는 뷰다.]),
+  ("to (digits, rest)", "—", [오른쪽 이름이 맨 위 값을 받는다.]),
+)
+
+조각을 이어 붙이거나 바꾼 글을 버퍼에 바로 쓰는 낱말도 있다. #word("str.join_into") 는 줄기의 조각을 사이 글로 이어
+버퍼에 붙이고, #word("str.replace_into") 는 바꾼 글을 버퍼에 붙이며 바꾼 횟수를 준다. 둘 다 버퍼가 차면 실패한다.
+`join_into` 는 줄기를 맨 뒤에 둔다 --- 줄기는 바로 뒤의 낱말이 받기 때문이다(4장).
+
+#ex("manual", "05-join.pnx")
+
+#qa[글자 부류는 한글이나 다른 유니코드 글자도 아는가?][모른다. 부류는 ASCII 범위만 본다. 한글 한 글자는 `str.alpha` 에
+들지 않는다. 바이트가 아닌 글자 단위가 필요하면 `str.chars` 로 글자를 하나씩 받아 직접 견준다.]
+
 #summary[
 - `str` 는 뷰다. 자르고 가르는 낱말은 복사하지 않는다(표준 7.3, 16.1).
 - 오래 사는 자리(전역, 칸, 필드)에는 뷰를 둘 수 없다(7.3).

@@ -15,7 +15,7 @@
 5. Each term is defined (#term) once.
 6. Every hand-typed reference N.M names a heading of the standard; a Korean term has its English
    twin at the same place; a chapter answers two questions and shows a mistake, a clause with
-   faults shows one (these three are "later" until PINAX_DOCS_SHAPE=1).
+   faults shows one.
 """
 import os
 import pathlib
@@ -155,8 +155,8 @@ for p in sorted(ko & en):
 # 8. The shape a reader new to the language needs: a chapter has at least two questions
 # answered and one common mistake; a clause with a faults part shows a faulting example.
 # Reported, and a failure when PINAX_DOCS_SHAPE=1 (set once the chapters have that shape).
-later = []  # the shape a chapter is being brought to; a failure once PINAX_DOCS_SHAPE=1
-shape = problems if os.environ.get("PINAX_DOCS_SHAPE") == "1" else later
+later = []  # kept for a rule that is being introduced; none now
+shape = problems
 for p in sorted(ko):
     if p.parent.name not in ("clauses", "chapters"):
         continue

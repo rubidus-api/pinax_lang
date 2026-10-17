@@ -44,6 +44,19 @@ JSON 을 토큰으로 읽으면 깊이와 상관없이 필요한 것만 고를 �
 갈래는 `json.object` 처럼 모듈의 상수이므로 `case` 가 아니라 `eq` 로 견준다(4장). 갈래마다 할 일만 고르면 되므로, 깊이가
 얼마든 필요한 값만 뽑을 수 있다. `11-json-read.pnx` 는 `json.number` 만 골라 더했다.
 
+관심 없는 값은 #word("json.skip") 으로 한 번에 건너뛴다. 객체나 배열이면 그 안 전부를 건너뛰므로 깊이를 셀 필요가 없다.
+갈래의 상수는 `json.object` `json.object_end` `json.array` `json.array_end` `json.key` `json.string` `json.number`
+`json.boolean` `json.null` 이다. 거꾸로 객체 하나를 레코드의 줄에 채우는 것은 #word("json.unpack") 이다: 모든 필드가 맞을
+때만 줄에 쓰고, 아니면 실패다.
+
+#ex("manual", "11-json-skip.pnx")
+
+CSV 를 쓰는 쪽은 필드 하나씩이다. #word("csv.put") 은 글을(쉼표, 따옴표, 줄바꿈이 들어 있으면 따옴표로 싸서),
+`csv.put_int` `csv.put_dec` `csv.put_bool` 은 수와 참거짓을, #word("csv.end_line") 은 줄 끝을 버퍼에 붙인다. 앞에 필요한
+쉼표는 낱말이 넣는다. 레코드의 줄 하나를 한 줄로 쓰는 것은 `csv.pack` 이다.
+
+#ex("manual", "11-csv-write.pnx")
+
 == 바이트
 
 모듈 `bytes` 는 정해진 폭과 바이트 순서로 쓰고 읽는다. 레코드에 `big_endian` 을 적으면 `bytes.pack` 이 큰 끝부터 쓴다.
@@ -62,6 +75,15 @@ JSON 을 토큰으로 읽으면 깊이와 상관없이 필요한 것만 고를 �
 
 `fmt` 는 수를 십육진, 이진, 0 을 채운 모양으로 바꾼다. `hash` 는 CRC-32, FNV-1a, SipHash 를, `encode` 는 Base64,
 십육진, URL 퍼센트 부호화를 준다. 바꾼 결과를 버퍼에 쓰는 낱말은 버퍼가 차면 실패한다. 자세한 목록은 표준 16절에 있다.
+
+해시는 글을 받아 `int` 를 준다. #word("hash.crc32") 는 검사합으로, `hash.fnv1a` 와 `hash.hash64` 는 키를 섞는 데 쓴다.
+레코드 한 줄이 `bytes.pack` 으로 몇 바이트가 되는지는 #word("bytes.packed_size") 가 미리 알려 준다 --- 버퍼의 자리를
+가늠할 때 쓴다.
+
+#ex("manual", "11-hash.pnx")
+
+#qa[JSON 으로 쓸 때 들여쓰기나 줄바꿈을 넣을 수 있는가?][없다. `json` 의 쓰는 낱말은 한 줄로 붙인다. 사람이 읽을 모양이
+필요하면 받은 쪽에서 다듬는다. 읽는 쪽은 공백과 줄바꿈이 있어도 그대로 읽는다.]
 
 #summary[
 - `json.next` 와 `csv.fields` 는 한 토큰, 한 필드씩 읽는다. 나무를 만들지 않는다(표준 16.8, 16.9).

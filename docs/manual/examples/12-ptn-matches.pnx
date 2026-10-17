@@ -1,0 +1,8 @@
+rem run
+use io
+use ptn
+word demo ()
+  "x=1, y=22, z=333" "%a=%d+" ptn.matches do (m str) cat ("<", m, ">") io.print end each
+  "" io.println
+end
+demo

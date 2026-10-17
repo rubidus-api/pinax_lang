@@ -18,6 +18,15 @@ ended.
 
 #ex("manual", "13-turns.pnx")
 
+One `spawn` line, followed, shows what a task takes and gives.
+
+#trace(
+  ("do \"ping\" 3 count_to end", "block", [A block that takes and gives nothing goes on as a value; the literals inside belong to it.]),
+  ("workers spawn", "task", [Makes one task in the set and gives it. Fails when no place is free.]),
+  ([`or_else (e) return end`], "task", [Success: skipped. On failure the word is left.]),
+  ("drop", "—", [The task value serves `resume` and `cancel`; here `run_all` runs it, so it is dropped.]),
+)
+
 `spawn` only makes a task; it does not run it. `run_all` gives each task of the set one turn after another, and a task
 gives its turn up at `yield`. Turn by turn, this is why the output alternates.
 
@@ -67,6 +76,12 @@ A fault in one task ends the whole run --- the other tasks stop too. The state r
 
 `TASK cancel` makes that task's next `yield`, or its wait for a queue, fail with `cancelled`. The task takes the failure with `or_else`, tidies up
 and ends. Cancelling does not stop a task by force.
+
+#qa[How many tasks can there be?][As many as the `count` of `tasks NAME count`, at most 4096. The place of a task that
+ended is used again. Each task has a call depth and a region of its own, so a large count needs a large block.]
+
+#qa[What does `yield` do in the main run?][Nothing, and it succeeds. The main run is not a task and has nobody to give
+a turn to. So the same word serves inside a task and outside.]
 
 #summary[
 - Tasks change only where they `yield` (standard 14.2).

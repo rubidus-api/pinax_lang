@@ -111,4 +111,36 @@ show
 </code></pre><p class="ex-label">Output</p><pre><code data-lang="text">$ pnx 05-chars.pnx
 bytes 9, characters 5
 &lt;한&gt;&lt;글&gt;&lt; &gt;&lt;o&gt;&lt;k&gt;
-</code></pre></div><div class="box summary"><p class="box-title">Summary</p><ul><li><code>str</code> is a view; cutting and splitting copy nothing (standard 7.3, 16.1).</li><li>A view cannot be kept in a long-lived place (global, cell, field) (7.3).</li><li>Long-lived places use <code>str(N)</code>; putting text there copies it, and text too long is a fault (7.3).</li><li>New bytes go into the region; <code>mark</code>/<code>release</code> gives them back, and views made in between are refused after (12.2, 12.3).</li><li>A buffer is where text is built; it fails when full (8.7).</li><li>Lengths are bytes; for characters, <code>char_count</code> and <code>chars</code> (16.1).</li></ul></div></main><nav class="bottom"><a href="index.html">Start</a> · <a href="05.html">Previous</a> · <a href="07.html">Next</a> · <a href="../html-ko/06.html">한국어</a></nav></body></html>
+</code></pre></div><h3>5.6 Character classes, and reading a decimal</h3><p>To take “as many digits as there are” off the front of a text, use <code>str.span</code>. The classes are the constants <code>str.digit</code> <code>str.alpha</code> <code>str.alnum</code> <code>str.space</code> <code>str.upper_case</code> <code>str.lower_case</code> <code>str.hex_digit</code> <code>str.punct</code> (all ASCII). A number with a point is read as a <code>dec(N)</code> by <code>str.to_dec</code> (chapter 2); more digits after the point than <code>N</code> is a failure.</p><div class="example run"><p class="ex-file"><code>05-classes.pnx</code></p><pre><code data-lang="pinax"><span style="color: #d73948">use</span> io
+<span style="color: #d73948">use</span> <span style="color: #d73948">str</span>
+<span style="color: #74747c">rem span cuts off the run of one class of bytes at the front; to_dec reads a decimal.</span>
+<span style="color: #d73948">word</span> demo ()
+  <span style="color: #198810">"42abc"</span> <span style="color: #d73948">str</span>.digit <span style="color: #d73948">str</span>.span <span style="color: #d73948">to</span> (digits, rest)
+  <span style="color: #d73948">cat</span> (<span style="color: #198810">"["</span>, digits, <span style="color: #198810">"] ["</span>, rest, <span style="color: #198810">"]"</span>) io.println
+  <span style="color: #198810">"   x"</span> <span style="color: #d73948">str</span>.space <span style="color: #d73948">str</span>.span <span style="color: #d73948">to</span> (blanks, after)
+  <span style="color: #d73948">cat</span> (blanks <span style="color: #d73948">str</span>.len, <span style="color: #198810">" blanks, then "</span>, after) io.println
+  <span style="color: #198810">"12.50"</span> <span style="color: #b60157">2</span> <span style="color: #d73948">str</span>.to_dec <span style="color: #d73948">or_else</span> (e) <span style="color: #b60157">0</span>.00 <span style="color: #d73948">end</span> <span style="color: #d73948">to</span> price
+  <span style="color: #d73948">cat</span> (<span style="color: #198810">"price "</span>, price) io.println
+  <span style="color: #198810">"12.505"</span> <span style="color: #b60157">2</span> <span style="color: #d73948">str</span>.to_dec <span style="color: #d73948">or_else</span> (e) <span style="color: #d73948">cat</span> (<span style="color: #198810">"not a dec(2): "</span>, e err_text) io.println <span style="color: #b60157">0</span>.00 <span style="color: #d73948">end</span> drop
+<span style="color: #d73948">end</span>
+demo
+</code></pre><p class="ex-label">Output</p><pre><code data-lang="text">$ pnx 05-classes.pnx
+[42] [abc]
+3 blanks, then x
+price 12.50
+not a dec(2): format
+</code></pre></div><table><thead><tr><th><strong>Token</strong></th><th><strong>Stack after it</strong></th><th><strong>What happened</strong></th></tr></thead><tbody><tr><td><code>"42abc" str.digit</code></td><td><code>"42abc" 48</code></td><td>The text and the class (a class is a small integer).</td></tr><tr><td><code>str.span</code></td><td><code>"42" "abc"</code></td><td>The digits at the front and the rest, both views of the same text.</td></tr><tr><td><code>to (digits, rest)</code></td><td><code>—</code></td><td>The right-hand name takes the top value.</td></tr></tbody></table><p>Two words write joined or replaced text straight into a buffer: <code>str.join_into</code> joins the pieces of a stem with a separator, <code>str.replace_into</code> appends the replaced text and gives the number of replacements. Both fail when the buffer is full. <code>join_into</code> takes the stem last, because a stem is taken by the word right after it (chapter 4).</p><div class="example run"><p class="ex-file"><code>05-join.pnx</code></p><pre><code data-lang="pinax"><span style="color: #d73948">use</span> io
+<span style="color: #d73948">use</span> <span style="color: #d73948">str</span>
+<span style="color: #d73948">buffer</span> joined <span style="color: #b60157">64</span>
+<span style="color: #d73948">buffer</span> fixed <span style="color: #b60157">64</span>
+<span style="color: #d73948">word</span> demo (<span style="color: #d73948">or</span> <span style="color: #d73948">fail</span>)
+  <span style="color: #198810">", "</span> joined <span style="color: #198810">"alpha beta gamma"</span> <span style="color: #d73948">str</span>.words <span style="color: #d73948">str</span>.join_into <span style="color: #d73948">or_fail</span>   <span style="color: #74747c">rem the stem comes last</span>
+  joined contents io.println
+  <span style="color: #198810">"hello world"</span> <span style="color: #198810">"o"</span> <span style="color: #198810">"0"</span> fixed <span style="color: #d73948">str</span>.replace_into <span style="color: #d73948">or_fail</span> <span style="color: #d73948">to</span> n
+  <span style="color: #d73948">cat</span> (n, <span style="color: #198810">" replaced: "</span>, fixed contents) io.println
+<span style="color: #d73948">end</span>
+demo <span style="color: #d73948">or_else</span> (e) e err_text io.println <span style="color: #d73948">end</span>
+</code></pre><p class="ex-label">Output</p><pre><code data-lang="text">$ pnx 05-join.pnx
+alpha, beta, gamma
+2 replaced: hell0 w0rld
+</code></pre></div><div class="box qa"><p class="box-title">Q&amp;A</p><p><strong>Q. Do the character classes know Korean or other Unicode letters?</strong></p><p>A. No. A class covers ASCII only; a Korean syllable is not in <code>str.alpha</code>. When characters rather than bytes matter, take them one by one with <code>str.chars</code> and compare them yourself.</p></div><div class="box summary"><p class="box-title">Summary</p><ul><li><code>str</code> is a view; cutting and splitting copy nothing (standard 7.3, 16.1).</li><li>A view cannot be kept in a long-lived place (global, cell, field) (7.3).</li><li>Long-lived places use <code>str(N)</code>; putting text there copies it, and text too long is a fault (7.3).</li><li>New bytes go into the region; <code>mark</code>/<code>release</code> gives them back, and views made in between are refused after (12.2, 12.3).</li><li>A buffer is where text is built; it fails when full (8.7).</li><li>Lengths are bytes; for characters, <code>char_count</code> and <code>chars</code> (16.1).</li></ul></div></main><nav class="bottom"><a href="index.html">Start</a> · <a href="05.html">Previous</a> · <a href="07.html">Next</a> · <a href="../html-ko/06.html">한국어</a></nav></body></html>

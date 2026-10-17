@@ -1,0 +1,10 @@
+rem run
+use io
+use csv
+buffer out 64
+word demo (or fail)
+  "kim" out csv.put or_fail  3 out csv.put_int or_fail  true out csv.put_bool or_fail  out csv.end_line or_fail
+  "a, b" out csv.put or_fail  2.50 out csv.put_dec or_fail  out csv.end_line or_fail
+  out contents io.print
+end
+demo or_else (e) e err_text io.println end

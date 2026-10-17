@@ -54,6 +54,18 @@ is an owned value as well.
 
 #ex("manual", "09-region-loop.pnx")
 
+One turn, followed. The mark that `mark` gives is a use-once value too, so the way out on failure hands it to
+`release` as well.
+
+#trace(
+  ("mark", "m", [Puts the region's current place on as a mark: a use-once value.]),
+  ("to m", "—", [Names it.]),
+  ("cat (…)", "\"row 1: 1\\n\"", [New text goes into the region.]),
+  ("report append", "—", [Copies it into the buffer. Fails when the buffer is full.]),
+  ([`or_else (e) m release e fail end`], "—", [The way of failure: gives the region back and fails for the same reason. On success, skipped.]),
+  ("m release", "—", [The region goes back to the mark; the next turn reuses the bytes `cat` wrote.]),
+)
+
 Bytes appended to a buffer are copied into it, so they survive giving the region back.
 
 == Deferring: `defer`
@@ -76,6 +88,10 @@ would be closed twice on the way out. Leave the closing to the defer.
 
 `defer` is written right in a word's body, a loop's body or a `do` block; not inside a branch of `if`. Deferred code
 leaves the stack as it found it, and a word that can fail inside it is taken with `or_else` (standard 10.7).
+
+#qa[Who closes an `owned` value I put into a global?][Nobody. Storing into a global is a handing over too, so the check
+ends there and the rest is the program's business. Write a word that takes it out of the global and closes it, and
+call it before the run ends. Only the handles of a run that ended with a fault are closed by the processor.]
 
 #summary[
 - An `owned` value is handed over exactly once on every path; lending is allowed any number of times (standard 12.4).

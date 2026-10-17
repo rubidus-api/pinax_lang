@@ -75,6 +75,11 @@ with `not_found` when there is none). Rows written with `row` are in it from the
 after `insert`, as `register` above does. When the key is there already, `insert` fails and the row added with `add_row`
 stays in the list --- so it is cleaner to `lookup` the key first and add after.]
 
+#qa[Can a row of one table go into another table?][No. The type of a row is the name of its table. A row of `cart`
+is used with `cart` only; given to a field or a list of another table it is refused as the wrong type. To move a row
+between two tables of the same record, read the fields one by one into a new row, or copy with `filter_into`
+(chapter 6).]
+
 #summary[
 - Records are handled as rows of tables; fields are read and stored as `RECORD.FIELD` (standard 8.8).
 - A row is a number checked on every use; a field of the none row is a fault (8.8).

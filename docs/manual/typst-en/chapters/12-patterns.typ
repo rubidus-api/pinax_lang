@@ -50,6 +50,20 @@ A block can also make the text that replaces each match.
 
 #ex("manual", "12-replace-by.pnx")
 
+Three more words search. #word("rex.match") gives the first match and fails when there is none. #word("rex.matches") is
+a stem that runs the block once per match; the block takes the whole match and one `str` per group. #word("rex.split")
+is the stem of the pieces between matches. `ptn` has the same stem, #word("ptn.matches").
+
+#ex("manual", "12-rex-words.pnx")
+#ex("manual", "12-ptn-matches.pnx")
+
+#trace(
+  ("\"order 66, aisle 7\" r\"\\d+\" rex.rx", "\"order 66, aisle 7\" re", [The text and the pattern program; `rex.rx` builds it at load.]),
+  ("rex.match", "\"66\"", [A view of the first match. With none, it fails.]),
+  ([`or_else (e) "none" end`], "\"66\"", [Success: skipped.]),
+  ("io.println", "—", [Prints it.]),
+)
+
 #mistake[Writing a regular expression in an ordinary string][`"\d+"` is refused, because in an ordinary string `\d` is
 an unknown escape. Worse is `"\b"`: it becomes a backspace character and quietly means something else. Write patterns
 in raw strings `r"…"`.
@@ -69,6 +83,10 @@ When a pattern made while running is needed, use `rex.compile`. A malformed patt
 #qa[Which do I use, `ptn` or `rex`?][For short patterns with a few captures `ptn` is lighter. When you need alternation
 or counts, when the pattern comes from outside, or when the text is very long, use `rex`. `ptn` goes back and tries
 again, so a bad pattern runs into its step limit and stops with a fault.]
+
+#qa[Is a match copied?][No. What `rex.match` gives, the groups and the pieces of `split` are all views of the original
+text (chapter 5). Only replaced text is new: `replace` writes it in the region, `replace_into` and `replace_by` into a
+buffer.]
 
 #summary[
 - `ptn` has Lua-sized patterns; captures are read with `ptn.capture`, and with no match in the run it is the fault

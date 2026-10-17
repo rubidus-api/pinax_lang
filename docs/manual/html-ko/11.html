@@ -81,4 +81,27 @@ hits after reset 0
 </code></pre><p class="ex-label">출력</p><pre><code data-lang="text">$ ./10-data
 port: 8080
 refused: a data source defines no words and uses no modules
-</code></pre></div><p><code>pnx</code> 는 자료 적재를 하지 않는다. 자료 적재는 호스트의 일이다(14장).</p><div class="box summary"><p class="box-title">정리</p><ul><li>파일 하나가 모듈이고, <code>export</code> 한 것만 밖에서 보인다(표준 13.1, 13.2).</li><li><code>use 모듈 [as 별명]</code> 뒤에 <code>모듈.이름</code> 으로 쓴다(13.1).</li><li>낱말, 상수, 전역은 경로로, 타입과 레코드는 이름만으로 쓴다. 내보낸 전역에는 <code>set 모듈.이름</code> 으로 넣는다(13.2).</li><li>선언한 타입은 같은 타입끼리만 더하고 뺀다(7.4).</li><li>자료 적재는 선언과 값만 받는다(13.4).</li></ul></div></main><nav class="bottom"><a href="index.html">처음</a> · <a href="10.html">앞</a> · <a href="12.html">다음</a> · <a href="../html-en/11.html">English</a></nav></body></html>
+</code></pre></div><p><code>pnx</code> 는 자료 적재를 하지 않는다. 자료 적재는 호스트의 일이다(14장).</p><h3>10.4 호스트가 빌려주는 모듈</h3><p><code>io</code> <code>file</code> <code>clock</code> <code>random</code> <code>env</code> 는 표준 모듈이 아니라 <strong>호스트 모듈</strong>이다: 언어에 들어 있지 않고, 호스트가 등록할 때만 있다(14장). <code>pnx</code> 는 다섯을 모두 등록한다. 그래서 파일과 시계와 환경에 닿는 길은 호스트가 정한다 — 믿지 못하는 스크립트에는 <code>file</code> 을 주지 않으면 된다.</p><div class="example run"><p class="ex-file"><code>10-host-modules.pnx</code></p><pre><code data-lang="pinax"><span style="color: #74747c">rem run: args alpha beta</span>
+<span style="color: #d73948">use</span> io
+<span style="color: #d73948">use</span> <span style="color: #d73948">str</span>
+<span style="color: #d73948">use</span> env
+<span style="color: #d73948">use</span> random
+<span style="color: #d73948">use</span> clock
+<span style="color: #d73948">word</span> demo ()
+  <span style="color: #d73948">cat</span> (<span style="color: #198810">"arguments: "</span>, env.arg_count) io.println             <span style="color: #74747c">rem 0 is the program file</span>
+  <span style="color: #b60157">1</span> env.arg <span style="color: #d73948">or_else</span> (e) <span style="color: #198810">"?"</span> <span style="color: #d73948">end</span> io.println
+  <span style="color: #198810">"PINAX_NO_SUCH_VARIABLE"</span> env.getenv <span style="color: #d73948">or_else</span> (e) <span style="color: #d73948">cat</span> (<span style="color: #198810">"getenv failed: "</span>, e err_text) <span style="color: #d73948">end</span> io.println
+  <span style="color: #b60157">7</span> random.seed                                             <span style="color: #74747c">rem the same seed, the same numbers</span>
+  <span style="color: #d73948">cat</span> (<span style="color: #b60157">10</span> random.random_below, <span style="color: #198810">" "</span>, <span style="color: #b60157">10</span> random.random_below, <span style="color: #198810">" "</span>, <span style="color: #b60157">10</span> random.random_below) io.println
+  clock.monotonic_ns <span style="color: #d73948">to</span> a
+  clock.monotonic_ns <span style="color: #d73948">to</span> b
+  <span style="color: #d73948">cat</span> (<span style="color: #198810">"the clock does not go back: "</span>, b a lt not) io.println
+<span style="color: #d73948">end</span>
+demo
+</code></pre><p class="ex-label">출력</p><pre><code data-lang="text">$ pnx 10-host-modules.pnx
+arguments: 1
+?
+getenv failed: not_found
+7 2 8
+the clock does not go back: true
+</code></pre></div><p><code>env.arg_count</code> 와 <code>env.arg</code> 는 명령줄의 인자이고(0 번은 프로그램 파일), <code>env.getenv</code> 는 환경 변수다. <code>random.seed</code> 뒤의 <code>random.random_below</code> 는 같은 씨앗에 같은 수열을 내므로 시험에서 쓰기 좋다. <code>clock.monotonic_ns</code> 는 거꾸로 가지 않는 시계라 걸린 시간을 재는 데 쓰고, <code>clock.now_ms</code> 는 달력의 시각이며, <code>clock.sleep</code> 은 밀리초만큼 멈춘다. <code>random.random</code> 은 범위 없는 64 비트 난수다(암호에 쓰는 것이 아니다).</p><table><thead><tr><th><strong>토큰</strong></th><th><strong>그 뒤의 스택</strong></th><th><strong>일어난 일</strong></th></tr></thead><tbody><tr><td><code>1</code></td><td><code>1</code></td><td>몇 번째 인자인지.</td></tr><tr><td><code>env.arg</code></td><td><code>"alpha"</code></td><td>그 인자. 없는 번호면 실패한다.</td></tr><tr><td><code>or_else (e) "?" end</code></td><td><code>"alpha"</code></td><td>성공이라 건너뛴다. 실패였다면 <code>"?"</code> 가 그 자리에 온다.</td></tr><tr><td><code>io.println</code></td><td><code>—</code></td><td>찍는다.</td></tr></tbody></table><div class="box qa"><p class="box-title">문답</p><p><strong>물음. 모듈 파일 안에서 <code>io.println</code> 을 써도 되는가?</strong></p><p>답. 모듈도 <code>use io</code> 를 적으면 된다. 다만 모듈을 적재하는 호스트가 <code>io</code> 를 등록하지 않았으면 그 모듈은 거절된다. 널리 쓰일 모듈은 호스트 모듈에 기대지 않고 결과를 돌려주는 편이 낫다.</p></div><div class="box summary"><p class="box-title">정리</p><ul><li>파일 하나가 모듈이고, <code>export</code> 한 것만 밖에서 보인다(표준 13.1, 13.2).</li><li><code>use 모듈 [as 별명]</code> 뒤에 <code>모듈.이름</code> 으로 쓴다(13.1).</li><li>낱말, 상수, 전역은 경로로, 타입과 레코드는 이름만으로 쓴다. 내보낸 전역에는 <code>set 모듈.이름</code> 으로 넣는다(13.2).</li><li>선언한 타입은 같은 타입끼리만 더하고 뺀다(7.4).</li><li>자료 적재는 선언과 값만 받는다(13.4).</li></ul></div></main><nav class="bottom"><a href="index.html">처음</a> · <a href="10.html">앞</a> · <a href="12.html">다음</a> · <a href="../html-en/11.html">English</a></nav></body></html>

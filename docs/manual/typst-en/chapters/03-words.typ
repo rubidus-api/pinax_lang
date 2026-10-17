@@ -105,6 +105,10 @@ A word may call itself without announcing it. A #strong[tail call] --- a call th
 in `gcd` --- reuses the place, so the depth does not grow. A call with work left after it, as in `fib`, piles up depth,
 and too deep stops with the fault `depth`. Two words that call each other announce one with `forward word`.
 
+#qa[A word's body is long and I lose the stack. What do I do?][`pnx see FILE` shows the stack at the end of every line
+of a definition (chapter 15). Write the body one step per line, and name the values in the middle with `to NAME`
+(chapter 4): then no more than two values are on the stack at once.]
+
 #summary[
 - Every word has a signature, checked where it is called and in its body (standard 9.2).
 - The value put on first is the first input. The body starts with an empty stack (bare inputs stay on it) and ends with

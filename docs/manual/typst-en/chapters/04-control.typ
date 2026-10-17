@@ -112,6 +112,10 @@ is expanded in place, so it can use the locals around it.
 `lo hi range` is a stem too (`hi` is not included). `fold` takes a first value before the stem, and its block takes
 (the value so far, an element) and gives the new value.
 
+#qa[What if the two branches of `if` should leave values of different types?][They cannot. The code after `if` does not
+know which branch ran, so both leave the same number of values of the same types. When one branch has a value and the
+other has not, that is a failure (chapter 8) or a row asked with `is_none` (chapter 7).]
+
 #summary[
 - `to NAME` stores into a local, `set NAME` into a global (standard 9.4).
 - A name made inside a branch is not visible outside it (9.4).

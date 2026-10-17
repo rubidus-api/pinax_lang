@@ -18,6 +18,21 @@ Pinax tells two kinds of wrong apart.
 
 With no exceptions, an error never skips several words and gets caught somewhere unexpected.
 
+The reason of a failure is a value of type `err`. Twelve have names, and `e err_text` gives the name as text. Any of
+them can be raised with `fail`; some are also what the processor stops with as a fault.
+
+#table(columns: (auto, 1fr), inset: 5pt, stroke: 0.5pt + luma(170),
+  table.header([*Name*], [*When*]),
+  [`err.failed`], [a failure in general; the fault of a false `assert`],
+  [`err.not_found`], [something is missing: a key, a file, the end of the input, the separator of `str.try_cut`],
+  [`err.format`], [text or bytes of the wrong form: `str.to_int`, `json`, `bytes.unpack`],
+  [`err.full`], [a capacity is used up: a list, a queue, a buffer, the region],
+  [`err.range`], [an index outside the range; `pop` on an empty list, `take` on an empty queue],
+  [`err.overflow` `err.div_zero`], [an integer overflowed, a division by zero; faults, but the `chk_` words give them as failures],
+  [`err.depth` `err.stale`], [calls too deep; a row or handle used after it was given back; faults],
+  [`err.cancelled` `err.deadlock` `err.interrupted`], [about tasks (chapter 13) and the host (chapter 14)],
+)
+
 == Three words that handle a failure
 
 Right after a word that can fail comes one #strong[guard]:
@@ -73,6 +88,10 @@ Where a fault could happen and you want a failure instead, use the `chk_` words.
 #qa[How do I decide what is a failure and what is a fault?][What happens because of data from outside (user input,
 files, the network) is a failure. What goes away only by fixing the program (a miscomputed index, a broken promise) is
 a fault.]
+
+#qa[My word has a new kind of failure to report. Can I make a new name?][There are only the twelve. Raise the one whose
+meaning is nearest with `fail`: `err.format` for a wrong input, `err.not_found` for something missing, `err.full` for no
+room. A more exact reason goes into a result value or a global.]
 
 #summary[
 - After a word that can fail comes `or_fail`, `or_return` or `or_else` (standard 11.2).

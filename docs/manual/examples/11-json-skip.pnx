@@ -1,0 +1,21 @@
+rem run
+use io
+use str
+use json
+record point
+  x int
+  y int
+end
+array pts point 1
+word demo (or fail)
+  "{\"tags\": [1, [2, 3]], \"x\": 4}" json.next or_fail to (k, v, rest)   rem the {
+  rest json.next or_fail to (k, v, rest)                                   rem the key tags
+  rest json.skip or_fail to rest                                           rem the whole array, however deep
+  rest json.next or_fail to (k, v, rest)                                   rem the key x
+  rest json.next or_fail to (k, v, rest)                                   rem 4
+  cat ("after the skip: ", v, ", a number? ", k json.number eq) io.println
+  "{\"x\": 7, \"y\": 9}" 0 pts idx json.unpack or_fail drop
+  cat ("unpacked ", 0 pts idx point.x, " ", 0 pts idx point.y) io.println
+  "{\"x\": true}" 0 pts idx json.unpack or_else (e) cat ("unpack failed: ", e err_text) io.println "" end drop
+end
+demo or_else (e) e err_text io.println end
