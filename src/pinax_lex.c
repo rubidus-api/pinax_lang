@@ -175,6 +175,9 @@ static bool number(pnx_lexer *lx, pnx_token *t) {
             double scale = 1.0 / 16.0;
             for (uint32_t k = 0; k < nf; ++k, scale /= 16.0)
                 v += lex_hex_value((uint8_t)fraction[k]) * scale;
+            // at most 79 digits each side: past 1500 the value is already infinite or 0, and a
+            // longer loop would make a few bytes of source cost a million steps
+            e = e > 1500 ? 1500 : e < -1500 ? -1500 : e;
             for (; e > 0; --e)
                 v *= 2.0;
             for (; e < 0; ++e)

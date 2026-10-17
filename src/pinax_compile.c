@@ -320,6 +320,14 @@ typedef struct trunc_edge {
     uint32_t word, param, callee, callee_param;
 } trunc_edge;
 
+// Entries of a table by name (name_first), once the table is long: a source of many names would
+// otherwise cost the square of its length to compile. `slot` holds entry numbers (NONE: empty), a
+// power of two of them, at least twice the entries; the first `n` entries are in it.
+typedef struct nindex {
+    uint32_t *slot;
+    uint32_t  cap, n;
+} nindex;
+
 typedef struct comp {
     pinax_state *st;
     const char  *file;
@@ -346,6 +354,7 @@ typedef struct comp {
     uint32_t     nested;   // value blocks open
     uint32_t     cats;     // cat ( ... ) open: each is a call of do_cat on the C stack
     uint32_t     sigs;     // block types inside the signature being read, the same for parse_sig
+    nindex       ix_words, ix_fwds, ix_consts, ix_globals, ix_records, ix_externs, ix_dtypes; // by name
     uint32_t     def_index; // the word a definition just made
     // Several loads make one program (RFC-0014). What earlier loads declared lies below these
     // counts and belongs to other modules: a bare name finds only what lies above them.
@@ -471,6 +480,94 @@ static bool name_eq(name a, name b) {
     return a.length == b.length && __builtin_memcmp(a.text, b.text, a.length) == 0;
 }
 
+static uint32_t name_hash(name n) {
+    uint32_t h = 2166136261u;
+    for (uint32_t k = 0; k < n.length; ++k)
+        h = (h ^ ((const uint8_t *)n.text)[k]) * 16777619u;
+    return h;
+}
+
+// Puts the entries of `v` (each `size` bytes, its name first) added since the last time into `ix`,
+// making it anew in the working memory when it is too small. A name does not change once its entry
+// is in the table, and no table gets shorter while a source compiles. False when there is no room:
+// the table is then looked through entry by entry.
+static bool nindex_fill(comp *c, nindex *ix, const vec *v, size_t size) {
+    if (v->n * 2u > ix->cap) {
+        uint32_t cap = 256;
+        while (cap < v->n * 4u)
+            cap *= 2;
+        const size_t bytes = (size_t)cap * 4;
+        if (bytes > (size_t)(c->arena_end - c->arena))
+            return false;
+        ix->slot = (uint32_t *)(void *)c->arena;
+        c->arena += bytes;
+        __builtin_memset(ix->slot, 0xff, bytes);
+        ix->cap = cap;
+        ix->n = 0;
+    }
+    for (; ix->n < v->n; ++ix->n) {
+        uint32_t at = name_hash(*(const name *)(const void *)((const uint8_t *)v->ptr + (size_t)ix->n * size)) & (ix->cap - 1);
+        while (ix->slot[at] != 0xffffffffu)
+            at = (at + 1) & (ix->cap - 1);
+        ix->slot[at] = ix->n;
+    }
+    return true;
+}
+
+typedef bool name_ok(const comp *c, const void *entry, uint32_t k, uint32_t arg);
+
+// The first entry of `v` from `from` up to `to` that is named `n` and that `ok` takes; NONE when
+// there is none. The same answer whether the index is used or not. (The index is a cache: a lookup
+// through a const comp fills it too.)
+static uint32_t name_first(const comp *cc, nindex *ix, const vec *v, size_t size, name n, uint32_t from, uint32_t to,
+                           name_ok *ok, uint32_t arg) {
+    comp *c = (comp *)cc;
+    const uint8_t *all = v->ptr;
+#define ENTRY(k) ((const void *)(all + (size_t)(k) * size))
+    if (v->n >= 64 && nindex_fill(c, ix, v, size)) {
+        uint32_t best = 0xffffffffu;
+        for (uint32_t at = name_hash(n) & (ix->cap - 1); ix->slot[at] != 0xffffffffu; at = (at + 1) & (ix->cap - 1)) {
+            const uint32_t k = ix->slot[at];
+            if (k >= from && k < to && k < best && name_eq(*(const name *)ENTRY(k), n) && (!ok || ok(c, ENTRY(k), k, arg)))
+                best = k;
+        }
+        return best;
+    }
+    for (uint32_t k = from; k < to; ++k) {
+        if (name_eq(*(const name *)ENTRY(k), n) && (!ok || ok(c, ENTRY(k), k, arg)))
+            return k;
+    }
+#undef ENTRY
+    return 0xffffffffu;
+}
+
+static bool source_used(const comp *c, uint32_t m);
+
+// What the lookups take. _own: an entry of this source, or of the session's earlier lines in
+// this module. _from: one that module `arg` exports, or any module in use when arg is NONE.
+#define NAME_OK(T, table)                                                                          \
+    static bool T##_own(const comp *c, const void *e, uint32_t k, uint32_t arg) {                  \
+        (void)arg;                                                                                 \
+        return k >= c->base.table || ((const T *)e)->module == c->module;                          \
+    }                                                                                              \
+    static bool T##_from(const comp *c, const void *e, uint32_t k, uint32_t arg) {                 \
+        (void)k;                                                                                   \
+        const T *x = e;                                                                            \
+        return x->exported && (arg == 0xffffffffu ? source_used(c, x->module) : x->module == arg); \
+    }
+NAME_OK(wordsym, words)
+NAME_OK(constant, consts)
+NAME_OK(globalsym, globals)
+NAME_OK(record, records)
+NAME_OK(externsym, externs)
+NAME_OK(dtype, dtypes)
+#undef NAME_OK
+
+static bool table_from(const comp *c, const void *e, uint32_t k, uint32_t arg) { // a table of records, exported
+    const globalsym *g = e;
+    return g->kind != GK_SCALAR && g->record != NONE && globalsym_from(c, e, k, arg);
+}
+
 static bool name_is(name a, const char *text) {
     const size_t n = __builtin_strlen(text);
     return a.length == n && __builtin_memcmp(a.text, text, n) == 0;
@@ -593,11 +690,10 @@ static tid type_of_name(const comp *c, name n) {
         return (tid)(TY_REFROW + l->reg);
     if (name_is(n, "regex") && module_used(c, cname("rex"))) // the type of the module rex, seen where it is used
         return TY_REGEX;
-    for (uint32_t k = c->eval ? 0 : c->base.dtypes; k < c->dtypes.n; ++k) {
-        const dtype *d = (const dtype *)c->dtypes.ptr + k;
-        if ((k >= c->base.dtypes || d->module == c->module) && name_eq(d->name, n))
-            return (tid)((TY_DISTINCT + k) | (d->base & TY_SBANK));
-    }
+    uint32_t k = name_first(c, (nindex *)&c->ix_dtypes, &c->dtypes, sizeof(dtype), n, c->eval ? 0 : c->base.dtypes,
+                            c->dtypes.n, dtype_own, 0);
+    if (k != NONE)
+        return (tid)((TY_DISTINCT + k) | (((const dtype *)c->dtypes.ptr + k)->base & TY_SBANK));
     for (uint32_t k = 0; k < c->st->n_handle_types; ++k) { // a type the host gave
         if (name_is(n, c->st->handle_types[k].name))
             return (tid)(TY_HANDLE + k);
@@ -611,17 +707,12 @@ static tid type_of_name(const comp *c, name n) {
             return row_type(g);
     }
     // a type or a table of records that a module in use exports
-    for (uint32_t k = 0; k < c->base.dtypes; ++k) {
-        const dtype *d = (const dtype *)c->dtypes.ptr + k;
-        if (d->exported && name_eq(d->name, n) && source_used(c, d->module))
-            return (tid)((TY_DISTINCT + k) | (d->base & TY_SBANK));
-    }
-    for (uint32_t k = 0; k < c->base.globals; ++k) {
-        const globalsym *sym = (const globalsym *)c->globals.ptr + k;
-        if (sym->exported && sym->kind != GK_SCALAR && sym->record != NONE && name_eq(sym->name, n) &&
-            source_used(c, sym->module))
-            return row_type(k);
-    }
+    k = name_first(c, (nindex *)&c->ix_dtypes, &c->dtypes, sizeof(dtype), n, 0, c->base.dtypes, dtype_from, NONE);
+    if (k != NONE)
+        return (tid)((TY_DISTINCT + k) | (((const dtype *)c->dtypes.ptr + k)->base & TY_SBANK));
+    k = name_first(c, (nindex *)&c->ix_globals, &c->globals, sizeof(globalsym), n, 0, c->base.globals, table_from, NONE);
+    if (k != NONE)
+        return row_type(k);
     return TY_NONE;
 }
 
@@ -1385,27 +1476,22 @@ static local *find_local(fn *f, name n) {
 }
 
 static wordsym *find_word(comp *c, name n, uint32_t *index) {
-    wordsym *all = c->words.ptr;
-    for (uint32_t k = c->eval ? 0 : c->base.words; k < c->words.n; ++k) {
-        if ((k >= c->base.words || all[k].module == c->module) && name_eq(all[k].name, n)) {
-            if (index)
-                *index = k;
-            return &all[k];
-        }
-    }
-    return NULL;
+    const uint32_t k = name_first(c, &c->ix_words, &c->words, sizeof(wordsym), n, c->eval ? 0 : c->base.words,
+                                  c->words.n, wordsym_own, 0);
+    if (k == NONE)
+        return NULL;
+    if (index)
+        *index = k;
+    return (wordsym *)c->words.ptr + k;
 }
 
 static fwd *find_fwd(const comp *c, name n, uint32_t *index) {
-    fwd *all = c->fwds.ptr;
-    for (uint32_t k = 0; k < c->fwds.n; ++k) {
-        if (name_eq(all[k].name, n)) {
-            if (index)
-                *index = k;
-            return &all[k];
-        }
-    }
-    return NULL;
+    const uint32_t k = name_first(c, (nindex *)&c->ix_fwds, &c->fwds, sizeof(fwd), n, 0, c->fwds.n, NULL, 0);
+    if (k == NONE)
+        return NULL;
+    if (index)
+        *index = k;
+    return (fwd *)c->fwds.ptr + k;
 }
 
 // The module a path prefix stands for: `use io` opens io, `use rex as rx` opens rx for rex.
@@ -1498,40 +1584,25 @@ static const core_word *find_core(name n) {
 }
 
 static const constant *find_const(const comp *c, name n) {
-    const constant *all = c->consts.ptr;
-    for (uint32_t k = c->eval ? 0 : c->base.consts; k < c->consts.n; ++k) {
-        if ((k >= c->base.consts || all[k].module == c->module) && name_eq(all[k].name, n))
-            return &all[k];
-    }
-    return NULL;
+    const uint32_t k = name_first(c, (nindex *)&c->ix_consts, &c->consts, sizeof(constant), n,
+                                  c->eval ? 0 : c->base.consts, c->consts.n, constant_own, 0);
+    return k == NONE ? NULL : (const constant *)c->consts.ptr + k;
 }
 
 static uint32_t find_global(const comp *c, name n) {
-    const globalsym *all = c->globals.ptr;
-    for (uint32_t k = c->eval ? 0 : c->base.globals; k < c->globals.n; ++k) {
-        if ((k >= c->base.globals || all[k].module == c->module) && name_eq(all[k].name, n))
-            return k;
-    }
-    return NONE;
+    return name_first(c, (nindex *)&c->ix_globals, &c->globals, sizeof(globalsym), n, c->eval ? 0 : c->base.globals, c->globals.n,
+                      globalsym_own, 0);
 }
 
 static uint32_t find_record(const comp *c, name n) {
-    const record *all = c->records.ptr;
-    for (uint32_t k = c->eval ? 0 : c->base.records; k < c->records.n; ++k) {
-        if ((k >= c->base.records || all[k].module == c->module) && name_eq(all[k].name, n))
-            return k;
-    }
-    return NONE;
+    return name_first(c, (nindex *)&c->ix_records, &c->records, sizeof(record), n, c->eval ? 0 : c->base.records, c->records.n,
+                      record_own, 0);
 }
 
 // The extern of this source called `n`: its number in comp.externs, or NONE.
 static uint32_t find_extern(const comp *c, name n) {
-    const externsym *all = c->externs.ptr;
-    for (uint32_t k = c->eval ? 0 : c->base.externs; k < c->externs.n; ++k) {
-        if ((k >= c->base.externs || all[k].module == c->module) && name_eq(all[k].name, n))
-            return k;
-    }
-    return NONE;
+    return name_first(c, (nindex *)&c->ix_externs, &c->externs, sizeof(externsym), n, c->eval ? 0 : c->base.externs, c->externs.n,
+                      externsym_own, 0);
 }
 
 // The record a field path begins with: one of this source, or one a module in use exports.
@@ -1539,12 +1610,8 @@ static uint32_t find_record_any(const comp *c, name n) {
     const uint32_t own = find_record(c, n);
     if (own != NONE)
         return own;
-    const record *all = c->records.ptr;
-    for (uint32_t k = 0; k < c->base.records; ++k) {
-        if (all[k].exported && name_eq(all[k].name, n) && source_used(c, all[k].module))
-            return k;
-    }
-    return NONE;
+    return name_first(c, (nindex *)&c->ix_records, &c->records, sizeof(record), n, 0, c->base.records, record_from,
+                      NONE);
 }
 
 // Field `n` of record `r`, or NULL.
@@ -2571,14 +2638,13 @@ static bool set_global(comp *c) {
         if (m == NONE)
             return error(c, PINAX_ERR_NOT_FOUND, "set takes a global, or a global a module in use exports");
         const name n = {path.text + dot + 1, path.length - dot - 1};
-        const globalsym *all = c->globals.ptr;
-        for (uint32_t k = 0; k < c->base.globals; ++k) {
-            if (all[k].module == m && all[k].exported && name_eq(all[k].name, n)) {
-                c->path_global = k;
-                const bool ok = store_local(c, n);
-                c->path_global = NONE;
-                return ok && advance(c);
-            }
+        const uint32_t k = name_first(c, &c->ix_globals, &c->globals, sizeof(globalsym), n, 0, c->base.globals,
+                                      globalsym_from, m);
+        if (k != NONE) {
+            c->path_global = k;
+            const bool ok = store_local(c, n);
+            c->path_global = NONE;
+            return ok && advance(c);
         }
         return error(c, PINAX_ERR_NOT_FOUND, "the module exports no global of this name");
     }
@@ -5946,29 +6012,22 @@ static bool read_global(comp *c, uint32_t g) {
 
 // A word, constant or global that module `m` exports, written m.name here.
 static bool module_symbol(comp *c, uint16_t m, name n) {
-    const wordsym *words = c->words.ptr;
-    for (uint32_t k = 0; k < c->base.words; ++k) {
-        if (words[k].module == m && words[k].exported && name_eq(words[k].name, n))
-            return call_word(c, &words[k].sig, k);
+    uint32_t k = name_first(c, &c->ix_words, &c->words, sizeof(wordsym), n, 0, c->base.words, wordsym_from, m);
+    if (k != NONE)
+        return call_word(c, &((const wordsym *)c->words.ptr)[k].sig, k);
+    k = name_first(c, &c->ix_consts, &c->consts, sizeof(constant), n, 0, c->base.consts, constant_from, m);
+    if (k != NONE) {
+        const constant *x = (const constant *)c->consts.ptr + k;
+        if (x->type == TY_STR)
+            return push_string(c, (uint32_t)x->value) && advance(c);
+        return push(c, (entry){.type = x->type, .kind = E_CONST, .value = x->value}) && advance(c);
     }
-    const constant *consts = c->consts.ptr;
-    for (uint32_t k = 0; k < c->base.consts; ++k) {
-        if (consts[k].module == m && consts[k].exported && name_eq(consts[k].name, n)) {
-            if (consts[k].type == TY_STR)
-                return push_string(c, (uint32_t)consts[k].value) && advance(c);
-            return push(c, (entry){.type = consts[k].type, .kind = E_CONST, .value = consts[k].value}) && advance(c);
-        }
-    }
-    const globalsym *globals = c->globals.ptr;
-    for (uint32_t k = 0; k < c->base.globals; ++k) {
-        if (globals[k].module == m && globals[k].exported && name_eq(globals[k].name, n))
-            return read_global(c, k);
-    }
-    const externsym *externs = c->externs.ptr;
-    for (uint32_t k = 0; k < c->base.externs; ++k) {
-        if (externs[k].module == m && externs[k].exported && name_eq(externs[k].name, n))
-            return call_host(c, externs[k].host);
-    }
+    k = name_first(c, &c->ix_globals, &c->globals, sizeof(globalsym), n, 0, c->base.globals, globalsym_from, m);
+    if (k != NONE)
+        return read_global(c, k);
+    k = name_first(c, &c->ix_externs, &c->externs, sizeof(externsym), n, 0, c->base.externs, externsym_from, m);
+    if (k != NONE)
+        return call_host(c, ((const externsym *)c->externs.ptr)[k].host);
     return error(c, PINAX_ERR_NOT_FOUND, "the module exports nothing of this name");
 }
 
