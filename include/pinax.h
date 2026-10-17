@@ -211,7 +211,9 @@ PINAX_API pinax_err pinax_handle_release(pinax_state *state, uint32_t type, pina
  * begins with its length, a uint64_t, and its declared bytes follow (so `bound buffer b 100`
  * takes 108 bytes); the length found there at binding must not exceed the declared size.
  * Until a global is bound it has storage of its own. Bind again after pinax_image_open(). The
- * memory must outlive the state. */
+ * memory must outlive the state. Refused (PINAX_ERR_STATE) while a run is suspended or waits, or
+ * from inside a host word: the run may hold views into the storage it has. So are pinax_share()
+ * and pinax_share_file(). */
 PINAX_API pinax_err pinax_bind(pinax_state *state, const char *global, void *memory, size_t bytes);
 
 /* Where a declared global lives, to read or write it in place between calls. `number` is what a

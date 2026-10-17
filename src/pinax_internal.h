@@ -158,6 +158,7 @@ typedef struct pnx_context {
     pnx_scell *sbank;
     pnx_frame *ctrl;
     uint32_t   int_slots, str_slots, depth_max, region_used, region_len;
+    uint32_t   region_floor; // RCUT goes no lower: the start of this run's part of the region
     uint32_t   pc, int_base, str_base, depth, depth_floor;
     uint32_t   resume_dst; // the register that learns whether the task it resumed has ended; UINT32_MAX: none
     bool       ends_task;  // returning at the floor ends a task, not the run
@@ -212,6 +213,7 @@ struct pinax_state {
     uint8_t   *region;
     pnx_host  *hosts;
     uint32_t   int_slots, str_slots, depth_max, region_len, region_used, n_hosts;
+    uint32_t   region_floor; // of the context running now (pnx_context)
 
     // loaded code; all inside the block
     const pnx_head     *head;
@@ -236,6 +238,9 @@ struct pinax_state {
     const uint8_t *lines;          // pnx_linerec records, head->n_lines of them (not aligned)
     char     where[112];           // "module:line: error" of the last fault, for pinax_error_text()
     uint32_t fault_ibase, fault_sbase; // the register windows of the word that faulted
+    int64_t   *fault_ibank;            // in the banks of the run it faulted in (a task's, perhaps),
+    pnx_scell *fault_sbank;            // until fault_locals() has read them
+    uint32_t   fault_int_slots, fault_str_slots;
     const uint8_t *localrecs;      // pnx_localrec records, head->n_locals of them (not aligned)
     // the locals of the word of the last fault, copied when it happened: names, types and the
     // bytes of str values lie in fault_pool
@@ -357,6 +362,14 @@ pinax_err pnx_extern_link(pinax_state *state, const char *module, const char *na
                           uint32_t *index);
 // Ends every task and puts the main run back in place: after a fault inside a task.
 void pnx_tasks_abort(pinax_state *state);
+// The banks the fault_ibase and fault_sbase of a fault are in: those of the run now.
+void pnx_fault_banks(pinax_state *state);
+// Where the run stands now, and back to it. A word run from a host word keeps it, so that
+// the run goes back there however that word ended.
+void pnx_ctx_save(const pinax_state *state, pnx_context *context);
+// That word ended badly while a task it resumed ran: the tasks entered since `task` was the
+// one running end, and the run is put back at `context`.
+void pnx_tasks_unwind(pinax_state *state, pnx_task *task, const pnx_context *context);
 // The name of source module `number`; empty when it has none.
 pinax_str pnx_module_name(const pinax_state *state, uint32_t number);
 uint32_t pnx_module_number(const pinax_state *state, const char *name, size_t length);

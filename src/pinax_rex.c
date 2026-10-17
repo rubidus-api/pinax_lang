@@ -540,6 +540,8 @@ static const rx_inst *rx_check(const uint8_t *prog, uint32_t len, rx_head *head)
             (in.op == RX_SAVE && in.a >= slots) || (in.op == RX_ASSERT && in.a >= RX_A_COUNT) ||
             (in.op == RX_RANGE && in.a > in.b))
             return NULL;
+        if (k + 1 == head->n_inst && in.op != RX_MATCH && in.op != RX_JMP && in.op != RX_SPLIT)
+            return NULL; // the last one would go on past the program
     }
     return (const rx_inst *)(const void *)at; // 8-byte records after a 16-byte head; read with memcpy below
 }

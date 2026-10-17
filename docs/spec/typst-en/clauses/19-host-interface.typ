@@ -132,10 +132,15 @@ library's `pinax_map_file(path, &bytes, &map)` maps the file read-only, so that 
 use the same pages. `pinax_share_file(state, global, bytes, from)` gives the file's global `from`, with the checks of
 (1a); an index needs the hash key of the file and its table given first from the same file. The file's head, the size
 and length of each global and the slots of an index are checked, else `PINAX_ERR_FORMAT`; its other bytes are trusted
-as an image's are (19.9). `bytes` starts on a 16-byte boundary and outlives the states that read it: call
+as an image's are (19.9), except that no more than N bytes are read from a `str(N)` cell whose length byte says more.
+`bytes` starts on a 16-byte boundary and outlives the states that read it: call
 `pinax_unmap_file` after they are closed.]
 
 #ex("spec", "19-share-file.c")
+
+#para("1d")[While a run is not finished --- suspended by the budget, waiting for a host operation, or inside a host
+word --- `pinax_bind`, `pinax_share` and `pinax_share_file` are `PINAX_ERR_STATE`: a view the run holds may point into
+the storage they would replace.]
 
 #para("2")[The `number` that `pinax_global_find` gives is what a word with a collection parameter (9.9) takes as that
 argument, an integer in `i`. A number of a collection of another kind or another size of element, or of no global, is the

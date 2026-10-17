@@ -256,7 +256,9 @@ PNX_OP(FGETS) {
     if (bad)
         return bad;
     const uint8_t *field = g->ptr + row * g->elem_bytes + ((x >> 12) & 0xfffu);
-    S[OP_A(w)] = (pnx_scell){PNX_SEG_GLOBAL, field[0], (uint64_t)(field + 1 - st->segment[PNX_SEG_GLOBAL])};
+    // never more than N: a shared table may come from a file another process wrote
+    const uint32_t length = field[0] <= (x >> 24) ? field[0] : x >> 24;
+    S[OP_A(w)] = (pnx_scell){PNX_SEG_GLOBAL, length, (uint64_t)(field + 1 - st->segment[PNX_SEG_GLOBAL])};
     return PNX_R_OK;
 }
 PNX_OP(FSETS) {
@@ -1665,7 +1667,7 @@ PNX_OP(RREP) {
 PNX_OP(RTOP) { R[OP_A(w)] = st->region_used; return PNX_R_OK; }
 PNX_OP(RCUT) {
     const uint64_t top = (uint64_t)R[OP_A(w)];
-    if (top > st->region_used)
+    if (top > st->region_used || top < st->region_floor) // not below this run's part (a task's, a nested word's)
         return PINAX_ERR_RANGE;
     if (st->region_used > st->region_peak)
         st->region_peak = st->region_used;
@@ -1802,7 +1804,7 @@ PNX_INLINE const uint8_t *pnx_index_key(const pinax_state *st, const pnx_global 
     const pnx_global *table = &st->globals[x->key & 0xfffu];
     const uint8_t *field = table->ptr + (size_t)(row - 1) * table->elem_bytes + ((x->key >> 12) & 0xfffu);
     if (x->key_is_str) {
-        *length = field[0];
+        *length = field[0] <= (x->key >> 24) ? field[0] : x->key >> 24; // N at most, as FGETS
         return field + 1;
     }
     const int64_t v = pnx_load_width(field, x->key >> 24);

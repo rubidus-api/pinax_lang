@@ -33,6 +33,7 @@ load, and the message names the limit. Another processor may have other values.
   [*Item*], [*This implementation*],
   [Stack depth inside a definition (values)], [64],
   [Blocks, branches and loops open inside each other], [32],
+  [`cat` inside `cat`], [32],
   [Block values inside block values], [4],
   [Locals of one word], [96],
   [Inputs / results of a signature], [16 / 16],

@@ -11,6 +11,7 @@
 #include "proven/sysio.h"
 #include "proven/time.h"
 
+#include <stdatomic.h>
 #include <stdint.h>
 
 static proven_u8str_view_t view_of(pinax_str s) {
@@ -289,32 +290,43 @@ static pinax_err clock_sleep(pinax_call *call, void *user, const pinax_args *arg
 
 // ---- random -------------------------------------------------------------------------------
 
+// One generator for the process. States on the threads of a loop (pinax_loop.h) call these words
+// at once, so the generator is used under a lock: held for a few instructions, a spin will do.
 static proven_xoshiro256ss_t generator;
 static bool                  generator_seeded;
+static atomic_flag           generator_lock = ATOMIC_FLAG_INIT;
 
-static proven_rng_t rng(void) {
+static proven_rng_t rng_take(void) {
+    while (atomic_flag_test_and_set_explicit(&generator_lock, memory_order_acquire)) {
+    }
     if (!generator_seeded) {
         proven_xoshiro256ss_seed(&generator, proven_random_u64());
         generator_seeded = true;
     }
     return proven_xoshiro256ss_rng(&generator);
 }
+static void rng_give(void) {
+    atomic_flag_clear_explicit(&generator_lock, memory_order_release);
+}
 static pinax_err random_next(pinax_call *call, void *user, const pinax_args *args) {
     (void)call, (void)user;
-    args->ri[0] = (int64_t)proven_rng_u64(rng());
+    args->ri[0] = (int64_t)proven_rng_u64(rng_take());
+    rng_give();
     return PINAX_OK;
 }
 static pinax_err random_below(pinax_call *call, void *user, const pinax_args *args) {
     (void)call, (void)user;
     if (args->i[0] <= 0)
         return PINAX_ERR_RANGE;
-    args->ri[0] = (int64_t)proven_rng_below(rng(), (proven_u64)args->i[0]);
+    args->ri[0] = (int64_t)proven_rng_below(rng_take(), (proven_u64)args->i[0]);
+    rng_give();
     return PINAX_OK;
 }
 static pinax_err random_seed(pinax_call *call, void *user, const pinax_args *args) {
     (void)call, (void)user;
+    (void)rng_take();
     proven_xoshiro256ss_seed(&generator, (proven_u64)args->i[0]);
-    generator_seeded = true;
+    rng_give();
     return PINAX_OK;
 }
 

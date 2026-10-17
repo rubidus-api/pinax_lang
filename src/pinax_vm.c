@@ -26,10 +26,13 @@ uint8_t *pnx_region_alloc(pinax_state *st, size_t bytes) {
 // ---- tasks ---------------------------------------------------------------------------------
 
 static void ctx_save(const pinax_state *st, pnx_context *c) {
-    *c = (pnx_context){st->ibank,     st->sbank,       st->ctrl,     st->int_slots,   st->str_slots,
-                       st->depth_max, st->region_used, st->region_len, st->pc,        st->int_base,
-                       st->str_base,  st->depth,       st->depth_floor, st->resume_dst, st->ends_task};
+    *c = (pnx_context){st->ibank,       st->sbank,       st->ctrl,       st->int_slots,   st->str_slots,
+                       st->depth_max,   st->region_used, st->region_len, st->region_floor, st->pc,
+                       st->int_base,    st->str_base,    st->depth,      st->depth_floor, st->resume_dst,
+                       st->ends_task};
 }
+
+void pnx_ctx_save(const pinax_state *st, pnx_context *c) { ctx_save(st, c); }
 
 static void ctx_load(pinax_state *st, const pnx_context *c) {
     st->ibank = c->ibank;
@@ -40,6 +43,7 @@ static void ctx_load(pinax_state *st, const pnx_context *c) {
     st->depth_max = c->depth_max;
     st->region_used = c->region_used;
     st->region_len = c->region_len;
+    st->region_floor = c->region_floor;
     st->pc = c->pc;
     st->int_base = c->int_base;
     st->str_base = c->str_base;
@@ -88,6 +92,24 @@ static void task_leave(pinax_state *st, bool ended) {
     ctx_load(st, st->task ? &st->task->ctx : &st->main);
     if (st->resume_dst != UINT32_MAX)
         st->ibank[st->int_base + st->resume_dst] = ended;
+}
+
+void pnx_fault_banks(pinax_state *st) {
+    st->fault_ibank = st->ibank;
+    st->fault_sbank = st->sbank;
+    st->fault_int_slots = st->int_slots;
+    st->fault_str_slots = st->str_slots;
+}
+
+void pnx_tasks_unwind(pinax_state *st, pnx_task *task, const pnx_context *c) {
+    while (st->task && st->task != task) { // each was resumed by the one before, inside that word
+        pnx_task *t = st->task;
+        st->task = t->parent;
+        t->state = PNX_TASK_FREE;
+        ++t->generation;
+    }
+    st->task = task;
+    ctx_load(st, c);
 }
 
 void pnx_tasks_abort(pinax_state *st) {
@@ -501,7 +523,7 @@ pinax_err pnx_execute(pinax_state *st) {
         CASE(CALL) {
             const pnx_wordrec *callee = &st->words[*pc++];
             const uint32_t new_ibase = ibase + OP_A(w), new_sbase = sbase + OP_B(w);
-            if (depth == st->depth_max || new_ibase + callee->int_cells > st->int_slots ||
+            if (depth >= st->depth_max || new_ibase + callee->int_cells > st->int_slots ||
                 new_sbase + callee->str_cells > st->str_slots)
                 FAULT(PINAX_ERR_DEPTH);
             st->ctrl[depth++] = (pnx_frame){(uint32_t)(pc - code), ibase, sbase, 0};
@@ -530,7 +552,7 @@ pinax_err pnx_execute(pinax_state *st) {
                 FAULT(PINAX_ERR_SIGNATURE);
             const pnx_wordrec *callee = &st->words[number];
             const uint32_t new_ibase = ibase + OP_A(w), new_sbase = sbase + OP_B(w);
-            if (depth == st->depth_max || new_ibase + callee->int_cells > st->int_slots ||
+            if (depth >= st->depth_max || new_ibase + callee->int_cells > st->int_slots ||
                 new_sbase + callee->str_cells > st->str_slots)
                 FAULT(PINAX_ERR_DEPTH);
             st->ctrl[depth++] = (pnx_frame){(uint32_t)(pc - code), ibase, sbase, 0};
@@ -689,9 +711,10 @@ pinax_err pnx_execute(pinax_state *st) {
             t->cancelled = t->yielded = t->blocked = false;
             t->wake_fail = t->wake_fault = PINAX_OK;
             t->wait.token = 0;
-            t->ctx = (pnx_context){t->ibank,     t->sbank,       t->ctrl, t->int_slots, t->str_slots,
-                                   t->depth_max, t->region_base, t->region_base + t->region_bytes,
-                                   callee->entry, 0, 0, 0, 0, UINT32_MAX, true};
+            t->ptn = (pnx_ptn_found){0}; // a capture is a view of what this task matched
+            t->ctx = (pnx_context){t->ibank,       t->sbank,     t->ctrl, t->int_slots, t->str_slots,
+                                   t->depth_max,   t->region_base, t->region_base + t->region_bytes,
+                                   t->region_base, callee->entry, 0, 0, 0, 0, UINT32_MAX, true};
             R[OP_A(w)] = (int64_t)((uint64_t)t->generation << 32 |
                                    (uint64_t)(t - (pnx_task *)(void *)g->ptr + 1));
             ++pc;
@@ -899,6 +922,7 @@ finished:
         st->fault_pc = (uint32_t)(pc - code);
         st->fault_ibase = ibase;
         st->fault_sbase = sbase;
+        pnx_fault_banks(st);
         // a fault inside a task ends the run and every task; so does a deadlock, whose tasks could never go on
         if ((st->task || result == PINAX_ERR_DEADLOCK) && st->nest == 0)
             pnx_tasks_abort(st);

@@ -344,6 +344,8 @@ typedef struct comp {
     vec          pending;  // pending_code: value blocks compiled inside the body now being compiled
     fn          *block_fn[MAX_NESTED];
     uint32_t     nested;   // value blocks open
+    uint32_t     cats;     // cat ( ... ) open: each is a call of do_cat on the C stack
+    uint32_t     sigs;     // block types inside the signature being read, the same for parse_sig
     uint32_t     def_index; // the word a definition just made
     // Several loads make one program (RFC-0014). What earlier loads declared lies below these
     // counts and belongs to other modules: a bare name finds only what lies above them.
@@ -710,6 +712,7 @@ static bool parse_ref(comp *c, tid *out) {
 }
 
 // "(" effect ")" ; the current token is the "(".
+enum { MAX_SIGS = 16 }; // "word (" is six bytes: deeper than this, the signature is past 71 bytes
 static bool parse_sig(comp *c, sig *s) {
     __builtin_memset(s, 0, sizeof *s);
     if (c->tok.kind != PNX_T_LPAREN)
@@ -762,7 +765,12 @@ static bool parse_sig(comp *c, sig *s) {
             }
             if (is_word(c, PNX_KW_word)) { // a block: word ( effect )
                 sig inner;
-                if (!advance(c) || !parse_sig(c, &inner) || !block_type(c, &inner, &t))
+                if (c->sigs == MAX_SIGS) // each is a call on the C stack; a signature that deep is too long anyway
+                    return syntax(c, "the signature is longer than 71 bytes");
+                ++c->sigs;
+                const bool parsed = advance(c) && parse_sig(c, &inner);
+                --c->sigs;
+                if (!parsed || !block_type(c, &inner, &t))
                     return false;
             } else if (c->tok.kind == PNX_T_NAME) {
                 type = tok_name(c);
@@ -3240,15 +3248,28 @@ static bool end_of(comp *c, block *b) {
 static bool body_token(comp *c);
 
 // cat ( item , item ... ) : every item is code that leaves one value; the values are joined
-// into one string in the region.
+// into one string in the region. A cat inside an item is a call inside this one: so many deep at
+// most, or a long source would run the C stack out.
+enum { MAX_CATS = 32 };
+static bool cat_items(comp *c);
+
 static bool do_cat(comp *c) {
-    fn *f = c->f;
     if (!advance(c))
         return false;
     if (c->tok.kind != PNX_T_LPAREN)
         return syntax(c, "cat is followed by its items in parentheses: cat (a, b)");
+    if (c->cats == MAX_CATS)
+        return syntax(c, "cat is nested too deeply");
     if (!advance(c))
         return false;
+    ++c->cats;
+    const bool done = cat_items(c);
+    --c->cats;
+    return done;
+}
+
+static bool cat_items(comp *c) {
+    fn *f = c->f;
     const uint32_t first = f->depth, floor = f->floor, blocks = f->n_blocks;
     for (;;) {
         const uint32_t before = f->depth;

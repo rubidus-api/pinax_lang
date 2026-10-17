@@ -1218,7 +1218,11 @@ static bool cell_readable(const pinax_state *st, pnx_scell cell, uint32_t n) {
 // registers still hold them: a load that faults is undone right after, records and all.
 static void fault_locals(pinax_state *st) {
     st->fault_n = st->fault_used = 0;
-    if (!st->head || !st->head->n_locals || !st->head->n_words)
+    int64_t *const   ibank = st->fault_ibank;
+    pnx_scell *const sbank = st->fault_sbank;
+    st->fault_ibank = NULL; // read once, right after the fault: an image does not carry them
+    st->fault_sbank = NULL;
+    if (!st->head || !st->head->n_locals || !st->head->n_words || !ibank || !sbank)
         return;
     const uint32_t pc = st->fault_pc ? st->fault_pc - 1 : 0;
     uint32_t word = 0;
@@ -1231,7 +1235,7 @@ static void fault_locals(pinax_state *st) {
         if (rec.word != word || at < rec.from || at >= rec.to)
             continue;
         const uint32_t reg = (rec.bank ? st->fault_sbase : st->fault_ibase) + rec.reg;
-        if (reg >= (rec.bank ? st->str_slots : st->int_slots))
+        if (reg >= (rec.bank ? st->fault_str_slots : st->fault_int_slots))
             continue;
         const uint32_t name_len = (uint32_t)__builtin_strlen(rec.name), type_len = (uint32_t)__builtin_strlen(rec.type);
         uint32_t text_len = 0;
@@ -1239,7 +1243,7 @@ static void fault_locals(pinax_state *st) {
         if (rec.bank) { // the first bytes of a str, when they are bytes this state can vouch for: the
             // local records are not checked against the code, so the register may hold a cell left
             // by an earlier run (whose host string may be gone)
-            cell = st->sbank[reg];
+            cell = sbank[reg];
             text_len = cell.length < 32 ? cell.length : 32;
             if (!cell_readable(st, cell, text_len))
                 text_len = 0;
@@ -1252,7 +1256,7 @@ static void fault_locals(pinax_state *st) {
                                        .type = (uint16_t)(st->fault_used + name_len), .type_len = (uint8_t)type_len,
                                        .text = (uint16_t)(st->fault_used + name_len + type_len),
                                        .text_len = (uint16_t)text_len, .kind = rec.kind,
-                                       .i = rec.bank ? 0 : st->ibank[reg]};
+                                       .i = rec.bank ? 0 : ibank[reg]};
         __builtin_memcpy(pool + out->name, rec.name, name_len);
         __builtin_memcpy(pool + out->type, rec.type, type_len);
         if (text_len)
@@ -1300,9 +1304,12 @@ static pinax_err run_nested(pinax_state *st, pinax_word word, const pinax_args *
     pnx_scell *const host_sa = st->host_sa;
     const uint32_t ibase = (uint32_t)(host_ia - st->ibank) + host->counts.int_args + host->counts.int_results;
     const uint32_t sbase = (uint32_t)(host_sa - st->sbank) + host->counts.str_args + host->counts.str_results;
-    if (st->depth == st->depth_max || ibase + rec->int_cells > st->int_slots ||
+    if (st->depth >= st->depth_max || ibase + rec->int_cells > st->int_slots ||
         sbase + rec->str_cells > st->str_slots)
         return fail(st, PINAX_ERR_DEPTH, "the word's window does not fit the banks");
+    pnx_task *const task = st->task;
+    pnx_context outer; // where the run goes back to, whatever task that word resumes and leaves
+    pnx_ctx_save(st, &outer);
     for (uint32_t k = 0; k < n.int_args; ++k)
         st->ibank[ibase + k] = args->i[k];
     for (uint32_t k = 0; k < n.str_args; ++k) { // the bytes move into the region: they may not outlive the call
@@ -1323,7 +1330,9 @@ static pinax_err run_nested(pinax_state *st, pinax_word word, const pinax_args *
     const uint32_t depth = st->depth;
     const pinax_err outer_fail = st->fail;
     const bool ends_task = st->ends_task;
+    const uint32_t region_floor = st->region_floor;
     st->ends_task = false; // this word returns to the host word, whatever runs around it
+    st->region_floor = st->region_used; // nor does it cut the region below its arguments
     st->pc = rec->entry;
     st->int_base = ibase;
     st->str_base = sbase;
@@ -1340,6 +1349,9 @@ static pinax_err run_nested(pinax_state *st, pinax_word word, const pinax_args *
         st->error_text = "the instruction budget ran out in a word run from a host word";
         err = PINAX_ERR_INTERRUPTED;
     }
+    if (st->task != task) // it ended inside a task it resumed: those tasks end, and the run is put back
+        pnx_tasks_unwind(st, task, &outer);
+    st->region_floor = region_floor;
     st->pc = pc;
     st->int_base = int_base;
     st->str_base = str_base;
@@ -1412,6 +1424,7 @@ pinax_err pinax_run(pinax_state *st, pinax_word word, const pinax_args *args) {
         st->run_serial = 1;
     st->pc = rec->entry;
     st->int_base = st->str_base = st->depth = st->depth_floor = 0;
+    st->region_floor = 0;
     st->ends_task = false;
     st->resume_dst = UINT32_MAX;
     st->left = st->budget;
@@ -1439,6 +1452,7 @@ pinax_err pinax_resume(pinax_state *st, const pinax_args *results) {
         st->fault_pc = st->pc;
         st->fault_ibase = st->int_base;
         st->fault_sbase = st->str_base;
+        pnx_fault_banks(st);
         if (st->task)
             pnx_tasks_abort(st);
     } else {
@@ -1502,11 +1516,18 @@ void pinax_stats_get(const pinax_state *st, pinax_stats *out) {
 // The storage of a global declared `bound`: a scalar, an array (of integers, of str(N), of
 // records) or a buffer. A buffer's memory begins with its length, a uint64_t, and its declared
 // bytes follow.
+// A run is suspended, waits, or a host word of it is running: the storage of its globals stays.
+static bool run_unfinished(const pinax_state *st) {
+    return st->host_cur || st->nest || st->suspended || st->loading;
+}
+
 pinax_err pinax_bind(pinax_state *st, const char *global, void *memory, size_t bytes) {
     if (!st || !global || !memory)
         return PINAX_ERR_ARGUMENT;
     if (!st->head)
         return fail(st, PINAX_ERR_STATE, "no code loaded");
+    if (run_unfinished(st)) // a view the run holds may point into the storage the host takes back
+        return fail(st, PINAX_ERR_STATE, "a run of the state is not finished");
     const pnx_globalrec *recs = (const pnx_globalrec *)(const void *)(st->words + st->head->n_words);
     for (uint32_t k = 0; k < st->head->n_globals; ++k) {
         if (!text_equal(recs[k].name, global))
@@ -1570,7 +1591,7 @@ pinax_err pinax_share(pinax_state *st, const char *global, pinax_state *source, 
         return PINAX_ERR_ARGUMENT;
     if (!st->head || !source->head)
         return fail(st, PINAX_ERR_STATE, "no code loaded");
-    if (st->host_cur || source->host_cur || source->suspended || source->loading)
+    if (run_unfinished(st) || run_unfinished(source))
         return fail(st, PINAX_ERR_STATE, "a run of one of the states is not finished");
     uint32_t             ti, si;
     const pnx_globalrec *trec = global_rec(st, global, &ti), *srec = global_rec(source, from, &si);
@@ -1717,8 +1738,12 @@ static const pnx_share_entry *share_entry(pinax_str file, uint32_t k) {
     case PNX_G_INDEX: { // a power of two of slots, each empty, removed or a row of its table
         if (e->rec.capacity & (e->rec.capacity - 1) || e->table >= k || (e->rec.reserved & ~1u))
             return NULL;
+        // the kind first: an index of an index would go on down the file, a call for each entry
+        const uint32_t table_kind = ((const pnx_share_entry *)(const void *)(file.ptr + sizeof *head) + e->table)->rec.kind;
+        if (table_kind != PNX_G_TABLE && table_kind != PNX_G_ROWS)
+            return NULL;
         const pnx_share_entry *table = share_entry(file, e->table);
-        if (!table || (table->rec.kind != PNX_G_TABLE && table->rec.kind != PNX_G_ROWS))
+        if (!table)
             return NULL;
         const uint32_t offset = (e->rec.elem_bytes >> 12) & 0xfffu, extra = e->rec.elem_bytes >> 24;
         if (offset + ((e->rec.reserved & 1u) ? 1u + extra : extra < PNX_W_COUNT ? width_bytes[extra] : UINT32_MAX) >
@@ -1741,7 +1766,7 @@ pinax_err pinax_share_file(pinax_state *st, const char *global, pinax_str file, 
         return PINAX_ERR_ARGUMENT;
     if (!st->head)
         return fail(st, PINAX_ERR_STATE, "no code loaded");
-    if (st->host_cur)
+    if (run_unfinished(st))
         return fail(st, PINAX_ERR_STATE, "a run of the state is not finished");
     if ((uintptr_t)file.ptr % 16)
         return fail(st, PINAX_ERR_ARGUMENT, "the file's bytes must start 16-byte aligned (a mapping always does)");
@@ -2349,6 +2374,7 @@ pinax_err pinax_image_open(pinax_mem block, pinax_str image, const pinax_config 
             handle_drop(st, k, false);
     }
     st->host_cur = NULL, st->host_ia = NULL, st->host_sa = NULL;
+    st->fault_ibank = NULL, st->fault_sbank = NULL;
     __builtin_memset(&st->before_load, 0, sizeof st->before_load);
     st->resolve = NULL, st->resolve_user = NULL;
     st->diag = config->diag, st->diag_user = config->diag_user;
