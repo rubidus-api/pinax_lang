@@ -33,6 +33,9 @@ values over a stack, and inside a word values have names. The rest of this docum
 #para("5")[This document defines rules. Someone learning Pinax for the first time will find the manual easier to start
 with. This document is for checking a rule exactly where the manual points to it ("standard 9.3").]
 
+#para("5a")[The index at the end points, for each term, to the clause and page that define it. Annex B collects the
+diagnostic messages of the clauses in one place.]
+
 #para("6")[Each clause has these parts in this order, leaving out the empty ones:
 - #strong[Syntax]: how it is written in a source (EBNF, annex A).
 - #strong[Constraints]: what is refused at load. Each constraint has a refused example and its message.

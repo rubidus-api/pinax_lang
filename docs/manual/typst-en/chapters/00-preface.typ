@@ -21,6 +21,7 @@ reading. The #strong[Common mistake] boxes are the places where people new to th
 A stack machine is new to many readers, so the book often follows a line of code through a table: each row is one
 token, the stack after it (the top on the right) and what happened. Chapter 2 explains the stack from the ground up; if
 the order of values and words ever seems backwards, go back to it. The remarks in the examples (after `rem`) say what
-each line does. Chapter 16 lists the messages you are most likely to meet, with what they mean and how to fix them.
+each line does. Chapter 16 lists the messages you are most likely to meet, with what they mean and how to fix them. The index at the
+end points to where a term is defined and where a word is first introduced.
 
 The examples are in `docs/manual/examples/` of the repository; run one with `pnx FILE`.
