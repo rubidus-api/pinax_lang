@@ -7630,7 +7630,8 @@ static bool compile(comp *c, image *im, bool *has_top) {
             } else if (c->st->diag) {
                 const wordsym *all = c->words.ptr;
                 for (uint32_t k = 0; k < c->words.n; ++k) {
-                    char text[120], effect[72];
+                    // "module.word effect": a module and a word name are 31 bytes at most, an effect 71
+                    char effect[72], text[32 + 32 + sizeof effect];
                     if (all[k].name.text[0] == '(')
                         continue;
                     if (k < c->base.words) // a word of an earlier load: its signature as it was written
