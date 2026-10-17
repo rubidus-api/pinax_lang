@@ -671,105 +671,141 @@ static bool set_meet(regset *into, const regset *from) {
     return changed;
 }
 
+// The work of check_flow for one instruction: what reaches it narrows what reaches the places it
+// goes on to; a place that narrowed and is not waiting to be looked at again is put on the list.
+// In the judging pass (`last`), a read of a register that may hold no value is the verdict.
+static const char *flow_step(const pinax_state *st, pnx_counts counts, span range, regset *in, uint32_t i, bool last,
+                             uint32_t *queue, uint8_t *queued, uint32_t *n_queue) {
+    const uint32_t *code = st->code;
+#define MEET(at, set)                                                                              \
+    do {                                                                                           \
+        const uint32_t at_ = (uint32_t)(at);                                                       \
+        if (set_meet(&in[at_], (set)) && !queued[at_]) {                                           \
+            queued[at_] = 1;                                                                       \
+            queue[(*n_queue)++] = at_;                                                             \
+        }                                                                                          \
+    } while (0)
+    const uint32_t w = code[i], op = w & 0xffu;
+    const pnx_opinfo info = opinfo[op];
+    const uint32_t reg[3] = {(w >> 8) & 0xffu, (w >> 16) & 0xffu, w >> 24};
+    const uint8_t kind[3] = {info.a, info.b, info.c};
+    const uint32_t next = i + (info.second ? 2u : 1u);
+    const uint32_t x = info.second ? code[i + 1] : 0;
+    regset now = in[i - range.begin], failed;
+    bool fails = info.fails, reads = true, falls = true;
+    int64_t target = -1;
+
+    const char *role = info.roles; // of each of A, B, C: r, w, m, or - for what names no register
+    for (unsigned k = 0; k < 3; ++k) { // what it reads holds a value
+        if (role[k] == 'r' || role[k] == 'm')
+            reads = reads && set_has(kind[k] == PNX_K_I ? now.i : now.s, reg[k], 1);
+    }
+    if (info.second == PNX_X_SREG)
+        reads = reads && x < 256 && set_has(now.s, x, 1);
+    pnx_counts callee = {0};
+    uint32_t ibase = reg[0], sbase = reg[1];
+    const bool calls = op == PNX_CALL || op == PNX_CALLR, hosts = op == PNX_HCALL || op == PNX_HCALLF;
+    if (op == PNX_CALL || op == PNX_TCALL) {
+        callee = st->word_counts[x];
+    } else if (op == PNX_CALLR) {
+        callee = (pnx_counts){(uint8_t)x, (uint8_t)(x >> 8), (uint8_t)(x >> 16), (uint8_t)((x >> 24) & 0x7fu),
+                              x >> 31 != 0, false};
+    } else if (hosts) {
+        callee = st->imports[x]->counts;
+    }
+    if (op == PNX_TCALL)
+        ibase = sbase = 0;
+    if (calls || hosts || op == PNX_TCALL)
+        reads = reads && set_has(now.i, ibase, callee.int_args) && set_has(now.s, sbase, callee.str_args);
+    if (op == PNX_RET || op == PNX_RETOK)
+        reads = set_has(now.i, 0, counts.int_results) && set_has(now.s, 0, counts.str_results);
+    if (!reads && last)
+        return "code: a register is read before it is written";
+
+    failed = now; // on the way where the operation fails nothing was written
+    if (calls) { // the callee's window lay over everything from its arguments up
+        set_cut(now.i, ibase);
+        set_cut(now.s, sbase);
+        failed = now;
+        set_put(now.i, ibase, callee.int_results);
+        set_put(now.s, sbase, callee.str_results);
+        fails = callee.fails;
+    } else if (hosts) { // results follow the arguments; a word run from the host word lies above
+        set_cut(now.i, ibase + callee.int_args);
+        set_cut(now.s, sbase + callee.str_args);
+        failed = now;
+        set_put(now.i, ibase + callee.int_args, callee.int_results);
+        set_put(now.s, sbase + callee.str_args, callee.str_results);
+    } else {
+        for (unsigned k = 0; k < 3; ++k) {
+            if (role[k] == 'w')
+                set_put(kind[k] == PNX_K_I ? now.i : now.s, reg[k], 1);
+        }
+    }
+
+    switch (op) {
+    case PNX_JMP: target = (int64_t)i + 1 + ((int32_t)w >> 8); falls = false; break;
+    case PNX_RET: case PNX_RETOK: case PNX_RETF: case PNX_FAIL: case PNX_FAILR: case PNX_FAULT:
+    case PNX_TCALL: falls = false; break;
+    default:
+        if (info.shape == PNX_F_ABC && info.c == PNX_K_J)
+            target = (int64_t)i + 1 + (int8_t)reg[2];
+        break;
+    }
+    // the shape check has seen that every way on stays inside the word
+    if (target >= 0)
+        MEET(target - range.begin, &now);
+    if (falls && fails) { // the failure word comes next; success skips it
+        MEET(next - range.begin, &failed);
+        if (next + 1 < range.end)
+            MEET(next + 1 - range.begin, &now);
+    } else if (falls && next < range.end) {
+        MEET(next - range.begin, &now);
+    }
+    return NULL;
+#undef MEET
+}
+
+// Checked after the shape: on every way to an instruction, the registers it reads hold a value.
+// Each place is looked at when something that reaches it narrowed (a worklist: each narrowing
+// takes a bit away, so the work is bounded by the bits, not by rounds over the word; BACKLOGS
+// R17), then once more in order to judge. `work` holds a set for each code word, then a list
+// of places and a flag for each.
 static const char *check_flow(const pinax_state *st, uint32_t index, span range, regset *in) {
     const pnx_counts counts = st->word_counts[index];
     const uint32_t *code = st->code;
     const uint32_t n = range.end - range.begin;
+    uint32_t *queue = (uint32_t *)(void *)(in + n);
+    uint8_t  *queued = (uint8_t *)(void *)(queue + n);
     __builtin_memset(in, 0xff, (size_t)n * sizeof *in); // nothing known yet: every way in may narrow it
     __builtin_memset(&in[0], 0, sizeof in[0]);
+    __builtin_memset(queued, 0, n);
     set_put(in[0].i, 0, counts.int_args);
     set_put(in[0].s, 0, counts.str_args);
-
-    const char *why = NULL;
-    for (bool changed = true, last = false; changed || !last;) {
-        last = !changed; // once nothing moves, one more round reads the settled sets and judges
-        changed = false;
-        for (uint32_t i = range.begin; i < range.end;) {
-            const uint32_t w = code[i], op = w & 0xffu;
-            const pnx_opinfo info = opinfo[op];
-            const uint32_t reg[3] = {(w >> 8) & 0xffu, (w >> 16) & 0xffu, w >> 24};
-            const uint8_t kind[3] = {info.a, info.b, info.c};
-            const uint32_t next = i + (info.second ? 2u : 1u);
-            const uint32_t x = info.second ? code[i + 1] : 0;
-            regset now = in[i - range.begin], failed;
-            bool fails = info.fails, reads = true, falls = true;
-            int64_t target = -1;
-
-            const char *role = info.roles; // of each of A, B, C: r, w, m, or - for what names no register
-            for (unsigned k = 0; k < 3; ++k) { // what it reads holds a value
-                if (role[k] == 'r' || role[k] == 'm')
-                    reads = reads && set_has(kind[k] == PNX_K_I ? now.i : now.s, reg[k], 1);
-            }
-            if (info.second == PNX_X_SREG)
-                reads = reads && x < 256 && set_has(now.s, x, 1);
-            pnx_counts callee = {0};
-            uint32_t ibase = reg[0], sbase = reg[1];
-            const bool calls = op == PNX_CALL || op == PNX_CALLR, hosts = op == PNX_HCALL || op == PNX_HCALLF;
-            if (op == PNX_CALL || op == PNX_TCALL) {
-                callee = st->word_counts[x];
-            } else if (op == PNX_CALLR) {
-                callee = (pnx_counts){(uint8_t)x, (uint8_t)(x >> 8), (uint8_t)(x >> 16), (uint8_t)((x >> 24) & 0x7fu),
-                                      x >> 31 != 0, false};
-            } else if (hosts) {
-                callee = st->imports[x]->counts;
-            }
-            if (op == PNX_TCALL)
-                ibase = sbase = 0;
-            if (calls || hosts || op == PNX_TCALL)
-                reads = reads && set_has(now.i, ibase, callee.int_args) && set_has(now.s, sbase, callee.str_args);
-            if (op == PNX_RET || op == PNX_RETOK)
-                reads = set_has(now.i, 0, counts.int_results) && set_has(now.s, 0, counts.str_results);
-            if (!reads && last) {
-                why = "code: a register is read before it is written";
-                break;
-            }
-
-            failed = now; // on the way where the operation fails nothing was written
-            if (calls) { // the callee's window lay over everything from its arguments up
-                set_cut(now.i, ibase);
-                set_cut(now.s, sbase);
-                failed = now;
-                set_put(now.i, ibase, callee.int_results);
-                set_put(now.s, sbase, callee.str_results);
-                fails = callee.fails;
-            } else if (hosts) { // results follow the arguments; a word run from the host word lies above
-                set_cut(now.i, ibase + callee.int_args);
-                set_cut(now.s, sbase + callee.str_args);
-                failed = now;
-                set_put(now.i, ibase + callee.int_args, callee.int_results);
-                set_put(now.s, sbase + callee.str_args, callee.str_results);
-            } else {
-                for (unsigned k = 0; k < 3; ++k) {
-                    if (role[k] == 'w')
-                        set_put(kind[k] == PNX_K_I ? now.i : now.s, reg[k], 1);
-                }
-            }
-
-            switch (op) {
-            case PNX_JMP: target = (int64_t)i + 1 + ((int32_t)w >> 8); falls = false; break;
-            case PNX_RET: case PNX_RETOK: case PNX_RETF: case PNX_FAIL: case PNX_FAILR: case PNX_FAULT:
-            case PNX_TCALL: falls = false; break;
-            default:
-                if (info.shape == PNX_F_ABC && info.c == PNX_K_J)
-                    target = (int64_t)i + 1 + (int8_t)reg[2];
-                break;
-            }
-            // the shape check has seen that every way on stays inside the word
-            if (target >= 0)
-                changed = set_meet(&in[target - range.begin], &now) || changed;
-            if (falls && fails) { // the failure word comes next; success skips it
-                changed = set_meet(&in[next - range.begin], &failed) || changed;
-                if (next + 1 < range.end)
-                    changed = set_meet(&in[next + 1 - range.begin], &now) || changed;
-            } else if (falls && next < range.end) {
-                changed = set_meet(&in[next - range.begin], &now) || changed;
-            }
-            i = next;
-        }
-        if (why)
-            break;
+    uint32_t n_queue = 0;
+    for (uint32_t i = range.begin; i < range.end;) { // every place once, in order: the list is taken from its end
+        queue[n_queue++] = i - range.begin;
+        i += opinfo[code[i] & 0xffu].second ? 2u : 1u;
     }
-    return why;
+    for (uint32_t k = 0; k < n_queue / 2; ++k) {
+        const uint32_t t = queue[k];
+        queue[k] = queue[n_queue - 1 - k];
+        queue[n_queue - 1 - k] = t;
+    }
+    for (uint32_t k = 0; k < n_queue; ++k)
+        queued[queue[k]] = 1;
+    while (n_queue) {
+        const uint32_t at = queue[--n_queue];
+        queued[at] = 0;
+        (void)flow_step(st, counts, range, in, at + range.begin, false, queue, queued, &n_queue);
+    }
+    for (uint32_t i = range.begin; i < range.end;) {
+        const char *why = flow_step(st, counts, range, in, i, true, queue, queued, &n_queue);
+        if (why)
+            return why;
+        i += opinfo[code[i] & 0xffu].second ? 2u : 1u;
+    }
+    return NULL;
 }
 
 pinax_err pinax_load_bytecode(pinax_state *st, pinax_str bytecode) {
@@ -1035,7 +1071,7 @@ pinax_err pnx_load_container(pinax_state *st, pinax_str bytecode, uint32_t keep)
             goto rollback;
         // room for the second check: one set of registers for every code word of this word
         const size_t flow_mark = st->used;
-        regset *sets = take(st, (size_t)(range.end - range.begin) * sizeof(regset), 8);
+        regset *sets = take(st, (size_t)(range.end - range.begin) * (sizeof(regset) + 4 + 1), 8);
         if (!sets) {
             err = PINAX_ERR_NO_ROOM;
             why = "block too small to check the code";
@@ -1079,24 +1115,53 @@ bool pnx_tasks_alive(const pinax_state *st) {
 // calls a host word that may finish later, or calls a word that may yield. Such a word cannot
 // run inside a host word: the C stack is in the way. A call through a register (a value
 // block) is not followed; a yield there inside a host word stays a fault at run time.
-static void mark_yields(pinax_state *st) {
+//
+// Whether word k yields on its own, and the words it calls, from one scan of its code.
+static bool word_yields_itself(const pinax_state *st, uint32_t k, void (*call)(void *, uint32_t, uint32_t), void *user) {
     const pnx_head *h = st->head;
-    for (uint32_t k = 0; k < h->n_words; ++k)
-        st->word_counts[k].yields = false;
+    const uint32_t end = k + 1 < h->n_words ? st->words[k + 1].entry : h->n_code;
+    bool yields = false;
+    for (uint32_t i = st->words[k].entry; i < end;) {
+        const uint32_t op = st->code[i] & 0xffu;
+        const pnx_opinfo info = opinfo[op];
+        const uint32_t x = info.second ? st->code[i + 1] : 0;
+        yields = yields || op == PNX_TYIELD || op == PNX_TRUNALL || op == PNX_QWTAKE || op == PNX_QWPUT ||
+                 ((op == PNX_HCALL || op == PNX_HCALLF) && (st->imports[x]->flags & PINAX_WORD_AWAITABLE));
+        if (info.second == PNX_X_WORD && call)
+            call(user, k, x);
+        i += info.second ? 2u : 1u;
+    }
+    return yields;
+}
+
+// The callers of every word, as one array of word numbers cut by `start` (BACKLOGS R16).
+typedef struct callers {
+    uint32_t *start, *at, *list;
+} callers;
+static void callers_count(void *user, uint32_t from, uint32_t to) {
+    (void)from;
+    ++((callers *)user)->start[to + 1];
+}
+static void callers_fill(void *user, uint32_t from, uint32_t to) {
+    callers *c = user;
+    c->list[c->at[to]++] = from;
+}
+
+// Round after round, each over all the code, until no word gains the flag: correct, and quadratic
+// in the number of words along a chain of calls. Used when the block has no room for the pass below.
+static void mark_yields_slowly(pinax_state *st) {
+    const pnx_head *h = st->head;
     for (bool changed = true; changed;) {
         changed = false;
         for (uint32_t k = 0; k < h->n_words; ++k) {
             if (st->word_counts[k].yields)
                 continue;
             const uint32_t end = k + 1 < h->n_words ? st->words[k + 1].entry : h->n_code;
-            bool yields = false;
+            bool yields = word_yields_itself(st, k, NULL, NULL);
             for (uint32_t i = st->words[k].entry; i < end && !yields;) {
                 const uint32_t op = st->code[i] & 0xffu;
                 const pnx_opinfo info = opinfo[op];
-                const uint32_t x = info.second ? st->code[i + 1] : 0;
-                yields = op == PNX_TYIELD || op == PNX_TRUNALL || op == PNX_QWTAKE || op == PNX_QWPUT ||
-                         ((op == PNX_HCALL || op == PNX_HCALLF) && (st->imports[x]->flags & PINAX_WORD_AWAITABLE)) ||
-                         (info.second == PNX_X_WORD && st->word_counts[x].yields);
+                yields = info.second == PNX_X_WORD && st->word_counts[st->code[i + 1]].yields;
                 i += info.second ? 2u : 1u;
             }
             if (yields) {
@@ -1105,6 +1170,52 @@ static void mark_yields(pinax_state *st) {
             }
         }
     }
+}
+
+// One scan of the code gives the words that yield on their own and who calls whom; the flag then
+// spreads from those words to their callers, each word entered once: linear in code and calls.
+static void mark_yields(pinax_state *st) {
+    const pnx_head *h = st->head;
+    const uint32_t n = h->n_words;
+    for (uint32_t k = 0; k < n; ++k)
+        st->word_counts[k].yields = false;
+    const size_t mark = st->used; // the block as scratch, given back below (as check_flow does)
+    callers c = {take(st, ((size_t)n + 1) * 4, 4), take(st, ((size_t)n + 1) * 4, 4), NULL};
+    uint32_t *work = take(st, (size_t)n * 4, 4);
+    if (!c.start || !c.at || !work) {
+        st->used = mark;
+        mark_yields_slowly(st);
+        return;
+    }
+    uint32_t n_work = 0;
+    for (uint32_t k = 0; k < n; ++k) {
+        if (word_yields_itself(st, k, callers_count, &c)) {
+            st->word_counts[k].yields = true;
+            work[n_work++] = k;
+        }
+    }
+    for (uint32_t k = 0; k < n; ++k) // start[k]: where the callers of word k begin
+        c.start[k + 1] += c.start[k];
+    c.list = take(st, (size_t)c.start[n] * 4 + 4, 4);
+    if (!c.list) {
+        st->used = mark;
+        mark_yields_slowly(st);
+        return;
+    }
+    __builtin_memcpy(c.at, c.start, ((size_t)n + 1) * 4);
+    for (uint32_t k = 0; k < n; ++k)
+        (void)word_yields_itself(st, k, callers_fill, &c);
+    while (n_work) {
+        const uint32_t w = work[--n_work];
+        for (uint32_t j = c.start[w]; j < c.start[w + 1]; ++j) {
+            const uint32_t caller = c.list[j];
+            if (!st->word_counts[caller].yields) {
+                st->word_counts[caller].yields = true;
+                work[n_work++] = caller;
+            }
+        }
+    }
+    st->used = mark;
 }
 
 pinax_err pinax_find(pinax_state *st, const char *name, const char *signature, uint32_t flags, pinax_word *out) {
@@ -1201,7 +1312,8 @@ static void fault_place(pinax_state *st, pinax_err err) {
 // Whether the first `n` bytes of a string cell lie in memory the state knows: its block, the
 // interpreter's own texts, or a host string of this run.
 static bool cell_readable(const pinax_state *st, pnx_scell cell, uint32_t n) {
-    if (cell.segment >= PNX_SEG_COUNT || cell.segment == PNX_SEG_EMPTY || cell.offset > UINT32_MAX)
+    if (cell.segment >= PNX_SEG_COUNT || cell.segment == PNX_SEG_EMPTY || cell.segment == PNX_SEG_DONE ||
+        cell.offset > UINT32_MAX)
         return false;
     if (cell.segment == PNX_SEG_KEPT) // a host word vouched that these bytes outlive the state
         return true;
@@ -2271,7 +2383,7 @@ static void scrub_cells(pinax_state *st, pnx_scell *cells, uint32_t count) {
     const uintptr_t lo = (uintptr_t)st->block, hi = lo + st->used;
     for (uint32_t k = 0; cells && k < count; ++k) {
         pnx_scell *c = &cells[k];
-        bool keep = c->segment == PNX_SEG_EMPTY ? c->length == 0
+        bool keep = c->segment == PNX_SEG_EMPTY || c->segment == PNX_SEG_DONE ? c->length == 0
                   : c->segment == PNX_SEG_STATIC ? c->offset <= pnx_static_len && c->length <= pnx_static_len - c->offset
                                                  : false;
         if (c->segment == PNX_SEG_CONST || c->segment == PNX_SEG_GLOBAL || c->segment == PNX_SEG_REGION) {

@@ -289,7 +289,7 @@ PNX_OP(SBYTE) {
 }
 PNX_OP(SNEXT) { // PNX_R_FAILED: the sequence is used up
     pnx_scell *rest = &S[OP_A(w)];
-    if (rest->offset == PNX_SNEXT_DONE)
+    if (rest->segment == PNX_SEG_DONE)
         return PNX_R_FAILED;
     const uint32_t n = pnx_find_byte(pnx_view_bytes(st, *rest), rest->length, (uint8_t)OP_C(w));
     st->charge += n != UINT32_MAX ? n : rest->length;
@@ -299,8 +299,7 @@ PNX_OP(SNEXT) { // PNX_R_FAILED: the sequence is used up
         rest->length -= n + 1u;
     } else {
         S[OP_B(w)] = *rest;
-        rest->length = 0;
-        rest->offset = PNX_SNEXT_DONE;
+        *rest = PNX_SNEXT_DONE;
     }
     return PNX_R_OK;
 }
@@ -609,16 +608,18 @@ PNX_OP(LPOPS) {
         return PNX_R_FAILED;
     }
     const uint8_t *cell = g->ptr + (size_t)(g->length - 1) * g->elem_bytes;
-    uint8_t *copy = cell[0] ? pnx_region_alloc(st, cell[0]) : NULL;
-    if (cell[0] && !copy)
+    // never more than N: the cell may have come from a file or bound memory (as FGETS)
+    const uint32_t n = cell[0] < g->elem_bytes ? cell[0] : g->elem_bytes - 1;
+    uint8_t *copy = n ? pnx_region_alloc(st, n) : NULL;
+    if (n && !copy)
         return PINAX_ERR_FULL;
     --g->length;
-    if (!cell[0]) {
+    if (!n) {
         S[OP_A(w)] = (pnx_scell){PNX_SEG_EMPTY, 0, 0};
         return PNX_R_OK;
     }
-    __builtin_memcpy(copy, cell + 1, cell[0]);
-    S[OP_A(w)] = (pnx_scell){PNX_SEG_REGION, cell[0], (uint64_t)(copy - st->region)};
+    __builtin_memcpy(copy, cell + 1, n);
+    S[OP_A(w)] = (pnx_scell){PNX_SEG_REGION, n, (uint64_t)(copy - st->region)};
     return PNX_R_OK;
 }
 PNX_OP(SFIND) {
@@ -868,7 +869,7 @@ PNX_OP(SLINE) { // PNX_R_FAILED: no line is left. A final line break does not st
 }
 PNX_OP(SNEXTS) { // like SNEXT, with a separator string; an empty separator never matches
     pnx_scell *rest = &S[OP_A(w)];
-    if (rest->offset == PNX_SNEXT_DONE)
+    if (rest->segment == PNX_SEG_DONE)
         return PNX_R_FAILED;
     const pnx_scell sep = S[OP_C(w)];
     const uint32_t at = sep.length ? pnx_find(pnx_view_bytes(st, *rest), rest->length, pnx_view_bytes(st, sep), sep.length)
@@ -880,8 +881,7 @@ PNX_OP(SNEXTS) { // like SNEXT, with a separator string; an empty separator neve
         rest->length -= at + sep.length;
     } else {
         S[OP_B(w)] = *rest;
-        rest->length = 0;
-        rest->offset = PNX_SNEXT_DONE;
+        *rest = PNX_SNEXT_DONE;
     }
     return PNX_R_OK;
 }
@@ -1003,13 +1003,13 @@ PNX_OP(PCAP) {
 // A: what is left to search; B: the next match. An empty match moves on by a byte.
 PNX_OP(PNEXT) {
     pnx_scell *rest = &S[OP_A(w)];
-    if (rest->offset == PNX_SNEXT_DONE)
+    if (rest->segment == PNX_SEG_DONE)
         return PNX_R_FAILED;
     pnx_ptn_caps caps;
     const int    r = pnx_ptn_run(st, *rest, 0, S[OP_C(w)], &caps);
     if (r != PNX_R_OK) {
         if (r == PNX_R_FAILED)
-            *rest = (pnx_scell){PNX_SEG_EMPTY, 0, PNX_SNEXT_DONE};
+            *rest = PNX_SNEXT_DONE;
         return r;
     }
     S[OP_B(w)] = pnx_ptn_now(st)->cap[0];
@@ -1017,7 +1017,7 @@ PNX_OP(PNEXT) {
     const pnx_scell pat = S[OP_C(w)];
     if ((caps.len == 0 && past == rest->length) || (pat.length && pnx_view_bytes(st, pat)[0] == '^')) {
         // nothing after an empty match at the end; an anchored pattern matches once, at the start
-        *rest = (pnx_scell){PNX_SEG_EMPTY, 0, PNX_SNEXT_DONE};
+        *rest = PNX_SNEXT_DONE;
         return PNX_R_OK;
     }
     if (caps.len == 0)
@@ -1422,7 +1422,7 @@ PNX_OP(JPUTS) {
 PNX_OP(CNEXT) {
     pnx_scell     *rest = &S[OP_A(w)];
     const uint32_t mode = OP_C(w);
-    if (rest->offset == PNX_SNEXT_DONE)
+    if (rest->segment == PNX_SEG_DONE)
         return PNX_R_FAILED;
     const uint8_t *bytes = pnx_view_bytes(st, *rest);
     uint32_t       start = 0, len = 0, past = 0;
@@ -1435,7 +1435,7 @@ PNX_OP(CNEXT) {
             return PNX_R_FAILED;
         }
         S[OP_B(w)] = *rest; // as it stands
-        *rest = (pnx_scell){PNX_SEG_EMPTY, 0, PNX_SNEXT_DONE};
+        *rest = PNX_SNEXT_DONE;
         return PNX_R_OK;
     }
     pnx_scell field = {rest->segment, len, rest->offset + start};
@@ -1454,7 +1454,7 @@ PNX_OP(CNEXT) {
     }
     S[OP_B(w)] = field;
     if (mode == 0 && last) {
-        *rest = (pnx_scell){PNX_SEG_EMPTY, 0, PNX_SNEXT_DONE};
+        *rest = PNX_SNEXT_DONE;
     } else {
         rest->offset += past;
         rest->length -= past;

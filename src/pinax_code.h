@@ -392,7 +392,9 @@ enum {
     PNX_SEG_HOST,   // from here: the string arguments of this run, one segment each
     PNX_SEG_KEPT = 15, // strings a PINAX_WORD_KEEP_STR host word gave: their offset is their address,
                        // from a base that never moves, so the cell stays good from run to run
-    PNX_SEG_COUNT = 16
+    PNX_SEG_DONE = 16, // a sequence that is used up (SNEXT and the other stems): no bytes, and a
+                       // segment of its own so that any string word may form its pointer
+    PNX_SEG_COUNT = 17
 };
 
 // The container pinax_load_bytecode() accepts: head, word records, global records, import

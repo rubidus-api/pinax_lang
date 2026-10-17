@@ -24,7 +24,7 @@ typedef struct pnx_scell {
     uint64_t offset;
 } pnx_scell;
 
-#define PNX_SNEXT_DONE UINT64_MAX // offset of a sequence that is used up
+#define PNX_SNEXT_DONE ((pnx_scell){PNX_SEG_DONE, 0, 0}) // a sequence that is used up (segment PNX_SEG_DONE)
 
 // The pattern matcher of the module ptn (pinax_ptn.c). pnx_ptn_find looks for the first match
 // at or after `from`: 1 found (caps set), 0 none, -1 a malformed pattern, -2 too many steps.

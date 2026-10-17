@@ -67,6 +67,11 @@ window, jumps out of the word, a register read before it is written, a jump back
 budget, a tail call to a word with other results, an operation that can fail without a failure word after it or with
 nothing after that, and an instruction that changes a string register and names it twice.]
 
+#para("1b")[A load has no budget. So the processor loads a source or a container in time proportional to its length: no
+pass of it, finding names, deciding which words yield or checking the flow of the registers, grows with the square
+of the length. A host that takes untrusted sources therefore limits only their length, without fear that one load
+never ends.]
+
 #para("2")[`pinax_eval(state, text)` runs one line as a session does. All lines form one module (the session). What a
 line leaves is read with `pinax_eval_count` and `pinax_eval_value`.]
 
