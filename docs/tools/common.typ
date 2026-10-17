@@ -51,6 +51,47 @@
   [#shown#metadata((term: word, en: en))<term>]
 }
 
+// A module word where a chapter introduces it (the manual): shown as code, listed in the index.
+#let word(name) = [#raw(name)#metadata((word: name))<word>]
+
+// The index: every term the document defines (#term) and every word it introduces (#word), with
+// the clause or chapter and, on paper, the page. Built from the sources: nothing is typed twice.
+#let term-index() = context {
+  let entries = ()
+  for m in query(<term>) {
+    let shown = if ko and m.value.en != none { m.value.term + " (" + m.value.en + ")" } else { m.value.term }
+    entries.push((key: m.value.term, shown: shown, loc: m.location()))
+  }
+  for m in query(<word>) {
+    entries.push((key: m.value.word, shown: m.value.word, loc: m.location(), code: true))
+  }
+  entries = entries.sorted(key: e => e.key)
+  let where(loc) = {
+    let n = counter(heading).at(loc)
+    let clause = n.slice(0, calc.min(2, n.len())).map(str).join(".")
+    if is-html() { clause } else { clause + ", " + str(loc.page()) }
+  }
+  heading(level: 1, numbering: none)[#tr("색인", "Index")]
+  [#tr("용어는 정의된 자리, 낱말은 처음 소개된 자리다: 절이나 장, 그리고 쪽.",
+       "A term at the place that defines it, a word where it is introduced: the clause or chapter, and the page.")]
+  let seen = (:)
+  let rows = ()
+  for e in entries {
+    if e.key in seen { continue }
+    seen.insert(e.key, true)
+    rows.push(if e.at("code", default: false) { raw(e.shown) } else { e.shown })
+    rows.push(where(e.loc))
+  }
+  if is-html() {
+    html.elem("div", attrs: (class: "index"))[
+      #table(columns: (1fr, auto), stroke: none, inset: 3pt, ..rows)
+    ]
+  } else {
+    set text(size: 0.92em)
+    columns(2)[#table(columns: (1fr, auto), stroke: none, inset: 3pt, ..rows)]
+  }
+}
+
 // Spec paragraphs: (n) with a hanging number. `n` is a string so that "3a" works.
 #let para(n, body) = context {
   if is-html() {

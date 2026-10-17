@@ -21,3 +21,4 @@ Learning and using the embeddable scripting language Pinax — Edition 0.6.0, Oc
 15. [14 Embedding in a C program](15.md)
 16. [15 Tools](16.md)
 17. [16 Messages you will meet](17.md)
+18. [Index](18.md)

@@ -29,3 +29,5 @@
 #include "clauses/22-annex-b-diagnostics.typ"
 #include "clauses/23-annex-c-limits.typ"
 #include "clauses/24-annex-d-not-here.typ"
+
+#term-index()

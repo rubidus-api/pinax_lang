@@ -28,3 +28,4 @@ The definition of the embeddable scripting language Pinax — Edition 0.6.0, Oct
 22. [Annex B Diagnostics (informative)](22.md)
 23. [Annex C Size limits (normative)](23.md)
 24. [Annex D Not in this edition (informative)](24.md)
+25. [Index](25.md)
