@@ -54,11 +54,11 @@ is an owned value as well.
 
 #ex("manual", "09-region-loop.pnx")
 
-One turn, followed. The mark that `mark` gives is a use-once value too, so the way out on failure hands it to
+One turn, followed. The mark that `mark` gives is an owned value too, so the way out on failure hands it to
 `release` as well.
 
 #trace(
-  ("mark", "m", [Puts the region's current place on as a mark: a use-once value.]),
+  ("mark", "m", [Puts the region's current place on as a mark: an owned value.]),
   ("to m", "—", [Names it.]),
   ("cat (…)", "\"row 1: 1\\n\"", [New text goes into the region.]),
   ("report append", "—", [Copies it into the buffer. Fails when the buffer is full.]),

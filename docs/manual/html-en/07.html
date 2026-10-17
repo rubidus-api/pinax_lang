@@ -66,7 +66,7 @@ fill <span style="color: #d73948">or_else</span> (e) <span style="color: #d73948
 </code></pre><p class="ex-label">Output</p><pre><code data-lang="text">$ pnx 06-list-full.pnx
 the third push failed: full
 the list holds 2
-</code></pre></div><p>Because they can fail, <code>push</code> and <code>pop</code> are always followed by a guard word (chapter 8); leaving it out is refused at load. To ignore the failure, write <code>or_else (e) end</code>, so that the source says it is ignored.</p><div class="example refused"><p class="ex-file"><code>06-push-unguarded.pnx</code></p><pre><code data-lang="pinax"><span style="color: #d73948">list</span> scores <span style="color: #d73948">int</span> <span style="color: #b60157">3</span>
+</code></pre></div><p>Because they can fail, <code>push</code> and <code>pop</code> are always followed by a guard (chapter 8); leaving it out is refused at load. To ignore the failure, write <code>or_else (e) end</code>, so that the source says it is ignored.</p><div class="example refused"><p class="ex-file"><code>06-push-unguarded.pnx</code></p><pre><code data-lang="pinax"><span style="color: #d73948">list</span> scores <span style="color: #d73948">int</span> <span style="color: #b60157">3</span>
 <span style="color: #d73948">word</span> add_score (n <span style="color: #d73948">int</span>) n scores push <span style="color: #d73948">end</span>   <span style="color: #74747c">rem push can fail: what then? the guard is missing</span>
 </code></pre><p class="ex-label">Refused</p><pre><code data-lang="text">$ pnx 06-push-unguarded.pnx
 06-push-unguarded.pnx:2:38: a word that can fail is followed by or_fail, or_return or or_else

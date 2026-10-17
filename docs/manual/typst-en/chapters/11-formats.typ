@@ -69,7 +69,7 @@ the most significant byte first. A `varint` field writes small numbers in few by
 
 #ex("manual", "11-binary.pnx")
 
-The writing words (`pack`, `put_…`, `encode.…_encode`) fail when the buffer is full, so a guard word always follows
+The writing words (`pack`, `put_…`, `encode.…_encode`) fail when the buffer is full, so a guard always follows
 them.
 
 #ex("manual", "11-pack-unguarded.pnx")

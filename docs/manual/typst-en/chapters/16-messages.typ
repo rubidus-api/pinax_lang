@@ -16,6 +16,25 @@ are exactly what the processor prints; the chapters in the right column have exa
 
 #table(columns: (1.3fr, 1fr, auto), inset: 5pt, stroke: 0.5pt + luma(170),
   table.header([*Message*], [*Meaning and fix*], [*Chapter*]),
+  [`an argument has another type than the word's signature asks for`],
+  [A value given to a word has another type than its signature asks. Read the signature, and convert the value or fix
+   the order.], [3],
+  [`this word takes a str`, `this word takes an int`],
+  [That word takes that one type. A number becomes text with `str.to_str`, text becomes a number with `str.to_int`.], [5],
+  [`the two values compared must have the same type`],
+  [A comparison such as `eq` or `lt` got two values of different types. Convert one; `int` and `dec` are different
+   types too.], [2],
+  [`two dec values of different scales: rescale one first (d 2 rescale)`],
+  [Decimals with different numbers of digits after the point, like `4.20` and `0.5`. `rescale` one, or write both with
+   the same digits.], [2],
+  [`a declared type is added to and subtracted from its own type, and multiplied, divided or taken modulo by an int; for other arithmetic take raw`],
+  [Arithmetic a declared type (such as `cents`) does not allow. Take the integer out with `raw` and compute with it.], [10],
+  [`the two branches of this if leave different stacks`],
+  [The two branches of an `if` leave different counts or types. Make both leave the same.], [4],
+  [`this block must leave the stack as it found it`],
+  [The block of a combining word such as `each` left a value. Use it inside the block, or `drop` it.], [4],
+  [`stored text is str(N); a str view lives only in locals, arguments and results`],
+  [A `str` was put where a global, a cell or a field lives. Places that live long take `str(N)`.], [5],
   [`the stack does not hold enough values for this word`],
   [The word takes more values than the stack holds. Check that the values were put on first, and in the right order.
    `pnx see` shows the stack after each line.], [2, 15],
@@ -35,10 +54,37 @@ are exactly what the processor prints; the chapters in the right column have exa
   [A signature mixes named inputs and inputs given as types only. Name them all.], [3],
 )
 
+== Characters and literals
+
+#table(columns: (1.3fr, 1fr, auto), inset: 5pt, stroke: 0.5pt + luma(170),
+  table.header([*Message*], [*Meaning and fix*], [*Chapter*]),
+  [`this character is not allowed outside literals and remarks`],
+  [A symbol such as `+`, `;` or `{` is in the code. Arithmetic and separation are all words: `add`, `mul`, a line
+   break.], [1],
+  [`a sign is attached to its number; arithmetic uses words (add, sub)`],
+  [Written like `3 - 1`. A `-` is only the sign of a number; write `3 1 sub`.], [2],
+  [`unknown escape; a raw string r"..." keeps backslashes as written`],
+  [An ordinary string holds an escape such as `\d`. Patterns go into raw strings `r"…"`.], [12],
+  [`rx takes a string literal or a const name; a pattern made while running is rex.compile`],
+  [A variable was given to `rex.rx`. A pattern is a literal or a `const`; one made while running is `rex.compile`.], [12],
+)
+
 == Names
 
 #table(columns: (1.3fr, 1fr, auto), inset: 5pt, stroke: 0.5pt + luma(170),
   table.header([*Message*], [*Meaning and fix*], [*Chapter*]),
+  [`no module of this name is registered or loaded`],
+  [The module of `use` is not there. Check the names of the standard and host modules; for a file module, that
+   `NAME.pnx` lies beside the program.], [10],
+  [`the module exports nothing of this name`],
+  [The module has no such name, or did not `export` it. Add `export` in the module file.], [10],
+  [`this name is already defined`],
+  [A word or a declaration of that name exists already. Use another name; in a session, `redefine word` replaces it.], [3, 15],
+  [`this parameter takes one row of a table; a parameter that takes the whole table is written list RECORD or array RECORD`],
+  [A table's name as a parameter type means one row. To take the whole table write `list RECORD` or `array RECORD`.], [6],
+  [`the collection given here is of another kind, or holds another type, than the parameter says`],
+  [The collection given differs from the parameter in kind or element type: an `array int` or a `list str(8)` cannot
+   stand where `list int` is asked for.], [6],
   [`this name is not declared before this place`],
   [The name does not exist, or is used before it is declared. Check the spelling and where it is declared; words that
    call each other use `forward word`.], [1, 3],
@@ -58,8 +104,23 @@ are exactly what the processor prints; the chapters in the right column have exa
 
 #table(columns: (1.3fr, 1fr, auto), inset: 5pt, stroke: 0.5pt + luma(170),
   table.header([*Message*], [*Meaning and fix*], [*Chapter*]),
+  [`an owned value in a local is not given on every path (close, free or store it)`],
+  [An owned value (an open file, a row of a pool, a mark) is not handed on along some path. Look at the ways out on
+   failure and at `return` too; `defer` makes this easy.], [9],
+  [`this local gave its owned value away; it holds nothing to read`],
+  [The name was used again after its value was handed on. A closed file cannot be used.], [9],
+  [`a defer gives this owned value when the block is left; here it can only be lent`],
+  [A value left to `defer` was handed on (closed) in the body as well. Leave the closing to `defer` and only lend
+   the value in the body.], [9],
+  [`this str was made after a mark that was released since; the region may hold other bytes there now`],
+  [Text made between a mark and its `release` was read after the release. Text to keep goes into `str(N)` or a buffer
+   before the release.], [5, 9],
+  [``or_fail passes the failure on, so this word needs `or fail` in its signature``],
+  [The word using `or_fail` has no `or fail` in its signature. Add it, or handle the failure there with `or_else`.], [8],
+  [`this list's rows are kept by a field, a global, a named row or an index; it cannot be truncated`],
+  [A list whose rows are held by something cannot be truncated. Check before adding instead.], [11],
   [`a word that can fail is followed by or_fail, or_return or or_else`],
-  [A word that can fail (`push`, `str.to_int`, a word with `or fail` in its signature) has no guard word after it. Even
+  [A word that can fail (`push`, `str.to_int`, a word with `or fail` in its signature) has no guard after it. Even
    to ignore the failure, write `or_else (e) end`.], [6, 8],
   [`the body of or_else must leave what the word would have given, or leave the word or the loop`],
   [The body of `or_else` leaves other values than success would. Leave a stand-in of the same type, or leave with

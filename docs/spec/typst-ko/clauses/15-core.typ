@@ -79,7 +79,7 @@
 #ex("spec", "15-compare-mixed.pnx")
 #ex("spec", "15-select-types.pnx")
 
-== 컬렉션 <core-collections>
+== 모음 <core-collections>
 
 #para("1")[8절이 선언하는 저장소를 다루는 낱말이다. `c` 는 그 저장소의 이름이다.
 #table(columns: (auto, auto, 1fr), inset: 5pt, stroke: 0.5pt + luma(170),

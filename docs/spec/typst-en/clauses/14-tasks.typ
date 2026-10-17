@@ -101,7 +101,7 @@ this does not normally happen.]
 #diag(
   ([a block with parameters or results given to `spawn`], "spawn takes a block that takes and gives nothing, and a set of tasks: do ... end workers spawn"),
   ([`resume`, `is_done` or `cancel` on a value that is not a task], "this word takes a task"),
-  ([`run_all` on a collection that is not a set of tasks (an array, a list)], "run_all takes a set of tasks"),
+  ([`run_all` on a collection that is not a task group (an array, a list)], "run_all takes a set of tasks"),
   ([a `tasks` count above 4096], "a set holds at most 4096 tasks"),
   ([a call depth of a task outside 1 to 4096], "the call depth of a task is 1 to 4096"),
   ([a region of a task above 16 MiB], "the region of a task is at most 16 MiB"),

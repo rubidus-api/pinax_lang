@@ -157,7 +157,7 @@ demo <span style="color: #d73948">or_else</span> (e) e err_text io.println <span
 </code></pre><p class="ex-label">Output</p><pre><code data-lang="text">$ pnx 11-binary.pnx
 bytes: 50494e580001ac02, crc32: 31d80bed
 read back: version 1, length 300
-</code></pre></div><p>The writing words (<code>pack</code>, <code>put_…</code>, <code>encode.…_encode</code>) fail when the buffer is full, so a guard word always follows them.</p><div class="example refused"><p class="ex-file"><code>11-pack-unguarded.pnx</code></p><pre><code data-lang="pinax"><span style="color: #d73948">use</span> json
+</code></pre></div><p>The writing words (<code>pack</code>, <code>put_…</code>, <code>encode.…_encode</code>) fail when the buffer is full, so a guard always follows them.</p><div class="example refused"><p class="ex-file"><code>11-pack-unguarded.pnx</code></p><pre><code data-lang="pinax"><span style="color: #d73948">use</span> json
 <span style="color: #d73948">record</span> point
   x <span style="color: #d73948">int</span>
   y <span style="color: #d73948">int</span>

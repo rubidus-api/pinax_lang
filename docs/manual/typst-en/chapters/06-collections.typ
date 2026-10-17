@@ -60,7 +60,7 @@ One `push` and one `pop`, followed on the stack. Both can fail, so a guard follo
 
 #ex("manual", "06-list-full.pnx")
 
-Because they can fail, `push` and `pop` are always followed by a guard word (chapter 8); leaving it out is refused at
+Because they can fail, `push` and `pop` are always followed by a guard (chapter 8); leaving it out is refused at
 load. To ignore the failure, write `or_else (e) end`, so that the source says it is ignored.
 
 #ex("manual", "06-push-unguarded.pnx")

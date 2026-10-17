@@ -35,7 +35,7 @@ skipped "choi, 140": range
 noted 1
 noted 2
 noted 3
-</code></pre></div><p>After a guard word the stack shall be the same on success and on failure. A word that failed leaves no results, so the body of <code>or_else … end</code> makes a value of the type success would have given, to take its place.</p><div class="example run"><p class="ex-file"><code>08-or-else-stack.pnx</code></p><pre><code data-lang="pinax"><span style="color: #d73948">use</span> io
+</code></pre></div><p>After a guard the stack shall be the same on success and on failure. A word that failed leaves no results, so the body of <code>or_else … end</code> makes a value of the type success would have given, to take its place.</p><div class="example run"><p class="ex-file"><code>08-or-else-stack.pnx</code></p><pre><code data-lang="pinax"><span style="color: #d73948">use</span> io
 <span style="color: #d73948">use</span> <span style="color: #d73948">str</span>
 <span style="color: #d73948">word</span> to_number (s <span style="color: #d73948">str</span> <span style="color: #d73948">gives</span> <span style="color: #d73948">int</span>)
   s <span style="color: #d73948">str</span>.to_int                        <span style="color: #74747c">rem on success: one int on the stack</span>

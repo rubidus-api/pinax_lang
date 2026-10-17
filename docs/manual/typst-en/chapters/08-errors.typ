@@ -47,7 +47,7 @@ Right after a word that can fail comes one #strong[guard]:
 
 #ex("manual", "08-or-return.pnx")
 
-After a guard word the stack shall be the same on success and on failure. A word that failed leaves no results, so the
+After a guard the stack shall be the same on success and on failure. A word that failed leaves no results, so the
 body of `or_else … end` makes a value of the type success would have given, to take its place.
 
 #ex("manual", "08-or-else-stack.pnx")
