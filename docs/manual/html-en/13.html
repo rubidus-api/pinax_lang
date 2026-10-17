@@ -85,9 +85,8 @@ The Quick Brown Fox (4 letters)
   <span style="color: #198810">"order 66, aisle 7"</span> <span style="color: #198810">r"\d+"</span> rex.rx rex.match <span style="color: #d73948">or_else</span> (e) <span style="color: #198810">"none"</span> <span style="color: #d73948">end</span> io.println
   <span style="color: #198810">"no digits here"</span> <span style="color: #198810">r"\d+"</span> rex.rx rex.match <span style="color: #d73948">or_else</span> (e) <span style="color: #198810">"none"</span> <span style="color: #d73948">end</span> io.println
   <span style="color: #198810">"x=1, y=22"</span> <span style="color: #198810">r"(\w)=(\d+)"</span> rex.rx rex.matches <span style="color: #d73948">do</span> (whole <span style="color: #d73948">str</span>, name <span style="color: #d73948">str</span>, value <span style="color: #d73948">str</span>)
-    <span style="color: #d73948">cat</span> (name, <span style="color: #198810">":"</span>, value, <span style="color: #198810">" "</span>) io.print
+    <span style="color: #d73948">cat</span> (name, <span style="color: #198810">" is "</span>, value) io.println
   <span style="color: #d73948">end</span> each
-  <span style="color: #198810">""</span> io.println
   <span style="color: #198810">"a;b;;c"</span> <span style="color: #198810">r";"</span> rex.rx rex.split <span style="color: #d73948">do</span> (p <span style="color: #d73948">str</span>) <span style="color: #d73948">cat</span> (<span style="color: #198810">"["</span>, p, <span style="color: #198810">"]"</span>) io.print <span style="color: #d73948">end</span> each
   <span style="color: #198810">""</span> io.println
 <span style="color: #d73948">end</span>
@@ -95,7 +94,8 @@ demo
 </code></pre><p class="ex-label">Output</p><pre><code data-lang="text">$ pnx 12-rex-words.pnx
 66
 none
-x:1 y:22 
+x is 1
+y is 22
 [a][b][][c]
 </code></pre></div><div class="example run"><p class="ex-file"><code>12-ptn-matches.pnx</code></p><pre><code data-lang="pinax"><span style="color: #d73948">use</span> io
 <span style="color: #d73948">use</span> ptn
