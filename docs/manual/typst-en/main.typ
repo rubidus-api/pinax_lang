@@ -2,7 +2,7 @@
 #show: document-setup.with(
   title: "The Pinax Manual",
   subtitle: "Learning and using the embeddable scripting language Pinax",
-  version: "Edition 0.5.0",
+  version: "Edition 0.6.0",
   date: "October 2026")
 
 #include "chapters/00-preface.typ"
