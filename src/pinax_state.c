@@ -1758,7 +1758,9 @@ pinax_err pnx_load_container(pinax_state *st, pinax_str bytecode, uint32_t keep)
         st->used = flow_mark;
         if (why)
             goto rollback;
-        prove_word(st, range); // RFC-0023: which checks cannot fire; never refuses
+        const size_t needed = st->needed; // RFC-0023: which checks cannot fire; never refuses, so a scratch
+        prove_word(st, range);            // that did not fit is not a size the host is told
+        st->needed = needed;
     }
     if (h.n_words == 0 && h.n_code != 0) {
         why = "bytecode: code without words";
