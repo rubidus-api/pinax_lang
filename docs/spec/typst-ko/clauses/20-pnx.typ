@@ -66,6 +66,12 @@ test = "test" NAME { body } "end" ;
 
 #ex("spec", "20-see-refused.pnx")
 
+#para("1b")[`pnx see --checks file.pnx` 는 파일을 `pnx file.pnx` 처럼 적재하고(정의 밖의 코드가 돈다), 그 다음 낱말마다
+적재기가 «울릴 수 없다»고 증명한 실행 때의 검사를 보인다: 낱말의 검사 수와 증명된 수, 그리고 증명된 명령마다 그 줄, 명령,
+까닭. 증명은 프로그램의 동작을 바꾸지 않는다. 검사는 그대로 돈다.]
+
+#ex("spec", "20-see-checks.pnx")
+
 #para("2")[`pnx fmt file.pnx` 는 들여쓰기와 공백만 고친 글을 표준 출력에 쓴다. 토큰과 줄바꿈의 자리, 주석은
 그대로다. 고친 글을 다시 고쳐도 같다.]
 

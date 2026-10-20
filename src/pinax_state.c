@@ -4,6 +4,7 @@
 
 #include "pinax_internal.h"
 
+#include <stdckdint.h>
 #include <stddef.h>
 
 static const uint8_t empty_bytes[1] = {0};
@@ -68,7 +69,7 @@ void *pnx_take(pinax_state *st, size_t bytes, size_t align) {
 pnx_program pnx_program_now(const pinax_state *st) {
     return (pnx_program){st->head, st->words, st->importrecs, st->iconst, st->sconst, st->code, st->word_counts,
                          st->imports, st->globals, st->segment[PNX_SEG_CONST], st->segment[PNX_SEG_GLOBAL],
-                         st->symbols, st->used, st->n_hosts, st->lines, st->localrecs};
+                         st->symbols, st->used, st->n_hosts, st->lines, st->localrecs, st->proven};
 }
 
 void pnx_program_restore(pinax_state *st, const pnx_program *p) {
@@ -88,6 +89,7 @@ void pnx_program_restore(pinax_state *st, const pnx_program *p) {
     st->n_hosts = p->n_hosts;
     st->lines = p->lines;
     st->localrecs = p->localrecs;
+    st->proven = p->proven;
     st->suspended = false;
     st->loading = false;
 }
@@ -808,6 +810,680 @@ static const char *check_flow(const pinax_state *st, uint32_t index, span range,
     return NULL;
 }
 
+// ---- which checks cannot fire (RFC-0023) ----------------------------------------------------
+//
+// A third pass over each word, after the two checks: it proves, where it can, that a run-time
+// check cannot fire. An index a counter keeps below an array's capacity, a row checked a moment
+// ago on the same table, an add of two values known to be small. The proofs change nothing
+// that runs: they are a byte per instruction (`st->proven`, the reason) that `pnx see --checks`
+// lists and that a C exporter would read to leave the check out. A wrong proof would be a
+// check dropped, so the facts here only narrow, a call or a task switch forgets what it could
+// have changed, and the PINAX_CHECK_PROOFS build stops the program when a proven check fires.
+//
+// Facts: a register's value lies in [lo, hi]; a register passed the index check of a global (it
+// is below the length as it was then); a register passed the row check of a table (and, for a
+// pool, the generation). A place keeps at most FACTS_MAX of them, and only the places where
+// ways join (the first instruction of a block) keep them between visits; inside a block they
+// are carried along. The worklist is over blocks; at a join a fact that is not on both ways is
+// dropped and a range only widens, twice at most per end before it becomes the whole int, so
+// every block is visited a bounded number of times. The judging pass then reads the proofs off
+// the settled facts.
+
+#define OP_A(w) (((w) >> 8) & 0xffu)
+#define OP_B(w) (((w) >> 16) & 0xffu)
+#define OP_C(w) ((w) >> 24)
+#define OP_BX(w) ((w) >> 16)
+#define OP_SBX(w) ((int32_t)(int16_t)((w) >> 16))
+#define OP_SB(w) ((int32_t)(int8_t)(((w) >> 16) & 0xffu))
+#define OP_SC(w) ((int32_t)(int8_t)((w) >> 24))
+#define OP_SAX(w) ((int32_t)(w) >> 8)
+
+enum { FACT_RANGE = 1, FACT_INDEX, FACT_ROW };
+typedef struct fact {
+    uint8_t  reg, kind, grew_lo, grew_hi;
+    uint16_t global; // FACT_INDEX, FACT_ROW
+    int64_t  lo, hi; // FACT_RANGE
+} fact;
+enum { FACTS_MAX = 16 };
+typedef struct facts {
+    uint32_t n;
+    fact     f[FACTS_MAX];
+} facts;
+
+static fact *fact_find(facts *fs, uint32_t reg, uint32_t kind, uint32_t global) {
+    for (uint32_t k = 0; k < fs->n; ++k) {
+        fact *f = &fs->f[k];
+        if (f->reg == reg && f->kind == kind && (kind == FACT_RANGE || f->global == global))
+            return f;
+    }
+    return NULL;
+}
+static void fact_remove(facts *fs, uint32_t k) {
+    for (; k + 1 < fs->n; ++k)
+        fs->f[k] = fs->f[k + 1];
+    --fs->n;
+}
+static void facts_drop_reg(facts *fs, uint32_t reg) { // the register is written: nothing is known of it
+    for (uint32_t k = 0; k < fs->n;) {
+        if (fs->f[k].reg == reg)
+            fact_remove(fs, k);
+        else
+            ++k;
+    }
+}
+static void facts_drop_from(facts *fs, uint32_t reg) { // a callee's window lay over these registers
+    for (uint32_t k = 0; k < fs->n;) {
+        if (fs->f[k].reg >= reg)
+            fact_remove(fs, k);
+        else
+            ++k;
+    }
+}
+static void facts_drop_passed(facts *fs) { // a collection may have changed, or another task ran
+    for (uint32_t k = 0; k < fs->n;) {
+        if (fs->f[k].kind != FACT_RANGE)
+            fact_remove(fs, k);
+        else
+            ++k;
+    }
+}
+static void fact_put(facts *fs, fact f) {
+    fact *old = fact_find(fs, f.reg, f.kind, f.global);
+    if (old) {
+        *old = f;
+        return;
+    }
+    if (fs->n == FACTS_MAX) // the oldest goes: a proof lost, never one gained
+        fact_remove(fs, 0);
+    fs->f[fs->n++] = f;
+}
+// The range of a register: the whole int when nothing is known (then false).
+static bool range_of(facts *fs, uint32_t reg, int64_t *lo, int64_t *hi) {
+    const fact *f = fact_find(fs, reg, FACT_RANGE, 0);
+    *lo = f ? f->lo : INT64_MIN;
+    *hi = f ? f->hi : INT64_MAX;
+    return f != NULL;
+}
+static void put_range(facts *fs, uint32_t reg, int64_t lo, int64_t hi) {
+    if (lo == INT64_MIN && hi == INT64_MAX) {
+        fact *f = fact_find(fs, reg, FACT_RANGE, 0);
+        if (f)
+            fact_remove(fs, (uint32_t)(f - fs->f));
+        return;
+    }
+    fact_put(fs, (fact){(uint8_t)reg, FACT_RANGE, 0, 0, 0, lo, hi});
+}
+// What a way says of a register: its range meets [lo, hi]. A way that cannot be taken (the meet
+// is empty) is left as it is.
+static void narrow(facts *fs, uint32_t reg, int64_t lo, int64_t hi) {
+    int64_t a, b;
+    (void)range_of(fs, reg, &a, &b);
+    a = a > lo ? a : lo;
+    b = b < hi ? b : hi;
+    if (a <= b)
+        put_range(fs, reg, a, b);
+}
+// What holds on both ways into a place: a fact that one way lacks goes, a range widens. True
+// when something changed.
+static bool facts_meet(facts *into, facts *from) {
+    bool changed = false;
+    for (uint32_t k = 0; k < into->n;) {
+        fact       *a = &into->f[k];
+        const fact *b = fact_find(from, a->reg, a->kind, a->global);
+        if (!b) {
+            fact_remove(into, k);
+            changed = true;
+            continue;
+        }
+        if (a->kind == FACT_RANGE) {
+            if (b->lo < a->lo) {
+                a->lo = ++a->grew_lo >= 2 ? INT64_MIN : b->lo;
+                changed = true;
+            }
+            if (b->hi > a->hi) {
+                a->hi = ++a->grew_hi >= 2 ? INT64_MAX : b->hi;
+                changed = true;
+            }
+            if (a->lo == INT64_MIN && a->hi == INT64_MAX) {
+                fact_remove(into, k);
+                continue;
+            }
+        }
+        ++k;
+    }
+    return changed;
+}
+
+// [lo, hi] of a sum, difference or product of two ranges, clamped to the int; `over` is set
+// when a clamp happened (the operation can overflow for some values in the ranges).
+static int64_t clamp_add(int64_t a, int64_t b, bool *over) {
+    int64_t r;
+    if (!ckd_add(&r, a, b))
+        return r;
+    *over = true;
+    return b > 0 ? INT64_MAX : INT64_MIN;
+}
+static int64_t clamp_sub(int64_t a, int64_t b, bool *over) {
+    int64_t r;
+    if (!ckd_sub(&r, a, b))
+        return r;
+    *over = true;
+    return b < 0 ? INT64_MAX : INT64_MIN;
+}
+static void range_mul(int64_t alo, int64_t ahi, int64_t blo, int64_t bhi, int64_t *lo, int64_t *hi, bool *over) {
+    const int64_t xs[4][2] = {{alo, blo}, {alo, bhi}, {ahi, blo}, {ahi, bhi}};
+    *lo = INT64_MAX;
+    *hi = INT64_MIN;
+    for (unsigned k = 0; k < 4; ++k) {
+        int64_t r;
+        if (ckd_mul(&r, xs[k][0], xs[k][1])) {
+            *over = true;
+            *lo = INT64_MIN;
+            *hi = INT64_MAX;
+            return;
+        }
+        *lo = r < *lo ? r : *lo;
+        *hi = r > *hi ? r : *hi;
+    }
+}
+
+// The instructions whose run-time check the pass can prove away.
+bool pnx_checked_op(uint32_t op) {
+    switch (op) {
+    case PNX_AGET: case PNX_ASET: case PNX_ROW: case PNX_AGETW: case PNX_ASETW: case PNX_ROWW:
+    case PNX_FGET: case PNX_FSET: case PNX_FGETS: case PNX_FSETS:
+    case PNX_ADD: case PNX_SUB: case PNX_MUL: case PNX_NEG: case PNX_ADDI: case PNX_MULI: return true;
+    default: return false;
+    }
+}
+
+const char *pnx_proven_text(uint8_t reason) {
+    switch (reason) {
+    case PNX_PROVEN_INDEX: return "the index lies below the capacity of the array";
+    case PNX_PROVEN_INDEX_AGAIN: return "the index passed this collection's check before";
+    case PNX_PROVEN_ROW: return "the row lies within the table";
+    case PNX_PROVEN_ROW_AGAIN: return "the row passed this table's check before";
+    case PNX_PROVEN_NO_OVERFLOW: return "the operands are in ranges whose result fits";
+    default: return "";
+    }
+}
+
+// What one instruction does to the facts. On return `now` holds on the way that falls through
+// (the success way of an instruction that can fail), `alt` on the other way: where a branch
+// jumps, or the failure word. `target` is where a jump goes, -1 when it does not jump. In the
+// judging pass the proof found is written to st->proven.
+static void prove_step(pinax_state *st, span range, uint32_t i, facts *now, facts *alt, int64_t *target, bool *falls,
+                       bool *fails, bool judge) {
+    const uint32_t  *code = st->code;
+    const uint32_t   w = code[i], op = w & 0xffu;
+    const pnx_opinfo info = opinfo[op];
+    const uint32_t   a = OP_A(w), b = OP_B(w), c = OP_C(w), x = info.second ? code[i + 1] : 0;
+    uint8_t          proof = PNX_PROVEN_NONE;
+    *target = -1;
+    *falls = true;
+    *fails = info.fails;
+    *alt = *now;
+
+    // the global an instruction names (not one a GSEL chose: of that nothing is known here)
+    uint32_t gi = UINT32_MAX;
+    switch (op) {
+    case PNX_AGET: case PNX_ASET: case PNX_ROW: gi = c; break;
+    case PNX_AGETW: case PNX_ASETW: case PNX_ROWW: gi = x; break;
+    case PNX_FGET: case PNX_FSET: case PNX_FGETS: case PNX_FSETS: gi = x & 0xfffu; break;
+    case PNX_GLEN: case PNX_GCAP: gi = OP_BX(w); break;
+    default: break;
+    }
+    const pnx_global *g = gi < st->head->n_globals ? &st->globals[gi] : NULL;
+    // an array is always full, a table too; a shared one reads as empty until it is given
+    const bool full = g && !g->shared && (g->kind == PNX_G_ARRAY || g->kind == PNX_G_TABLE);
+    int64_t lo, hi;
+
+    switch (op) {
+    case PNX_MOVI: {
+        if (a != b) {
+            facts copy = *now;
+            facts_drop_reg(now, a);
+            for (uint32_t k = 0; k < copy.n; ++k) {
+                if (copy.f[k].reg == b) {
+                    fact f = copy.f[k];
+                    f.reg = (uint8_t)a;
+                    fact_put(now, f);
+                }
+            }
+        }
+        break;
+    }
+    case PNX_LOADI:
+        facts_drop_reg(now, a);
+        put_range(now, a, OP_SBX(w), OP_SBX(w));
+        break;
+    case PNX_LOADK:
+        facts_drop_reg(now, a);
+        put_range(now, a, st->iconst[OP_BX(w)], st->iconst[OP_BX(w)]);
+        break;
+    case PNX_ADD: case PNX_SUB: case PNX_MUL: case PNX_ADDI: case PNX_MULI: case PNX_NEG: {
+        int64_t blo, bhi, clo, chi, rlo, rhi;
+        bool    over = false;
+        const bool bk = range_of(now, b, &blo, &bhi);
+        bool       ck;
+        if (op == PNX_ADDI || op == PNX_MULI) {
+            clo = chi = OP_SC(w);
+            ck = true;
+        } else if (op == PNX_NEG) {
+            clo = chi = 0;
+            ck = true;
+        } else {
+            ck = range_of(now, c, &clo, &chi);
+        }
+        if (op == PNX_ADD || op == PNX_ADDI) {
+            rlo = clamp_add(blo, clo, &over);
+            rhi = clamp_add(bhi, chi, &over);
+        } else if (op == PNX_SUB) {
+            rlo = clamp_sub(blo, chi, &over);
+            rhi = clamp_sub(bhi, clo, &over);
+        } else if (op == PNX_NEG) { // 0 - b
+            rlo = clamp_sub(0, bhi, &over);
+            rhi = clamp_sub(0, blo, &over);
+        } else {
+            range_mul(blo, bhi, clo, chi, &rlo, &rhi, &over);
+        }
+        if (bk && ck && !over)
+            proof = PNX_PROVEN_NO_OVERFLOW;
+        facts_drop_reg(now, a); // on the success way the result is in the clamped range
+        put_range(now, a, rlo, rhi);
+        break;
+    }
+    case PNX_GLEN: case PNX_GCAP:
+        facts_drop_reg(now, a);
+        if (g && !g->shared)
+            put_range(now, a, op == PNX_GCAP || full ? g->capacity : 0, g->capacity);
+        break;
+    case PNX_AGET: case PNX_ASET: case PNX_ROW: case PNX_AGETW: case PNX_ASETW: case PNX_ROWW: {
+        const bool writes = op != PNX_ASET && op != PNX_ASETW;
+        if (g) {
+            (void)range_of(now, b, &lo, &hi);
+            if (full && lo >= 0 && hi < (int64_t)g->capacity)
+                proof = PNX_PROVEN_INDEX;
+            else if (fact_find(now, b, FACT_INDEX, gi))
+                proof = PNX_PROVEN_INDEX_AGAIN;
+            narrow(now, b, 0, (int64_t)g->capacity - 1); // on the success way: below the length
+            fact_put(now, (fact){(uint8_t)b, FACT_INDEX, 0, 0, (uint16_t)gi, 0, 0});
+        }
+        if (writes) {
+            const bool known = g && range_of(now, b, &lo, &hi);
+            facts_drop_reg(now, a);
+            if (op == PNX_ROW || op == PNX_ROWW) { // the row is the index plus one
+                if (g) {
+                    if (known)
+                        put_range(now, a, lo + 1, hi + 1);
+                    fact_put(now, (fact){(uint8_t)a, FACT_ROW, 0, 0, (uint16_t)gi, 0, 0});
+                }
+            }
+        }
+        break;
+    }
+    case PNX_FGET: case PNX_FSET: case PNX_FGETS: case PNX_FSETS: {
+        if (g) {
+            if (fact_find(now, b, FACT_ROW, gi)) {
+                proof = PNX_PROVEN_ROW_AGAIN;
+            } else if (full && range_of(now, b, &lo, &hi) && lo >= 1 && hi <= (int64_t)g->capacity) {
+                proof = PNX_PROVEN_ROW;
+            }
+            fact_put(now, (fact){(uint8_t)b, FACT_ROW, 0, 0, (uint16_t)gi, 0, 0});
+            if (g->kind != PNX_G_POOL) // a pool's row carries its generation above the slot
+                narrow(now, b, 1, (int64_t)g->capacity);
+        }
+        if (op == PNX_FGET)
+            facts_drop_reg(now, a);
+        break;
+    }
+    case PNX_JEQ: case PNX_JNE: case PNX_JLT: case PNX_JLE: case PNX_JEQI: case PNX_JNEI: case PNX_JLTI: case PNX_JGEI: {
+        *target = (int64_t)i + 1 + (int8_t)c;
+        const bool imm = info.b == PNX_K_IMM;
+        int64_t alo, ahi, blo, bhi;
+        (void)range_of(now, a, &alo, &ahi);
+        if (imm)
+            blo = bhi = OP_SB(w);
+        else
+            (void)range_of(now, b, &blo, &bhi);
+        // `alt` is the way the jump takes, `now` the way that falls through
+        const bool lt = op == PNX_JLT || op == PNX_JLTI, le = op == PNX_JLE;
+        const bool eq = op == PNX_JEQ || op == PNX_JEQI, ne = op == PNX_JNE || op == PNX_JNEI, ge = op == PNX_JGEI;
+        facts *below = lt || le ? alt : ge ? now : NULL; // where a < b (lt), a <= b (le), a < b (ge falls)
+        facts *above = lt || le ? now : ge ? alt : NULL; // where a >= b (lt), a > b (le), a >= b (ge jumps)
+        const bool strict_below = lt || ge, strict_above = le; // a < b (lt, ge falls); a > b (le falls)
+        if (below) {
+            if (bhi > INT64_MIN || !strict_below)
+                narrow(below, a, INT64_MIN, strict_below ? bhi - 1 : bhi);
+            if (!imm && (alo < INT64_MAX || !strict_below))
+                narrow(below, b, strict_below ? alo + 1 : alo, INT64_MAX);
+        }
+        if (above) {
+            if (blo < INT64_MAX || !strict_above)
+                narrow(above, a, strict_above ? blo + 1 : blo, INT64_MAX);
+            if (!imm && (ahi > INT64_MIN || !strict_above))
+                narrow(above, b, INT64_MIN, strict_above ? ahi - 1 : ahi);
+        }
+        facts *same = eq ? alt : ne ? now : NULL;
+        if (same) {
+            narrow(same, a, blo, bhi);
+            if (!imm)
+                narrow(same, b, alo, ahi);
+        }
+        break;
+    }
+    case PNX_JMP:
+        *target = (int64_t)i + 1 + OP_SAX(w);
+        *falls = false;
+        break;
+    case PNX_RET: case PNX_RETOK: case PNX_RETF: case PNX_FAIL: case PNX_FAILR: case PNX_FAULT: case PNX_TCALL:
+        *falls = false;
+        break;
+    case PNX_CALL: case PNX_CALLR: case PNX_HCALL: case PNX_HCALLF: // the callee may change any collection
+        facts_drop_passed(now);
+        facts_drop_from(now, a);
+        *alt = *now;
+        break;
+    case PNX_CHECK: case PNX_TYIELD: // another task, or the host between two runs, may change a collection
+        facts_drop_passed(now);
+        *alt = *now;
+        break;
+    default: {
+        const uint32_t reg[3] = {a, b, c};
+        const uint8_t  kind[3] = {info.a, info.b, info.c};
+        for (unsigned k = 0; k < 3; ++k) {
+            if (kind[k] == PNX_K_I && (info.roles[k] == 'w' || info.roles[k] == 'm'))
+                facts_drop_reg(now, reg[k]);
+        }
+        // one that names a global and may change it (or a task), or one this pass does not know
+        if (info.shape == PNX_F_GLOBAL || info.a == PNX_K_G || info.b == PNX_K_G || info.c == PNX_K_G ||
+            info.second == PNX_X_GLOBAL || info.second == PNX_X_FIELD || info.second == PNX_X_WORD ||
+            info.second == PNX_X_IMPORT || info.second == PNX_X_COUNTS)
+            facts_drop_passed(now);
+        break;
+    }
+    }
+    if (*target >= 0 && *target < range.begin) // the shape check allows no such jump; keep the index sound
+        *target = -1;
+    if (judge && pnx_checked_op(op)) {
+        st->proven[i] = proof;
+        if (info.second) // marked as the second word, so a fault's pc finds the instruction
+            st->proven[i + 1] = proof == PNX_PROVEN_NONE ? PNX_PROVEN_NONE : (uint8_t)(proof | 0x80u);
+    }
+}
+
+// What holds on either of two ways into a place, without the widening of facts_meet: the
+// narrowing rounds of prove_word use it, where ranges may shrink again.
+static void facts_join(facts *into, facts *from) {
+    for (uint32_t k = 0; k < into->n;) {
+        fact       *a = &into->f[k];
+        const fact *b = fact_find(from, a->reg, a->kind, a->global);
+        if (!b) {
+            fact_remove(into, k);
+            continue;
+        }
+        if (a->kind == FACT_RANGE) {
+            a->lo = b->lo < a->lo ? b->lo : a->lo;
+            a->hi = b->hi > a->hi ? b->hi : a->hi;
+            if (a->lo == INT64_MIN && a->hi == INT64_MAX) {
+                fact_remove(into, k);
+                continue;
+            }
+        }
+        ++k;
+    }
+}
+
+// The facts of block `b` carried through its instructions. What leaves it goes out along at
+// most two edges: `to` the blocks, `out` the facts on each. In the judging pass the proofs are
+// written instead and no edge is reported.
+typedef struct edges {
+    uint32_t n, to[2];
+    facts    out[2];
+} edges;
+static void prove_block(pinax_state *st, span range, const uint8_t *leader, const uint32_t *block_of,
+                        const uint32_t *start_of, const facts *in, uint32_t b, bool judge, edges *e) {
+    const uint32_t *code = st->code;
+    facts           now = in[b], alt;
+    uint32_t        i = start_of[b];
+    e->n = 0;
+    for (;;) {
+        const uint32_t next = i + (opinfo[code[i] & 0xffu].second ? 2u : 1u);
+        int64_t        target;
+        bool           falls, fails;
+        prove_step(st, range, i, &now, &alt, &target, &falls, &fails, judge);
+        const bool last = next >= range.end || leader[next - range.begin] || target >= 0 || !falls || fails;
+        if (!last) {
+            i = next;
+            continue;
+        }
+        if (judge)
+            return;
+#define EDGE(at, from)                                                                             \
+        do {                                                                                       \
+            e->to[e->n] = block_of[(uint32_t)(at) - range.begin];                                  \
+            e->out[e->n++] = *(from);                                                              \
+        } while (0)
+        if (target >= 0)
+            EDGE(target, &alt); // a branch: the way it takes; a JMP: `alt` is `now` (nothing was written)
+        if (falls && fails) {
+            EDGE(next, &alt); // the failure word, with what held before
+            if (next + 1 < range.end)
+                EDGE(next + 1, &now);
+        } else if (falls && next < range.end) {
+            EDGE(next, &now);
+        }
+#undef EDGE
+        return;
+    }
+}
+
+// The proofs of one word. Blocks: the first instruction of the word, every place a jump goes
+// to, the instruction after a jump, after one that does not go on and after one that can fail
+// (its failure word), and the one after that. Rounds: first the worklist with widening until
+// nothing changes (a range at a loop head grows to the whole int after two growths), then two
+// rounds that take each block's facts again as what its ways in bring, without widening, so
+// that a counter the loop's own test bounds gets its bound back; both keep every value above
+// the true one. Then the judging pass. No room for the scratch means no proofs, never a refusal.
+static void prove_word(pinax_state *st, span range) {
+    const uint32_t *code = st->code;
+    const uint32_t  n = range.end - range.begin;
+    const size_t    mark = st->used;
+    uint8_t        *leader = take(st, n, 1);
+    uint32_t       *block_of = leader ? take(st, (size_t)n * 4, 4) : NULL;
+    if (!block_of) {
+        st->used = mark;
+        return;
+    }
+    leader[0] = 1;
+    for (uint32_t i = range.begin; i < range.end;) {
+        const uint32_t   w = code[i], op = w & 0xffu;
+        const pnx_opinfo info = opinfo[op];
+        const uint32_t   next = i + (info.second ? 2u : 1u);
+        int64_t          target = -1;
+        bool             falls = true;
+        switch (op) {
+        case PNX_JMP: target = (int64_t)i + 1 + OP_SAX(w); falls = false; break;
+        case PNX_RET: case PNX_RETOK: case PNX_RETF: case PNX_FAIL: case PNX_FAILR: case PNX_FAULT: case PNX_TCALL:
+            falls = false; break;
+        default:
+            if (info.shape == PNX_F_ABC && info.c == PNX_K_J)
+                target = (int64_t)i + 1 + (int8_t)(w >> 24);
+            break;
+        }
+        if (target >= range.begin && target < range.end)
+            leader[target - range.begin] = 1;
+        if ((target >= 0 || !falls || info.fails) && next < range.end)
+            leader[next - range.begin] = 1;
+        if (info.fails && next + 1 < range.end)
+            leader[next + 1 - range.begin] = 1;
+        i = next;
+    }
+    uint32_t n_blocks = 0;
+    for (uint32_t i = range.begin; i < range.end;) {
+        if (leader[i - range.begin])
+            ++n_blocks;
+        block_of[i - range.begin] = n_blocks - 1;
+        i += opinfo[code[i] & 0xffu].second ? 2u : 1u;
+    }
+    uint32_t *start_of = take(st, (size_t)n_blocks * 4, 4);
+    facts    *fs = start_of ? take(st, (size_t)n_blocks * sizeof(facts), 8) : NULL;
+    uint32_t *queue = fs ? take(st, (size_t)n_blocks * 4, 4) : NULL;
+    uint8_t  *queued = queue ? take(st, n_blocks, 1) : NULL;
+    uint8_t  *seen = queued ? take(st, n_blocks, 1) : NULL;
+    uint32_t *pred_at = seen ? take(st, ((size_t)n_blocks + 1) * 4, 4) : NULL; // the ways into each block
+    uint32_t *preds = pred_at ? take(st, (size_t)n_blocks * 2 * 4, 4) : NULL;
+    if (!preds) {
+        st->used = mark;
+        return;
+    }
+    for (uint32_t i = range.begin, b = 0; i < range.end;) {
+        if (leader[i - range.begin])
+            start_of[b++] = i;
+        i += opinfo[code[i] & 0xffu].second ? 2u : 1u;
+    }
+    edges    e;
+    uint32_t n_queue = 0;
+    seen[0] = queued[0] = 1;
+    queue[n_queue++] = 0;
+    while (n_queue) {
+        const uint32_t b = queue[--n_queue];
+        queued[b] = 0;
+        prove_block(st, range, leader, block_of, start_of, fs, b, false, &e);
+        for (uint32_t k = 0; k < e.n; ++k) {
+            const uint32_t to = e.to[k];
+            if (!seen[to]) {
+                fs[to] = e.out[k];
+                seen[to] = 1;
+            } else if (!facts_meet(&fs[to], &e.out[k])) {
+                continue;
+            }
+            if (!queued[to]) {
+                queued[to] = 1;
+                queue[n_queue++] = to;
+            }
+        }
+    }
+    // the narrowing rounds: each block's facts become what its ways in bring now, in order, so
+    // that a bound found at a loop's test reaches the head in the same round
+    __builtin_memset(pred_at, 0, ((size_t)n_blocks + 1) * 4);
+    for (uint32_t b = 0; b < n_blocks; ++b) {
+        if (!seen[b])
+            continue;
+        prove_block(st, range, leader, block_of, start_of, fs, b, false, &e);
+        for (uint32_t k = 0; k < e.n; ++k)
+            ++pred_at[e.to[k] + 1];
+    }
+    for (uint32_t b = 0; b < n_blocks; ++b)
+        pred_at[b + 1] += pred_at[b];
+    for (uint32_t b = 0; b < n_blocks; ++b) {
+        if (!seen[b])
+            continue;
+        prove_block(st, range, leader, block_of, start_of, fs, b, false, &e);
+        for (uint32_t k = 0; k < e.n; ++k)
+            preds[pred_at[e.to[k]]++] = b;
+    }
+    for (uint32_t b = n_blocks; b > 0; --b)
+        pred_at[b] = pred_at[b - 1];
+    pred_at[0] = 0;
+    for (unsigned round = 0; round < 4; ++round) {
+        bool changed = false;
+        for (uint32_t b = 1; b < n_blocks; ++b) { // the first block keeps its empty facts
+            if (!seen[b])
+                continue;
+            facts now;
+            bool  first = true;
+            for (uint32_t k = pred_at[b]; k < pred_at[b + 1]; ++k) {
+                prove_block(st, range, leader, block_of, start_of, fs, preds[k], false, &e);
+                for (uint32_t j = 0; j < e.n; ++j) {
+                    if (e.to[j] != b)
+                        continue;
+                    if (first)
+                        now = e.out[j];
+                    else
+                        facts_join(&now, &e.out[j]);
+                    first = false;
+                }
+            }
+            if (!first && __builtin_memcmp(&now, &fs[b], sizeof now) != 0) {
+                fs[b] = now;
+                changed = true;
+            }
+        }
+        if (!changed)
+            break;
+    }
+    for (uint32_t b = 0; b < n_blocks; ++b) {
+        if (seen[b])
+            prove_block(st, range, leader, block_of, start_of, fs, b, true, &e);
+    }
+    st->used = mark;
+}
+
+// For `pnx see --checks`: a line per word (its checks and how many are proven), then a line per
+// proven instruction with its source line, the instruction and the reason.
+void pnx_checks_report(const pinax_state *st, void (*put)(void *user, const char *text, size_t len), void *user) {
+    static const char *const names[256] = {
+#define PNX_NAME(name, number, a, b, c, shape, second, fails, roles) [number] = #name,
+        PNX_OPS(PNX_NAME)
+#undef PNX_NAME
+    };
+    if (!st->head)
+        return;
+    uint32_t line_k = 0, line = 0;
+    for (uint32_t k = 0; k < st->head->n_words; ++k) {
+        const span range = {st->words[k].entry, k + 1 < st->head->n_words ? st->words[k + 1].entry : st->head->n_code};
+        uint32_t   checks = 0, proven = 0;
+        for (uint32_t i = range.begin; i < range.end; i += opinfo[st->code[i] & 0xffu].second ? 2u : 1u) {
+            checks += pnx_checked_op(st->code[i] & 0xffu);
+            proven += st->proven[i] != PNX_PROVEN_NONE;
+        }
+        char    text[256];
+        uint8_t digits[24];
+        size_t  n = 0;
+#define PUT_TEXT(s, len)                                                                           \
+        do {                                                                                       \
+            for (size_t put_k = 0; put_k < (size_t)(len) && n < sizeof text; ++put_k)              \
+                text[n++] = (s)[put_k];                                                            \
+        } while (0)
+#define PUT_INT(v)                                                                                 \
+        do {                                                                                       \
+            const uint32_t count = pnx_format_int((int64_t)(v), digits);                           \
+            PUT_TEXT(digits, count);                                                               \
+        } while (0)
+        PUT_TEXT("word ", 5);
+        PUT_TEXT(st->words[k].name, __builtin_strlen(st->words[k].name));
+        PUT_TEXT(": ", 2);
+        PUT_INT(checks);
+        PUT_TEXT(checks == 1 ? " check, " : " checks, ", checks == 1 ? 8 : 9);
+        PUT_INT(proven);
+        PUT_TEXT(" proven\n", 8);
+        put(user, text, n);
+        for (uint32_t i = range.begin; i < range.end; i += opinfo[st->code[i] & 0xffu].second ? 2u : 1u) {
+            for (; line_k < st->head->n_lines; ++line_k) { // the line records rise with the pc
+                pnx_linerec rec;
+                __builtin_memcpy(&rec, st->lines + (size_t)line_k * sizeof rec, sizeof rec);
+                if (rec.pc > i)
+                    break;
+                line = rec.line;
+            }
+            if (st->proven[i] == PNX_PROVEN_NONE)
+                continue;
+            n = 0;
+            PUT_TEXT("  line ", 7);
+            PUT_INT(line);
+            PUT_TEXT(": ", 2);
+            PUT_TEXT(names[st->code[i] & 0xffu], __builtin_strlen(names[st->code[i] & 0xffu]));
+            PUT_TEXT(": ", 2);
+            PUT_TEXT(pnx_proven_text(st->proven[i]), __builtin_strlen(pnx_proven_text(st->proven[i])));
+            PUT_TEXT("\n", 1);
+            put(user, text, n);
+        }
+#undef PUT_INT
+#undef PUT_TEXT
+    }
+}
+
 pinax_err pinax_load_bytecode(pinax_state *st, pinax_str bytecode) {
     if (!st || !bytecode.ptr)
         return PINAX_ERR_ARGUMENT;
@@ -863,7 +1539,8 @@ pinax_err pnx_load_container(pinax_state *st, pinax_str bytecode, uint32_t keep)
     st->segment[PNX_SEG_CONST] = (const uint8_t *)(st->code + h.n_code);
 
     st->word_counts = take(st, sizeof(pnx_counts) * (h.n_words + 1u), 8);
-    st->imports = st->word_counts ? take(st, sizeof(pnx_host *) * (h.n_imports + 1u), 8) : NULL;
+    st->proven = st->word_counts ? take(st, h.n_code + 1u, 1) : NULL; // zero: nothing proven yet
+    st->imports = st->proven ? take(st, sizeof(pnx_host *) * (h.n_imports + 1u), 8) : NULL;
     st->globals = st->imports ? take(st, sizeof(pnx_global) * (h.n_globals + 1u), 8) : NULL;
     if (!st->globals)
         goto rollback;
@@ -1081,6 +1758,7 @@ pinax_err pnx_load_container(pinax_state *st, pinax_str bytecode, uint32_t keep)
         st->used = flow_mark;
         if (why)
             goto rollback;
+        prove_word(st, range); // RFC-0023: which checks cannot fire; never refuses
     }
     if (h.n_words == 0 && h.n_code != 0) {
         why = "bytecode: code without words";
@@ -2435,6 +3113,7 @@ pinax_err pinax_image_open(pinax_mem block, pinax_str image, const pinax_config 
     MOVE(st->ibank), MOVE(st->sbank), MOVE(st->ctrl), MOVE(st->region), MOVE(st->hosts), MOVE(st->handles);
     MOVE(st->head), MOVE(st->words), MOVE(st->importrecs), MOVE(st->iconst), MOVE(st->sconst), MOVE(st->code);
     MOVE(st->word_counts), MOVE(st->imports), MOVE(st->globals), MOVE(st->lines), MOVE(st->localrecs);
+    MOVE(st->proven);
     MOVE(st->task), MOVE(st->main.ibank), MOVE(st->main.sbank), MOVE(st->main.ctrl), MOVE(st->main_wait.host);
     if (st->symbols) {
         const void *from = st->symbols;

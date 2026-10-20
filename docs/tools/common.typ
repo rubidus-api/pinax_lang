@@ -132,6 +132,7 @@
   repl: tr("대화", "Session"), fmt: tr("정리한 모양", "Formatted"),
   see: tr("목록", "Listing"), embed: tr("출력", "Output"),
   see-refused: tr("목록과 거절", "Listing, then the refusal"),
+  see-checks: tr("출력과 검사 목록", "Output, then the checks"),
 ).at(kind, default: kind)
 
 // An example: the program from <tree>/examples/<name> and what running it printed, both read

@@ -193,6 +193,33 @@ static pinax_err host_call(pinax_state *st, const pnx_host *h, int64_t *ia, pnx_
     return PINAX_OK;
 }
 
+#if defined(PINAX_CHECK_PROOFS)
+// RFC-0023: whether the fault at `at` (the pc after the instruction) is the check the loader
+// proved away for that instruction. A field instruction has other checks (the width of the
+// field, the length of a str(N) cell) that the proof does not cover: the row check is done again.
+static bool pnx_proven_fired(const pinax_state *st, const int64_t *R, uint32_t at, pinax_err result) {
+    if (!st->proven || at == 0 ||
+        (result != PINAX_ERR_RANGE && result != PINAX_ERR_OVERFLOW && result != PINAX_ERR_STALE))
+        return false;
+    uint32_t i = at - 1;
+    if (st->proven[i] & 0x80u) // the second word of a two-word instruction
+        --i;
+    if (st->proven[i] == PNX_PROVEN_NONE)
+        return false;
+    const uint32_t w = st->code[i], op = w & 0xffu;
+    switch (op) {
+    case PNX_FGET: case PNX_FSET: case PNX_FGETS: case PNX_FSETS: {
+        uint64_t row;
+        return pnx_row_of(&st->globals[PNX_GF(st, st->code[i + 1])], R[OP_B(w)], &row) != PNX_R_OK;
+    }
+    case PNX_ADD: case PNX_SUB: case PNX_MUL: case PNX_NEG: case PNX_ADDI: case PNX_MULI:
+        return result == PINAX_ERR_OVERFLOW;
+    default:
+        return result == PINAX_ERR_RANGE;
+    }
+}
+#endif
+
 pinax_err pnx_execute(pinax_state *st) {
     const uint32_t *const code = st->code;
     const uint32_t *pc = code + st->pc;
@@ -920,6 +947,10 @@ suspended:
 finished:
     if (result != PINAX_OK) {
         st->fault_pc = (uint32_t)(pc - code);
+#if defined(PINAX_CHECK_PROOFS) // RFC-0023: a check the loader proved away must never fire
+        if (pnx_proven_fired(st, R, st->fault_pc, result))
+            __builtin_trap();
+#endif
         st->fault_ibase = ibase;
         st->fault_sbase = sbase;
         pnx_fault_banks(st);

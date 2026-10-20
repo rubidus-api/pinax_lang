@@ -5,6 +5,8 @@
 //   pnx test file.pnx             loads the file, then runs each of its `test name ... end`
 //   pnx repl                      reads lines and runs each (pinax_eval); what a line leaves is shown
 //   pnx see file.pnx              prints, for every line of every definition, the stack after it
+//   pnx see --checks file.pnx     loads the file, then lists per word the run-time checks the loader
+//                                 proved cannot fire (RFC-0023)
 //   pnx fmt file.pnx              prints the file with its lines laid out the one way
 //
 // A module the file uses that is no host module is looked for beside it: `use shapes` loads
@@ -24,6 +26,7 @@
 
 #include "pinax.h"
 #include "pinax_host.h"
+#include "pinax_internal.h" // pnx_checks_report
 #include "pnx_fmt.h"
 
 #include <stdio.h>
@@ -191,6 +194,8 @@ static int n_sources;
 
 static const char *eval_path = "(eval)"; // the file whose text is given to pinax_eval, when there is one
 static bool        refused;              // the last text was refused with a message
+static void put_text(void *user, const char *text, size_t len) { fwrite(text, 1, len, (FILE *)user); }
+
 static const char *see_text;             // pnx see: the text being listed, to print each line beside its stack
 static size_t      see_length;
 // pnx repl: a text that turns out to be unfinished is run again when it has grown, so what
@@ -524,13 +529,15 @@ int main(int argc, char **argv) {
 
 static int run(int argc, char **argv) {
     const bool testing = argc > 1 && strcmp(argv[1], "test") == 0;
-    const bool seeing = argc > 1 && strcmp(argv[1], "see") == 0;
+    const bool checking = argc > 2 && strcmp(argv[1], "see") == 0 && strcmp(argv[2], "--checks") == 0;
+    const bool seeing = argc > 1 && strcmp(argv[1], "see") == 0 && !checking;
     const bool formatting = argc > 1 && strcmp(argv[1], "fmt") == 0;
     const bool talking = argc == 2 && strcmp(argv[1], "repl") == 0;
-    const int  at = testing || seeing || formatting ? 2 : 1;
+    const int  at = checking ? 3 : testing || seeing || formatting ? 2 : 1;
     if (argc <= at) {
         fprintf(stderr, "usage: pnx [--lib NAME=PATH]... file.pnx [arguments]\n       pnx test file.pnx\n"
-                        "       pnx repl\n       pnx see file.pnx\n       pnx fmt file.pnx\n");
+                        "       pnx repl\n       pnx see file.pnx\n       pnx see --checks file.pnx\n"
+                        "       pnx fmt file.pnx\n");
         return 2;
     }
     if (formatting) {
@@ -601,6 +608,8 @@ static int run(int argc, char **argv) {
         status = 1;
     } else if (testing) {
         status = run_tests(state, plain ? module : "");
+    } else if (checking) {
+        pnx_checks_report(state, put_text, stdout);
     }
     fflush(stdout);
     pinax_close(state);

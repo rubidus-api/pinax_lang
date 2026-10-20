@@ -201,6 +201,7 @@ typedef struct pnx_program {
     size_t               used;
     uint32_t             n_hosts;
     const uint8_t       *lines, *localrecs;
+    uint8_t             *proven;
 } pnx_program;
 
 struct pinax_state {
@@ -223,6 +224,7 @@ struct pinax_state {
     const pnx_sconst   *sconst;
     const uint32_t     *code;
     pnx_counts         *word_counts;
+    uint8_t            *proven; // per code word: why its check cannot fire (RFC-0023), 0 when not proven
     const pnx_host    **imports;
     pnx_global         *globals;
 
@@ -311,6 +313,19 @@ bool pnx_signature_counts(const char *signature, pnx_counts *out);
 
 // Runs from state->pc until the top word returns, faults, fails or the budget runs out.
 pinax_err pnx_execute(pinax_state *state);
+
+// RFC-0023: what the loader proved of an instruction's run-time check (state->proven).
+enum {
+    PNX_PROVEN_NONE,
+    PNX_PROVEN_INDEX,       // the index lies in [0, capacity - 1] of an always-full array
+    PNX_PROVEN_INDEX_AGAIN, // the index passed this collection's check earlier in the word
+    PNX_PROVEN_ROW,         // the row lies in [1, capacity] of an always-full table
+    PNX_PROVEN_ROW_AGAIN,   // the row passed this table's check (a pool's generation too) earlier
+    PNX_PROVEN_NO_OVERFLOW, // both operands lie in ranges whose result fits an int
+};
+bool        pnx_checked_op(uint32_t op); // the instructions whose check the proofs cover
+const char *pnx_proven_text(uint8_t reason);
+void        pnx_checks_report(const pinax_state *state, void (*put)(void *user, const char *text, size_t len), void *user);
 
 // Text helpers on the vendored proven (pinax_text.c).
 // Decimal integer with an optional sign; the whole view must be the number.

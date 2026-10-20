@@ -13,7 +13,9 @@
 //   ./nob all                 check + freestanding + test
 //   ./nob clean               remove build/
 //   options: --target=win64   cross-compile with MinGW-w64 ($PINAX_WIN64_CC, default
-//                             x86_64-w64-mingw32-gcc); --sanitize (ASan + UBSan); --debug
+//                             x86_64-w64-mingw32-gcc); --sanitize (ASan + UBSan); --debug;
+//            --proofs (PINAX_CHECK_PROOFS: a run-time check the loader proved away stops the
+//            program if it fires, RFC-0023; for the tests, the examples and the fuzzer)
 //
 // Two flag sets. Pinax's sources: -std=c23 -Wall -Wextra -pedantic -Werror. The vendored
 // proven_c_lib: its own set (no -pedantic, which rejects its __int128), see
@@ -95,6 +97,7 @@ typedef struct {
     const char *exe;
     bool sanitize;
     bool debug;
+    bool proofs; // PINAX_CHECK_PROOFS: a proven check that fires stops the program (RFC-0023)
 } target_t;
 
 static int run(const char *command) {
@@ -131,7 +134,8 @@ static bool exists(const char *path) {
 }
 
 static void build_dir(char *out, size_t cap, const target_t *t) {
-    snprintf(out, cap, "build/%s%s", t->name, t->sanitize ? "-asan" : (t->debug ? "-debug" : ""));
+    snprintf(out, cap, "build/%s%s%s", t->name, t->sanitize ? "-asan" : (t->debug ? "-debug" : ""),
+             t->proofs ? "-proofs" : "");
 }
 
 static void object_path(char *out, size_t cap, const char *objdir, const char *source) {
@@ -146,8 +150,9 @@ static void object_path(char *out, size_t cap, const char *objdir, const char *s
 
 static const char *mode_flags(const target_t *t) {
     static char buf[160];
-    snprintf(buf, sizeof buf, "%s %s", t->debug || t->sanitize ? "-O0 -g" : "-O2",
-             t->sanitize ? "-fsanitize=address,undefined -fno-omit-frame-pointer -fno-sanitize-recover=all" : "");
+    snprintf(buf, sizeof buf, "%s %s%s", t->debug || t->sanitize ? "-O0 -g" : "-O2",
+             t->sanitize ? "-fsanitize=address,undefined -fno-omit-frame-pointer -fno-sanitize-recover=all" : "",
+             t->proofs ? " -DPINAX_CHECK_PROOFS" : "");
     return buf;
 }
 
@@ -620,12 +625,14 @@ int main(int argc, char **argv) {
             t.sanitize = true;
         } else if (strcmp(a, "--debug") == 0) {
             t.debug = true;
+        } else if (strcmp(a, "--proofs") == 0) {
+            t.proofs = true;
         } else if (a[0] != '-' && strcmp(command, "build") == 0) {
             command = a;
         } else {
             fprintf(stderr, "nob: unknown option %s\n"
                             "usage: ./nob [build|test|check|freestanding|wasm|dist|all|clean] "
-                            "[--target=native|win64] [--sanitize] [--debug]\n", a);
+                            "[--target=native|win64] [--sanitize] [--debug] [--proofs]\n", a);
             return 2;
         }
     }

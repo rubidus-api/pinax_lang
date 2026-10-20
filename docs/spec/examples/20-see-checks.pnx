@@ -1,0 +1,20 @@
+rem see-checks
+use io
+use str
+const days 7
+array rain int days
+record city
+  name str(8)
+  people int
+end
+list cities city 4
+word wettest (gives int)                      rem the index of the largest cell
+  0 to best
+  0 rain len range do (i int)
+    i rain idx  best rain idx  gt if i to best end
+  end each
+  best
+end
+word people_of (i int gives int) i cities idx city.people end
+assign rain (3, 0, 12, 7, 0, 1, 2)
+wettest str.to_str io.println

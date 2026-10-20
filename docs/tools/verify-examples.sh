@@ -13,6 +13,7 @@
 #   rem repl                 the rest of the file is typed into pnx repl
 #   rem fmt | rem see        the output of pnx fmt or pnx see
 #   rem see-refused          pnx see on a source it refuses: the listing up to the place, then the message
+#   rem see-checks           the output of pnx see --checks (the program runs first, as with pnx)
 #   rem args: A B            arguments after the file name
 #   rem stdin: NAME.in       standard input (a file beside the example)
 #   rem with: OTHER.pnx      another example the program uses (copied beside it)
@@ -44,7 +45,7 @@ for f in "$src_dir"/*.pnx; do
     [ -e "$f" ] || continue
     n=$(basename "$f")
     awk 'BEGIN { head = 1 }
-         head && /^rem (run|fault|refused|test|test-fail|repl|fmt|see|see-refused|hide)$/ { next }
+         head && /^rem (run|fault|refused|test|test-fail|repl|fmt|see|see-refused|see-checks|hide)$/ { next }
          head && /^rem (args|stdin|with):/ { next }
          { head = 0; print }' "$f" >"$run_dir/$n"
     cp "$run_dir/$n" "$out_dir/$n.src"
@@ -64,7 +65,7 @@ for f in "$src_dir"/*.pnx; do
     fi
     total=$((total + 1))
     kind=run
-    for k in fault refused test test-fail repl fmt see see-refused; do
+    for k in fault refused test test-fail repl fmt see see-refused see-checks; do
         [ "$(contract "$f" "$k")" = yes ] && kind=$k
     done
     args=$(contract "$f" args)
@@ -84,10 +85,12 @@ for f in "$src_dir"/*.pnx; do
             (cd "$run_dir" && "$pnx" "$kind" "$n" <"$input" >"$o" 2>"$e") ;;
         see-refused) cmd="pnx see $n"
             (cd "$run_dir" && "$pnx" see "$n" <"$input" >"$o" 2>"$e") ;;
+        see-checks) cmd="pnx see --checks $n"
+            (cd "$run_dir" && "$pnx" see --checks "$n" <"$input" >"$o" 2>"$e") ;;
     esac
     status=$?
     case $kind in
-        run|test|fmt|see)
+        run|test|fmt|see|see-checks)
             [ $status = 0 ] || { fail "$n" "exit $status, wanted 0" "$e"; continue; }
             [ -s "$e" ] && { fail "$n" "wrote to standard error" "$e"; continue; }
             { echo "\$ $cmd"; cat "$o"; } >"$out" ;;

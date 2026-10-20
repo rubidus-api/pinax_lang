@@ -69,6 +69,13 @@ diagnostic, and exits with 1.]
 
 #ex("spec", "20-see-refused.pnx")
 
+#para("1b")[`pnx see --checks file.pnx` loads the file as `pnx file.pnx` does (the code outside definitions runs),
+then shows, per word, the run-time checks the loader proved cannot fire: the word's number of checks and of proven
+ones, and for each proven instruction its line, the instruction and the reason. A proof changes nothing a program
+does; the checks still run.]
+
+#ex("spec", "20-see-checks.pnx")
+
 #para("2")[`pnx fmt file.pnx` writes the text with only indentation and spaces changed to standard output. Tokens, line
 breaks and remarks stay where they are. Formatting the result again changes nothing.]
 

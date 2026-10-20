@@ -61,6 +61,41 @@ error: line 1: div_zero
     2    n 1 add                                        | int
     3    n                                              | int int
 20-see-refused.pnx:4:1: the stack does not hold exactly the results of the signature here
+</code></pre></div><p class="para"><span class="pn">(1b)</span> <code>pnx see --checks file.pnx</code> 는 파일을 <code>pnx file.pnx</code> 처럼 적재하고(정의 밖의 코드가 돈다), 그 다음 낱말마다 적재기가 «울릴 수 없다»고 증명한 실행 때의 검사를 보인다: 낱말의 검사 수와 증명된 수, 그리고 증명된 명령마다 그 줄, 명령, 까닭. 증명은 프로그램의 동작을 바꾸지 않는다. 검사는 그대로 돈다.</p><div class="example see-checks"><p class="ex-file"><code>20-see-checks.pnx</code></p><pre><code data-lang="pinax"><span style="color: #d73948">use</span> io
+<span style="color: #d73948">use</span> <span style="color: #d73948">str</span>
+<span style="color: #d73948">const</span> days <span style="color: #b60157">7</span>
+<span style="color: #d73948">array</span> rain <span style="color: #d73948">int</span> days
+<span style="color: #d73948">record</span> city
+  name <span style="color: #d73948">str</span>(<span style="color: #b60157">8</span>)
+  people <span style="color: #d73948">int</span>
+<span style="color: #d73948">end</span>
+<span style="color: #d73948">list</span> cities city <span style="color: #b60157">4</span>
+<span style="color: #d73948">word</span> wettest (<span style="color: #d73948">gives</span> <span style="color: #d73948">int</span>)                      <span style="color: #74747c">rem the index of the largest cell</span>
+  <span style="color: #b60157">0</span> <span style="color: #d73948">to</span> best
+  <span style="color: #b60157">0</span> rain len range <span style="color: #d73948">do</span> (i <span style="color: #d73948">int</span>)
+    i rain idx  best rain idx  gt <span style="color: #d73948">if</span> i <span style="color: #d73948">to</span> best <span style="color: #d73948">end</span>
+  <span style="color: #d73948">end</span> each
+  best
+<span style="color: #d73948">end</span>
+<span style="color: #d73948">word</span> people_of (i <span style="color: #d73948">int</span> <span style="color: #d73948">gives</span> <span style="color: #d73948">int</span>) i cities idx city.people <span style="color: #d73948">end</span>
+<span style="color: #d73948">assign</span> rain (<span style="color: #b60157">3</span>, <span style="color: #b60157">0</span>, <span style="color: #b60157">12</span>, <span style="color: #b60157">7</span>, <span style="color: #b60157">0</span>, <span style="color: #b60157">1</span>, <span style="color: #b60157">2</span>)
+wettest <span style="color: #d73948">str</span>.to_str io.println
+</code></pre><p class="ex-label">출력과 검사 목록</p><pre><code data-lang="text">$ pnx see --checks 20-see-checks.pnx
+2
+word wettest: 3 checks, 3 proven
+  line 13: AGET: the index lies below the capacity of the array
+  line 13: AGET: the index lies below the capacity of the array
+  line 14: ADDI: the operands are in ranges whose result fits
+word people_of: 2 checks, 1 proven
+  line 17: FGET: the row passed this table's check before
+word (load): 7 checks, 7 proven
+  line 18: ASET: the index lies below the capacity of the array
+  line 18: ASET: the index lies below the capacity of the array
+  line 18: ASET: the index lies below the capacity of the array
+  line 18: ASET: the index lies below the capacity of the array
+  line 18: ASET: the index lies below the capacity of the array
+  line 18: ASET: the index lies below the capacity of the array
+  line 18: ASET: the index lies below the capacity of the array
 </code></pre></div><p class="para"><span class="pn">(2)</span> <code>pnx fmt file.pnx</code> 는 들여쓰기와 공백만 고친 글을 표준 출력에 쓴다. 토큰과 줄바꿈의 자리, 주석은 그대로다. 고친 글을 다시 고쳐도 같다.</p><div class="example fmt"><p class="ex-file"><code>20-fmt.pnx</code></p><pre><code data-lang="pinax"><span style="color: #d73948">use</span> io
 <span style="color: #d73948">word</span> sign (n <span style="color: #d73948">int</span> <span style="color: #d73948">gives</span> r <span style="color: #d73948">int</span>)
 n <span style="color: #b60157">0</span> gt <span style="color: #d73948">if</span>
