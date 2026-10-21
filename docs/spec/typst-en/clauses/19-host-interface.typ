@@ -84,11 +84,13 @@ pass of it, finding names, deciding which words yield or checking the flow of th
 of the length. A host that takes untrusted sources therefore limits only their length, without fear that one load
 never ends.]
 
-#para("1c")[A load into a state that already holds a program loads that program again with the new source: the time
-of one load that declares words grows with the whole program so far, not with the source passed. The bound of (1b) is
-therefore a bound on one load. When the load has ended the processor takes back the room of what it replaced, so the
-room the program takes in the block grows with what was declared, not with the number of loads; while a task (clause
-14) is alive it does not, and the next load after the task has ended does. The room used is read from `block_bytes_used`
+#para("1c")[A load into a state that already holds a program appends what the new source adds to the program and
+checks the new words only, so the bound of (1b) holds for the lines of a session and for modules loaded one by one.
+What grows with the whole program is one pass that decides which words yield and the copy of the declaration tables,
+both small per word. The room the program takes in the block grows with what was declared: when a part has no room
+left to append to, the processor moves that part to a larger place, and when the load has ended it takes back the
+room it left; while a task (clause 14) is alive it does not, and the next load after the task has ended does.
+`redefine` appends the new body and leaves the old code where it was. The room used is read from `block_bytes_used`
 of `pinax_stats`. A session line that only runs code takes no room.]
 
 #para("2")[`pinax_eval(state, text)` runs one line as a session does. All lines form one module (the session). What a

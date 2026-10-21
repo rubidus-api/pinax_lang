@@ -72,30 +72,135 @@ static void give_back(pinax_state *st, size_t mark) {
     st->used = mark;
 }
 
+// ---- the parts of the program ------------------------------------------------------------
+
+static const size_t part_item[PNX_PARTS] = {
+    sizeof(pnx_wordrec), sizeof(pnx_globalrec), sizeof(pnx_importrec), sizeof(int64_t), sizeof(pnx_sconst),
+    sizeof(uint32_t),    1,                     sizeof(pnx_linerec),   sizeof(pnx_localrec), sizeof(pnx_counts),
+    1,                   sizeof(pnx_host *),    sizeof(pnx_global)};
+
+static void *part_get(const pinax_state *st, unsigned part) {
+    switch (part) {
+    case PNX_PART_WORDS: return (void *)(uintptr_t)st->words;
+    case PNX_PART_GLOBALRECS: return (void *)(uintptr_t)st->globalrecs;
+    case PNX_PART_IMPORTRECS: return (void *)(uintptr_t)st->importrecs;
+    case PNX_PART_ICONST: return (void *)(uintptr_t)st->iconst;
+    case PNX_PART_SCONST: return (void *)(uintptr_t)st->sconst;
+    case PNX_PART_CODE: return (void *)(uintptr_t)st->code;
+    case PNX_PART_STRBYTES: return (void *)(uintptr_t)st->segment[PNX_SEG_CONST];
+    case PNX_PART_LINES: return (void *)(uintptr_t)st->lines;
+    case PNX_PART_LOCALS: return (void *)(uintptr_t)st->localrecs;
+    case PNX_PART_WCOUNTS: return st->word_counts;
+    case PNX_PART_PROVEN: return st->proven;
+    case PNX_PART_IMPORTS: return (void *)(uintptr_t)st->imports;
+    default: return st->globals;
+    }
+}
+
+static void part_set(pinax_state *st, unsigned part, void *p) {
+    switch (part) {
+    case PNX_PART_WORDS: st->words = p; break;
+    case PNX_PART_GLOBALRECS: st->globalrecs = p; break;
+    case PNX_PART_IMPORTRECS: st->importrecs = p; break;
+    case PNX_PART_ICONST: st->iconst = p; break;
+    case PNX_PART_SCONST: st->sconst = p; break;
+    case PNX_PART_CODE: st->code = p; break;
+    case PNX_PART_STRBYTES: st->segment[PNX_SEG_CONST] = p; break;
+    case PNX_PART_LINES: st->lines = p; break;
+    case PNX_PART_LOCALS: st->localrecs = p; break;
+    case PNX_PART_WCOUNTS: st->word_counts = p; break;
+    case PNX_PART_PROVEN: st->proven = p; break;
+    case PNX_PART_IMPORTS: st->imports = p; break;
+    default: st->globals = p; break;
+    }
+}
+
+// How many items a part holds: the count of the program it belongs to.
+static uint32_t part_count(const pinax_state *st, unsigned part) {
+    const pnx_head *h = st->head;
+    if (!h)
+        return 0;
+    switch (part) {
+    case PNX_PART_WORDS: case PNX_PART_WCOUNTS: return h->n_words;
+    case PNX_PART_GLOBALRECS: case PNX_PART_GLOBALS: return h->n_globals;
+    case PNX_PART_IMPORTRECS: case PNX_PART_IMPORTS: return h->n_imports;
+    case PNX_PART_ICONST: return h->n_iconst;
+    case PNX_PART_SCONST: return h->n_sconst;
+    case PNX_PART_CODE: case PNX_PART_PROVEN: return h->n_code;
+    case PNX_PART_STRBYTES: return h->n_strbytes;
+    case PNX_PART_LINES: return h->n_lines;
+    default: return h->n_locals;
+    }
+}
+
+// Room for `add` more items in a part: in place when the capacity allows, else a new segment of
+// twice the size with the items so far copied in (the old one is dead room until the next
+// compaction). The items past the count are zeroed either way.
+static bool part_room(pinax_state *st, unsigned part, uint32_t add) {
+    const uint32_t count = part_count(st, part);
+    const size_t   item = part_item[part];
+    uint8_t       *at = part_get(st, part);
+    if ((uint64_t)count + add > st->part_cap[part]) {
+        uint64_t cap = (uint64_t)st->part_cap[part] * 2;
+        if (cap < (uint64_t)count + add)
+            cap = (uint64_t)count + add;
+        if (cap < 16)
+            cap = 16;
+        if (cap > UINT32_MAX || cap * item > SIZE_MAX / 2)
+            return false;
+        uint8_t *p = take(st, (size_t)cap * item, 16);
+        if (!p)
+            return false;
+        if (count)
+            __builtin_memcpy(p, at, (size_t)count * item);
+        part_set(st, part, p);
+        st->part_cap[part] = (uint32_t)cap;
+        return true;
+    }
+    if (add)
+        __builtin_memset(at + (size_t)count * item, 0, (size_t)add * item);
+    return true;
+}
+
 pnx_program pnx_program_now(const pinax_state *st) {
-    return (pnx_program){st->head, st->words, st->importrecs, st->iconst, st->sconst, st->code, st->word_counts,
-                         st->imports, st->globals, st->segment[PNX_SEG_CONST], st->segment[PNX_SEG_GLOBAL],
-                         st->symbols, st->used, st->n_hosts, st->lines, st->localrecs, st->proven};
+    pnx_program p = {.head = st->head, .globals = st->globals, .seg_const = st->segment[PNX_SEG_CONST],
+                     .seg_global = st->segment[PNX_SEG_GLOBAL], .symbols = st->symbols, .used = st->used,
+                     .n_hosts = st->n_hosts};
+    if (st->head)
+        p.counts = *st->head;
+    for (unsigned part = 0; part < PNX_PARTS; ++part) {
+        p.parts[part] = part_get(st, part);
+        p.caps[part] = st->part_cap[part];
+    }
+    return p;
 }
 
 void pnx_program_restore(pinax_state *st, const pnx_program *p) {
-    st->head = p->head;
-    st->words = p->words;
-    st->importrecs = p->importrecs;
-    st->iconst = p->iconst;
-    st->sconst = p->sconst;
-    st->code = p->code;
-    st->word_counts = p->word_counts;
-    st->imports = p->imports;
-    st->globals = p->globals;
+    st->counts = p->counts;
+    st->head = p->head ? &st->counts : NULL;
+    for (unsigned part = 0; part < PNX_PARTS; ++part) {
+        part_set(st, part, p->parts[part]);
+        st->part_cap[part] = p->caps[part];
+    }
+    if (st->undo_pending) { // a redefine traded a word's code in place: the record and the locals go back
+        st->undo_pending = false;
+        if (st->head && st->undo_old < st->head->n_words)
+            ((pnx_wordrec *)(uintptr_t)st->words)[st->undo_old] = st->undo_word;
+        for (uint32_t k = 0; st->head && k < st->head->n_locals; ++k) {
+            pnx_localrec rec;
+            uint8_t     *at = (uint8_t *)(uintptr_t)st->localrecs + (size_t)k * sizeof rec;
+            __builtin_memcpy(&rec, at, sizeof rec);
+            if (rec.word == st->undo_new) {
+                rec.word = st->undo_old;
+                __builtin_memcpy(at, &rec, sizeof rec);
+            }
+        }
+    }
     st->segment[PNX_SEG_CONST] = p->seg_const;
     st->segment[PNX_SEG_GLOBAL] = p->seg_global;
     st->symbols = p->symbols;
     st->used = p->used;
     st->n_hosts = p->n_hosts;
-    st->lines = p->lines;
-    st->localrecs = p->localrecs;
-    st->proven = p->proven;
     st->suspended = false;
     st->loading = false;
 }
@@ -347,10 +452,6 @@ pinax_mem pinax_call_buffer(pinax_call *call, int64_t buffer, size_t written) {
 }
 
 // ---- loading -----------------------------------------------------------------------------
-
-typedef struct span {
-    uint32_t begin, end; // instruction indexes of one word
-} span;
 
 static bool is_failure_word(uint32_t op) {
     return op == PNX_JMP || op == PNX_RETF || op == PNX_FAIL || op == PNX_FAILR;
@@ -1438,7 +1539,7 @@ void pnx_checks_report(const pinax_state *st, void (*put)(void *user, const char
         return;
     uint32_t line_k = 0, line = 0;
     for (uint32_t k = 0; k < st->head->n_words; ++k) {
-        const span range = {st->words[k].entry, k + 1 < st->head->n_words ? st->words[k + 1].entry : st->head->n_code};
+        const span range = pnx_word_span(st, k);
         uint32_t   checks = 0, proven = 0;
         for (uint32_t i = range.begin; i < range.end; i += opinfo[st->code[i] & 0xffu].second ? 2u : 1u) {
             checks += pnx_checked_op(st->code[i] & 0xffu);
@@ -1495,7 +1596,7 @@ pinax_err pinax_load_bytecode(pinax_state *st, pinax_str bytecode) {
         return PINAX_ERR_ARGUMENT;
     if (st->head)
         return fail(st, PINAX_ERR_STATE, "a state takes one bytecode container; sources can be added with pinax_load");
-    return pnx_load_container(st, bytecode, 0);
+    return pnx_load_container(st, bytecode);
 }
 
 // the records after the head are read in place: the head keeps them 8-byte aligned
@@ -1540,86 +1641,123 @@ static uint64_t storage_bytes(const pnx_globalrec *rec) {
     }
 }
 
-pinax_err pnx_load_container(pinax_state *st, pinax_str bytecode, uint32_t keep) {
+// The word that holds code word `pc`, or UINT32_MAX: after a redefine the words' code is not in
+// their order, so this looks at every word (fault paths only).
+static uint32_t word_of_pc(const pinax_state *st, uint32_t pc) {
+    for (uint32_t k = 0; st->head && k < st->head->n_words; ++k) {
+        if (pc >= st->words[k].entry && pc < st->words[k].entry + st->words[k].length)
+            return k;
+    }
+    return UINT32_MAX;
+}
+
+static const uint32_t no_word = UINT32_MAX;
+
+pinax_err pnx_load_container(pinax_state *st, pinax_str bytecode) {
     const pnx_program before = pnx_program_now(st);
     pnx_head h;
     if (bytecode.len < sizeof h)
         return fail(st, PINAX_ERR_FORMAT, "bytecode: too short");
     __builtin_memcpy(&h, bytecode.ptr, sizeof h);
     if (__builtin_memcmp(h.magic, PNX_MAGIC, 4) != 0 || h.version != PNX_CONTAINER_VERSION ||
-        h.order != PNX_ORDER_MARK || h.reserved != 0)
+        h.order != PNX_ORDER_MARK || h.reserved != 0 || h.reserved2 != 0)
         return fail(st, PINAX_ERR_FORMAT, "bytecode: not a container of this version and byte order");
+    const pnx_head base = st->head ? *st->head : (pnx_head){0};
+    if (h.base_words != base.n_words || h.base_globals != base.n_globals || h.base_imports != base.n_imports ||
+        h.base_iconst != base.n_iconst || h.base_sconst != base.n_sconst || h.base_code != base.n_code ||
+        h.base_strbytes != base.n_strbytes || h.base_lines != base.n_lines || h.base_locals != base.n_locals)
+        return fail(st, PINAX_ERR_FORMAT, "bytecode: the container continues another program than the state holds");
     const uint64_t total = container_bytes(&h);
-    if (total != bytecode.len || h.n_globals > 0xfffu || h.n_code > st->region_len)
+    if (total != bytecode.len || (uint64_t)base.n_globals + h.n_globals > 0xfffu ||
+        (uint64_t)base.n_code + h.n_code > st->region_len || (uint64_t)base.n_words + h.n_words > UINT32_MAX / 2 ||
+        (uint64_t)base.n_strbytes + h.n_strbytes > UINT32_MAX / 2)
         return fail(st, PINAX_ERR_FORMAT, "bytecode: sizes do not add up or exceed the P0 limits");
+    const bool redefines = h.redefine_old != no_word || h.redefine_new != no_word;
+    if (redefines && (!st->head || h.redefine_old >= base.n_words || h.redefine_new < base.n_words ||
+                      h.redefine_new >= base.n_words + h.n_words))
+        return fail(st, PINAX_ERR_FORMAT, "bytecode: the redefined word is not of the program, or the new one not of the container");
 
     const size_t mark = st->used;
     pinax_err err = PINAX_ERR_NO_ROOM;
     const char *why = "block too small for the code and its globals";
-    uint8_t *copy = take(st, bytecode.len, 8);
-    if (!copy)
-        goto rollback;
-    __builtin_memcpy(copy, bytecode.ptr, bytecode.len);
-    st->head = (const pnx_head *)(const void *)copy;
-    st->words = (const pnx_wordrec *)(const void *)(copy + sizeof h);
-    const pnx_globalrec *globalrecs = (const pnx_globalrec *)(const void *)(st->words + h.n_words);
-    st->importrecs = (const pnx_importrec *)(const void *)(globalrecs + h.n_globals);
-    st->iconst = (const int64_t *)(const void *)(st->importrecs + h.n_imports);
-    st->sconst = (const pnx_sconst *)(const void *)(st->iconst + h.n_iconst);
-    st->code = (const uint32_t *)(const void *)(st->sconst + h.n_sconst);
-    st->segment[PNX_SEG_CONST] = (const uint8_t *)(st->code + h.n_code);
-
-    st->word_counts = take(st, sizeof(pnx_counts) * (h.n_words + 1u), 8);
-    st->proven = st->word_counts ? take(st, h.n_code + 1u, 1) : NULL; // zero: nothing proven yet
-    st->imports = st->proven ? take(st, sizeof(pnx_host *) * (h.n_imports + 1u), 8) : NULL;
-    st->globals = st->imports ? take(st, sizeof(pnx_global) * (h.n_globals + 1u), 8) : NULL;
-    if (!st->globals)
-        goto rollback;
+    const uint32_t adds[PNX_PARTS] = {h.n_words,   h.n_globals, h.n_imports, h.n_iconst, h.n_sconst, h.n_code, h.n_strbytes,
+                                      h.n_lines,   h.n_locals,  h.n_words,   h.n_code,   h.n_imports, h.n_globals};
+    for (unsigned part = 0; part < PNX_PARTS; ++part) {
+        if (!part_room(st, part, adds[part]))
+            goto rollback;
+    }
+    // the records go in after what is there; the counts become the totals once they are in
+    const uint8_t *p = bytecode.ptr + sizeof h;
+#define APPEND(part, count)                                                                                 \
+    do {                                                                                                    \
+        const size_t bytes_ = (size_t)(count) * part_item[part];                                            \
+        if (bytes_)                                                                                         \
+            __builtin_memcpy((uint8_t *)part_get(st, part) + (size_t)part_count(st, part) * part_item[part], \
+                             p, bytes_);                                                                    \
+        p += bytes_;                                                                                        \
+    } while (0)
+    APPEND(PNX_PART_WORDS, h.n_words);
+    APPEND(PNX_PART_GLOBALRECS, h.n_globals);
+    APPEND(PNX_PART_IMPORTRECS, h.n_imports);
+    APPEND(PNX_PART_ICONST, h.n_iconst);
+    APPEND(PNX_PART_SCONST, h.n_sconst);
+    APPEND(PNX_PART_CODE, h.n_code);
+    APPEND(PNX_PART_STRBYTES, h.n_strbytes);
+    APPEND(PNX_PART_LINES, h.n_lines);
+    APPEND(PNX_PART_LOCALS, h.n_locals);
+#undef APPEND
+    st->counts = (pnx_head){.magic = {'P', 'N', 'X', 'B'},
+                            .version = PNX_CONTAINER_VERSION,
+                            .order = PNX_ORDER_MARK,
+                            .n_words = base.n_words + h.n_words,
+                            .n_globals = base.n_globals + h.n_globals,
+                            .n_imports = base.n_imports + h.n_imports,
+                            .n_iconst = base.n_iconst + h.n_iconst,
+                            .n_sconst = base.n_sconst + h.n_sconst,
+                            .n_code = base.n_code + h.n_code,
+                            .n_strbytes = base.n_strbytes + h.n_strbytes,
+                            .n_lines = base.n_lines + h.n_lines,
+                            .n_locals = base.n_locals + h.n_locals,
+                            .redefine_old = no_word,
+                            .redefine_new = no_word};
+    st->head = &st->counts;
+    const pnx_head *const now = st->head;
+    pnx_wordrec *const words = (pnx_wordrec *)(uintptr_t)st->words;
 
     err = PINAX_ERR_FORMAT;
     why = "bytecode: bad word record";
-    for (uint32_t k = 0; k < h.n_words; ++k) {
-        const pnx_wordrec *word = &st->words[k];
+    for (uint32_t k = base.n_words; k < now->n_words; ++k) {
+        const pnx_wordrec *word = &words[k];
         if (word->counted)
             st->word_counts[k] = (pnx_counts){word->int_args, word->str_args, word->int_results, word->str_results,
                                               word->fails != 0, false};
+        const uint32_t expected = k == base.n_words ? base.n_code : words[k - 1].entry + words[k - 1].length;
         if (!terminated(word->name, sizeof word->name) || !terminated(word->signature, sizeof word->signature) ||
             (!word->counted && !pnx_signature_counts(word->signature, &st->word_counts[k])) ||
             st->word_counts[k].str_args > PNX_MAX_STR_ARGS || st->word_counts[k].str_results > PNX_MAX_STR_RESULTS ||
-            word->entry >= h.n_code ||
-            (k > 0 && word->entry <= st->words[k - 1].entry) || (k == 0 && word->entry != 0) ||
-            word->int_cells > 256 || word->str_cells > 256)
+            word->entry != expected || word->length == 0 || word->length > now->n_code - word->entry ||
+            word->int_cells > 256 || word->str_cells > 256 || word->reserved2 != 0)
             goto rollback;
     }
-    st->lines = st->segment[PNX_SEG_CONST] + h.n_strbytes;
+    if ((h.n_words == 0 && h.n_code != 0) ||
+        (h.n_words && words[now->n_words - 1].entry + words[now->n_words - 1].length != now->n_code)) {
+        why = "bytecode: code without words, or words that do not cover the code";
+        goto rollback;
+    }
     why = "bytecode: bad line record";
-    for (uint32_t k = 0, before = 0; k < h.n_lines; ++k) {
+    for (uint32_t k = base.n_lines, before_pc = 0; k < now->n_lines; ++k) {
         pnx_linerec rec;
         __builtin_memcpy(&rec, st->lines + (size_t)k * sizeof rec, sizeof rec);
-        if (rec.pc >= h.n_code || (k && rec.pc <= before))
+        if (rec.pc < base.n_code || rec.pc >= now->n_code || (k > base.n_lines && rec.pc <= before_pc))
             goto rollback;
-        before = rec.pc;
-    }
-    st->localrecs = st->lines + (size_t)h.n_lines * sizeof(pnx_linerec);
-    why = "bytecode: bad local record";
-    for (uint32_t k = 0; k < h.n_locals; ++k) {
-        pnx_localrec rec;
-        __builtin_memcpy(&rec, st->localrecs + (size_t)k * sizeof rec, sizeof rec);
-        if (rec.word >= h.n_words)
-            goto rollback;
-        const pnx_wordrec *word = &st->words[rec.word];
-        const uint32_t length = (rec.word + 1 < h.n_words ? st->words[rec.word + 1].entry : h.n_code) - word->entry;
-        if (rec.from >= rec.to || rec.to > length || rec.bank > 1 || rec.reg >= (rec.bank ? word->str_cells : word->int_cells) ||
-            rec.kind > PINAX_VALUE_ERR || (rec.bank == 1) != (rec.kind == PINAX_VALUE_STR) || !rec.name[0] ||
-            !terminated(rec.name, sizeof rec.name) || !terminated(rec.type, sizeof rec.type))
-            goto rollback;
+        before_pc = rec.pc;
     }
     why = "bytecode: bad string constant";
-    for (uint32_t k = 0; k < h.n_sconst; ++k)
-        if ((uint64_t)st->sconst[k].offset + st->sconst[k].length > h.n_strbytes)
+    for (uint32_t k = base.n_sconst; k < now->n_sconst; ++k)
+        if ((uint64_t)st->sconst[k].offset + st->sconst[k].length > now->n_strbytes)
             goto rollback;
 
-    for (uint32_t k = 0; k < h.n_imports; ++k) {
+    for (uint32_t k = base.n_imports; k < now->n_imports; ++k) {
         const pnx_importrec *rec = &st->importrecs[k];
         err = PINAX_ERR_FORMAT;
         why = "bytecode: bad import record";
@@ -1652,9 +1790,9 @@ pinax_err pnx_load_container(pinax_state *st, pinax_str bytecode, uint32_t keep)
         st->imports[k] = found;
     }
 
-    uint8_t *first_global = NULL;
-    for (uint32_t k = 0; k < h.n_globals; ++k) {
-        const pnx_globalrec *rec = &globalrecs[k];
+    uint8_t *first_global = (uint8_t *)(uintptr_t)(before.seg_global != empty_bytes ? before.seg_global : NULL);
+    for (uint32_t k = base.n_globals; k < now->n_globals; ++k) {
+        const pnx_globalrec *rec = &st->globalrecs[k];
         pnx_global *g = &st->globals[k];
         uint64_t bytes;
         err = PINAX_ERR_FORMAT;
@@ -1695,14 +1833,6 @@ pinax_err pnx_load_container(pinax_state *st, pinax_str bytecode, uint32_t keep)
                           : rec->kind != PNX_G_TASKS && rec->reserved == 4;
         if (shared && (rec->kind == PNX_G_QUEUE || rec->kind == PNX_G_POOL))
             goto rollback;
-        if (k < keep) { // a global of the program being extended: its storage and state stay
-            if (before.globals[k].kind != rec->kind)
-                goto rollback;
-            *g = before.globals[k];
-            if (!first_global)
-                first_global = (uint8_t *)before.seg_global;
-            continue;
-        }
         err = PINAX_ERR_NO_ROOM;
         why = "block too small for the code and its globals";
         if (bytes > SIZE_MAX / 2)
@@ -1761,10 +1891,48 @@ pinax_err pnx_load_container(pinax_state *st, pinax_str bytecode, uint32_t keep)
     }
     st->segment[PNX_SEG_GLOBAL] = first_global ? first_global : empty_bytes;
 
+    // redefine: the old word's number runs the new body, and the new word keeps the old code
+    if (redefines) {
+        pnx_wordrec *old = &words[h.redefine_old], *made = &words[h.redefine_new];
+        err = PINAX_ERR_FORMAT;
+        why = "bytecode: the redefined word has another signature";
+        if (!text_equal(old->signature, made->signature) ||
+            __builtin_memcmp(&st->word_counts[h.redefine_old], &st->word_counts[h.redefine_new], sizeof(pnx_counts)) != 0)
+            goto rollback;
+        st->undo_word = *old; // put back by pnx_program_restore until the load is final
+        st->undo_old = h.redefine_old, st->undo_new = h.redefine_new;
+        st->undo_pending = true;
+        const uint32_t entry = old->entry, length = old->length;
+        const uint16_t ic = old->int_cells, sc = old->str_cells;
+        old->entry = made->entry, old->length = made->length, old->int_cells = made->int_cells, old->str_cells = made->str_cells;
+        made->entry = entry, made->length = length, made->int_cells = ic, made->str_cells = sc;
+    }
     err = PINAX_ERR_FORMAT;
-    __builtin_memset(st->region, 0, h.n_code); // scratch: which code words start an instruction
-    for (uint32_t k = 0; k < h.n_words; ++k) {
-        span range = {st->words[k].entry, k + 1 < h.n_words ? st->words[k + 1].entry : h.n_code};
+    why = "bytecode: bad local record";
+    for (uint32_t k = base.n_locals; k < now->n_locals; ++k) {
+        pnx_localrec rec;
+        __builtin_memcpy(&rec, st->localrecs + (size_t)k * sizeof rec, sizeof rec);
+        if (rec.word >= now->n_words)
+            goto rollback;
+        const pnx_wordrec *word = &words[rec.word];
+        if (rec.from >= rec.to || rec.to > word->length || rec.bank > 1 || rec.reg >= (rec.bank ? word->str_cells : word->int_cells) ||
+            rec.kind > PINAX_VALUE_ERR || (rec.bank == 1) != (rec.kind == PINAX_VALUE_STR) || !rec.name[0] ||
+            !terminated(rec.name, sizeof rec.name) || !terminated(rec.type, sizeof rec.type))
+            goto rollback;
+    }
+
+    // the three checks over the words that came, and over the redefined word, which has new code
+    __builtin_memset(st->region, 0, now->n_code); // scratch: which code words start an instruction
+    for (uint32_t k = base.n_words, pass = 0; pass < 2; ++k) {
+        if (k >= now->n_words) {
+            if (++pass == 2 || !redefines)
+                break;
+            k = h.redefine_old; // the second pass: that one word
+            pass = 1;
+        }
+        if (redefines && k == h.redefine_new && pass == 0)
+            continue; // it holds the old word's code, checked when that word came
+        const span range = pnx_word_span(st, k);
         why = check_word(st, k, range, st->region);
         if (why)
             goto rollback;
@@ -1783,19 +1951,51 @@ pinax_err pnx_load_container(pinax_state *st, pinax_str bytecode, uint32_t keep)
         const size_t needed = st->needed; // RFC-0023: which checks cannot fire; never refuses, so a scratch
         prove_word(st, range);            // that did not fit is not a size the host is told
         st->needed = needed;
-    }
-    if (h.n_words == 0 && h.n_code != 0) {
-        why = "bytecode: code without words";
-        goto rollback;
+        if (pass == 1)
+            break;
     }
     mark_yields(st);
+    if (redefines) { // the old word's locals now describe the code the new word holds; done last, as it is in place
+        for (uint32_t k = 0; k < base.n_locals; ++k) {
+            pnx_localrec rec;
+            uint8_t     *at = (uint8_t *)(uintptr_t)st->localrecs + (size_t)k * sizeof rec;
+            __builtin_memcpy(&rec, at, sizeof rec);
+            if (rec.word == h.redefine_old) {
+                rec.word = h.redefine_new;
+                __builtin_memcpy(at, &rec, sizeof rec);
+            }
+        }
+    }
     st->region_used = 0;
     return PINAX_OK;
 
 rollback:
     (void)mark;
-    pnx_program_restore(st, &before);
+    pnx_program_restore(st, &before); // puts a traded word back too
     return fail(st, err, why);
+}
+
+// The program as one container for an empty state (base zero): the fuzzer and tests read it.
+size_t pnx_program_bytes(const pinax_state *st, unsigned char *out, size_t cap) {
+    if (!st->head)
+        return 0;
+    pnx_head h = *st->head;
+    h.base_words = h.base_globals = h.base_imports = h.base_iconst = h.base_sconst = h.base_code = h.base_strbytes =
+        h.base_lines = h.base_locals = 0;
+    h.redefine_old = h.redefine_new = no_word;
+    const uint64_t total = container_bytes(&h);
+    if (total > cap)
+        return 0;
+    unsigned char *p = out;
+    __builtin_memcpy(p, &h, sizeof h);
+    p += sizeof h;
+    for (unsigned part = 0; part <= PNX_PART_LOCALS; ++part) {
+        const size_t bytes = (size_t)part_count(st, part) * part_item[part];
+        if (bytes)
+            __builtin_memcpy(p, part_get(st, part), bytes);
+        p += bytes;
+    }
+    return (size_t)total;
 }
 
 // ---- finding and running -----------------------------------------------------------------
@@ -1836,11 +2036,16 @@ static void *moved_to(const piece *pieces, uint32_t n, const void *p) {
 }
 #define RELOC(field) ((field) = (typeof(field))moved_to(pieces, n, (const void *)(field)))
 
+void pnx_load_done(pinax_state *st) {
+    st->undo_pending = false;
+    pnx_compact(st);
+}
+
 void pnx_compact(pinax_state *st) {
     if (!st->head || st->suspended || st->loading || st->host_cur || st->nest || st->frozen || pnx_tasks_alive(st))
         return;
     const pnx_head *h = st->head;
-    const uint32_t  most = h->n_globals + 6;
+    const uint32_t  most = h->n_globals + PNX_PARTS + 2;
     const size_t    mark = st->used;
     piece *pieces = take(st, (size_t)most * sizeof(piece), 8); // the list of live pieces, as scratch above them all
     if (!pieces) {
@@ -1848,12 +2053,11 @@ void pnx_compact(pinax_state *st) {
         return;
     }
     uint32_t n = 0;
-    pieces[n++] = (piece){(uint8_t *)(uintptr_t)h, (size_t)container_bytes(h), 0};
-    pieces[n++] = (piece){(uint8_t *)st->word_counts, sizeof(pnx_counts) * ((size_t)h->n_words + 1u), 0};
-    pieces[n++] = (piece){st->proven, (size_t)h->n_code + 1u, 0};
-    pieces[n++] = (piece){(uint8_t *)st->imports, sizeof(pnx_host *) * ((size_t)h->n_imports + 1u), 0};
-    pieces[n++] = (piece){(uint8_t *)st->globals, sizeof(pnx_global) * ((size_t)h->n_globals + 1u), 0};
-    const pnx_globalrec *recs = (const pnx_globalrec *)(const void *)(st->words + h->n_words);
+    for (unsigned part = 0; part < PNX_PARTS; ++part) { // each part at its capacity: the room to grow stays
+        if (st->part_cap[part])
+            pieces[n++] = (piece){part_get(st, part), (size_t)st->part_cap[part] * part_item[part], 0};
+    }
+    const pnx_globalrec *recs = st->globalrecs;
     const uint8_t *const floor = (const uint8_t *)st->handles + sizeof(pnx_handle_slot) * st->handle_slots;
     for (uint32_t k = 0; k < h->n_globals; ++k) {
         const pnx_global *g = &st->globals[k];
@@ -1881,10 +2085,9 @@ void pnx_compact(pinax_state *st) {
         pieces[i].by = dst - pieces[i].at;
         cursor = dst + pieces[i].bytes;
     }
-    RELOC(st->head), RELOC(st->words), RELOC(st->importrecs), RELOC(st->iconst), RELOC(st->sconst), RELOC(st->code);
-    h = st->head; // the head moved with its container; where it was may hold another piece now
-    RELOC(st->lines), RELOC(st->localrecs), RELOC(st->segment[PNX_SEG_CONST]), RELOC(st->segment[PNX_SEG_GLOBAL]);
-    RELOC(st->word_counts), RELOC(st->proven), RELOC(st->imports), RELOC(st->globals);
+    for (unsigned part = 0; part < PNX_PARTS; ++part)
+        part_set(st, part, moved_to(pieces, n, part_get(st, part)));
+    RELOC(st->segment[PNX_SEG_GLOBAL]);
     if (st->symbols) {
         const void *from = st->symbols;
         RELOC(st->symbols);
@@ -1937,8 +2140,7 @@ bool pnx_tasks_alive(const pinax_state *st) {
 //
 // Whether word k yields on its own, and the words it calls, from one scan of its code.
 static bool word_yields_itself(const pinax_state *st, uint32_t k, void (*call)(void *, uint32_t, uint32_t), void *user) {
-    const pnx_head *h = st->head;
-    const uint32_t end = k + 1 < h->n_words ? st->words[k + 1].entry : h->n_code;
+    const uint32_t end = st->words[k].entry + st->words[k].length;
     bool yields = false;
     for (uint32_t i = st->words[k].entry; i < end;) {
         const uint32_t op = st->code[i] & 0xffu;
@@ -1975,7 +2177,7 @@ static void mark_yields_slowly(pinax_state *st) {
         for (uint32_t k = 0; k < h->n_words; ++k) {
             if (st->word_counts[k].yields)
                 continue;
-            const uint32_t end = k + 1 < h->n_words ? st->words[k + 1].entry : h->n_code;
+            const uint32_t end = st->words[k].entry + st->words[k].length;
             bool yields = word_yields_itself(st, k, NULL, NULL);
             for (uint32_t i = st->words[k].entry; i < end && !yields;) {
                 const uint32_t op = st->code[i] & 0xffu;
@@ -2106,10 +2308,9 @@ static void fault_place(pinax_state *st, pinax_err err) {
         line = rec.line;
     }
     if (line) {
-        uint32_t word = 0;
-        while (word + 1 < st->head->n_words && st->words[word + 1].entry <= pc)
-            ++word;
-        const pinax_str module = pnx_module_name(st, st->words[word].module);
+        const uint32_t  word = word_of_pc(st, pc);
+        const pinax_str module = word == UINT32_MAX ? (pinax_str){(const unsigned char *)"", 0}
+                                                    : pnx_module_name(st, st->words[word].module);
         uint8_t digits[24];
         const uint32_t count = pnx_format_int(line, digits);
         if (module.len) {
@@ -2156,9 +2357,9 @@ static void fault_locals(pinax_state *st) {
     if (!st->head || !st->head->n_locals || !st->head->n_words || !ibank || !sbank)
         return;
     const uint32_t pc = st->fault_pc ? st->fault_pc - 1 : 0;
-    uint32_t word = 0;
-    while (word + 1 < st->head->n_words && st->words[word + 1].entry <= pc)
-        ++word;
+    const uint32_t word = word_of_pc(st, pc);
+    if (word == UINT32_MAX)
+        return;
     const uint32_t at = pc - st->words[word].entry;
     for (uint32_t k = 0; k < st->head->n_locals && st->fault_n < 16; ++k) {
         pnx_localrec rec;
@@ -2398,7 +2599,7 @@ pinax_err pinax_resume(pinax_state *st, const pinax_args *results) {
             pnx_program_restore(st, &before);
             st->error_text = text;
         } else {
-            pnx_compact(st);
+            pnx_load_done(st);
         }
     }
     return err;
@@ -2461,7 +2662,7 @@ pinax_err pinax_bind(pinax_state *st, const char *global, void *memory, size_t b
         return fail(st, PINAX_ERR_STATE, "no code loaded");
     if (run_unfinished(st)) // a view the run holds may point into the storage the host takes back
         return fail(st, PINAX_ERR_STATE, "a run of the state is not finished");
-    const pnx_globalrec *recs = (const pnx_globalrec *)(const void *)(st->words + st->head->n_words);
+    const pnx_globalrec *recs = st->globalrecs;
     for (uint32_t k = 0; k < st->head->n_globals; ++k) {
         if (!text_equal(recs[k].name, global))
             continue;
@@ -2492,7 +2693,7 @@ pinax_err pinax_bind(pinax_state *st, const char *global, void *memory, size_t b
 
 // The record of the global named `name`, or NULL.
 static const pnx_globalrec *global_rec(const pinax_state *st, const char *name, uint32_t *index) {
-    const pnx_globalrec *recs = (const pnx_globalrec *)(const void *)(st->words + st->head->n_words);
+    const pnx_globalrec *recs = st->globalrecs;
     for (uint32_t k = 0; k < st->head->n_globals; ++k) {
         if (text_equal(recs[k].name, name)) {
             *index = k;
@@ -2617,7 +2818,7 @@ pinax_err pinax_share_save(const pinax_state *st, pinax_mem out, size_t *written
     const size_t size = pinax_share_size(st);
     if (out.len < size)
         return PINAX_ERR_NO_ROOM;
-    const pnx_globalrec *recs = (const pnx_globalrec *)(const void *)(st->words + st->head->n_words);
+    const pnx_globalrec *recs = st->globalrecs;
     uint8_t             *file = out.ptr;
     pnx_share_head       head = {.magic = {'P', 'N', 'X', 'S'}, .format = PINAX_FORMAT, .order = PNX_ORDER_MARK,
                                  .length = size};
@@ -2710,7 +2911,7 @@ pinax_err pinax_share_file(pinax_state *st, const char *global, pinax_str file, 
     if (__builtin_memcmp(head.magic, "PNXS", 4) != 0 || head.format != PINAX_FORMAT || head.order != PNX_ORDER_MARK ||
         head.length != file.len || head.count > (file.len - sizeof head) / sizeof(pnx_share_entry))
         return fail(st, PINAX_ERR_FORMAT, "not a share file of this format and byte order, or cut short");
-    uint32_t             ti, fi = UINT32_MAX;
+    uint32_t             ti = UINT32_MAX, fi = UINT32_MAX;
     const pnx_globalrec *trec = global_rec(st, global, &ti);
     const pnx_share_entry *entries = (const pnx_share_entry *)(const void *)(file.ptr + sizeof head);
     for (uint32_t k = 0; fi == UINT32_MAX && k < head.count; ++k) {
@@ -3100,7 +3301,7 @@ pinax_err pinax_global_find(pinax_state *st, const char *name, pinax_global *out
         return PINAX_ERR_ARGUMENT;
     if (!st->head)
         return fail(st, PINAX_ERR_STATE, "no code loaded");
-    const pnx_globalrec *recs = (const pnx_globalrec *)(const void *)(st->words + st->head->n_words);
+    const pnx_globalrec *recs = st->globalrecs;
     for (uint32_t k = 0; k < st->head->n_globals; ++k) {
         if (!text_equal(recs[k].name, name))
             continue;
@@ -3146,7 +3347,7 @@ static uint64_t image_layout(void) {
     const uint64_t parts[] = {sizeof(pinax_state), sizeof(pnx_task), sizeof(pnx_global), sizeof(pnx_host),
                               sizeof(pnx_handle_slot), sizeof(pnx_handle_type), sizeof(pnx_context),
                               sizeof(pnx_scell), sizeof(pnx_frame), sizeof(pnx_counts), sizeof(void *),
-                              offsetof(pinax_state, symbols), offsetof(pinax_state, handles),
+                              offsetof(pinax_state, symbols), offsetof(pinax_state, handles), offsetof(pinax_state, counts),
                               offsetof(pinax_state, globals), offsetof(pinax_state, main), offsetof(pnx_task, ctx),
                               offsetof(pnx_global, own), offsetof(pnx_global, shared), offsetof(pnx_host, fn), PNX_OP_COUNT, PNX_CONTAINER_VERSION,
                               PINAX_FORMAT, pnx_static_len, PNX_SEG_COUNT, PNX_MAX_HOSTS, PNX_MAX_HANDLE_TYPES};
@@ -3254,7 +3455,8 @@ pinax_err pinax_image_open(pinax_mem block, pinax_str image, const pinax_config 
     st->block_len = block.len - sizeof head - skip;
     st->needed = 0;
     MOVE(st->ibank), MOVE(st->sbank), MOVE(st->ctrl), MOVE(st->region), MOVE(st->hosts), MOVE(st->handles);
-    MOVE(st->head), MOVE(st->words), MOVE(st->importrecs), MOVE(st->iconst), MOVE(st->sconst), MOVE(st->code);
+    MOVE(st->head), MOVE(st->words), MOVE(st->globalrecs), MOVE(st->importrecs), MOVE(st->iconst), MOVE(st->sconst);
+    MOVE(st->code);
     MOVE(st->word_counts), MOVE(st->imports), MOVE(st->globals), MOVE(st->lines), MOVE(st->localrecs);
     MOVE(st->proven);
     MOVE(st->task), MOVE(st->main.ibank), MOVE(st->main.sbank), MOVE(st->main.ctrl), MOVE(st->main_wait.host);

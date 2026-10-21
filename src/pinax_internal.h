@@ -185,23 +185,38 @@ typedef struct pnx_task {
     pnx_ptn_found ptn; // its last ptn.match
 } pnx_task;
 
-// What a load replaces, kept so that a failed load can put it back.
+// The parts of a program, each a segment of the block with a capacity (RFC-0024): a load appends
+// to them; a full one is taken again at twice the size, and the old one is dead room until the
+// next compaction. Their counts are the state's `counts` (a pnx_head).
+enum {
+    PNX_PART_WORDS,      // pnx_wordrec
+    PNX_PART_GLOBALRECS, // pnx_globalrec
+    PNX_PART_IMPORTRECS, // pnx_importrec
+    PNX_PART_ICONST,     // int64_t
+    PNX_PART_SCONST,     // pnx_sconst
+    PNX_PART_CODE,       // uint32_t
+    PNX_PART_STRBYTES,   // uint8_t (segment[PNX_SEG_CONST])
+    PNX_PART_LINES,      // pnx_linerec, unaligned
+    PNX_PART_LOCALS,     // pnx_localrec, unaligned
+    PNX_PART_WCOUNTS,    // pnx_counts, one per word
+    PNX_PART_PROVEN,     // uint8_t, one per code word
+    PNX_PART_IMPORTS,    // const pnx_host *, one per import
+    PNX_PART_GLOBALS,    // pnx_global, one per global
+    PNX_PARTS
+};
+
+// What a load changes, kept so that a failed load can put it back: the counts by value, the
+// parts and their capacities, and the rest of what points at the program.
 typedef struct pnx_program {
-    const pnx_head      *head;
-    const pnx_wordrec   *words;
-    const pnx_importrec *importrecs;
-    const int64_t       *iconst;
-    const pnx_sconst    *sconst;
-    const uint32_t      *code;
-    pnx_counts          *word_counts;
-    const pnx_host     **imports;
-    pnx_global          *globals;
-    const uint8_t       *seg_const, *seg_global;
-    void                *symbols;
-    size_t               used;
-    uint32_t             n_hosts;
-    const uint8_t       *lines, *localrecs;
-    uint8_t             *proven;
+    const pnx_head *head; // NULL, or the state's own counts
+    pnx_head        counts;
+    void           *parts[PNX_PARTS];
+    uint32_t        caps[PNX_PARTS];
+    pnx_global     *globals; // parts[PNX_PART_GLOBALS], for the readers that name it
+    const uint8_t  *seg_const, *seg_global;
+    void           *symbols;
+    size_t          used;
+    uint32_t        n_hosts;
 } pnx_program;
 
 struct pinax_state {
@@ -216,9 +231,13 @@ struct pinax_state {
     uint32_t   int_slots, str_slots, depth_max, region_len, region_used, n_hosts;
     uint32_t   region_floor; // of the context running now (pnx_context)
 
-    // loaded code; all inside the block
+    // loaded code; all inside the block. `head` is NULL until a program is loaded, then `&counts`:
+    // the counts of the parts, which loads append to (RFC-0024, PNX_PART_*).
     const pnx_head     *head;
+    pnx_head            counts;
+    uint32_t            part_cap[PNX_PARTS];
     const pnx_wordrec  *words;
+    const pnx_globalrec *globalrecs;
     const pnx_importrec *importrecs;
     const int64_t      *iconst;
     const pnx_sconst   *sconst;
@@ -279,6 +298,11 @@ struct pinax_state {
     bool     frozen;     // lent a global with pinax_share(): it neither runs nor loads again
     bool     load_runs;  // the code of a load runs: shared globals not given yet read as empty
     pnx_program before_load; // what that load would be undone to
+    // redefine: the record of the word whose code a load traded, as it was, until the load is final
+    // (a failed load, or one whose code faults, puts it back: pnx_program_restore)
+    pnx_wordrec undo_word;
+    uint32_t    undo_old, undo_new;
+    bool        undo_pending;
     void    *symbols;   // the compiler's declaration tables, kept for the next load (pinax_compile.c)
     pinax_err   fail;
     const char *error_text;
@@ -359,6 +383,8 @@ size_t   pnx_symbols_bytes(const void *symbols); // the bytes of the kept tables
 // left behind, so that the block holds one (RFC-0024). Does nothing while a run, a load, a host
 // word or a task is in the middle of something.
 void pnx_compact(pinax_state *state);
+// A load is final (its code ran through): what it traded stays, and the block is compacted.
+void pnx_load_done(pinax_state *state);
 uint64_t pnx_symbols_layout(uint64_t hash);
 void pnx_err_name(int64_t err, uint32_t *offset, uint32_t *length);
 bool pnx_tasks_alive(const pinax_state *state); // a task was spawned and has not ended
@@ -370,9 +396,21 @@ uint32_t pnx_find_byte(const uint8_t *bytes, uint32_t length, uint8_t byte);
 // The loaded program as it is now, and putting an earlier one back (a failed load).
 pnx_program pnx_program_now(const pinax_state *state);
 void pnx_program_restore(pinax_state *state, const pnx_program *program);
-// Loads a container in place of the present program. The first `keep` globals keep their
-// storage and what it holds: they are the globals of the program being extended.
-pinax_err pnx_load_container(pinax_state *state, pinax_str bytecode, uint32_t keep);
+// Loads a container: appends what it carries to the program the state holds (which must be the
+// one the container continues), checks the new words, and undoes everything on a refusal.
+pinax_err pnx_load_container(pinax_state *state, pinax_str bytecode);
+// The program of the state as one container made for an empty state (base zero), for tests and
+// the fuzzer: the bytes written, or 0 when `cap` is too small or the state holds no program.
+size_t pnx_program_bytes(const pinax_state *state, unsigned char *out, size_t cap);
+typedef struct span {
+    uint32_t begin, end; // instruction indexes of one word
+} span;
+
+// The code of word `index`: [entry, entry + length).
+static inline span pnx_word_span(const pinax_state *state, uint32_t index) {
+    const pnx_wordrec *w = &state->words[index];
+    return (span){w->entry, w->entry + w->length};
+}
 // Bytes from the block, zeroed; NULL when it is full (pinax_needed() then tells how much).
 void *pnx_take(pinax_state *state, size_t bytes, size_t align);
 // The number of the source module called `name` (of `length` bytes), or UINT32_MAX.

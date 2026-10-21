@@ -401,9 +401,14 @@ enum {
 // records, integer constants, string constant records, code, string bytes, line records, local
 // records; in this order, native byte order.
 #define PNX_MAGIC "PNXB"
-#define PNX_CONTAINER_VERSION 2
+#define PNX_CONTAINER_VERSION 3
 #define PNX_ORDER_MARK 0x0102
 
+// A container carries one load: what the program gains. Its records are numbered on from the
+// program it continues (base_*: the counts that program had, all zero for a container made for
+// an empty state), so a word number, a global number or a constant offset in it is absolute. The
+// loader refuses a container whose base is not the state's counts. The processor keeps its program
+// as these counts over its own segments; the same struct holds them there (RFC-0024).
 typedef struct pnx_head {
     uint8_t  magic[4];
     uint16_t version;
@@ -412,6 +417,13 @@ typedef struct pnx_head {
     uint32_t n_lines; // line records after the string bytes; a loader that wants none may skip them
     uint32_t n_locals; // local records after the line records; may be 0
     uint32_t reserved; // 0: keeps the records after the head 8-byte aligned
+    uint32_t base_words, base_globals, base_imports, base_iconst, base_sconst, base_code, base_strbytes, base_lines,
+             base_locals;
+    // redefine: the word of the program (below base_words) whose code this container replaces, and the
+    // new word (one of this container's) that carries the new body; the loader trades their code.
+    // UINT32_MAX: none.
+    uint32_t redefine_old, redefine_new;
+    uint32_t reserved2; // 0
 } pnx_head;
 
 // Debug information: from code word `pc` on, the code came from source line `line` (of the
@@ -433,7 +445,8 @@ typedef struct pnx_localrec {
 typedef struct pnx_wordrec {
     char     name[32];
     char     signature[72];
-    uint32_t entry; // index of the first instruction; words are stored in rising order
+    uint32_t entry;  // index of the first instruction; a container's words follow each other in order
+    uint32_t length; // code words of the word: a redefined word's code lies elsewhere than its number says
     uint16_t int_cells, str_cells;
     // How many arguments and results live in each bank. With `counted` 0 the loader reads them
     // off the signature, where every type but str is an integer; a compiler that knows
@@ -441,6 +454,7 @@ typedef struct pnx_wordrec {
     uint8_t  counted, int_args, str_args, int_results, str_results, fails;
     uint8_t  module;   // the source module the word belongs to: 0 is the first source loaded
     uint8_t  reserved;
+    uint32_t reserved2; // 0; keeps the record a multiple of 8 bytes, as the records after it are read in place
 } pnx_wordrec;
 
 typedef struct pnx_globalrec {

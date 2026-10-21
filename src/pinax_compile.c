@@ -373,8 +373,6 @@ typedef struct comp {
     // takes its place (RFC-0006 S11); NONE when the text redefines nothing
     uint32_t     redefine_old, redefine_new;
     bool         redefining; // `redefine` stands before the definition being read
-    uint32_t    *entries;    // after a redefinition: where every word's code begins now
-    uint16_t     redefine_cells[2]; // and the registers of the new code, which the old word gets
     bool         in_extern; // a signature of an extern is being read: cstr is a type there
     bool         in_host;   // a signature of a host word is being read: buffer is a type there
     bool         drop_names; // the names in the signature being read are not wanted
@@ -7886,75 +7884,17 @@ static bool compile(comp *c, image *im, bool *has_top) {
     return true;
 }
 
-// redefine: the new code takes the place of the old word's code, and the old code goes where
-// the new word was, under the hidden name "(replaced)". Calls name words by number and jumps
-// are relative inside a word, so whole words of code can change places; the word that was
-// replaced keeps its number, and every call to it, from earlier code too, runs the new code.
-static bool move_redefined(comp *c, image *im) {
-    const pinax_state *st = c->st;
-    const uint32_t n = c->words.n, total = im->code.n, old_code = st->head->n_code, n_lines = st->head->n_lines;
-    const uint32_t old = c->redefine_old, made = c->redefine_new;
-    wordsym *all = c->words.ptr;
-    uint32_t *code = im->code.ptr, *lines = im->lines.ptr;
-    // the source lines of the earlier code, from its records, one for each code word
-    for (uint32_t pc = 0; pc < old_code; ++pc)
-        lines[pc] = 0;
-    for (uint32_t k = 0; k < n_lines; ++k) {
-        pnx_linerec rec, next = {old_code, 0};
-        __builtin_memcpy(&rec, st->lines + (size_t)k * sizeof rec, sizeof rec);
-        if (k + 1 < n_lines)
-            __builtin_memcpy(&next, st->lines + (size_t)(k + 1) * sizeof next, sizeof next);
-        for (uint32_t pc = rec.pc; pc < next.pc && pc < old_code; ++pc)
-            lines[pc] = rec.line;
-    }
-    uint32_t *begin = arena_alloc(c, (size_t)(n + 1) * sizeof(uint32_t)), *entries = arena_alloc(c, (size_t)n * sizeof(uint32_t)),
-             *code2 = arena_alloc(c, (size_t)total * sizeof(uint32_t)), *lines2 = arena_alloc(c, (size_t)total * sizeof(uint32_t));
-    if (!begin || !entries || !code2 || !lines2)
-        return false;
-    for (uint32_t j = 0; j < n; ++j)
-        begin[j] = j < c->base.words ? st->words[j].entry : all[j].entry;
-    begin[n] = total;
-    for (uint32_t j = 0; j < n; ++j) {
-        if (begin[j] > begin[j + 1] || (j == c->base.words && begin[j] != old_code))
-            return error(c, PINAX_ERR_STATE, "redefine: the code of the words is not laid out in their order");
-    }
-    for (uint32_t j = 0, at = 0; j < n; ++j) {
-        const uint32_t from = j == old ? made : j == made ? old : j, length = begin[from + 1] - begin[from];
-        __builtin_memcpy(code2 + at, code + begin[from], (size_t)length * sizeof(uint32_t));
-        __builtin_memcpy(lines2 + at, lines + begin[from], (size_t)length * sizeof(uint32_t));
-        entries[j] = at;
-        at += length;
-    }
-    __builtin_memcpy(code, code2, (size_t)total * sizeof(uint32_t));
-    __builtin_memcpy(lines, lines2, (size_t)total * sizeof(uint32_t));
-    __builtin_memcpy(c->redefine_cells, all[made].cells, sizeof c->redefine_cells);
-    all[made].cells[0] = st->words[old].int_cells;
-    all[made].cells[1] = st->words[old].str_cells;
-    for (uint32_t j = 0; j < n; ++j)
-        all[j].entry = entries[j];
-    c->entries = entries;
-    return true;
-}
-
-// Writes the container into the arena and reports where it is.
+// Writes the container of this load into the arena and reports where it is: what the program
+// gains (the words, globals, imports, constants, code, strings, line and local records of this
+// load), numbered on from the program so far, whose counts the head carries (RFC-0024).
 static bool serialize(comp *c, const image *im, uint8_t **out, size_t *out_len) {
-    // line records: those of the earlier loads, then one wherever the line changes in the new code
     const pinax_state *st = c->st;
-    // after a redefinition every line record is made again from the lines of the code words
-    const bool     moved = c->entries != NULL;
-    const uint32_t old_code = st->head && !moved ? st->head->n_code : 0,
-                   old_lines = st->head && !moved ? st->head->n_lines : 0;
+    const pnx_head     base = st->head ? *st->head : (pnx_head){0};
+    // line records: one wherever the line changes in the new code
     vec runs = {0};
-    if (old_lines) {
-        runs.ptr = arena_alloc(c, (size_t)old_lines * sizeof(pnx_linerec));
-        if (!runs.ptr)
-            return false;
-        __builtin_memcpy(runs.ptr, st->lines, (size_t)old_lines * sizeof(pnx_linerec));
-        runs.n = runs.cap = old_lines;
-    }
-    for (uint32_t k = old_code, line = 0; k < im->code.n; ++k) {
+    for (uint32_t k = base.n_code, line = 0; k < im->code.n; ++k) {
         const uint32_t here = ((const uint32_t *)im->lines.ptr)[k];
-        if (k == old_code || here != line) {
+        if (k == base.n_code || here != line) {
             pnx_linerec *rec = vec_push(c, &runs, sizeof(pnx_linerec));
             if (!rec)
                 return false;
@@ -7969,15 +7909,26 @@ static bool serialize(comp *c, const image *im, uint8_t **out, size_t *out_len) 
         .magic = {'P', 'N', 'X', 'B'},
         .version = PNX_CONTAINER_VERSION,
         .order = PNX_ORDER_MARK,
-        .n_words = c->words.n,
-        .n_globals = c->globals.n,
-        .n_imports = c->imports.n,
-        .n_iconst = c->iconst.n,
-        .n_sconst = c->sconst.n,
-        .n_code = im->code.n,
-        .n_strbytes = c->strbytes.n,
+        .n_words = c->words.n - base.n_words,
+        .n_globals = c->globals.n - base.n_globals,
+        .n_imports = c->imports.n - base.n_imports,
+        .n_iconst = c->iconst.n - base.n_iconst,
+        .n_sconst = c->sconst.n - base.n_sconst,
+        .n_code = im->code.n - base.n_code,
+        .n_strbytes = c->strbytes.n - base.n_strbytes,
         .n_lines = runs.n,
-        .n_locals = (st->head ? st->head->n_locals : 0) + c->localrecs.n,
+        .n_locals = c->localrecs.n,
+        .base_words = base.n_words,
+        .base_globals = base.n_globals,
+        .base_imports = base.n_imports,
+        .base_iconst = base.n_iconst,
+        .base_sconst = base.n_sconst,
+        .base_code = base.n_code,
+        .base_strbytes = base.n_strbytes,
+        .base_lines = base.n_lines,
+        .base_locals = base.n_locals,
+        .redefine_old = c->redefine_old,
+        .redefine_new = c->redefine_new,
     };
     const size_t len = sizeof head + (size_t)head.n_words * sizeof(pnx_wordrec) +
                        (size_t)head.n_globals * sizeof(pnx_globalrec) +
@@ -7991,23 +7942,11 @@ static bool serialize(comp *c, const image *im, uint8_t **out, size_t *out_len) 
     *out_len = len;
     __builtin_memcpy(p, &head, sizeof head);
     p += sizeof head;
-    for (uint32_t k = 0; k < head.n_words; ++k) {
+    for (uint32_t k = base.n_words; k < c->words.n; ++k) {
         const wordsym *w = (const wordsym *)c->words.ptr + k;
-        if (k < c->base.words) { // a word of an earlier load: its record as it is
-            pnx_wordrec rec;
-            __builtin_memcpy(&rec, &st->words[k], sizeof rec);
-            if (moved)
-                rec.entry = c->entries[k];
-            if (k == c->redefine_old) {
-                rec.int_cells = c->redefine_cells[0];
-                rec.str_cells = c->redefine_cells[1];
-            }
-            __builtin_memcpy(p, &rec, sizeof rec);
-            p += sizeof(pnx_wordrec);
-            continue;
-        }
-        pnx_wordrec rec = {.entry = w->entry, .int_cells = w->cells[0], .str_cells = w->cells[1], .counted = 1,
-                           .fails = w->sig.fails, .module = (uint8_t)w->module};
+        const uint32_t next = k + 1 < c->words.n ? ((const wordsym *)c->words.ptr + k + 1)->entry : im->code.n;
+        pnx_wordrec rec = {.entry = w->entry, .length = next - w->entry, .int_cells = w->cells[0], .str_cells = w->cells[1],
+                           .counted = 1, .fails = w->sig.fails, .module = (uint8_t)w->module};
         uint32_t in[2], out[2];
         count_sig(&w->sig, in, out);
         rec.int_args = (uint8_t)in[0];
@@ -8020,7 +7959,7 @@ static bool serialize(comp *c, const image *im, uint8_t **out, size_t *out_len) 
         __builtin_memcpy(p, &rec, sizeof rec);
         p += sizeof rec;
     }
-    for (uint32_t k = 0; k < head.n_globals; ++k) {
+    for (uint32_t k = base.n_globals; k < c->globals.n; ++k) {
         const globalsym *g = (const globalsym *)c->globals.ptr + k;
         pnx_globalrec rec = {.kind = g->kind == GK_ARRAY ? PNX_G_ARRAY : g->kind == GK_LIST ? PNX_G_LIST : PNX_G_INT,
                              .elem_bytes = 8,
@@ -8068,7 +8007,7 @@ static bool serialize(comp *c, const image *im, uint8_t **out, size_t *out_len) 
         __builtin_memcpy(p, &rec, sizeof rec);
         p += sizeof rec;
     }
-    for (uint32_t k = 0; k < head.n_imports; ++k) {
+    for (uint32_t k = base.n_imports; k < c->imports.n; ++k) {
         const pnx_host *h = &c->st->hosts[((const uint32_t *)c->imports.ptr)[k]];
         pnx_importrec rec = {0};
         __builtin_memcpy(rec.module, h->module, sizeof rec.module);
@@ -8078,34 +8017,27 @@ static bool serialize(comp *c, const image *im, uint8_t **out, size_t *out_len) 
         p += sizeof rec;
     }
     if (head.n_iconst)
-        __builtin_memcpy(p, c->iconst.ptr, (size_t)head.n_iconst * 8);
+        __builtin_memcpy(p, (const int64_t *)c->iconst.ptr + base.n_iconst, (size_t)head.n_iconst * 8);
     p += (size_t)head.n_iconst * 8;
     if (head.n_sconst)
-        __builtin_memcpy(p, c->sconst.ptr, (size_t)head.n_sconst * sizeof(pnx_sconst));
+        __builtin_memcpy(p, (const pnx_sconst *)c->sconst.ptr + base.n_sconst, (size_t)head.n_sconst * sizeof(pnx_sconst));
     p += (size_t)head.n_sconst * sizeof(pnx_sconst);
-    if (head.n_code) {
-        patch_forward_calls(c, im->code.ptr, head.n_code);
-        __builtin_memcpy(p, im->code.ptr, (size_t)head.n_code * 4);
+    if (head.n_code) { // forward words are of this load alone: only its code holds calls to patch
+        patch_forward_calls(c, (uint32_t *)im->code.ptr + base.n_code, head.n_code);
+        __builtin_memcpy(p, (const uint32_t *)im->code.ptr + base.n_code, (size_t)head.n_code * 4);
     }
     p += (size_t)head.n_code * 4;
     if (head.n_strbytes)
-        __builtin_memcpy(p, c->strbytes.ptr, head.n_strbytes);
+        __builtin_memcpy(p, (const uint8_t *)c->strbytes.ptr + base.n_strbytes, head.n_strbytes);
     p += head.n_strbytes;
     if (head.n_lines)
         __builtin_memcpy(p, runs.ptr, (size_t)head.n_lines * sizeof(pnx_linerec));
     p += (size_t)head.n_lines * sizeof(pnx_linerec);
-    // local records: those of the earlier loads, then this one's; after a redefinition the two
-    // words that changed code trade their records too
+    // local records of this load; those of a redefined body belong to the word that keeps its
+    // number, since the loader gives that word the new code
     for (uint32_t k = 0; k < head.n_locals; ++k, p += sizeof(pnx_localrec)) {
-        const uint32_t before = head.n_locals - c->localrecs.n;
-        pnx_localrec rec;
-        if (k < before)
-            __builtin_memcpy(&rec, st->localrecs + (size_t)k * sizeof rec, sizeof rec);
-        else
-            rec = ((const pnx_localrec *)c->localrecs.ptr)[k - before];
-        if (moved && k < before && rec.word == c->redefine_old)
-            rec.word = c->redefine_new;
-        else if (moved && k >= before && rec.word == c->redefine_new)
+        pnx_localrec rec = ((const pnx_localrec *)c->localrecs.ptr)[k];
+        if (c->redefine_new != NONE && rec.word == c->redefine_new)
             rec.word = c->redefine_old;
         __builtin_memcpy(p, &rec, sizeof rec);
     }
@@ -8534,8 +8466,7 @@ static pinax_err load_source(pinax_state *st, const char *file, pinax_str source
         static const sig no_results = {0};
         c.top_fn->sig = &no_results;
         c.f = c.top_fn;
-        if (compile(&c, &im, &has_top) && truncs_ok(&c) && (c.redefine_new == NONE || move_redefined(&c, &im)) &&
-            serialize(&c, &im, &container, &length))
+        if (compile(&c, &im, &has_top) && truncs_ok(&c) && serialize(&c, &im, &container, &length))
             tables = keep_symbols(&c, source, work);
     }
     if (c.err != PINAX_OK) {
@@ -8576,7 +8507,7 @@ static pinax_err load_source(pinax_state *st, const char *file, pinax_str source
     const size_t full = st->block_len;
     st->block_len = (size_t)(parked - st->block);
     const pinax_str bytes = {parked, length};
-    pinax_err err = pnx_load_container(st, bytes, before.head ? before.head->n_globals : 0);
+    pinax_err err = pnx_load_container(st, bytes);
     symtab *kept = NULL;
     if (err == PINAX_OK) {
         st->block_len = (size_t)(parked_tables - st->block);
@@ -8634,11 +8565,11 @@ static pinax_err load_source(pinax_state *st, const char *file, pinax_str source
     // lives in that code. What the line did to the globals stays: their storage is shared, and
     // their state (a list's length, a queue's head) is copied back into the older table.
     if (err == PINAX_OK && !declared && !pnx_tasks_alive(st)) {
-        if (before.head && before.head->n_globals)
-            __builtin_memcpy(before.globals, st->globals, (size_t)before.head->n_globals * sizeof(pnx_global));
+        if (before.counts.n_globals && before.globals != st->globals) // the part may have grown elsewhere
+            __builtin_memcpy(before.globals, st->globals, (size_t)before.counts.n_globals * sizeof(pnx_global));
         pnx_program_restore(st, &before);
-    } else if (err == PINAX_OK) { // the program was replaced: the copy before it is dead room, taken back now
-        pnx_compact(st);
+    } else if (err == PINAX_OK) { // the load is final: what it traded stays, and the dead room goes
+        pnx_load_done(st);
     }
     return err;
 }

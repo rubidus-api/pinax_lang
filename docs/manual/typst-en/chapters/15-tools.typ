@@ -33,8 +33,8 @@ ones. A line that is refused or ends with a fault leaves nothing behind.
 The last line, `cube cube`, was refused because the stack was empty. The message of a refusal goes to standard error,
 so it is not in the output above.
 
-A line that declares a word or a global is loaded again with the whole program so far. So in a long session a later
-line takes a little longer to load, and the memory block fills with what was declared. A line that only computes
+A line that declares a word or a global adds just what it declares to the program, so even in a long session a
+line loads in the time its own length takes, and the memory block fills with what was declared. A line that only computes
 values uses none of it. When three quarters of the block are used, `pnx` says so once on standard error. Start a
 session that declares many large globals with a larger block through `PNX_BLOCK_KB` (the default is 16384, that is
 16 MiB).
