@@ -84,6 +84,12 @@ pass of it, finding names, deciding which words yield or checking the flow of th
 of the length. A host that takes untrusted sources therefore limits only their length, without fear that one load
 never ends.]
 
+#para("1c")[A load into a state that already holds a program loads that program again with the new source: the time
+of one load that declares words, and the room it takes in the block, grow with the whole program so far, not with the
+source passed, and the copy before it stays in the block. The bound of (1b) is therefore a bound on one load. A host
+that takes many declaring loads (a session, a host loading modules one by one) sizes the block by their number and
+reads the room used from `block_bytes_used` of `pinax_stats`. A session line that only runs code takes no room.]
+
 #para("2")[`pinax_eval(state, text)` runs one line as a session does. All lines form one module (the session). What a
 line leaves is read with `pinax_eval_count` and `pinax_eval_value`.]
 

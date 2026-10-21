@@ -66,6 +66,12 @@ void *pnx_take(pinax_state *st, size_t bytes, size_t align) {
     return take(st, bytes, align);
 }
 
+// Scratch taken since `mark` is given back. The one way back, as take() is the one way in:
+// a record of what the block holds, if take() ever keeps one, is kept here too.
+static void give_back(pinax_state *st, size_t mark) {
+    st->used = mark;
+}
+
 pnx_program pnx_program_now(const pinax_state *st) {
     return (pnx_program){st->head, st->words, st->importrecs, st->iconst, st->sconst, st->code, st->word_counts,
                          st->imports, st->globals, st->segment[PNX_SEG_CONST], st->segment[PNX_SEG_GLOBAL],
@@ -1292,7 +1298,7 @@ static void prove_word(pinax_state *st, span range) {
     uint8_t        *leader = take(st, n, 1);
     uint32_t       *block_of = leader ? take(st, (size_t)n * 4, 4) : NULL;
     if (!block_of) {
-        st->used = mark;
+        give_back(st, mark);
         return;
     }
     leader[0] = 1;
@@ -1334,7 +1340,7 @@ static void prove_word(pinax_state *st, span range) {
     uint32_t *pred_at = seen ? take(st, ((size_t)n_blocks + 1) * 4, 4) : NULL; // the ways into each block
     uint32_t *preds = pred_at ? take(st, (size_t)n_blocks * 2 * 4, 4) : NULL;
     if (!preds) {
-        st->used = mark;
+        give_back(st, mark);
         return;
     }
     for (uint32_t i = range.begin, b = 0; i < range.end;) {
@@ -1417,7 +1423,7 @@ static void prove_word(pinax_state *st, span range) {
         if (seen[b])
             prove_block(st, range, leader, block_of, start_of, fs, b, true, &e);
     }
-    st->used = mark;
+    give_back(st, mark);
 }
 
 // For `pnx see --checks`: a line per word (its checks and how many are proven), then a line per
@@ -1755,7 +1761,7 @@ pinax_err pnx_load_container(pinax_state *st, pinax_str bytecode, uint32_t keep)
             goto rollback;
         }
         why = check_flow(st, k, range, sets);
-        st->used = flow_mark;
+        give_back(st, flow_mark);
         if (why)
             goto rollback;
         const size_t needed = st->needed; // RFC-0023: which checks cannot fire; never refuses, so a scratch
@@ -1863,7 +1869,7 @@ static void mark_yields(pinax_state *st) {
     callers c = {take(st, ((size_t)n + 1) * 4, 4), take(st, ((size_t)n + 1) * 4, 4), NULL};
     uint32_t *work = take(st, (size_t)n * 4, 4);
     if (!c.start || !c.at || !work) {
-        st->used = mark;
+        give_back(st, mark);
         mark_yields_slowly(st);
         return;
     }
@@ -1878,7 +1884,7 @@ static void mark_yields(pinax_state *st) {
         c.start[k + 1] += c.start[k];
     c.list = take(st, (size_t)c.start[n] * 4 + 4, 4);
     if (!c.list) {
-        st->used = mark;
+        give_back(st, mark);
         mark_yields_slowly(st);
         return;
     }
@@ -1895,7 +1901,7 @@ static void mark_yields(pinax_state *st) {
             }
         }
     }
-    st->used = mark;
+    give_back(st, mark);
 }
 
 pinax_err pinax_find(pinax_state *st, const char *name, const char *signature, uint32_t flags, pinax_word *out) {
@@ -2798,7 +2804,7 @@ static pinax_err extern_call(pinax_call *call, void *user, const pinax_args *arg
             const pinax_str s = args->s[ns++];
             uint8_t *copy = pnx_region_alloc(st, s.len + 1);
             if (!copy) {
-                st->region_used = region_mark;
+                pnx_region_give_back(st, region_mark);
                 return PINAX_ERR_FULL;
             }
             if (s.len)
@@ -2810,7 +2816,7 @@ static pinax_err extern_call(pinax_call *call, void *user, const pinax_args *arg
             const pinax_handle handle = (pinax_handle)args->i[ni++];
             void *object = pinax_handle_get(st, type, handle);
             if (!object) {
-                st->region_used = region_mark;
+                pnx_region_give_back(st, region_mark);
                 return PINAX_ERR_STALE;
             }
             if (kind & PNX_XA_OWNED) {
@@ -2832,7 +2838,7 @@ static pinax_err extern_call(pinax_call *call, void *user, const pinax_args *arg
     case 7: r = ((x7 *)h->ext)(a[0], a[1], a[2], a[3], a[4], a[5], a[6]); break;
     default: r = ((x8 *)h->ext)(a[0], a[1], a[2], a[3], a[4], a[5], a[6], a[7]); break;
     }
-    st->region_used = region_mark;
+    pnx_region_give_back(st, region_mark);
     for (unsigned k = 0; k < n_taken; ++k) // the function took the object: the script's handle ends
         (void)pinax_handle_release(st, taken_type[k], taken[k]);
     if (h->ext_result == PNX_XA_INT) {

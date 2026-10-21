@@ -391,5 +391,10 @@ uint32_t pnx_module_number(const pinax_state *state, const char *name, size_t le
 
 // Bytes in the main task's region; NULL when it is full.
 uint8_t *pnx_region_alloc(pinax_state *state, size_t bytes);
+// What a run took from the region since `mark` is given back: the one way back, so that a
+// record of the region, if one is ever kept, is kept here.
+static inline void pnx_region_give_back(pinax_state *state, uint32_t mark) {
+    state->region_used = mark;
+}
 
 #endif // PINAX_INTERNAL_H

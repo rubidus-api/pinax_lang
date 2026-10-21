@@ -411,9 +411,23 @@ static void show_fault_locals(const pinax_state *state, FILE *out) {
 
 // Reads lines from standard input and runs each as a line of one session. A definition or a
 // block may go over several lines: the text is run when it is complete.
-static int repl(pinax_state *state) {
+// A line that declares something is loaded with the whole program so far, and the copy it
+// replaces stays in the block: a long session uses the block up. Said once, when three quarters
+// of the block are used.
+static void warn_block(pinax_state *state, size_t block_bytes, bool *warned) {
+    pinax_stats stats = {.struct_size = sizeof stats};
+    pinax_stats_get(state, &stats);
+    if (*warned || stats.block_bytes_used < block_bytes / 4 * 3)
+        return;
+    *warned = true;
+    fprintf(stderr, "pnx: the block is %zu percent used; every line that declares something uses more of it, so a longer session needs a larger PNX_BLOCK_KB\n",
+            stats.block_bytes_used / (block_bytes / 100));
+}
+
+static int repl(pinax_state *state, size_t block_bytes) {
     static char text[1 << 16];
     size_t      n = 0;
+    bool        warned = false;
     for (;;) {
         fputs(n ? ".. " : "> ", stderr);
         if (!fgets(text + n, (int)(sizeof text - n), stdin))
@@ -428,6 +442,7 @@ static int repl(pinax_state *state) {
         if (err == PINAX_OK)
             show_values(state);
         holding = false;
+        warn_block(state, block_bytes, &warned);
         const pinax_str why = pinax_error_text(state);
         if (err == PINAX_ERR_SYNTAX && why.len >= 11 && memcmp(why.ptr, "unfinished:", 11) == 0 &&
             n + 1 < sizeof text)
@@ -574,9 +589,13 @@ static int run(int argc, char **argv) {
     }
     pinax_host_set_args(argc - at, (const char *const *)(argv + at));
     if (talking) {
-        const int status = repl(state);
+        const int status = repl(state, block_bytes);
         pinax_close(state);
         free(block);
+        for (int k = 0; k < n_sources; ++k) { // what `use` loaded
+            free(sources[k].path);
+            free(sources[k].text);
+        }
         return status;
     }
 

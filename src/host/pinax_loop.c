@@ -1,14 +1,35 @@
 // pinax_loop.c - the default host loop and channels (see pinax_loop.h). Written against pinax.h;
-// threads and their semaphores come from the vendored proven, memory from the C library.
+// threads and their semaphores come from the vendored proven, and so does the memory: every
+// object of the loop (a message, a completion, a waiter, a channel, a job, the loop) is taken
+// from proven's heap allocator through `loop_alloc` and given back through `loop_free`, so a
+// record of them, or another allocator, is one change here.
 //
 // Locks: each channel has one, the loop has one. A channel's lock may be held while the loop's is
 // taken (to hand a run its completion); never the other way round.
 #include "pinax_loop.h"
 
 #include "../../vendor/proven/platform/proven_sys_thread.h"
+#include "proven/heap.h"
 
-#include <stdlib.h>
+#include <stdalign.h>
 #include <string.h>
+
+// Zeroed bytes from proven's heap, aligned for any object of this file; NULL when there are none.
+static void *loop_alloc(size_t bytes) {
+    const proven_allocator_t heap = proven_heap_allocator();
+    const proven_result_mem_mut_t room = heap.alloc_fn(heap.ctx, bytes, alignof(max_align_t));
+    if (room.err != PROVEN_OK)
+        return NULL;
+    memset(room.value.ptr, 0, bytes);
+    return room.value.ptr;
+}
+
+static void loop_free(void *object) {
+    if (object) {
+        const proven_allocator_t heap = proven_heap_allocator();
+        heap.free_fn(heap.ctx, object);
+    }
+}
 
 typedef proven_sys_semaphore_t lock_t; // a semaphore of one permit
 
@@ -36,7 +57,7 @@ typedef struct message {
 } message;
 
 static message *message_copy(pinax_str text) {
-    message *m = malloc(sizeof *m + text.len);
+    message *m = loop_alloc(sizeof *m + text.len);
     if (m) {
         m->next = NULL;
         m->len = text.len;
@@ -145,7 +166,7 @@ static void post(pinax_loop *loop, job *j, completion *c) {
 }
 
 static completion *completion_new(pinax_token token, pinax_err outcome) {
-    completion *c = calloc(1, sizeof *c);
+    completion *c = loop_alloc(sizeof *c);
     if (c)
         c->token = token, c->outcome = outcome;
     return c;
@@ -164,9 +185,9 @@ static void wake(pinax_channel *ch, waiter *w, pinax_err outcome, message *m) {
         c->from = m ? ch : NULL;
         post(ch->loop, w->job, c);
     } else {
-        free(m);
+        loop_free(m);
     }
-    free(w);
+    loop_free(w);
 }
 
 static void append(pinax_channel *ch, message *m) { // channel locked
@@ -211,7 +232,7 @@ static pinax_err ch_send(pinax_call *call, void *user, const pinax_args *args) {
     lock(&ch->lock);
     if (ch->closed) {
         unlock(&ch->lock);
-        free(m);
+        loop_free(m);
         return PINAX_ERR_CANCELLED;
     }
     waiter *r = take_first(&ch->receivers);
@@ -226,10 +247,10 @@ static pinax_err ch_send(pinax_call *call, void *user, const pinax_args *args) {
         return PINAX_OK;
     }
     job    *j = calling_job(call);
-    waiter *w = j ? malloc(sizeof *w) : NULL;
+    waiter *w = j ? loop_alloc(sizeof *w) : NULL;
     if (!w) {
         unlock(&ch->lock);
-        free(m);
+        loop_free(m);
         return j ? PINAX_ERR_FULL : NOT_HERE;
     }
     *w = (waiter){.job = j, .token = pinax_call_pending(call), .msg = m};
@@ -263,7 +284,7 @@ static pinax_err ch_receive(pinax_call *call, void *user, const pinax_args *args
         if (m->len)
             memcpy(room.ptr, m->bytes, m->len);
         args->rs[0] = (pinax_str){room.ptr, m->len};
-        free(m);
+        loop_free(m);
         return PINAX_OK;
     }
     if (ch->closed) {
@@ -271,7 +292,7 @@ static pinax_err ch_receive(pinax_call *call, void *user, const pinax_args *args
         return PINAX_ERR_NOT_FOUND;
     }
     job    *j = calling_job(call);
-    waiter *w = j ? malloc(sizeof *w) : NULL;
+    waiter *w = j ? loop_alloc(sizeof *w) : NULL;
     if (!w) {
         unlock(&ch->lock);
         return j ? PINAX_ERR_FULL : NOT_HERE;
@@ -290,7 +311,7 @@ void pinax_channel_close(pinax_channel *ch) {
     for (waiter *w; (w = take_first(&ch->receivers));)
         wake(ch, w, PINAX_ERR_NOT_FOUND, NULL);
     for (waiter *w; (w = take_first(&ch->senders));) {
-        free(w->msg);
+        loop_free(w->msg);
         wake(ch, w, PINAX_ERR_CANCELLED, NULL);
     }
     unlock(&ch->lock);
@@ -326,8 +347,8 @@ static void forget(pinax_channel *ch, const job *j) {
             waiter *w = *at;
             if (w->job == j) {
                 *at = w->next;
-                free(w->msg);
-                free(w);
+                loop_free(w->msg);
+                loop_free(w);
             } else {
                 at = &w->next;
             }
@@ -353,11 +374,11 @@ pinax_err pinax_channel_open(pinax_loop *loop, const char *name, uint32_t messag
     *out = NULL;
     if (!loop || !name || !word_name(name) || strlen(name) >= sizeof((pinax_channel *)0)->name || !messages)
         return PINAX_ERR_ARGUMENT;
-    pinax_channel *ch = calloc(1, sizeof *ch);
+    pinax_channel *ch = loop_alloc(sizeof *ch);
     if (!ch)
         return PINAX_ERR_NO_ROOM;
     if (!lock_init(&ch->lock)) {
-        free(ch);
+        loop_free(ch);
         return PINAX_ERR_NO_ROOM;
     }
     ch->loop = loop;
@@ -393,8 +414,8 @@ static void apply(pinax_state *state, completion *c) {
         if (c->msg && err == PINAX_ERR_NOT_FOUND) // the run that waited for it has gone
             give_back(c->from, c->msg);
         else
-            free(c->msg);
-        free(c);
+            loop_free(c->msg);
+        loop_free(c);
         c = next;
     }
 }
@@ -404,7 +425,7 @@ static void discard(completion *c) {
         completion *next = c->next;
         if (c->msg)
             give_back(c->from, c->msg);
-        free(c);
+        loop_free(c);
         c = next;
     }
 }
@@ -428,7 +449,7 @@ static void finish(pinax_loop *loop, job *j, pinax_err outcome) {
     unlock(&loop->lock);
     discard(left);
     j->done(j->user, j->state, outcome);
-    free(j);
+    loop_free(j);
     lock(&loop->lock);
     --loop->running;
     if (--loop->n_active == 0 && loop->waiting) {
@@ -500,10 +521,10 @@ pinax_err pinax_loop_open(unsigned threads, pinax_loop **out) {
     *out = NULL;
     if (threads < 1 || threads > 256)
         return PINAX_ERR_ARGUMENT;
-    pinax_loop *loop = calloc(1, sizeof *loop);
+    pinax_loop *loop = loop_alloc(sizeof *loop);
     if (!loop)
         return PINAX_ERR_NO_ROOM;
-    loop->threads = calloc(threads, sizeof *loop->threads);
+    loop->threads = loop_alloc(threads * sizeof *loop->threads);
     bool made_lock = false, made_work = false, made_idle = false;
     if (!loop->threads || !(made_lock = lock_init(&loop->lock)) ||
         !(made_work = proven_sys_semaphore_init(&loop->work)) || !(made_idle = proven_sys_semaphore_init(&loop->idle))) {
@@ -511,8 +532,8 @@ pinax_err pinax_loop_open(unsigned threads, pinax_loop **out) {
             proven_sys_semaphore_destroy(&loop->lock);
         if (made_work)
             proven_sys_semaphore_destroy(&loop->work);
-        free(loop->threads);
-        free(loop);
+        loop_free(loop->threads);
+        loop_free(loop);
         return PINAX_ERR_NO_ROOM;
     }
     loop->ready_tail = &loop->ready;
@@ -531,7 +552,7 @@ pinax_err pinax_loop_start(pinax_loop *loop, pinax_state *state, pinax_word word
                            pinax_loop_done done, void *user) {
     if (!loop || !state || !args || !done)
         return PINAX_ERR_ARGUMENT;
-    job *j = calloc(1, sizeof *j);
+    job *j = loop_alloc(sizeof *j);
     if (!j)
         return PINAX_ERR_NO_ROOM;
     *j = (job){.state = state, .word = word, .args = args, .done = done, .user = user};
@@ -539,7 +560,7 @@ pinax_err pinax_loop_start(pinax_loop *loop, pinax_state *state, pinax_word word
     lock(&loop->lock);
     if (loop->stopping || find_job(loop, state)) {
         unlock(&loop->lock);
-        free(j);
+        loop_free(j);
         return PINAX_ERR_STATE;
     }
     j->next_active = loop->active;
@@ -579,26 +600,26 @@ void pinax_loop_close(pinax_loop *loop) {
         pinax_channel *next = ch->next;
         for (message *m = ch->head; m;) {
             message *after = m->next;
-            free(m);
+            loop_free(m);
             m = after;
         }
         for (waiter **list = &ch->receivers; list; list = list == &ch->receivers ? &ch->senders : NULL) {
             for (waiter *w = *list; w;) {
                 waiter *after = w->next;
-                free(w->msg);
-                free(w);
+                loop_free(w->msg);
+                loop_free(w);
                 w = after;
             }
         }
         proven_sys_semaphore_destroy(&ch->lock);
-        free(ch);
+        loop_free(ch);
         ch = next;
     }
     proven_sys_semaphore_destroy(&loop->idle);
     proven_sys_semaphore_destroy(&loop->work);
     proven_sys_semaphore_destroy(&loop->lock);
-    free(loop->threads);
-    free(loop);
+    loop_free(loop->threads);
+    loop_free(loop);
 }
 
 pinax_token pinax_loop_pending(pinax_loop *loop, pinax_call *call) {
@@ -615,7 +636,7 @@ pinax_err pinax_loop_complete(pinax_loop *loop, pinax_state *state, pinax_token 
     size_t bytes = sizeof(completion) + ni * sizeof(int64_t) + ns * sizeof(pinax_str);
     for (size_t k = 0; k < ns; ++k)
         bytes += rs[k].len;
-    completion *c = calloc(1, bytes);
+    completion *c = loop_alloc(bytes);
     if (!c)
         return PINAX_ERR_NO_ROOM;
     c->token = token, c->outcome = outcome, c->ni = ni, c->ns = ns;
@@ -637,7 +658,7 @@ pinax_err pinax_loop_complete(pinax_loop *loop, pinax_state *state, pinax_token 
     if (!j) {
         check_deadlock(loop);
         unlock(&loop->lock);
-        free(c);
+        loop_free(c);
         return PINAX_ERR_NOT_FOUND;
     }
     c->next = NULL;

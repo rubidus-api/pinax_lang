@@ -1326,7 +1326,7 @@ PNX_OP(JNEXT) {
             return PINAX_ERR_FULL;
         const uint32_t n = pnx_json_unescape(bytes + start, len, copy);
         if (n == UINT32_MAX) {
-            st->region_used = before;
+            pnx_region_give_back(st, before);
             st->fail = PINAX_ERR_FORMAT;
             return PNX_R_FAILED;
         }
@@ -1671,7 +1671,7 @@ PNX_OP(RCUT) {
         return PINAX_ERR_RANGE;
     if (st->region_used > st->region_peak)
         st->region_peak = st->region_used;
-    st->region_used = (uint32_t)top;
+    pnx_region_give_back(st, (uint32_t)top);
     return PNX_R_OK;
 }
 PNX_OP(RFREE) { R[OP_A(w)] = st->region_len - st->region_used; return PNX_R_OK; }
