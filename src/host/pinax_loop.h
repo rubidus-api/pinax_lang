@@ -1,7 +1,8 @@
 /*
  * pinax_loop.h - a default host loop for Pinax: states run on a few threads, and channels carry
  * messages between them (RFC-0005 section 4, RFC-0020). Written against pinax.h alone, in the
- * host library; it uses the operating system's threads and the C library's allocator.
+ * host library; it uses the operating system's threads, and for its own objects the memory
+ * functions the host gives in pinax_loop_config (proven's heap when it gives none).
  *
  * The loop runs words: pinax_loop_start() hands it a state and a word, and one of its threads
  * calls pinax_run() and pinax_resume() until the run ends. A run that runs out of its budget goes
@@ -44,8 +45,27 @@ typedef struct pinax_channel pinax_channel;
  * the state is the host's again (it may start another run on it here). */
 typedef void (*pinax_loop_done)(void *user, pinax_state *state, pinax_err outcome);
 
-/* A loop with `threads` threads, 1 to 256. PINAX_ERR_NO_ROOM when memory or a thread cannot be had. */
-pinax_err pinax_loop_open(unsigned threads, pinax_loop **out);
+/* Where the loop's own objects live: the loop, its channels, every message, every run it is
+ * given and every completion. alloc gives `bytes` bytes aligned to `align` (never more than
+ * alignof(max_align_t)), or NULL when it cannot; free takes back what alloc gave. The loop calls
+ * both from its threads and from the host's at once, so they must be safe to call at once. With
+ * both NULL the loop uses proven's heap allocator. */
+typedef struct pinax_loop_memory {
+    void *user;
+    void *(*alloc)(void *user, size_t bytes, size_t align);
+    void (*free)(void *user, void *ptr);
+} pinax_loop_memory;
+
+/* struct_size lets the struct grow compatibly, as pinax_config does. */
+typedef struct pinax_loop_config {
+    size_t            struct_size; /* sizeof(pinax_loop_config) */
+    unsigned          threads;     /* 1 to 256 */
+    pinax_loop_memory memory;      /* both functions NULL: proven's heap */
+} pinax_loop_config;
+
+/* A loop with config->threads threads. PINAX_ERR_ARGUMENT for a config it does not understand
+ * or a thread count outside 1 to 256; PINAX_ERR_NO_ROOM when memory or a thread cannot be had. */
+pinax_err pinax_loop_open(const pinax_loop_config *config, pinax_loop **out);
 /* Runs `word` of `state` with `args` until it ends, then calls done(user, state, outcome). args
  * and what it points to (inputs and the places of the results) stay the host's and must live
  * until then. PINAX_ERR_STATE when the state already runs on the loop or the loop is closing. */

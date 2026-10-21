@@ -57,9 +57,10 @@ static int start(pinax_loop *loop, pinax_channel *jobs, worker *x, const char *s
 }
 
 int main(void) {
+    pinax_loop_config loop_config = {.struct_size = sizeof loop_config, .threads = 2};
     pinax_loop *loop;
     pinax_channel *jobs;
-    if (pinax_loop_open(2, &loop) != PINAX_OK || pinax_channel_open(loop, "jobs", 4, 20, &jobs) != PINAX_OK)
+    if (pinax_loop_open(&loop_config, &loop) != PINAX_OK || pinax_channel_open(loop, "jobs", 4, 20, &jobs) != PINAX_OK)
         return 1;
     w[0].in = 100;
     if (start(loop, jobs, &w[1], consumer, "consume") || start(loop, jobs, &w[2], consumer, "consume") ||

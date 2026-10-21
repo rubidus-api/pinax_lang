@@ -86,7 +86,9 @@ a closed channel are still taken.]
 (`pinax_loop_start`) wait. In any other run, a `send` or `receive` that would have to wait ends the run with the fault
 `PINAX_ERR_STATE`.]
 
-#para("4")[The #term("host loop") runs states on a set number of threads. A state runs on one thread at a time. A run
+#para("4")[The #term("host loop") runs states on a set number of threads. `pinax_loop_open` takes a configuration:
+the number of threads, and the two memory functions for the loop's own objects (its channels, messages, runs and
+completions), which are proven's heap when the host gives none. A state runs on one thread at a time. A run
 whose budget (19.5) is used up goes to the back of the line, and a run that waits gives its thread up. While the host
 waits in `pinax_loop_wait`, when every run left waits for a channel and no host operation is outstanding, the loop ends
 all of them with `PINAX_ERR_DEADLOCK`.]

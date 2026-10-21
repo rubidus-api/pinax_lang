@@ -48,8 +48,9 @@ int main(void) {
         pinax_load(dict, "dictionary", (pinax_str){(const unsigned char *)dictionary, strlen(dictionary)},
                    PINAX_LOAD_DATA) != PINAX_OK)
         return 1;
+    pinax_loop_config loop_config = {.struct_size = sizeof loop_config, .threads = 2};
     pinax_loop *loop;
-    if (pinax_loop_open(2, &loop) != PINAX_OK)
+    if (pinax_loop_open(&loop_config, &loop) != PINAX_OK)
         return 1;
     for (int k = 0; k < 2; ++k) {
         if (pinax_open((pinax_mem){w[k].block, sizeof w[k].block}, &config, &w[k].state) != PINAX_OK ||

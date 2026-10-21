@@ -69,9 +69,10 @@ static int prepare(side *s, pinax_channel *orders, const char *source, const cha
 }
 
 int main(void) {
+    pinax_loop_config loop_config = {.struct_size = sizeof loop_config, .threads = 2};
     pinax_loop *loop;
     pinax_channel *orders;
-    if (pinax_loop_open(2, &loop) != PINAX_OK || pinax_channel_open(loop, "orders", 2, 32, &orders) != PINAX_OK ||
+    if (pinax_loop_open(&loop_config, &loop) != PINAX_OK || pinax_channel_open(loop, "orders", 2, 32, &orders) != PINAX_OK ||
         prepare(&shop_side, orders, shop, "open_shop") || prepare(&clerk_side, orders, clerk, "serve"))
         return 1;
     pinax_loop_start(loop, clerk_side.state, clerk_side.word, &clerk_side.args, done, NULL);
