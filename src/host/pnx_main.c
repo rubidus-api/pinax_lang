@@ -411,16 +411,14 @@ static void show_fault_locals(const pinax_state *state, FILE *out) {
 
 // Reads lines from standard input and runs each as a line of one session. A definition or a
 // block may go over several lines: the text is run when it is complete.
-// A line that declares something is loaded with the whole program so far, and the copy it
-// replaces stays in the block: a long session uses the block up. Said once, when three quarters
-// of the block are used.
+// What a session declares fills the block. Said once, when three quarters of it are used.
 static void warn_block(pinax_state *state, size_t block_bytes, bool *warned) {
     pinax_stats stats = {.struct_size = sizeof stats};
     pinax_stats_get(state, &stats);
     if (*warned || stats.block_bytes_used < block_bytes / 4 * 3)
         return;
     *warned = true;
-    fprintf(stderr, "pnx: the block is %zu percent used; every line that declares something uses more of it, so a longer session needs a larger PNX_BLOCK_KB\n",
+    fprintf(stderr, "pnx: the block is %zu percent used; a session that declares more needs a larger PNX_BLOCK_KB\n",
             stats.block_bytes_used / (block_bytes / 100));
 }
 

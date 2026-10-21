@@ -1511,6 +1511,35 @@ static void unshared(pnx_global *g) {
         g->capacity = 1; // one empty slot: every key is not found
 }
 
+// The bytes of a container whose head this is: the head, then every record and segment in order.
+static uint64_t container_bytes(const pnx_head *h) {
+    return sizeof *h + (uint64_t)h->n_words * sizeof(pnx_wordrec) + (uint64_t)h->n_globals * sizeof(pnx_globalrec) +
+           (uint64_t)h->n_imports * sizeof(pnx_importrec) + (uint64_t)h->n_iconst * 8 +
+           (uint64_t)h->n_sconst * sizeof(pnx_sconst) + (uint64_t)h->n_code * 4 + h->n_strbytes +
+           (uint64_t)h->n_lines * sizeof(pnx_linerec) + (uint64_t)h->n_locals * sizeof(pnx_localrec);
+}
+
+// The bytes of storage a global record asks for (the loader checks the record first).
+static uint64_t storage_bytes(const pnx_globalrec *rec) {
+    switch (rec->kind) {
+    case PNX_G_INT: return 8;
+    case PNX_G_ARRAY:
+    case PNX_G_LIST:
+    case PNX_G_QUEUE: return (uint64_t)rec->capacity * 8;
+    case PNX_G_BUFFER: return (uint64_t)rec->capacity + 8;
+    case PNX_G_TABLE:
+    case PNX_G_ROWS: return (uint64_t)rec->capacity * rec->elem_bytes;
+    case PNX_G_POOL: return (uint64_t)rec->capacity * ((uint64_t)rec->elem_bytes + 8);
+    case PNX_G_INDEX: return (uint64_t)rec->capacity * 4;
+    case PNX_G_TASKS: // elem_bytes: the call depth of a task; reserved: the bytes of its region
+        return (uint64_t)rec->capacity *
+               (sizeof(pnx_task) + (uint64_t)rec->elem_bytes * (PNX_TASK_INTS * 8 + PNX_TASK_STRS * sizeof(pnx_scell) +
+                                                                 sizeof(pnx_frame)) +
+                ((rec->reserved + 15u) & ~15u));
+    default: return 0;
+    }
+}
+
 pinax_err pnx_load_container(pinax_state *st, pinax_str bytecode, uint32_t keep) {
     const pnx_program before = pnx_program_now(st);
     pnx_head h;
@@ -1520,11 +1549,7 @@ pinax_err pnx_load_container(pinax_state *st, pinax_str bytecode, uint32_t keep)
     if (__builtin_memcmp(h.magic, PNX_MAGIC, 4) != 0 || h.version != PNX_CONTAINER_VERSION ||
         h.order != PNX_ORDER_MARK || h.reserved != 0)
         return fail(st, PINAX_ERR_FORMAT, "bytecode: not a container of this version and byte order");
-    const uint64_t total = sizeof h + (uint64_t)h.n_words * sizeof(pnx_wordrec) +
-                           (uint64_t)h.n_globals * sizeof(pnx_globalrec) +
-                           (uint64_t)h.n_imports * sizeof(pnx_importrec) + (uint64_t)h.n_iconst * 8 +
-                           (uint64_t)h.n_sconst * sizeof(pnx_sconst) + (uint64_t)h.n_code * 4 + h.n_strbytes +
-                           (uint64_t)h.n_lines * sizeof(pnx_linerec) + (uint64_t)h.n_locals * sizeof(pnx_localrec);
+    const uint64_t total = container_bytes(&h);
     if (total != bytecode.len || h.n_globals > 0xfffu || h.n_code > st->region_len)
         return fail(st, PINAX_ERR_FORMAT, "bytecode: sizes do not add up or exceed the P0 limits");
 
@@ -1637,21 +1662,16 @@ pinax_err pnx_load_container(pinax_state *st, pinax_str bytecode, uint32_t keep)
         if (!terminated(rec->name, sizeof rec->name) || !terminated(rec->type, sizeof rec->type) || rec->capacity == 0)
             goto rollback;
         switch (rec->kind) {
-        case PNX_G_INT: bytes = 8; break;
+        case PNX_G_INT:
         case PNX_G_ARRAY:
         case PNX_G_LIST:
-        case PNX_G_QUEUE: bytes = (uint64_t)rec->capacity * 8; break;
-        case PNX_G_BUFFER: bytes = (uint64_t)rec->capacity + 8; break;
+        case PNX_G_QUEUE:
+        case PNX_G_BUFFER: break;
         case PNX_G_TABLE:
         case PNX_G_ROWS:
-            if (rec->elem_bytes == 0)
-                goto rollback;
-            bytes = (uint64_t)rec->capacity * rec->elem_bytes;
-            break;
         case PNX_G_POOL:
             if (rec->elem_bytes == 0)
                 goto rollback;
-            bytes = (uint64_t)rec->capacity * ((uint64_t)rec->elem_bytes + 8);
             break;
         case PNX_G_INDEX: { // slots: a power of two; the key field must lie inside an earlier table
             const uint32_t table = rec->elem_bytes & 0xfffu, offset = (rec->elem_bytes >> 12) & 0xfffu,
@@ -1662,19 +1682,15 @@ pinax_err pnx_load_container(pinax_state *st, pinax_str bytecode, uint32_t keep)
                 (!is_str && extra >= PNX_W_COUNT) ||
                 offset + (is_str ? 1u + extra : width_bytes[extra]) > st->globals[table].elem_bytes)
                 goto rollback;
-            bytes = (uint64_t)rec->capacity * 4;
             break;
         }
         case PNX_G_TASKS: // elem_bytes: the call depth of a task; reserved: the bytes of its region
             if (rec->capacity > 4096 || rec->elem_bytes == 0 || rec->elem_bytes > 4096 || rec->reserved > (1u << 24))
                 goto rollback;
-            bytes = (uint64_t)rec->capacity *
-                    (sizeof(pnx_task) + (uint64_t)rec->elem_bytes * (PNX_TASK_INTS * 8 + PNX_TASK_STRS * sizeof(pnx_scell) +
-                                                                     sizeof(pnx_frame)) +
-                     ((rec->reserved + 15u) & ~15u));
             break;
         default: goto rollback;
         }
+        bytes = storage_bytes(rec);
         const bool shared = rec->kind == PNX_G_INDEX ? (rec->reserved & 4u) != 0
                           : rec->kind != PNX_G_TASKS && rec->reserved == 4;
         if (shared && (rec->kind == PNX_G_QUEUE || rec->kind == PNX_G_POOL))
@@ -1786,6 +1802,123 @@ rollback:
 
 // A task holds places in the code (where it goes on, where its calls return): while one lives,
 // the code must not move under it.
+// ---- compaction ------------------------------------------------------------------------
+
+// A load that declares takes a fresh copy of the whole program (its container, the loader's
+// tables, the symbol tables), and the copy it replaces is left in the block, between the storage
+// of the globals declared earlier, which stays where it is (RFC-0024). After such a load the live
+// pieces are moved down over the dead ones, in address order, so that the block holds one copy.
+// Only when nothing points into the block from a run: no run suspended, no load half done, no
+// host word running, no task alive (a task's saved context points into its slot).
+
+typedef struct piece {
+    uint8_t  *at;
+    size_t    bytes;
+    ptrdiff_t by;
+} piece;
+
+// Where an address lies after the move: in the piece that holds it, moved with it; or the same
+// (an address outside every piece: the host's memory, the fixed front of the block, NULL).
+static void *moved_to(const piece *pieces, uint32_t n, const void *p) {
+    const uintptr_t a = (uintptr_t)p;
+    uint32_t lo = 0, hi = n;
+    while (lo < hi) {
+        const uint32_t mid = lo + (hi - lo) / 2;
+        const uintptr_t from = (uintptr_t)pieces[mid].at;
+        if (a < from)
+            hi = mid;
+        else if (a >= from + pieces[mid].bytes)
+            lo = mid + 1;
+        else
+            return (uint8_t *)p + pieces[mid].by;
+    }
+    return (void *)p;
+}
+#define RELOC(field) ((field) = (typeof(field))moved_to(pieces, n, (const void *)(field)))
+
+void pnx_compact(pinax_state *st) {
+    if (!st->head || st->suspended || st->loading || st->host_cur || st->nest || st->frozen || pnx_tasks_alive(st))
+        return;
+    const pnx_head *h = st->head;
+    const uint32_t  most = h->n_globals + 6;
+    const size_t    mark = st->used;
+    piece *pieces = take(st, (size_t)most * sizeof(piece), 8); // the list of live pieces, as scratch above them all
+    if (!pieces) {
+        give_back(st, mark);
+        return;
+    }
+    uint32_t n = 0;
+    pieces[n++] = (piece){(uint8_t *)(uintptr_t)h, (size_t)container_bytes(h), 0};
+    pieces[n++] = (piece){(uint8_t *)st->word_counts, sizeof(pnx_counts) * ((size_t)h->n_words + 1u), 0};
+    pieces[n++] = (piece){st->proven, (size_t)h->n_code + 1u, 0};
+    pieces[n++] = (piece){(uint8_t *)st->imports, sizeof(pnx_host *) * ((size_t)h->n_imports + 1u), 0};
+    pieces[n++] = (piece){(uint8_t *)st->globals, sizeof(pnx_global) * ((size_t)h->n_globals + 1u), 0};
+    const pnx_globalrec *recs = (const pnx_globalrec *)(const void *)(st->words + h->n_words);
+    const uint8_t *const floor = (const uint8_t *)st->handles + sizeof(pnx_handle_slot) * st->handle_slots;
+    for (uint32_t k = 0; k < h->n_globals; ++k) {
+        const pnx_global *g = &st->globals[k];
+        if (!g->shared && g->own >= floor && g->own < st->block + mark)
+            pieces[n++] = (piece){g->own, (size_t)storage_bytes(&recs[k]), 0};
+    }
+    if (st->symbols)
+        pieces[n++] = (piece){st->symbols, pnx_symbols_bytes(st->symbols), 0};
+    for (uint32_t i = 1; i < n; ++i) { // by address; nearly in order already
+        const piece p = pieces[i];
+        uint32_t    j = i;
+        while (j > 0 && pieces[j - 1].at > p.at)
+            pieces[j] = pieces[j - 1], --j;
+        pieces[j] = p;
+    }
+    uint8_t *cursor = (uint8_t *)(uintptr_t)(((uintptr_t)floor + 15u) & ~(uintptr_t)15u);
+    for (uint32_t i = 0; i < n; ++i) {
+        uint8_t *const dst = (uint8_t *)(uintptr_t)(((uintptr_t)cursor + 15u) & ~(uintptr_t)15u);
+        if (dst > pieces[i].at || pieces[i].at + pieces[i].bytes > st->block + mark) { // not the layout this expects: leave the block as it is
+            give_back(st, mark);
+            return;
+        }
+        if (dst != pieces[i].at)
+            __builtin_memmove(dst, pieces[i].at, pieces[i].bytes);
+        pieces[i].by = dst - pieces[i].at;
+        cursor = dst + pieces[i].bytes;
+    }
+    RELOC(st->head), RELOC(st->words), RELOC(st->importrecs), RELOC(st->iconst), RELOC(st->sconst), RELOC(st->code);
+    h = st->head; // the head moved with its container; where it was may hold another piece now
+    RELOC(st->lines), RELOC(st->localrecs), RELOC(st->segment[PNX_SEG_CONST]), RELOC(st->segment[PNX_SEG_GLOBAL]);
+    RELOC(st->word_counts), RELOC(st->proven), RELOC(st->imports), RELOC(st->globals);
+    if (st->symbols) {
+        const void *from = st->symbols;
+        RELOC(st->symbols);
+        if (st->symbols != from)
+            pnx_symbols_move(st->symbols, from, (const uint8_t *)st->symbols - (const uint8_t *)from);
+    }
+    for (uint32_t k = 0; k < h->n_globals; ++k) {
+        pnx_global *g = &st->globals[k];
+        if (g->shared)
+            continue;
+        const uint8_t *const was = g->own;
+        RELOC(g->own);
+        RELOC(g->ptr); // the host's memory, when bound, lies in no piece and stays
+        const ptrdiff_t by = g->own - was;
+        for (uint32_t slot = 0; g->kind == PNX_G_TASKS && slot < g->capacity; ++slot) {
+            pnx_task *t = (pnx_task *)(void *)g->own + slot;
+            RELOC(t->ibank), RELOC(t->sbank), RELOC(t->ctrl), RELOC(t->parent);
+            RELOC(t->ctx.ibank), RELOC(t->ctx.sbank), RELOC(t->ctx.ctrl);
+            t->region_base = (uint32_t)((ptrdiff_t)t->region_base + by); // offsets from the region, which stays
+            t->ctx.region_used = (uint32_t)((ptrdiff_t)t->ctx.region_used + by);
+            t->ctx.region_len = (uint32_t)((ptrdiff_t)t->ctx.region_len + by);
+            t->ctx.region_floor = (uint32_t)((ptrdiff_t)t->ctx.region_floor + by);
+            t->ptn = (pnx_ptn_found){0};
+        }
+    }
+    for (uint32_t k = 0; k < st->eval_n; ++k)
+        RELOC(st->eval_str[k].ptr);
+    st->fault_ibank = NULL, st->fault_sbank = NULL; // read right after the fault, as an image does not carry them
+    st->ptn = (pnx_ptn_found){0};                   // a match's offsets into a global's storage do not survive the move
+    give_back(st, mark);
+    st->used = (size_t)(cursor - st->block);
+}
+#undef RELOC
+
 bool pnx_tasks_alive(const pinax_state *st) {
     for (uint32_t k = 0; st->head && k < st->head->n_globals; ++k) {
         const pnx_global *g = &st->globals[k];
@@ -2264,6 +2397,8 @@ pinax_err pinax_resume(pinax_state *st, const pinax_args *results) {
             const pnx_program before = st->before_load;
             pnx_program_restore(st, &before);
             st->error_text = text;
+        } else {
+            pnx_compact(st);
         }
     }
     return err;

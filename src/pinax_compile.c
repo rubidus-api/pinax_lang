@@ -8156,16 +8156,23 @@ static void each_name(symtab *t, name_fn *f, void *user) {
     X(words, wordsym) X(consts, constant) X(globals, globalsym) X(records, record) X(fields, field)          \
     X(btypes, sig) X(dtypes, dtype) X(srcmods, name) X(externs, externsym) X(rtypes, rtype)
 
-// A name whose bytes will not outlive this load lies in the source or in the working memory.
+// A name whose bytes will not outlive this load lies in the source, in the working memory, or in
+// the tables kept by the load before (which the block takes back once these replace them).
 typedef struct keeper {
-    const uint8_t *lo[2], *hi[2];
+    const uint8_t *lo[3], *hi[3];
     uint8_t       *at;
     size_t         total;
 } keeper;
 
 static bool passing(const keeper *k, const name *n) {
     const uint8_t *p = (const uint8_t *)n->text;
-    return n->length && ((p >= k->lo[0] && p < k->hi[0]) || (p >= k->lo[1] && p < k->hi[1]));
+    if (!n->length)
+        return false;
+    for (unsigned r = 0; r < 3; ++r) {
+        if (p >= k->lo[r] && p < k->hi[r])
+            return true;
+    }
+    return false;
 }
 
 static void name_size(name *n, void *user) {
@@ -8211,7 +8218,8 @@ static symtab *keep_symbols(comp *c, pinax_str source, const uint8_t *work) {
         __builtin_memcpy(now.opened, old->opened, sizeof now.opened);
         __builtin_memcpy(now.opened_real, old->opened_real, sizeof now.opened_real);
     }
-    keeper k = {{source.ptr, work}, {source.ptr + source.len, c->arena_end}, NULL, 0};
+    const uint8_t *const old_at = (const uint8_t *)old;
+    keeper k = {{source.ptr, work, old_at}, {source.ptr + source.len, c->arena_end, old ? old_at + old->bytes : NULL}, NULL, 0};
     each_name(&now, name_size, &k);
     size_t bytes = sizeof(symtab) + ((k.total + 7u) & ~(size_t)7u);
 #define X(v, t) bytes += ((size_t)now.v.n * sizeof(t) + 7u) & ~(size_t)7u;
@@ -8255,6 +8263,10 @@ static void move_symbols(symtab *t, const uint8_t *from, ptrdiff_t by) {
 
 void pnx_symbols_move(void *symbols, const void *from, ptrdiff_t by) {
     move_symbols(symbols, from, by);
+}
+
+size_t pnx_symbols_bytes(const void *symbols) {
+    return ((const symtab *)symbols)->bytes;
 }
 
 // FNV-1a over the sizes and a few places of what the kept tables hold: an image made by a
@@ -8625,6 +8637,8 @@ static pinax_err load_source(pinax_state *st, const char *file, pinax_str source
         if (before.head && before.head->n_globals)
             __builtin_memcpy(before.globals, st->globals, (size_t)before.head->n_globals * sizeof(pnx_global));
         pnx_program_restore(st, &before);
+    } else if (err == PINAX_OK) { // the program was replaced: the copy before it is dead room, taken back now
+        pnx_compact(st);
     }
     return err;
 }

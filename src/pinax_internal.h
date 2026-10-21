@@ -354,6 +354,11 @@ extern const uint32_t pnx_static_len; // bytes of pnx_static_text
 // `from` and now lie `by` bytes further on; and the sizes of the compiler's kept structs,
 // mixed into the layout hash of an image.
 void     pnx_symbols_move(void *symbols, const void *from, ptrdiff_t by);
+size_t   pnx_symbols_bytes(const void *symbols); // the bytes of the kept tables, as one piece
+// After a load that declared: the live pieces of the program move down over the copies a load
+// left behind, so that the block holds one (RFC-0024). Does nothing while a run, a load, a host
+// word or a task is in the middle of something.
+void pnx_compact(pinax_state *state);
 uint64_t pnx_symbols_layout(uint64_t hash);
 void pnx_err_name(int64_t err, uint32_t *offset, uint32_t *length);
 bool pnx_tasks_alive(const pinax_state *state); // a task was spawned and has not ended
