@@ -113,3 +113,6 @@ resources/cache/
 
 # The PDF editions are built, not kept (they would pile up in history).
 docs/*/pdf-*/
+/scripts/sot-check.sh
+/scripts/claim.sh
+/scripts/install-hook.sh
