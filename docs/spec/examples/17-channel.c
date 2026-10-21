@@ -57,7 +57,12 @@ static int start(pinax_loop *loop, pinax_channel *jobs, worker *x, const char *s
 }
 
 int main(void) {
-    pinax_loop_config loop_config = {.struct_size = sizeof loop_config, .threads = 2};
+    // the loop and its channel live in one block the host sizes with the two size functions
+    pinax_loop_config loop_config = {.struct_size = sizeof loop_config, .threads = 2, .states = 3};
+    static unsigned char loop_block[1 << 16];
+    if (pinax_loop_size(&loop_config) + pinax_channel_size(&loop_config, 4, 20) > sizeof loop_block)
+        return 1;
+    loop_config.block = (pinax_mem){loop_block, sizeof loop_block};
     pinax_loop *loop;
     pinax_channel *jobs;
     if (pinax_loop_open(&loop_config, &loop) != PINAX_OK || pinax_channel_open(loop, "jobs", 4, 20, &jobs) != PINAX_OK)

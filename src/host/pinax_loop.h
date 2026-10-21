@@ -1,8 +1,10 @@
 /*
  * pinax_loop.h - a default host loop for Pinax: states run on a few threads, and channels carry
  * messages between them (RFC-0005 section 4, RFC-0020). Written against pinax.h alone, in the
- * host library; it uses the operating system's threads, and for its own objects the memory
- * functions the host gives in pinax_loop_config (proven's heap when it gives none).
+ * host library; it uses the operating system's threads. Its memory is one block the host gives,
+ * as a state's is: the loop's objects (the runs it is given, their completions) are fixed slots
+ * in it, taken and given back in place, and each channel carves its slots (messages, waiting
+ * runs) from the same block when it is opened. Nothing is allocated while runs go on.
  *
  * The loop runs words: pinax_loop_start() hands it a state and a word, and one of its threads
  * calls pinax_run() and pinax_resume() until the run ends. A run that runs out of its budget goes
@@ -45,26 +47,35 @@ typedef struct pinax_channel pinax_channel;
  * the state is the host's again (it may start another run on it here). */
 typedef void (*pinax_loop_done)(void *user, pinax_state *state, pinax_err outcome);
 
-/* Where the loop's own objects live: the loop, its channels, every message, every run it is
- * given and every completion. alloc gives `bytes` bytes aligned to `align` (never more than
- * alignof(max_align_t)), or NULL when it cannot; free takes back what alloc gave. The loop calls
- * both from its threads and from the host's at once, so they must be safe to call at once. With
- * both NULL the loop uses proven's heap allocator. */
-typedef struct pinax_loop_memory {
-    void *user;
-    void *(*alloc)(void *user, size_t bytes, size_t align);
-    void (*free)(void *user, void *ptr);
-} pinax_loop_memory;
-
-/* struct_size lets the struct grow compatibly, as pinax_config does. */
+/* Capacities, and the block. Zero means "default"; struct_size lets the struct grow compatibly.
+ *   threads      1 to 256, no default
+ *   states       runs the loop holds at once (started and not yet ended), default 16; one more
+ *                is PINAX_ERR_NO_ROOM from pinax_loop_start
+ *   result_bytes the most a host operation's results take in a completion (8 per integer, 16
+ *                per string, plus the strings' bytes), default 4096; more is PINAX_ERR_NO_ROOM
+ *                from pinax_loop_complete
+ *   block        memory for the loop and its channels: pinax_loop_size() bytes for the loop,
+ *                plus pinax_channel_size() for each channel opened on it. With block.ptr NULL the
+ *                loop takes one piece of that size from proven's heap, and one per channel, and
+ *                gives them back in pinax_loop_close(). */
 typedef struct pinax_loop_config {
-    size_t            struct_size; /* sizeof(pinax_loop_config) */
-    unsigned          threads;     /* 1 to 256 */
-    pinax_loop_memory memory;      /* both functions NULL: proven's heap */
+    size_t    struct_size; /* sizeof(pinax_loop_config) */
+    unsigned  threads;
+    uint32_t  states;
+    uint32_t  result_bytes;
+    pinax_mem block;
 } pinax_loop_config;
 
+/* The bytes of the block the loop itself takes for this config (0 for a config it refuses), and
+ * the bytes a channel of `messages` messages of up to `message_bytes` each takes on a loop of
+ * this config, both enough for a block of any alignment. The sum over the loop and its channels
+ * is the block. */
+size_t pinax_loop_size(const pinax_loop_config *config);
+size_t pinax_channel_size(const pinax_loop_config *config, uint32_t messages, uint32_t message_bytes);
+
 /* A loop with config->threads threads. PINAX_ERR_ARGUMENT for a config it does not understand
- * or a thread count outside 1 to 256; PINAX_ERR_NO_ROOM when memory or a thread cannot be had. */
+ * or a thread count outside 1 to 256; PINAX_ERR_NO_ROOM when the block is too small for the
+ * loop, or memory or a thread cannot be had. */
 pinax_err pinax_loop_open(const pinax_loop_config *config, pinax_loop **out);
 /* Runs `word` of `state` with `args` until it ends, then calls done(user, state, outcome). args
  * and what it points to (inputs and the places of the results) stay the host's and must live
@@ -85,7 +96,8 @@ pinax_err   pinax_loop_complete(pinax_loop *loop, pinax_state *state, pinax_toke
                                 const int64_t *ri, size_t ni, const pinax_str *rs, size_t ns);
 
 /* A channel named `name` (written like a word) holding at most `messages` messages of at most
- * `message_bytes` bytes each. It lives until the loop is closed. */
+ * `message_bytes` bytes each. It lives until the loop is closed. Its slots are carved from the
+ * loop's block: PINAX_ERR_NO_ROOM when pinax_channel_size() bytes are not left there. */
 pinax_err pinax_channel_open(pinax_loop *loop, const char *name, uint32_t messages, uint32_t message_bytes,
                              pinax_channel **out);
 /* Makes the channel the module `name` of the state; before the scripts that use it load, and

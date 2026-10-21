@@ -87,8 +87,10 @@ a closed channel are still taken.]
 `PINAX_ERR_STATE`.]
 
 #para("4")[The #term("host loop") runs states on a set number of threads. `pinax_loop_open` takes a configuration:
-the number of threads, and the two memory functions for the loop's own objects (its channels, messages, runs and
-completions), which are proven's heap when the host gives none. A state runs on one thread at a time. A run
+the number of threads, how many runs it holds at once, how much a host operation's results may take, and one block of
+memory, as a state takes one: the loop's objects are fixed slots in it (`pinax_loop_size` bytes), and each channel
+carves its slots from the same block when it is opened (`pinax_channel_size` bytes). Nothing is allocated while runs
+go on; with no block the loop takes one piece of that size from proven's heap. A state runs on one thread at a time. A run
 whose budget (19.5) is used up goes to the back of the line, and a run that waits gives its thread up. While the host
 waits in `pinax_loop_wait`, when every run left waits for a channel and no host operation is outstanding, the loop ends
 all of them with `PINAX_ERR_DEADLOCK`.]

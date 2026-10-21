@@ -50,8 +50,9 @@ were before the run, save an image before running and open the state again from 
 
 One state runs on one thread at a time. To use several cores, open several states. The host loop of the host library
 (`pinax_loop.h`) runs states on a set number of threads, and #strong[channels] carry messages between them. The loop is
-opened with a configuration, as a state is: the number of threads, and, when the host wants the loop's own objects in
-memory of its choosing, two functions that give and take back memory. The host hands a state and a word to the loop
+opened with a configuration, as a state is: the number of threads, how many states it holds at once, and a block of
+memory that holds the loop and its channels; two size functions say how large. Without a block it takes one piece
+of the heap of that size. The host hands a state and a word to the loop
 with `pinax_loop_start` and hears that it ended through the function it gave
 there. The host names a channel and registers it as a module; the script writes `use orders` and then `orders.send`,
 `orders.receive` and `orders.close`. A task that puts into a full channel or takes from an empty one waits, and its
