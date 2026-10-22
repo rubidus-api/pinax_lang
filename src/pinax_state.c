@@ -16,7 +16,8 @@ const pnx_opinfo pnx_ops_info[PNX_OP_COUNT] = {
 };
 #define opinfo pnx_ops_info
 
-static void mark_yields(pinax_state *st);
+static void mark_yields_all(pinax_state *st);
+static void mark_yields_from(pinax_state *st, uint32_t base);
 
 static const uint8_t width_bytes[PNX_W_COUNT] = {1, 2, 4, 8, 1, 2, 4};
 
@@ -182,7 +183,8 @@ void pnx_program_restore(pinax_state *st, const pnx_program *p) {
         part_set(st, part, p->parts[part]);
         st->part_cap[part] = p->caps[part];
     }
-    if (st->undo_pending) { // a redefine traded a word's code in place: the record and the locals go back
+    const bool traded = st->undo_pending;
+    if (traded) { // a redefine traded a word's code in place: the record and the locals go back
         st->undo_pending = false;
         if (st->head && st->undo_old < st->head->n_words)
             ((pnx_wordrec *)(uintptr_t)st->words)[st->undo_old] = st->undo_word;
@@ -203,6 +205,8 @@ void pnx_program_restore(pinax_state *st, const pnx_program *p) {
     st->n_hosts = p->n_hosts;
     st->suspended = false;
     st->loading = false;
+    if (traded && st->head) // the marks were worked out over the traded code: again over the code put back
+        mark_yields_all(st);
 }
 
 // ---- signatures ------------------------------------------------------------------------
@@ -1221,8 +1225,10 @@ static void prove_step(pinax_state *st, span range, uint32_t i, facts *now, fact
             facts_drop_reg(now, a);
             if (op == PNX_ROW || op == PNX_ROWW) { // the row is the index plus one
                 if (g) {
-                    if (known)
-                        put_range(now, a, lo + 1, hi + 1);
+                    if (known) { // a mutated container leaves the index unbounded above: clamped, not wrapped
+                        bool over = false;
+                        put_range(now, a, clamp_add(lo, 1, &over), clamp_add(hi, 1, &over));
+                    }
                     fact_put(now, (fact){(uint8_t)a, FACT_ROW, 0, 0, (uint16_t)gi, 0, 0});
                 }
             }
@@ -1896,8 +1902,10 @@ pinax_err pnx_load_container(pinax_state *st, pinax_str bytecode) {
         pnx_wordrec *old = &words[h.redefine_old], *made = &words[h.redefine_new];
         err = PINAX_ERR_FORMAT;
         why = "bytecode: the redefined word has another signature";
+        pnx_counts old_counts = st->word_counts[h.redefine_old], made_counts = st->word_counts[h.redefine_new];
+        old_counts.yields = made_counts.yields = false; // the mark is worked out below, not part of the signature
         if (!text_equal(old->signature, made->signature) ||
-            __builtin_memcmp(&st->word_counts[h.redefine_old], &st->word_counts[h.redefine_new], sizeof(pnx_counts)) != 0)
+            __builtin_memcmp(&old_counts, &made_counts, sizeof(pnx_counts)) != 0)
             goto rollback;
         st->undo_word = *old; // put back by pnx_program_restore until the load is final
         st->undo_old = h.redefine_old, st->undo_new = h.redefine_new;
@@ -1954,7 +1962,10 @@ pinax_err pnx_load_container(pinax_state *st, pinax_str bytecode) {
         if (pass == 1)
             break;
     }
-    mark_yields(st);
+    if (redefines) // the old word's number runs new code: its mark and its callers' may change either way
+        mark_yields_all(st);
+    else
+        mark_yields_from(st, base.n_words);
     if (redefines) { // the old word's locals now describe the code the new word holds; done last, as it is in place
         for (uint32_t k = 0; k < base.n_locals; ++k) {
             pnx_localrec rec;
@@ -2195,7 +2206,7 @@ static void mark_yields_slowly(pinax_state *st) {
 
 // One scan of the code gives the words that yield on their own and who calls whom; the flag then
 // spreads from those words to their callers, each word entered once: linear in code and calls.
-static void mark_yields(pinax_state *st) {
+static void mark_yields_all(pinax_state *st) {
     const pnx_head *h = st->head;
     const uint32_t n = h->n_words;
     for (uint32_t k = 0; k < n; ++k)
@@ -2233,6 +2244,84 @@ static void mark_yields(pinax_state *st) {
             if (!st->word_counts[caller].yields) {
                 st->word_counts[caller].yields = true;
                 work[n_work++] = caller;
+            }
+        }
+    }
+    give_back(st, mark);
+}
+
+// The same over the words a load brought, from `base` on (RFC-0024 section 7.3). A word's mark depends on
+// its own code, the marks of the words it calls and the AWAITABLE flag of the host words it imports. For a
+// word below `base` none of those changes on a load, except through the trade of `redefine` (and the undo of
+// that trade), which the loader answers with the pass above: `forward` is closed inside one source, the code
+// of an earlier word cannot name a later word, `pinax_register` only appends host words, and compaction and
+// images move the bytes as they are. So here a word from `base` on yields when its code does, when it calls an
+// earlier word that is marked, or when it calls a word of this load that yields; the last spreads by a worklist
+// over the new words only. No mark below `base` changes. With `base` 0 this is the pass above.
+typedef struct newcalls {
+    callers         c;      // the callers among the new words, numbered from `base`
+    const pnx_counts *marks; // the marks of the earlier words
+    uint32_t        base;
+    bool            seeded; // the word being scanned calls an earlier word that yields
+} newcalls;
+static void newcalls_count(void *user, uint32_t from, uint32_t to) {
+    newcalls *nc = user;
+    (void)from;
+    if (to >= nc->base)
+        ++nc->c.start[to - nc->base + 1];
+    else if (nc->marks[to].yields)
+        nc->seeded = true;
+}
+static void newcalls_fill(void *user, uint32_t from, uint32_t to) {
+    newcalls *nc = user;
+    if (to >= nc->base)
+        nc->c.list[nc->c.at[to - nc->base]++] = from - nc->base;
+}
+static void mark_yields_from(pinax_state *st, uint32_t base) {
+    const pnx_head *h = st->head;
+    const uint32_t n = h->n_words;
+    if (base == 0 || base > n) {
+        mark_yields_all(st);
+        return;
+    }
+    const uint32_t m = n - base;
+    for (uint32_t k = base; k < n; ++k)
+        st->word_counts[k].yields = false;
+    const size_t mark = st->used;
+    newcalls nc = {{take(st, ((size_t)m + 1) * 4, 4), take(st, ((size_t)m + 1) * 4, 4), NULL}, st->word_counts, base, false};
+    uint32_t *work = take(st, (size_t)m * 4, 4);
+    if (!nc.c.start || !nc.c.at || !work) {
+        give_back(st, mark);
+        mark_yields_all(st);
+        return;
+    }
+    uint32_t n_work = 0;
+    for (uint32_t k = base; k < n; ++k) {
+        nc.seeded = false;
+        const bool own = word_yields_itself(st, k, newcalls_count, &nc);
+        if (own || nc.seeded) {
+            st->word_counts[k].yields = true;
+            work[n_work++] = k - base;
+        }
+    }
+    for (uint32_t k = 0; k < m; ++k)
+        nc.c.start[k + 1] += nc.c.start[k];
+    nc.c.list = take(st, (size_t)nc.c.start[m] * 4 + 4, 4);
+    if (!nc.c.list) {
+        give_back(st, mark);
+        mark_yields_all(st);
+        return;
+    }
+    __builtin_memcpy(nc.c.at, nc.c.start, ((size_t)m + 1) * 4);
+    for (uint32_t k = base; k < n; ++k)
+        (void)word_yields_itself(st, k, newcalls_fill, &nc);
+    while (n_work) {
+        const uint32_t w = work[--n_work];
+        for (uint32_t j = nc.c.start[w]; j < nc.c.start[w + 1]; ++j) {
+            const uint32_t caller = base + nc.c.list[j];
+            if (!st->word_counts[caller].yields) {
+                st->word_counts[caller].yields = true;
+                work[n_work++] = caller - base;
             }
         }
     }
