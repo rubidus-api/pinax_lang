@@ -205,8 +205,11 @@ void pnx_program_restore(pinax_state *st, const pnx_program *p) {
     st->n_hosts = p->n_hosts;
     st->suspended = false;
     st->loading = false;
-    if (traded && st->head) // the marks were worked out over the traded code: again over the code put back
+    if (traded && st->head) { // the marks were worked out over the traded code: again over the code put back
+        const size_t needed = st->needed; // the pass's scratch is no size the host is told (as prove_word)
         mark_yields_all(st);
+        st->needed = needed;
+    }
 }
 
 // ---- signatures ------------------------------------------------------------------------
