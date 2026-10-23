@@ -47,6 +47,11 @@ in 9.2. `T` means "any one type"; it is a notation for built-in words only. The 
   [`byte_swap`], [`(int gives int)`], [the eight bytes in reverse order],
 )]
 
+#para("5")[On a narrow integer (7.6) the words above take two of one type and give that type; overflow, wrapping and
+saturation are judged by that type's range. The words that read numbers as unsigned and `floor_div` `floor_mod` are the
+plain words on an unsigned type and do not take a signed one. The bit words work within the width. `neg` `abs` `min`
+`max` `clamp` do not take a narrow integer; `rotl` `rotr` `mul_hi` `u_mul_hi` take `u64` only.]
+
 #ex("spec", "15-integers.pnx")
 
 #part("Constraints")

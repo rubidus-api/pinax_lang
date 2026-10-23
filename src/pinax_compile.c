@@ -48,6 +48,7 @@ enum { L_PLAIN, L_OWNS, L_MOVED }; // what a local holds of a value that must be
 #define TY_REF 0x1100u       // array T, list T, queue T or buffer (RFC-0018): this plus its number in comp.rtypes
 #define TY_REFROW 0x1400u    // a row of a table a reference names: this plus the register of the reference
 #define TY_DEC 0x1500u       // dec(N), N 0 to 18 (RFC-0019): this plus N; an int scaled by 10^N
+#define TY_NARROW 0x1600u    // u8 u16 u32 u64 i8 i16 i32 (RFC-0025): this plus the width code (PNX_W_*)
 #define REF_GLOBAL 0xf00u    // in place of a global's number: the collection a reference names, this plus its
                              // register; emit() puts a GSEL before the instruction (globals stay below it)
 #define MAX_NESTED 4         // value blocks inside value blocks
@@ -623,6 +624,78 @@ static tid base_of(const comp *c, tid type) {
 
 static uint32_t find_global(const comp *c, name n);
 
+// ---- the narrow integer types (RFC-0025) --------------------------------------------------
+//
+// u8 u16 u32 u64 i8 i16 i32 are value types over the I bank: a value is held extended in 64
+// bits (a u64 as its bits), the type exists at load only. They are their own base: nothing
+// treats one as an int, so every word that does not know them refuses them.
+static bool is_narrow(tid type) {
+    return type >= TY_NARROW && type < TY_NARROW + PNX_W_COUNT;
+}
+static const char *const narrow_names[PNX_W_COUNT] = {"u8", "u16", "u32", "u64", "i8", "i16", "i32"};
+// The width code of a narrow type, or of a type declared over one; NONE for every other type.
+static uint32_t narrow_width(const comp *c, tid type) {
+    const tid b = base_of(c, type);
+    return is_narrow(b) ? b - TY_NARROW : NONE;
+}
+static bool narrow_name(name n, uint32_t *width) {
+    for (uint32_t k = 0; k < PNX_W_COUNT; ++k) {
+        if (name_is(n, narrow_names[k])) {
+            *width = k;
+            return true;
+        }
+    }
+    return false;
+}
+// low_u8 ... low_i32: the low bits of a value (no low_u64: every value has 64)
+static bool low_name(name n, uint32_t *width) {
+    if (n.length < 5 || __builtin_memcmp(n.text, "low_", 4) != 0)
+        return false;
+    const name rest = {n.text + 4, n.length - 4};
+    return narrow_name(rest, width) && *width != PNX_W_64;
+}
+static int64_t width_min(uint32_t width) {
+    return width == PNX_W_I8 ? INT8_MIN : width == PNX_W_I16 ? INT16_MIN : width == PNX_W_I32 ? INT32_MIN : 0;
+}
+static int64_t width_max(uint32_t width) {
+    switch (width) {
+    case PNX_W_U8: return UINT8_MAX;
+    case PNX_W_U16: return UINT16_MAX;
+    case PNX_W_U32: return UINT32_MAX;
+    case PNX_W_I8: return INT8_MAX;
+    case PNX_W_I16: return INT16_MAX;
+    case PNX_W_I32: return INT32_MAX;
+    default: return INT64_MAX; // u64: the top half is held as a negative pattern
+    }
+}
+// Whether a constant (from an int, or from the narrow type `from`) is a value of width `to`.
+static bool const_fits(int64_t value, uint32_t from, uint32_t to) {
+    if (from == PNX_W_64 && value < 0) // 2^63 and above: outside every narrower type
+        return false;
+    if (to == PNX_W_64)
+        return value >= 0;
+    return value >= width_min(to) && value <= width_max(to);
+}
+static int64_t wrap_width(int64_t v, uint32_t width) {
+    switch (width) {
+    case PNX_W_U8: return (uint8_t)v;
+    case PNX_W_U16: return (uint16_t)v;
+    case PNX_W_U32: return (uint32_t)v;
+    case PNX_W_I8: return (int8_t)(uint8_t)v;
+    case PNX_W_I16: return (int16_t)(uint16_t)v;
+    case PNX_W_I32: return (int32_t)(uint32_t)v;
+    default: return v;
+    }
+}
+// Every value of width `from` is a value of width `to`: no check is needed.
+static bool always_fits(uint32_t from, uint32_t to) {
+    if (from == NONE || from == PNX_W_64)
+        return false;
+    if (to == PNX_W_64)
+        return from < PNX_W_I8; // an unsigned value is a u64
+    return width_min(to) <= width_min(from) && width_max(from) <= width_max(to);
+}
+
 static const local *ref_local(const comp *c, uint32_t reg);
 static local       *find_local(fn *f, name n);
 
@@ -640,6 +713,8 @@ static tid num_base(const comp *c, tid type) {
 static name type_name(const comp *c, tid type) {
     if (is_dec(type))
         return cname(dec_names[type - TY_DEC]);
+    if (is_narrow(type))
+        return cname(narrow_names[type - TY_NARROW]);
     if (is_ref(type)) {
         const uint8_t kind = ((const rtype *)c->rtypes.ptr + (type - TY_REF))->kind;
         return cname(kind == GK_ARRAY ? "array" : kind == GK_LIST ? "list" : kind == GK_QUEUE ? "queue" : "buffer");
@@ -659,8 +734,11 @@ static name type_name(const comp *c, tid type) {
 }
 
 static tid basic_type(name n) {
+    uint32_t width;
     if (name_is(n, "int"))
         return TY_INT;
+    if (narrow_name(n, &width))
+        return (tid)(TY_NARROW + width);
     if (name_is(n, "bool"))
         return TY_BOOL;
     if (name_is(n, "str"))
@@ -1714,7 +1792,7 @@ static const struct builtin *find_builtin(name n, uint8_t module) {
 // A name every part of the source sees: a word, a constant, a global, a type, a core word.
 static bool name_is_global(comp *c, name n) {
     return find_word(c, n, NULL) || find_fwd(c, n, NULL) || find_extern(c, n) != NONE || find_core(n) || type_of_name(c, n) != TY_NONE ||
-           name_is(n, "float") || name_is(n, "raw") || name_is(n, "dec") ||
+           name_is(n, "float") || name_is(n, "raw") || name_is(n, "dec") || low_name(n, &(uint32_t){0}) ||
            find_record(c, n) != NONE ||
            name_is(n, "err") || find_const(c, n) || find_global(c, n) != NONE || find_builtin(n, 0);
 }
@@ -1799,11 +1877,119 @@ static bool fits8(int64_t v) {
     return v >= INT8_MIN && v <= INT8_MAX;
 }
 
+// Arithmetic on two values of one narrow type (RFC-0025): the result is of the type, or the
+// fault overflow; wrap_* wraps at the width, sat_* stops at its ends. The bit words that are
+// closed over the type are the plain instructions; the rest go through NARITH with the width.
+static bool narrow_arith(comp *c, uint32_t op, const entry *a, const entry *b, uint32_t width) {
+    fn *f = c->f;
+    if (a->type != b->type || width == NONE)
+        return type_error(c, "this word takes two values of one type: u8 with u8, int with int; u8 and raw convert");
+    const bool u64 = width == PNX_W_64, is_signed = width >= PNX_W_I8;
+    uint32_t   narrow = NONE, plain = NONE;
+    switch (op) {
+    case PNX_ADD: narrow = PNX_NA_ADD; break;
+    case PNX_SUB: narrow = PNX_NA_SUB; break;
+    case PNX_MUL: narrow = PNX_NA_MUL; break;
+    case PNX_DIV: narrow = PNX_NA_DIV; break;
+    case PNX_MOD: narrow = PNX_NA_MOD; break;
+    case PNX_WADD: narrow = PNX_NA_WADD; break;
+    case PNX_WSUB: narrow = PNX_NA_WSUB; break;
+    case PNX_WMUL: narrow = PNX_NA_WMUL; break;
+    case PNX_SATADD: narrow = PNX_NA_SATADD; break;
+    case PNX_SATSUB: narrow = PNX_NA_SATSUB; break;
+    case PNX_SATMUL: narrow = PNX_NA_SATMUL; break;
+    case PNX_SHL: if (u64) plain = PNX_SHL; else narrow = PNX_NA_SHL; break; // the bits shifted out leave
+    case PNX_AND: case PNX_OR: case PNX_XOR: plain = op; break;
+    case PNX_SHR: plain = u64 ? PNX_USHR : PNX_SHR; break; // a signed value keeps its sign, an unsigned one fills with 0
+    case PNX_USHR:
+        if (is_signed)
+            return type_error(c, "u_shr takes an int or an unsigned type; a signed type shifts with shr");
+        plain = u64 ? PNX_USHR : PNX_SHR;
+        break;
+    case PNX_UDIV: case PNX_UMOD: case PNX_FDIV: case PNX_FMOD:
+        if (is_signed)
+            return type_error(c, "u_div, u_mod, floor_div and floor_mod take an int or an unsigned type");
+        if (u64)
+            plain = op == PNX_UDIV || op == PNX_FDIV ? PNX_UDIV : PNX_UMOD;
+        else
+            narrow = op == PNX_UDIV || op == PNX_FDIV ? PNX_NA_DIV : PNX_NA_MOD;
+        break;
+    case PNX_MULHI: case PNX_UMULHI:
+        if (!u64)
+            return type_error(c, "mul_hi and u_mul_hi take an int or a u64; for a narrow type take raw");
+        plain = PNX_UMULHI;
+        break;
+    case PNX_ROTL: case PNX_ROTR:
+        if (!u64)
+            return type_error(c, "rotl and rotr take an int or a u64; for a narrow type take raw");
+        plain = op;
+        break;
+    default: return type_error(c, "this word takes int values; for a narrow type take raw");
+    }
+    const uint32_t dst = slot_of(c, f->depth - 2);
+    uint32_t       ra, rb;
+    if (!reg_of(c, f->depth - 2, &ra) || !reg_of(c, f->depth - 1, &rb))
+        return false;
+    if (plain != NONE) {
+        if (emit_def(c, PNX_ABC(plain, dst, ra, rb), BANK_I) == NONE)
+            return false;
+    } else if (emit_def(c, PNX_ABC(PNX_NARITH, dst, ra, rb), BANK_I) == NONE || emit(c, PNX_NX(narrow, width)) == NONE) {
+        return false;
+    }
+    const tid result = a->type;
+    f->depth -= 2;
+    return push_slot(c, result);
+}
+
+// n u8 (a fault outside the type; a constant is refused), n low_u8 (the low bits)
+static bool narrow_convert(comp *c, uint32_t width, bool low) {
+    fn *f = c->f;
+    if (!need(c, 1))
+        return false;
+    entry *e = &f->stack[f->depth - 1];
+    const tid      to = (tid)(TY_NARROW + width);
+    const uint32_t from = narrow_width(c, e->type);
+    if (e->type != TY_INT && (from == NONE || base_of(c, e->type) != e->type))
+        return type_error(c, "u8, u16, u32, u64, i8, i16, i32 and low_u8 ... are made from an int or from one "
+                             "another; for a declared type take raw first");
+    if (e->type == to)
+        return advance(c);
+    if (e->kind == E_CONST) {
+        if (low)
+            e->value = wrap_width(e->value, width);
+        else if (!const_fits(e->value, from, width))
+            return type_error(c, "the constant is outside the range of this type; low_u8 and the others keep the low bits");
+        e->type = to;
+        return advance(c);
+    }
+    uint32_t ra;
+    if (low) {
+        const uint32_t dst = slot_of(c, f->depth - 1);
+        if (!reg_of(c, f->depth - 1, &ra) || emit_def(c, PNX_ABC(PNX_NUN, dst, ra, 0), BANK_I) == NONE ||
+            emit(c, PNX_NX(PNX_NU_LOW, width)) == NONE)
+            return false;
+        e->kind = E_SLOT;
+        e->src = 0;
+    } else if (!always_fits(from, width)) { // the check, where the value may lie outside the type
+        if (!settle(c, f->depth - 1))
+            return false;
+        ra = slot_of(c, f->depth - 1);
+        if (emit(c, PNX_ABC(PNX_NUN, ra, ra, 0)) == NONE ||
+            emit(c, PNX_NX(from == PNX_W_64 ? PNX_NU_FITU : PNX_NU_FIT, width)) == NONE)
+            return false;
+        f->def_at = NONE;
+    }
+    e->type = to;
+    return advance(c);
+}
+
 static bool arith_word(comp *c, uint32_t op) {
     fn *f = c->f;
     if (!need(c, 2))
         return false;
     entry *a = &f->stack[f->depth - 2], *b = &f->stack[f->depth - 1];
+    if (narrow_width(c, a->type) != NONE || narrow_width(c, b->type) != NONE) // RFC-0025
+        return narrow_arith(c, op, a, b, narrow_width(c, a->type));
     if (op == PNX_MUL && is_dec(a->type) && is_dec(b->type)) { // dec(A) dec(B) mul : dec(A+B), exact (RFC-0019)
         const uint32_t scale = (a->type - TY_DEC) + (b->type - TY_DEC);
         if (scale > 18)
@@ -1864,10 +2050,21 @@ static bool compare_word(comp *c, int which) {
     entry *a = &f->stack[f->depth - 2], *b = &f->stack[f->depth - 1];
     if (a->type != b->type)
         return type_error(c, "the two values compared must have the same type");
-    if (num_base(c, a->type) != TY_INT && a->type != TY_STR && which != CMP_EQ && which != CMP_NE)
+    const uint32_t narrow = narrow_width(c, a->type);
+    if (num_base(c, a->type) != TY_INT && narrow == NONE && a->type != TY_STR && which != CMP_EQ && which != CMP_NE)
         return type_error(c, "values of this type are compared with eq and ne only");
     entry e = {.type = TY_BOOL, .kind = E_COND};
     uint32_t ra, rb;
+    if (narrow == PNX_W_64 && which != CMP_EQ && which != CMP_NE) { // u64: the unsigned order, as u_lt (RFC-0025)
+        if (!settle(c, f->depth - 2) || !settle(c, f->depth - 1))
+            return false;
+        ra = slot_of(c, f->depth - 2);
+        rb = slot_of(c, f->depth - 1);
+        f->depth -= 2;
+        const bool     swap = which == CMP_GT || which == CMP_GE;
+        const uint32_t op = which == CMP_LT || which == CMP_GT ? PNX_ULT : PNX_ULE;
+        return emit_def(c, PNX_ABC(op, ra, swap ? rb : ra, swap ? ra : rb), BANK_I) != NONE && push_slot(c, TY_BOOL);
+    }
     if (a->type == TY_STR && which != CMP_EQ && which != CMP_NE) { // byte order: compare, then test the sign
         if (!reg_of(c, f->depth - 2, &ra) || !reg_of(c, f->depth - 1, &rb))
             return false;
@@ -1945,6 +2142,25 @@ static bool core(comp *c, const core_word *w) {
     case C_UNARY: { // int gives int
         if (!need(c, 1))
             return false;
+        const uint32_t nw = narrow_width(c, f->stack[f->depth - 1].type);
+        if (nw != NONE) { // a narrow type (RFC-0025): the bit words work at its width; the counts are int
+            if (w->op == PNX_ABS)
+                return type_error(c, "abs takes an int or a declared type over int; a narrow type has no abs");
+            entry *e = &f->stack[f->depth - 1];
+            const tid result = w->op == PNX_POPC || w->op == PNX_CLZ || w->op == PNX_CTZ ? TY_INT : e->type;
+            const uint32_t dst = slot_of(c, f->depth - 1);
+            const uint32_t un = w->op == PNX_BNOT ? PNX_NU_NOT : w->op == PNX_POPC ? PNX_NU_POPC : w->op == PNX_CLZ ? PNX_NU_CLZ
+                              : w->op == PNX_CTZ ? PNX_NU_CTZ : PNX_NU_BSWAP;
+            if (!reg_of(c, f->depth - 1, &ra))
+                return false;
+            if (nw == PNX_W_64 ? emit_def(c, PNX_ABC(w->op, dst, ra, 0), BANK_I) == NONE
+                               : emit_def(c, PNX_ABC(PNX_NUN, dst, ra, 0), BANK_I) == NONE || emit(c, PNX_NX(un, nw)) == NONE)
+                return false;
+            e->kind = E_SLOT;
+            e->src = 0;
+            e->type = result;
+            return advance(c);
+        }
         if (f->stack[f->depth - 1].type != TY_INT &&
             !(w->op == PNX_ABS && num_base(c, f->stack[f->depth - 1].type) == TY_INT)) // abs keeps a declared type
             return type_error(c, "this word takes an int");
@@ -1961,7 +2177,15 @@ static bool core(comp *c, const core_word *w) {
             return false;
         const tid ta = f->stack[f->depth - 2].type, tb = f->stack[f->depth - 1].type;
         tid result = TY_INT;
-        if (w->kind == C_CHK && (is_dec(ta) || is_dec(tb))) { // dec(N) as add, sub, mul and div take it (RFC-0019)
+        uint32_t narrow = NONE;
+        if (narrow_width(c, ta) != NONE || narrow_width(c, tb) != NONE) { // a narrow type (RFC-0025)
+            narrow = narrow_width(c, ta);
+            if (ta != tb || narrow == NONE)
+                return type_error(c, "this word takes two values of one type: u8 with u8, int with int");
+            if (w->kind == C_UCMP && narrow >= PNX_W_I8)
+                return type_error(c, "u_lt, u_le, u_gt and u_ge take an int or an unsigned type; a signed type compares with lt");
+            result = ta;
+        } else if (w->kind == C_CHK && (is_dec(ta) || is_dec(tb))) { // dec(N) as add, sub, mul and div take it (RFC-0019)
             const bool same = ta == tb && (w->op == PNX_CHKADD || w->op == PNX_CHKSUB);
             const bool by_int = (w->op == PNX_CHKMUL && (ta == TY_INT || tb == TY_INT)) || (w->op == PNX_CHKDIV && tb == TY_INT);
             const bool both = w->op == PNX_CHKMUL && is_dec(ta) && is_dec(tb) && (ta - TY_DEC) + (tb - TY_DEC) <= 18;
@@ -1977,6 +2201,12 @@ static bool core(comp *c, const core_word *w) {
         ra = slot_of(c, f->depth - 2);
         rb = slot_of(c, f->depth - 1);
         f->depth -= 2;
+        if (w->kind == C_CHK && narrow != NONE) {
+            const uint32_t fn_ = w->op == PNX_CHKADD ? PNX_NC_ADD : w->op == PNX_CHKSUB ? PNX_NC_SUB
+                               : w->op == PNX_CHKMUL ? PNX_NC_MUL : PNX_NC_DIV;
+            return settle_all(c) && emit(c, PNX_ABC(PNX_NCHK, ra, ra, rb)) != NONE && emit(c, PNX_NX(fn_, narrow)) != NONE &&
+                   guard_op(c, result);
+        }
         if (w->kind == C_CHK)
             return settle_all(c) && emit(c, PNX_ABC(w->op, ra, ra, rb)) != NONE && guard_op(c, result);
         const bool swap = w->op == CMP_GT || w->op == CMP_GE; // a > b is b < a
@@ -6115,6 +6345,12 @@ static bool body_name(comp *c) {
         const fwd *ahead = find_fwd(c, n, &index);
         if (ahead)
             return call_word(c, &ahead->sig, FWD_MARK | index);
+        { // n u8, n low_u8 (RFC-0025)
+            uint32_t   width;
+            const bool low = low_name(n, &width);
+            if (low || narrow_name(n, &width))
+                return narrow_convert(c, width, low);
+        }
         if (name_is(n, "dec")) { // n dec(N) : the int n as n.00..., exact; a fault when it does not fit
             tid made;
             if (!advance(c) || !dec_scale(c, &made) || !need(c, 1))
@@ -6140,8 +6376,12 @@ static bool body_name(comp *c) {
                 return false;
             entry *e = &f->stack[f->depth - 1];
             if (name_is(n, "raw")) {
+                if (is_narrow(e->type)) { // the int held: a u64 as its bits (RFC-0025)
+                    e->type = TY_INT;
+                    return advance(c);
+                }
                 if (base_of(c, e->type) == e->type)
-                    return type_error(c, "raw takes a value of a declared type and gives its plain value");
+                    return type_error(c, "raw takes a value of a declared type or of a narrow type and gives its plain value");
                 e->type = base_of(c, e->type);
             } else {
                 if (e->type != base_of(c, made))
@@ -7030,8 +7270,9 @@ static bool declare_collection(comp *c, uint8_t kind) {
     const bool dec = g.record == NONE && name_is(tok_name(c), "dec");
     if (dec)
         g.type = TY_DEC; // the scale follows
-    if (g.record == NONE && g.type != TY_INT && g.type != TY_BOOL && g.type != TY_ERR && g.type != TY_STR && !dec)
-        return type_error(c, "the cells are int, bool, err, dec(N), str(N) or a record; other types are not supported yet");
+    if (g.record == NONE && g.type != TY_INT && g.type != TY_BOOL && g.type != TY_ERR && g.type != TY_STR && !dec &&
+        !is_narrow(g.type))
+        return type_error(c, "the cells are int, bool, err, dec(N), str(N), a narrow integer type or a record; other types are not supported yet");
     if (slot && g.record == NONE)
         return type_error(c, "a table announced by forward holds a record");
     if (kind == GK_QUEUE && (g.record != NONE || g.type == TY_STR))
@@ -7225,8 +7466,8 @@ static bool declare_type(comp *c) {
     const bool dec = name_is(tok_name(c), "dec");
     if (!advance(c) || (dec && !dec_scale(c, &d.base)))
         return false;
-    if (d.base != TY_INT && d.base != TY_STR && d.base != TY_BOOL && !is_dec(d.base))
-        return type_error(c, "a declared type is made of int, bool, str or dec(N)");
+    if (d.base != TY_INT && d.base != TY_STR && d.base != TY_BOOL && !is_dec(d.base) && !is_narrow(d.base))
+        return type_error(c, "a declared type is made of int, bool, str, dec(N) or a narrow integer type");
     if (c->dtypes.n >= 0x3000u)
         return syntax(c, "too many declared types");
     dtype *slot = vec_push(c, &c->dtypes, sizeof(dtype));

@@ -1,0 +1,14 @@
+rem run
+use io
+use str
+word show (n int) n str.to_str io.println end
+word demo ()
+  250 u8 5 u8 add raw show               rem 255
+  0 u8 1 u8 wrap_sub raw show            rem 255: wraps at 2^8
+  200 u8 100 u8 sat_add raw show         rem 255: stops at the end
+  200 u8 bit_not raw show                rem 55: eight bits flipped
+  -1 low_u8 raw show                     rem 255: the low byte of -1
+  0 u64 bit_not 1 u64 gt if "u64 compares unsigned" io.println end
+  0 u64 bit_not raw show                 rem -1: the bits as an int
+end
+demo

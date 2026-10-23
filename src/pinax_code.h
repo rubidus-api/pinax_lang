@@ -180,6 +180,10 @@ enum {
     X(WMULI, 0x38, PNX_K_I, PNX_K_I, PNX_K_IMM, PNX_F_ABC, PNX_X_NONE, 0, "wr-") \
     X(VLEN, 0x39, PNX_K_I, PNX_K_I, PNX_K_NONE, PNX_F_ABC, PNX_X_NONE, 0, "wr-") \
     X(FITW, 0x3a, PNX_K_I, PNX_K_NONE, PNX_K_IMM, PNX_F_ABC, PNX_X_NONE, 1, "r--") \
+    /* the narrow integer types (RFC-0025): the second word is the operation and the width */ \
+    X(NARITH, 0x3c, PNX_K_I, PNX_K_I, PNX_K_I, PNX_F_ABC, PNX_X_IMM, 0, "wrr") \
+    X(NCHK, 0x3d, PNX_K_I, PNX_K_I, PNX_K_I, PNX_F_ABC, PNX_X_IMM, 1, "wrr") \
+    X(NUN, 0x3e, PNX_K_I, PNX_K_I, PNX_K_NONE, PNX_F_ABC, PNX_X_IMM, 0, "wr-") \
     /* jumps */ \
     X(JEQ, 0x48, PNX_K_I, PNX_K_I, PNX_K_J, PNX_F_ABC, PNX_X_NONE, 0, "rr-") \
     X(JNE, 0x49, PNX_K_I, PNX_K_I, PNX_K_J, PNX_F_ABC, PNX_X_NONE, 0, "rr-") \
@@ -362,6 +366,17 @@ enum {
 enum { PNX_W_U8, PNX_W_U16, PNX_W_U32, PNX_W_64, PNX_W_I8, PNX_W_I16, PNX_W_I32, PNX_W_COUNT };
 #define PNX_W_VARINT PNX_W_COUNT
 #define PNX_W_BE 0x08u
+// The narrow types' instructions (RFC-0025): the second word of NARITH, NCHK and NUN is the
+// operation in its low byte and the width code (PNX_W_U8 to PNX_W_I32; PNX_W_64 is u64) in the
+// next. Arithmetic faults (NARITH) or fails (NCHK) with overflow when the result leaves the type.
+enum { PNX_NA_ADD, PNX_NA_SUB, PNX_NA_MUL, PNX_NA_DIV, PNX_NA_MOD, PNX_NA_WADD, PNX_NA_WSUB, PNX_NA_WMUL,
+       PNX_NA_SATADD, PNX_NA_SATSUB, PNX_NA_SATMUL, PNX_NA_SHL, PNX_NA_COUNT };
+enum { PNX_NC_ADD, PNX_NC_SUB, PNX_NC_MUL, PNX_NC_DIV, PNX_NC_COUNT };
+// NUN: FIT faults overflow unless B is a value of the width (from int or a narrower type);
+// FITU the same from a u64 (a bit pattern of 2^63 and above is out of every other range); LOW
+// keeps the low bits; NOT, POPC, CLZ, CTZ, BSWAP work at the width.
+enum { PNX_NU_FIT, PNX_NU_FITU, PNX_NU_LOW, PNX_NU_NOT, PNX_NU_POPC, PNX_NU_CLZ, PNX_NU_CTZ, PNX_NU_BSWAP, PNX_NU_COUNT };
+#define PNX_NX(fn, width) ((uint32_t)(fn) | (uint32_t)(width) << 8)
 
 // What SHASH computes (its C) and what BENC writes (its B).
 enum { PNX_HASH_CRC32, PNX_HASH_FNV1A, PNX_HASH_SIP, PNX_HASH_COUNT };

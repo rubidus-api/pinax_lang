@@ -47,6 +47,11 @@
   [`byte_swap`], [`(int gives int)`], [8 바이트의 차례를 뒤집음],
 )]
 
+#para("5")[좁은 정수(7.6)에서 위 낱말은 같은 타입 둘을 받아 그 타입을 준다. 넘침과 감기와 멈춤의 기준은 그 타입의
+범위다. 부호 없는 수로 보는 낱말과 `floor_div` `floor_mod` 는 부호 없는 타입에서 보통 낱말과 같고 부호 있는 타입은
+받지 않는다. 비트 낱말은 폭 안에서 한다. `neg` `abs` `min` `max` `clamp` 는 받지 않고, `rotl` `rotr` `mul_hi`
+`u_mul_hi` 는 `u64` 만 받는다.]
+
 #ex("spec", "15-integers.pnx")
 
 #part("제약")

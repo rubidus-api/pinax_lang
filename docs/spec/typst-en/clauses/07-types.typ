@@ -10,6 +10,7 @@ type while running. A program whose types do not match is refused at load.]
   [*Type*], [*Values*],
   [`int`], [64-bit two's complement integers (7.1)],
   [`dec(N)`], [decimals with N digits after the point, N from 0 to 18 (7.5)],
+  [`u8` `u16` `u32` `u64` `i8` `i16` `i32`], [unsigned and signed integers of that width (7.6); `u8` is a byte, `u32` a code point],
   [`bool`], [`true`, `false` (7.2)],
   [`str`], [a view of bytes (7.3); only in locals, arguments and results],
   [`str(N)`], [stored text of up to N bytes (7.3); in globals, cells of arrays, fields of records],
@@ -158,9 +159,60 @@ a `dec`.]
 #ex("spec", "07-dec-scales.pnx")
 #ex("spec", "07-dec-div.pnx")
 
+== Narrow integers <types-narrow>
+
+#para("1")[`u8` `u16` `u32` `u64` `i8` `i16` `i32` are the #term("narrow integer", en: "narrow integer") types. The name
+says the range: `u` from 0 to 2#super[width]−1, `i` from −2#super[width−1] to 2#super[width−1]−1. `u8` is the type of a
+byte and `u32` the type of a code point. The 64-bit signed integer is `int`; there is no type `i64`.]
+
+#para("2")[A narrow integer is another type than `int`, and each is another type than the others. Conversion is a word:
+`n u8` makes the `int` or other narrow integer `n` into a `u8`, and a value outside the range is the fault `overflow`.
+Nothing is truncated. A literal is written the same way: `255 u8`. A constant outside the range is refused at load.
+`x raw` gives the `int` held; `raw` of a `u64` puts its 64 bits into the `int` as they are (2#super[63] and above are
+negative). `n low_u8` … `n low_i32` take the low bits only: these are the truncating words.]
+
+#para("3")[`add` `sub` `mul` `div` `mod` take two of one narrow integer type and give that type; a result outside the
+range is the fault `overflow`. `wrap_add` `wrap_sub` `wrap_mul` wrap modulo 2#super[width], `sat_add` `sat_sub`
+`sat_mul` stop at the ends of the range, and `chk_add` `chk_sub` `chk_mul` `chk_div` fail. The comparison words take two
+of one type; `u64` compares and divides unsigned. `neg` `abs` `min` `max` `clamp` do not take them (15.1).]
+
+#para("4")[The bit words work within the width. `bit_not` flips the bits of the width only, `shl` drops the bits that
+leave the width, and `shr` keeps the sign of a signed type and fills an unsigned one with zeros. `u_shr` `u_div` `u_mod`
+`u_lt` `u_le` `u_gt` `u_ge` `floor_div` `floor_mod` are, on an unsigned type, `shr` `div` `mod` `lt` `le` `gt` `ge`
+`div` `mod`, and do not take a signed type. `count_ones` `leading_zeros` `trailing_zeros` count the bits of the width and
+give an `int` (the width for 0); `byte_swap` reverses the bytes of the width. `rotl` `rotr` `mul_hi` `u_mul_hi` take
+`u64` only.]
+
+#para("5")[A narrow integer is, as `int` is, the type of globals, of cells of arrays and lists, of values of queues, of
+parameters and results and of host word signatures (19.2), and the base of a declared type (7.4), as in `type opcode
+u8`. A host word takes and gives the value as one 64-bit integer.]
+
+#ex("spec", "07-narrow.pnx")
+
+#part("Constraints")
+
+#para("6")[An `int` with a narrow integer, or two narrow integers of different types, given to one word is refused. A
+constant outside the range converted is refused.]
+#ex("spec", "07-narrow-mix.pnx")
+#ex("spec", "07-narrow-range.pnx")
+
+#part("Faults")
+
+#para("7")[A result or a conversion outside the range ends the run with the fault `overflow`.]
+#ex("spec", "07-narrow-overflow.pnx")
+
 #part("Diagnostics")
 #diag(
   ([A value that is not a `bool` where a condition goes], "a bool is expected here"),
+  ([A narrow integer with an `int`, or two narrow integers of different types], "this word takes two values of one type: u8 with u8, int with int; u8 and raw convert"),
+  ([A constant outside the range converted], "the constant is outside the range of this type; low_u8 and the others keep the low bits"),
+  ([A value of a declared type converted directly], "u8, u16, u32, u64, i8, i16, i32 and low_u8 ... are made from an int or from one another; for a declared type take raw first"),
+  ([`u_shr` on a signed narrow integer], "u_shr takes an int or an unsigned type; a signed type shifts with shr"),
+  ([`u_div` `u_mod` `floor_div` `floor_mod` on a signed narrow integer], "u_div, u_mod, floor_div and floor_mod take an int or an unsigned type"),
+  ([`u_lt` `u_le` `u_gt` `u_ge` on a signed narrow integer], "u_lt, u_le, u_gt and u_ge take an int or an unsigned type; a signed type compares with lt"),
+  ([`rotl` `rotr` on a narrow integer other than `u64`], "rotl and rotr take an int or a u64; for a narrow type take raw"),
+  ([`mul_hi` `u_mul_hi` on a narrow integer other than `u64`], "mul_hi and u_mul_hi take an int or a u64; for a narrow type take raw"),
+  ([`abs` on a narrow integer], "abs takes an int or a declared type over int; a narrow type has no abs"),
   ([The two values of an arithmetic word differ in type or are not `int`], "this word takes two int values, or two of the same declared type"),
   ([Arithmetic outside (3) and (3a) on a declared type], "a declared type is added to and subtracted from its own type, and multiplied, divided or taken modulo by an int; for other arithmetic take raw"),
   ([An argument of another type than the signature], "an argument has another type than the word's signature asks for"),

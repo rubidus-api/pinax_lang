@@ -1,0 +1,6 @@
+rem fault
+use io
+word byte (n int gives u8) n u8 end
+"before" io.println
+255 byte 1 u8 add drop
+"never printed" io.println

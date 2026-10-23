@@ -67,6 +67,32 @@ PNX_INLINE int64_t pnx_load_width(const uint8_t *p, uint32_t width) {
     }
 }
 
+// The low bits of `v` at a width, extended as the type is (RFC-0025): what wrap_add and low_u8 give.
+PNX_INLINE int64_t pnx_wrap_width(int64_t v, uint32_t width) {
+    switch (width) {
+    case PNX_W_U8: return (uint8_t)v;
+    case PNX_W_U16: return (uint16_t)v;
+    case PNX_W_U32: return (uint32_t)v;
+    case PNX_W_I8: return (int8_t)(uint8_t)v;
+    case PNX_W_I16: return (int16_t)(uint16_t)v;
+    case PNX_W_I32: return (int32_t)(uint32_t)v;
+    default: return v;
+    }
+}
+PNX_INLINE int64_t pnx_width_min(uint32_t width) {
+    return width == PNX_W_I8 ? INT8_MIN : width == PNX_W_I16 ? INT16_MIN : width == PNX_W_I32 ? INT32_MIN : 0;
+}
+PNX_INLINE int64_t pnx_width_max(uint32_t width) {
+    switch (width) {
+    case PNX_W_U8: return UINT8_MAX;
+    case PNX_W_U16: return UINT16_MAX;
+    case PNX_W_U32: return UINT32_MAX;
+    case PNX_W_I8: return INT8_MAX;
+    case PNX_W_I16: return INT16_MAX;
+    case PNX_W_I32: return INT32_MAX;
+    default: return -1; // u64: all bits
+    }
+}
 PNX_INLINE bool pnx_fits_width(int64_t v, uint32_t width) {
     switch (width) {
     case PNX_W_U8: return v >= 0 && v <= UINT8_MAX;
@@ -1769,6 +1795,122 @@ PNX_UN(POPC, __builtin_popcountll((unsigned long long)a))
 PNX_UN(CLZ, a == 0 ? 64 : __builtin_clzll((unsigned long long)a))
 PNX_UN(CTZ, a == 0 ? 64 : __builtin_ctzll((unsigned long long)a))
 PNX_UN(BSWAP, (int64_t)__builtin_bswap64((uint64_t)a))
+
+// ---- the narrow integer types (RFC-0025) ---------------------------------------------------
+//
+// a and b are values of the type, held extended in 64 bits (a u64 as its bits). The result is
+// the value when it is one of the type; else the fault (or, for NCHK, the failure) overflow.
+// At a width below 64 the exact result of add, sub and mul fits in 64 bits, so the operation is
+// done wide and the result tested; at u64 the test is the unsigned carry.
+PNX_INLINE int pnx_narrow_arith(uint32_t fn, uint32_t width, int64_t a, int64_t b, int64_t *out) {
+    const bool u64 = width == PNX_W_64;
+    const uint64_t ua = (uint64_t)a, ub = (uint64_t)b;
+    int64_t r;
+    switch (fn) {
+    case PNX_NA_ADD:
+        r = (int64_t)(ua + ub);
+        if (u64 ? (uint64_t)r < ua : !pnx_fits_width(r, width))
+            return PINAX_ERR_OVERFLOW;
+        break;
+    case PNX_NA_SUB:
+        r = (int64_t)(ua - ub);
+        if (u64 ? ua < ub : !pnx_fits_width(r, width))
+            return PINAX_ERR_OVERFLOW;
+        break;
+    case PNX_NA_MUL:
+        r = (int64_t)(ua * ub);
+        if (u64 ? pnx_umulhi(ua, ub) != 0 : !pnx_fits_width(r, width))
+            return PINAX_ERR_OVERFLOW;
+        break;
+    case PNX_NA_DIV: case PNX_NA_MOD:
+        if (b == 0)
+            return PINAX_ERR_DIV_ZERO;
+        if (u64)
+            r = (int64_t)(fn == PNX_NA_DIV ? ua / ub : ua % ub);
+        else if (a == pnx_width_min(width) && b == -1) { // the one quotient that does not fit (i8: -128 -1 div)
+            if (fn == PNX_NA_DIV)
+                return PINAX_ERR_OVERFLOW;
+            r = 0;
+        } else {
+            r = fn == PNX_NA_DIV ? a / b : a % b;
+        }
+        break;
+    case PNX_NA_WADD: r = pnx_wrap_width((int64_t)(ua + ub), width); break;
+    case PNX_NA_WSUB: r = pnx_wrap_width((int64_t)(ua - ub), width); break;
+    case PNX_NA_WMUL: r = pnx_wrap_width((int64_t)(ua * ub), width); break;
+    case PNX_NA_SATADD: // below 64 bits the exact result is in r: the end it passed is the answer
+        r = (int64_t)(ua + ub);
+        if (u64 ? (uint64_t)r < ua : !pnx_fits_width(r, width))
+            r = u64 ? -1 : (r < pnx_width_min(width) ? pnx_width_min(width) : pnx_width_max(width));
+        break;
+    case PNX_NA_SATSUB:
+        r = (int64_t)(ua - ub);
+        if (u64 ? ua < ub : !pnx_fits_width(r, width))
+            r = u64 ? 0 : (r < pnx_width_min(width) ? pnx_width_min(width) : pnx_width_max(width));
+        break;
+    case PNX_NA_SATMUL:
+        if (u64) {
+            r = pnx_umulhi(ua, ub) != 0 ? -1 : (int64_t)(ua * ub);
+        } else if (width == PNX_W_U32) { // the product of two u32 may pass 2^63: judged unsigned
+            r = ua * ub > UINT32_MAX ? (int64_t)UINT32_MAX : (int64_t)(ua * ub);
+        } else {
+            r = (int64_t)(ua * ub); // exact: two values of at most 32 bits
+            if (!pnx_fits_width(r, width))
+                r = r < pnx_width_min(width) ? pnx_width_min(width) : pnx_width_max(width);
+        }
+        break;
+    case PNX_NA_SHL: r = pnx_wrap_width((int64_t)(ua << (ub & 63)), width); break;
+    default: return PINAX_ERR_FORMAT;
+    }
+    *out = r;
+    return PNX_R_OK;
+}
+PNX_OP(NARITH) {
+    int64_t r;
+    const int e = pnx_narrow_arith(x & 0xffu, (x >> 8) & 0xffu, R[OP_B(w)], R[OP_C(w)], &r);
+    if (e != PNX_R_OK)
+        return e;
+    R[OP_A(w)] = r;
+    return PNX_R_OK;
+}
+PNX_OP(NCHK) {
+    static const uint8_t fns[PNX_NC_COUNT] = {PNX_NA_ADD, PNX_NA_SUB, PNX_NA_MUL, PNX_NA_DIV};
+    int64_t r;
+    const int e = pnx_narrow_arith(fns[(x & 0xffu) % PNX_NC_COUNT], (x >> 8) & 0xffu, R[OP_B(w)], R[OP_C(w)], &r);
+    if (e != PNX_R_OK) {
+        st->fail = (pinax_err)e;
+        return PNX_R_FAILED;
+    }
+    R[OP_A(w)] = r;
+    return PNX_R_OK;
+}
+PNX_OP(NUN) {
+    const uint32_t width = (x >> 8) & 0xffu, bits = 8u * pnx_width_bytes[width % PNX_W_COUNT];
+    const int64_t  a = R[OP_B(w)];
+    const uint64_t pattern = (uint64_t)a & (bits == 64 ? ~0ull : (1ull << bits) - 1); // the width's bits
+    int64_t r;
+    switch (x & 0xffu) {
+    case PNX_NU_FIT: // from int or a narrower type: the value itself; into u64 it must not be negative
+        if (width == PNX_W_64 ? a < 0 : !pnx_fits_width(a, width))
+            return PINAX_ERR_OVERFLOW;
+        r = a;
+        break;
+    case PNX_NU_FITU: // from u64: 2^63 and above is a negative pattern, outside every narrower type
+        if (a < 0 || !pnx_fits_width(a, width))
+            return PINAX_ERR_OVERFLOW;
+        r = a;
+        break;
+    case PNX_NU_LOW: r = pnx_wrap_width(a, width); break;
+    case PNX_NU_NOT: r = pnx_wrap_width(~a, width); break;
+    case PNX_NU_POPC: r = __builtin_popcountll((unsigned long long)pattern); break;
+    case PNX_NU_CLZ: r = pattern == 0 ? (int64_t)bits : __builtin_clzll((unsigned long long)pattern) - (64 - (int64_t)bits); break;
+    case PNX_NU_CTZ: r = pattern == 0 ? (int64_t)bits : __builtin_ctzll((unsigned long long)pattern); break;
+    case PNX_NU_BSWAP: r = pnx_wrap_width((int64_t)(__builtin_bswap64(pattern) >> (64 - bits)), width); break;
+    default: return PINAX_ERR_FORMAT;
+    }
+    R[OP_A(w)] = r;
+    return PNX_R_OK;
+}
 
 #define PNX_CHK(name, call)                                                                        \
     PNX_OP(name) {                                                                                 \

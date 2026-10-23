@@ -10,6 +10,7 @@
   [*타입*], [*값*],
   [`int`], [64 비트 2 의 보수 정수(7.1)],
   [`dec(N)`], [소수점 아래 N 자리의 십진 소수, N 은 0 부터 18(7.5)],
+  [`u8` `u16` `u32` `u64` `i8` `i16` `i32`], [그 폭의 부호 없는, 부호 있는 정수(7.6). `u8` 은 바이트, `u32` 는 코드포인트],
   [`bool`], [`true`, `false`(7.2)],
   [`str`], [바이트의 뷰(7.3). 지역 변수, 인자, 결과에만 쓴다],
   [`str(N)`], [N 바이트까지 담는 저장된 글(7.3). 전역, 배열의 칸, 레코드의 필드에 쓴다],
@@ -155,9 +156,56 @@ DEC      = [ sign ] digits "." digits ;   (* 지수 없음: 6.4 *)
 #ex("spec", "07-dec-scales.pnx")
 #ex("spec", "07-dec-div.pnx")
 
+== 좁은 정수 <types-narrow>
+
+#para("1")[`u8` `u16` `u32` `u64` `i8` `i16` `i32` 는 #term("좁은 정수", en: "narrow integer") 타입이다. 범위는 이름이
+말한다: `u` 는 0 부터 2#super[폭]−1, `i` 는 −2#super[폭−1] 부터 2#super[폭−1]−1. `u8` 은 바이트의 타입이고 `u32` 는
+코드포인트의 타입이다. 64 비트 부호 있는 정수는 `int` 다. `i64` 라는 타입은 없다.]
+
+#para("2")[좁은 정수는 `int` 와 다른 타입이고 서로도 다른 타입이다. 변환은 낱말로 적는다. `n u8` 은 `int` 나 다른 좁은
+정수 `n` 을 `u8` 로 만들고, 값이 범위 밖이면 결함 `overflow` 다. 자르지 않는다. 리터럴도 같은 꼴이다: `255 u8`.
+상수가 범위 밖이면 적재 때 거절된다. `x raw` 는 담긴 `int` 를 준다. `u64` 의 `raw` 는 64 비트를 그대로 `int` 에
+담는다(2#super[63] 이상은 음수). `n low_u8` … `n low_i32` 는 아래 비트만 받는다. 이것이 자르는 낱말이다.]
+
+#para("3")[`add` `sub` `mul` `div` `mod` 는 같은 좁은 정수 둘을 받아 같은 타입을 준다. 결과가 범위를 벗어나면 결함
+`overflow` 다. `wrap_add` `wrap_sub` `wrap_mul` 은 2#super[폭] 을 법으로 감고, `sat_add` `sat_sub` `sat_mul` 은 범위의
+끝에서 멈추고, `chk_add` `chk_sub` `chk_mul` `chk_div` 는 실패로 알린다. 비교 낱말은 같은 타입 둘을 받는다. `u64` 는
+부호 없이 비교하고 나눈다. `neg` `abs` `min` `max` `clamp` 는 받지 않는다(15.1).]
+
+#para("4")[비트 낱말은 폭 안에서 한다. `bit_not` 은 폭의 비트만 뒤집고, `shl` 은 폭을 넘는 비트를 버리고, `shr` 은 부호
+있는 타입이면 부호를 지키고 없는 타입이면 0 을 채운다. `u_shr` `u_div` `u_mod` `u_lt` `u_le` `u_gt` `u_ge` `floor_div`
+`floor_mod` 는 부호 없는 타입에서 `shr` `div` `mod` `lt` `le` `gt` `ge` `div` `mod` 와 같고, 부호 있는 타입은 받지 않는다.
+`count_ones` `leading_zeros` `trailing_zeros` 는 폭의 비트를 세어 `int` 를 주고(0 이면 폭), `byte_swap` 은 폭의 바이트를
+뒤집는다. `rotl` `rotr` `mul_hi` `u_mul_hi` 는 `u64` 만 받는다.]
+
+#para("5")[좁은 정수는 `int` 처럼 전역, 배열과 목록의 칸, 큐의 값, 매개변수와 결과, 호스트 낱말의 서명(19.2)의 타입이
+되고, `type opcode u8` 처럼 선언한 타입(7.4)의 바탕이 된다. 호스트 낱말은 값을 64 비트 정수 하나로 받고 준다.]
+
+#ex("spec", "07-narrow.pnx")
+
+#part("제약")
+
+#para("6")[`int` 와 좁은 정수, 또는 다른 좁은 정수 둘을 한 낱말에 주면 거절된다. 범위 밖의 상수를 변환하면 거절된다.]
+#ex("spec", "07-narrow-mix.pnx")
+#ex("spec", "07-narrow-range.pnx")
+
+#part("결함")
+
+#para("7")[범위를 벗어나는 결과와 변환은 결함 `overflow` 로 멈춘다.]
+#ex("spec", "07-narrow-overflow.pnx")
+
 #part("진단")
 #diag(
   ([조건 자리에 `bool` 이 아닌 값], "a bool is expected here"),
+  ([좁은 정수와 `int`, 또는 다른 좁은 정수 둘], "this word takes two values of one type: u8 with u8, int with int; u8 and raw convert"),
+  ([범위 밖의 상수를 변환], "the constant is outside the range of this type; low_u8 and the others keep the low bits"),
+  ([선언한 타입의 값을 바로 변환], "u8, u16, u32, u64, i8, i16, i32 and low_u8 ... are made from an int or from one another; for a declared type take raw first"),
+  ([부호 있는 좁은 정수에 `u_shr`], "u_shr takes an int or an unsigned type; a signed type shifts with shr"),
+  ([부호 있는 좁은 정수에 `u_div` `u_mod` `floor_div` `floor_mod`], "u_div, u_mod, floor_div and floor_mod take an int or an unsigned type"),
+  ([부호 있는 좁은 정수에 `u_lt` `u_le` `u_gt` `u_ge`], "u_lt, u_le, u_gt and u_ge take an int or an unsigned type; a signed type compares with lt"),
+  ([`u64` 아닌 좁은 정수에 `rotl` `rotr`], "rotl and rotr take an int or a u64; for a narrow type take raw"),
+  ([`u64` 아닌 좁은 정수에 `mul_hi` `u_mul_hi`], "mul_hi and u_mul_hi take an int or a u64; for a narrow type take raw"),
+  ([좁은 정수에 `abs`], "abs takes an int or a declared type over int; a narrow type has no abs"),
   ([산술 낱말의 두 값의 타입이 다르거나 `int` 가 아님], "this word takes two int values, or two of the same declared type"),
   ([선언한 타입에 (3)과 (3a) 밖의 산술], "a declared type is added to and subtracted from its own type, and multiplied, divided or taken modulo by an int; for other arithmetic take raw"),
   ([인자의 타입이 서명과 다름], "an argument has another type than the word's signature asks for"),
