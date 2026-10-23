@@ -77,7 +77,8 @@ assign-item = "assign" NAME "(" value { "," value } ")" ;
 ```
 
 #para("1")[`array 이름 타입 용량` 은 칸이 용량만큼 있는 #term("배열", en: "array")을 만든다. 배열은 늘
-가득 차 있다: `len` 은 용량과 같다. 원소 타입은 `int` `bool` `err` `dec(N)` `str(N)`, 선언한 타입, 레코드의 이름이다.]
+가득 차 있다: `len` 은 용량과 같다. 원소 타입은 `int` `bool` `err` `dec(N)` `str(N)`, 좁은 정수(7.6), 선언한 타입,
+레코드의 이름이다. 좁은 정수의 칸은 그 폭만큼의 바이트이고, 다른 값의 칸은 8 바이트다. 목록과 큐의 칸도 같다.]
 
 #para("2")[`i 배열 idx` 는 칸 `i` 의 값을 읽는다. `v i set 배열` 은 칸 `i` 에 넣는다. 모음 매개변수(9.9)의 칸도 같은 꼴로 넣는다. 번호는 0 부터 센다.
 레코드의 배열에서 `idx` 는 값이 아니라 줄(8.8)을 낸다.]
@@ -149,7 +150,8 @@ assign-item = "assign" NAME "(" value { "," value } ")" ;
 #para("1")[`buffer 이름 용량` 은 용량만큼의 바이트를 담는 #term("버퍼", en: "buffer")를 만든다. 버퍼는 고칠
 수 있는 바이트의 열이다. 글을 조금씩 이어 붙일 때 쓴다.]
 
-#para("2")[`s 버퍼 append`, `n 버퍼 append_int`(십진), `b 버퍼 append_byte` 는 끝에 붙이고, 자리가 모자라면
+#para("2")[`s 버퍼 append`, `n 버퍼 append_int`(십진; `n` 은 `int` 나 좁은 정수), `b 버퍼 append_byte`(`b` 는 `u8`)
+는 끝에 붙이고, 자리가 모자라면
 `err.full` 로 실패한다(실패하면 아무것도 붙이지 않는다). `버퍼 contents` 는 지금 내용의 `str` 뷰를 준다.
 `n 버퍼 truncate` 는 길이를 `n` 으로 줄인다. `버퍼 clear` 는 길이를 0 으로 한다.]
 
@@ -171,8 +173,8 @@ value    = literal | NAME ;                         (* NAME: a const, a row name
 ```
 
 #para("1")[`record 이름 … end` 는 필드의 나열인 #term("레코드", en: "record") 타입을 만든다. 필드마다 폭을
-적는다. 정수 필드는 읽으면 `int`, `bool` 필드는 `bool`, `dec(N)` 필드는 `dec(N)`(8 바이트), `str(N)` 필드는
-`str` 뷰가 된다. 필드의 타입에 표의
+적는다. `int` 와 `i64` 필드는 읽으면 `int`, `u8` … `i32` 필드는 그 좁은 정수(7.6), `bool` 필드는 `bool`, `dec(N)`
+필드는 `dec(N)`(8 바이트), `str(N)` 필드는 `str` 뷰가 된다. 필드에는 그 타입의 값만 넣는다. 필드의 타입에 표의
 이름을 쓰면 그 표의 줄을 담는다.]
 
 #para("2")[레코드는 값으로 다루지 않는다. 레코드를 원소로 하는 배열·목록·풀(#term("표", en: "table"))을
@@ -200,8 +202,9 @@ value    = literal | NAME ;                         (* NAME: a const, a row name
 
 #part("결함")
 
-#para("8")[좁은 정수 필드에 그 폭에 맞지 않는 값을 넣으면 결함 `overflow` 다. 자르지 않는다 --- 잘라 넣으려면
-먼저 `bit_and` 로 가린다. 없음 줄의 필드를 읽거나 쓰면 결함 `range` 다.]
+#para("8")[좁은 정수 필드에 넣을 `int` 는 먼저 그 타입으로 바꾼다(`n u8`); 값이 폭에 맞지 않으면 그 변환이 결함
+`overflow` 다(7.6). 자르지 않는다 --- 잘라 넣으려면 `low_u8` 처럼 아래 비트를 받는 낱말을 쓴다. 없음 줄의 필드를
+읽거나 쓰면 결함 `range` 다.]
 #ex("spec", "08-record-narrow.pnx")
 
 == 풀 <decl-pool>

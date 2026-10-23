@@ -654,6 +654,17 @@ static bool low_name(name n, uint32_t *width) {
     const name rest = {n.text + 4, n.length - 4};
     return narrow_name(rest, width) && *width != PNX_W_64;
 }
+static uint32_t pnx_width_bytes_of(uint32_t width) {
+    return width == PNX_W_U8 || width == PNX_W_I8 ? 1 : width == PNX_W_U16 || width == PNX_W_I16 ? 2
+         : width == PNX_W_U32 || width == PNX_W_I32 ? 4 : 8;
+}
+// 'A' is a u8, U'x' a u32 (RFC-0025): the source says which
+static tid char_type(const comp *c, const pnx_token *t) {
+    return (tid)(TY_NARROW + (c->lx->source[t->start] == 'U' ? PNX_W_U32 : PNX_W_U8));
+}
+static uint32_t unsigned_width(uint32_t width) {
+    return width == PNX_W_I8 ? PNX_W_U8 : width == PNX_W_I16 ? PNX_W_U16 : width == PNX_W_I32 ? PNX_W_U32 : width;
+}
 static int64_t width_min(uint32_t width) {
     return width == PNX_W_I8 ? INT8_MIN : width == PNX_W_I16 ? INT16_MIN : width == PNX_W_I32 ? INT32_MIN : 0;
 }
@@ -1486,8 +1497,9 @@ static bool select_ref(comp *c, uint32_t reg) {
     if (r->record != NONE || r->strcap) {
         kind = r->kind == GK_ARRAY ? PNX_G_TABLE : PNX_G_ROWS;
         elem = r->record != NONE ? ((const record *)c->records.ptr + r->record)->size : (uint32_t)r->strcap + 1;
-    } else if (r->kind != GK_BUFFER) {
-        elem = 8;
+    } else if (r->kind != GK_BUFFER) { // cells: their bytes, and the width code plus one above (RFC-0025)
+        elem = is_narrow(r->cell) ? pnx_width_bytes_of(r->cell - TY_NARROW) | (uint32_t)(r->cell - TY_NARROW + 1) << 16
+                                  : 8 | (uint32_t)(PNX_W_64 + 1) << 16;
     }
     return emit_raw(c, PNX_ABC(PNX_GSEL, reg, kind, 0)) != NONE && emit_raw(c, elem) != NONE;
 }
@@ -1981,6 +1993,46 @@ static bool narrow_convert(comp *c, uint32_t width, bool low) {
     }
     e->type = to;
     return advance(c);
+}
+
+// The bits of the value at stack index `idx` as the hex, binary and byte words see them: a
+// narrow value below 64 bits is masked to its width into a scratch register (RFC-0025); an int
+// or a u64 is its register.
+// An int literal given where a cell, field or case subject of a narrow type is: it takes the type
+// when it lies in the range, else the source is refused (RFC-0025).
+static bool item_narrow(comp *c, tid *type, int64_t value, tid target) {
+    if (*type != TY_INT || !is_narrow(target))
+        return true;
+    if (!const_fits(value, NONE, target - TY_NARROW))
+        return type_error(c, "the constant is outside the range of the type of the cell or field");
+    *type = target;
+    return true;
+}
+
+static bool pattern_of(comp *c, uint32_t idx, uint32_t *reg) {
+    const uint32_t width = narrow_width(c, c->f->stack[idx].type);
+    uint32_t ra;
+    if (!reg_of(c, idx, &ra))
+        return false;
+    if (width == NONE || width == PNX_W_64) {
+        *reg = ra;
+        return true;
+    }
+    const uint32_t temp = top_slot(c, BANK_I, 1);
+    if (emit(c, PNX_ABC(PNX_NUN, temp, ra, 0)) == NONE || emit(c, PNX_NX(PNX_NU_LOW, unsigned_width(width))) == NONE)
+        return false;
+    c->f->def_at = NONE;
+    *reg = temp;
+    return true;
+}
+// Whether a value is printed as a decimal number: int, dec(N) and the narrow types (a u64 unsigned).
+static bool is_number(const comp *c, tid type) {
+    return type == TY_INT || is_dec(type) || narrow_width(c, type) != NONE;
+}
+static uint32_t decimal_op(const comp *c, tid type, uint32_t ra, uint32_t scratch) {
+    if (is_dec(type))
+        return PNX_ABC(PNX_RCATD, scratch, ra, type - TY_DEC);
+    return narrow_width(c, type) == PNX_W_64 ? PNX_ABC(PNX_RCATU, scratch, ra, 0) : PNX_ABC(PNX_RCATI, scratch, ra, 0);
 }
 
 static bool arith_word(comp *c, uint32_t op) {
@@ -3353,8 +3405,8 @@ static bool do_case(comp *c) {
     if (!need(c, 1))
         return false;
     const tid type = f->stack[f->depth - 1].type;
-    if (type != TY_INT && type != TY_STR && type != TY_ERR)
-        return type_error(c, "case compares an int, an err or a str");
+    if (type != TY_INT && type != TY_STR && type != TY_ERR && !is_narrow(type)) // a narrow integer too (RFC-0025)
+        return type_error(c, "case compares an int, a narrow integer, an err or a str");
     if (!settle(c, f->depth - 1))
         return false;
     const uint32_t subject = slot_of(c, f->depth - 1);
@@ -3378,7 +3430,7 @@ static bool case_value(comp *c, block *b, int64_t *value) {
     switch (c->tok.kind) {
     case PNX_T_INT:
     case PNX_T_CHAR:
-        type = TY_INT;
+        type = c->tok.kind == PNX_T_CHAR ? char_type(c, &c->tok) : TY_INT;
         *value = c->tok.integer;
         break;
     case PNX_T_STRING:
@@ -3408,6 +3460,8 @@ static bool case_value(comp *c, block *b, int64_t *value) {
         return type_error(c, "a case value is a literal or the name of a const");
     default: return syntax(c, "a case value is expected here");
     }
+    if (!item_narrow(c, &type, *value, b->subject_type))
+        return false;
     if (type != b->subject_type)
         return type_error(c, "a case value has another type than the value compared");
     for (uint32_t k = 0; k < b->n_values; ++k) {
@@ -3582,7 +3636,7 @@ static bool cat_items(comp *c) {
         if (f->dead || f->depth != before + 1)
             return type_error(c, "each item of cat leaves exactly one value");
         const tid type = f->stack[before].type;
-        if (type != TY_STR && type != TY_INT && type != TY_BOOL && !is_dec(type))
+        if (type != TY_STR && type != TY_BOOL && !is_number(c, type))
             return type_error(c, "cat joins str, int and bool values");
         if (!settle(c, before))
             return false;
@@ -3596,8 +3650,10 @@ static bool cat_items(comp *c) {
         return false;
     for (uint32_t k = first; k < f->depth; ++k) {
         const tid type = f->stack[k].type;
-        const uint32_t op = type == TY_STR ? PNX_RCATS : type == TY_INT ? PNX_RCATI : is_dec(type) ? PNX_RCATD : PNX_RCATB;
-        if (emit(c, PNX_ABC(op, scratch, slot_of(c, k), is_dec(type) ? type - TY_DEC : 0)) == NONE)
+        const uint32_t word = type == TY_STR ? PNX_ABC(PNX_RCATS, scratch, slot_of(c, k), 0)
+                            : type == TY_BOOL ? PNX_ABC(PNX_RCATB, scratch, slot_of(c, k), 0)
+                                              : decimal_op(c, type, slot_of(c, k), scratch);
+        if (emit(c, word) == NONE)
             return false;
     }
     f->depth = first;
@@ -3718,9 +3774,10 @@ static bool stem_begin(comp *c, uint8_t *kind, uint8_t *cur, uint8_t *lim, uint1
         *count = 2;
         return true;
     }
-    // bytes of a string: an index and the length above the string
+    // bytes of a string: an index and the length above the string; each byte is a u8 (RFC-0025)
     f->stack[f->depth - 1].hidden = true;
     *src = (uint16_t)slot_of(c, f->depth - 1);
+    *element = (tid)(TY_NARROW + PNX_W_U8);
     if (!push_slot(c, TY_INT) || !push_slot(c, TY_INT))
         return false;
     f->stack[f->depth - 2].hidden = f->stack[f->depth - 1].hidden = true;
@@ -4975,12 +5032,15 @@ static bool csv_word(comp *c, name n) {
 // and the bytes). put: (v, buf or fail); get: (s str gives v, rest str or fail).
 static bool bytes_word(comp *c, name n) {
     fn *f = c->f;
-    static const struct {
+    static const struct { // the width, and the type the word gives and takes (RFC-0025): i64 and varint are int
         const char *name;
         uint32_t    code;
-    } kinds[] = {{"u8", PNX_W_U8},   {"u16", PNX_W_U16}, {"u32", PNX_W_U32}, {"u64", PNX_W_64},
-                 {"i8", PNX_W_I8},   {"i16", PNX_W_I16}, {"i32", PNX_W_I32}, {"i64", PNX_W_64},
-                 {"varint", PNX_W_VARINT}, {"str", NONE}};
+        tid         type;
+    } kinds[] = {{"u8", PNX_W_U8, TY_NARROW + PNX_W_U8},   {"u16", PNX_W_U16, TY_NARROW + PNX_W_U16},
+                 {"u32", PNX_W_U32, TY_NARROW + PNX_W_U32}, {"u64", PNX_W_64, TY_NARROW + PNX_W_64},
+                 {"i8", PNX_W_I8, TY_NARROW + PNX_W_I8},    {"i16", PNX_W_I16, TY_NARROW + PNX_W_I16},
+                 {"i32", PNX_W_I32, TY_NARROW + PNX_W_I32}, {"i64", PNX_W_64, TY_INT},
+                 {"varint", PNX_W_VARINT, TY_INT}, {"str", NONE, TY_STR}};
     if (name_is(n, "pack") || name_is(n, "unpack") || name_is(n, "packed_size"))
         return pack_word(c, n);
     const bool put = n.length > 4 && __builtin_memcmp(n.text, "put_", 4) == 0;
@@ -4991,9 +5051,12 @@ static bool bytes_word(comp *c, name n) {
     if (be)
         rest.length -= 3;
     uint32_t code = NONE - 1;
+    tid      type = TY_INT;
     for (uint32_t k = 0; k < sizeof kinds / sizeof kinds[0]; ++k) {
-        if (name_is(rest, kinds[k].name))
+        if (name_is(rest, kinds[k].name)) {
             code = kinds[k].code;
+            type = kinds[k].type;
+        }
     }
     if (code == NONE - 1 || (be && (code == NONE || code == PNX_W_VARINT || code == PNX_W_U8 || code == PNX_W_I8)))
         return error(c, PINAX_ERR_NOT_FOUND, "the module has no word of this name");
@@ -5005,9 +5068,9 @@ static bool bytes_word(comp *c, name n) {
         uint32_t         gi;
         if (!need_coll(c, &g, &gi) || !need(c, 1))
             return false;
-        if (g->kind != GK_BUFFER || f->stack[f->depth - 1].type != (code == NONE ? TY_STR : TY_INT))
+        if (g->kind != GK_BUFFER || f->stack[f->depth - 1].type != type)
             return type_error(c, code == NONE ? "put_str takes a str and a buffer: s buf bytes.put_str"
-                                              : "this word takes an int and a buffer: n buf bytes.put_u32");
+                                              : "this word takes a value of the type its name says and a buffer: n buf bytes.put_u32");
         if (!settle(c, f->depth - 1))
             return false;
         ra = slot_of(c, f->depth - 1);
@@ -5028,7 +5091,7 @@ static bool bytes_word(comp *c, name n) {
     if (!settle_all(c))
         return false;
     sig two = {.n_out = 2, .fails = true};
-    two.out[0] = code == NONE ? TY_STR : TY_INT;
+    two.out[0] = type;
     two.out[1] = TY_STR;
     if (code == NONE) { // the value where s was, the rest above it
         const uint32_t value = top_slot(c, BANK_S, 2);
@@ -5405,7 +5468,7 @@ static bool builtin(comp *c, const struct builtin *w) {
         if (!reg_of(c, f->depth - 1, &ra))
             return false;
         --f->depth;
-        if (!push_slot(c, TY_INT))
+        if (!push_slot(c, (tid)(TY_NARROW + (w->id == BW_CRC32 ? PNX_W_U32 : PNX_W_64)))) // u32, u64 (RFC-0025)
             return false;
         const uint32_t kind = w->id == BW_CRC32 ? PNX_HASH_CRC32 : w->id == BW_FNV1A ? PNX_HASH_FNV1A : PNX_HASH_SIP;
         return emit_def(c, PNX_ABC(PNX_SHASH, slot_of(c, f->depth - 1), ra, kind), BANK_I) != NONE && advance(c);
@@ -5432,9 +5495,9 @@ static bool builtin(comp *c, const struct builtin *w) {
     case BW_APPEND_HEX: { // n buf append_hex : fails when the buffer is full
         if (!need_coll(c, &g, &gi) || !need(c, 1))
             return false;
-        if (g->kind != GK_BUFFER || f->stack[f->depth - 1].type != TY_INT)
-            return type_error(c, "append_hex takes an int and a buffer: n buf fmt.append_hex");
-        if (!reg_of(c, f->depth - 1, &ra))
+        if (g->kind != GK_BUFFER || (f->stack[f->depth - 1].type != TY_INT && narrow_width(c, f->stack[f->depth - 1].type) == NONE))
+            return type_error(c, "append_hex takes an int or a narrow integer and a buffer: n buf fmt.append_hex");
+        if (!pattern_of(c, f->depth - 1, &ra))
             return false;
         --f->depth;
         if (!settle_all(c))
@@ -5518,9 +5581,9 @@ static bool builtin(comp *c, const struct builtin *w) {
         const entry sep = f->stack[f->depth - 1];
         if (f->stack[f->depth - 2].type != TY_STR)
             return type_error(c, "split takes a str and a separator: s sep split");
-        if (sep.type == TY_INT) {
-            if (sep.kind != E_CONST || sep.value < 0 || sep.value > 255)
-                return type_error(c, "a separator given as a number is one byte written as a literal (',')");
+        if (sep.type == (tid)(TY_NARROW + PNX_W_U8)) { // a byte (RFC-0025): a character literal, or a u8 constant
+            if (sep.kind != E_CONST)
+                return type_error(c, "a separator given as a byte is a constant: a character literal (',')");
             --f->depth;
             return settle(c, f->depth - 1) &&
                    push(c, (entry){.type = TY_STEM, .kind = E_SLOT, .op = STEM_SPLIT_BYTE, .value = sep.value}) &&
@@ -5569,7 +5632,7 @@ static bool builtin(comp *c, const struct builtin *w) {
     case BW_TRY_CUT: { // s sep cut : the parts before and after the first sep
         if (!need(c, 2))
             return false;
-        if (w->id == BW_CUT && f->stack[f->depth - 2].type == TY_STR && f->stack[f->depth - 1].type == TY_INT &&
+        if (w->id == BW_CUT && f->stack[f->depth - 2].type == TY_STR && f->stack[f->depth - 1].type == (tid)(TY_NARROW + PNX_W_U8) &&
             f->stack[f->depth - 1].kind == E_CONST && f->stack[f->depth - 1].value >= 0 &&
             f->stack[f->depth - 1].value <= 255) { // the separator is one byte, written as a character
             const uint32_t byte = (uint32_t)f->stack[f->depth - 1].value;
@@ -5629,19 +5692,24 @@ static bool builtin(comp *c, const struct builtin *w) {
     case BW_PAD_LEFT:
     case BW_PAD_RIGHT: { // text built in the region
         const bool two = w->id != BW_HEX && w->id != BW_BIN;
-        const tid  what = w->id == BW_PAD_LEFT || w->id == BW_PAD_RIGHT ? TY_STR : TY_INT;
+        const bool text = w->id == BW_PAD_LEFT || w->id == BW_PAD_RIGHT, bits = w->id != BW_ZERO_PAD && !text;
         if (!need(c, two ? 2 : 1))
             return false;
-        if (f->stack[f->depth - (two ? 2 : 1)].type != what || (two && f->stack[f->depth - 1].type != TY_INT))
-            return type_error(c, two ? "this word takes a value and a width" : "this word takes an int");
-        if (!reg_of(c, f->depth - (two ? 2 : 1), &ra) || (two && !reg_of(c, f->depth - 1, &rb)))
+        const tid given = f->stack[f->depth - (two ? 2 : 1)].type;
+        if ((text ? given != TY_STR : given != TY_INT && narrow_width(c, given) == NONE) ||
+            (two && f->stack[f->depth - 1].type != TY_INT))
+            return type_error(c, two ? "this word takes a value and a width" : "this word takes an int or a narrow integer");
+        // the hex and binary words print the bits of the width (RFC-0025)
+        if ((bits ? !pattern_of(c, f->depth - (two ? 2 : 1), &ra) : !reg_of(c, f->depth - (two ? 2 : 1), &ra)) ||
+            (two && !reg_of(c, f->depth - 1, &rb)))
             return false;
         f->depth -= two ? 2 : 1;
         const uint32_t scratch = top_slot(c, BANK_S, 2) + 1;
+        const bool u64 = narrow_width(c, given) == PNX_W_64;
         const uint32_t op = w->id == BW_HEX ? PNX_ABC(PNX_RCATX, scratch, ra, 0)
                           : w->id == BW_BIN ? PNX_ABC(PNX_RCATX, scratch, ra, 1)
                           : w->id == BW_HEX_PAD ? PNX_ABC(PNX_RCATXW, scratch, ra, rb)
-                          : w->id == BW_ZERO_PAD ? PNX_ABC(PNX_RCATW, scratch, ra, rb)
+                          : w->id == BW_ZERO_PAD ? PNX_ABC(u64 ? PNX_RCATUW : PNX_RCATW, scratch, ra, rb)
                           : w->id == BW_PAD_LEFT ? PNX_ABC(PNX_RPADL, scratch, ra, rb)
                                                  : PNX_ABC(PNX_RPADR, scratch, ra, rb);
         if (emit(c, PNX_ABC(PNX_RMARK, scratch, 0, 0)) == NONE || emit(c, op) == NONE || !push_slot(c, TY_STR))
@@ -5707,7 +5775,7 @@ static bool builtin(comp *c, const struct builtin *w) {
             return false;
         f->depth -= 2;
         const uint32_t dst = top_slot(c, BANK_I, 1);
-        return emit_def(c, PNX_ABC(PNX_SBYTE, dst, ra, rb), BANK_I) != NONE && push_slot(c, TY_INT) && advance(c);
+        return emit_def(c, PNX_ABC(PNX_SBYTE, dst, ra, rb), BANK_I) != NONE && push_slot(c, (tid)(TY_NARROW + PNX_W_U8)) && advance(c);
     }
     case BW_IDX: { // i names idx
         if (!need_coll(c, &g, &gi) || !need(c, 1))
@@ -5824,8 +5892,13 @@ static bool builtin(comp *c, const struct builtin *w) {
             return false;
         if (g->kind != GK_BUFFER)
             return type_error(c, "this word appends to a buffer");
-        if (f->stack[f->depth - 1].type != (w->id == BW_APPEND ? TY_STR : TY_INT))
-            return type_error(c, w->id == BW_APPEND ? "append takes a str" : "this word takes an int");
+        const tid given = f->stack[f->depth - 1].type;
+        if (w->id == BW_APPEND ? given != TY_STR
+            : w->id == BW_APPEND_INT ? given != TY_INT && narrow_width(c, given) == NONE
+                                     : given != (tid)(TY_NARROW + PNX_W_U8))
+            return type_error(c, w->id == BW_APPEND ? "append takes a str"
+                                 : w->id == BW_APPEND_INT ? "append_int takes an int or a narrow integer"
+                                                          : "append_byte takes a u8");
         if (!settle(c, f->depth - 1))
             return false;
         ra = slot_of(c, f->depth - 1);
@@ -5834,6 +5907,11 @@ static bool builtin(comp *c, const struct builtin *w) {
             return false;
         if (w->id != BW_APPEND && w->id != BW_APPEND_INT)
             return emit_g(c, PNX_BPUT, ra, PNX_W_U8, gi) != NONE && guard_op(c, TY_NONE);
+        if (w->id == BW_APPEND_INT && narrow_width(c, given) == PNX_W_64) { // unsigned: through the region
+            const uint32_t scratch = top_slot(c, BANK_S, 2) + 1;
+            return emit(c, PNX_ABC(PNX_RMARK, scratch, 0, 0)) != NONE && emit(c, PNX_ABC(PNX_RCATU, scratch, ra, 0)) != NONE &&
+                   emit(c, PNX_ABX(PNX_BCAT, scratch, gi)) != NONE && guard_op(c, TY_NONE);
+        }
         return emit(c, w->id == BW_APPEND ? PNX_ABX(PNX_BCAT, ra, gi) : PNX_ABX(PNX_BCATI, ra, gi)) != NONE &&
                guard_op(c, TY_NONE);
     }
@@ -6129,14 +6207,13 @@ static bool builtin(comp *c, const struct builtin *w) {
         if (!need(c, 1))
             return false;
         const tid type = f->stack[f->depth - 1].type;
-        if (type != TY_INT && !is_dec(type))
-            return type_error(c, "to_str takes an int or a dec(N)");
+        if (!is_number(c, type))
+            return type_error(c, "to_str takes an int, a dec(N) or a narrow integer");
         if (!reg_of(c, f->depth - 1, &ra))
             return false;
         --f->depth;
         const uint32_t scratch = top_slot(c, BANK_S, 2) + 1;
-        if (emit(c, PNX_ABC(PNX_RMARK, scratch, 0, 0)) == NONE ||
-            emit(c, is_dec(type) ? PNX_ABC(PNX_RCATD, scratch, ra, type - TY_DEC) : PNX_ABC(PNX_RCATI, scratch, ra, 0)) == NONE ||
+        if (emit(c, PNX_ABC(PNX_RMARK, scratch, 0, 0)) == NONE || emit(c, decimal_op(c, type, ra, scratch)) == NONE ||
             !push_slot(c, TY_STR))
             return false;
         return move_slot(c, TY_STR, slot_of(c, f->depth - 1), scratch) && advance(c);
@@ -6605,8 +6682,9 @@ static bool body_token(comp *c) {
     }
     switch (t.kind) {
     case PNX_T_INT:
-    case PNX_T_CHAR:
         return push(c, (entry){.type = TY_INT, .kind = E_CONST, .value = t.integer}) && advance(c);
+    case PNX_T_CHAR:
+        return push(c, (entry){.type = char_type(c, &t), .kind = E_CONST, .value = t.integer}) && advance(c);
     case PNX_T_DEC: // 12.50 : a dec(2) of 1250 (RFC-0019)
         return push(c, (entry){.type = (tid)(TY_DEC + t.scale), .kind = E_CONST, .value = t.integer}) && advance(c);
     case PNX_T_FLOAT: return type_error(c, "float is not available: this build has no F bank; 2.5 without an exponent is a dec");
@@ -7131,7 +7209,7 @@ static bool declare_const(comp *c) {
     switch (c->tok.kind) {
     case PNX_T_INT:
     case PNX_T_CHAR:
-        k.type = TY_INT;
+        k.type = c->tok.kind == PNX_T_CHAR ? char_type(c, &c->tok) : TY_INT;
         k.value = c->tok.integer;
         break;
     case PNX_T_STRING:
@@ -7383,8 +7461,8 @@ static bool declare_record(comp *c) {
         const name tn = tok_name(c);
         uint32_t   bytes = 0;
         for (size_t k = 0; k < sizeof widths / sizeof widths[0]; ++k) {
-            if (name_is(tn, widths[k].name)) {
-                fd.type = TY_INT;
+            if (name_is(tn, widths[k].name)) { // u8 ... i32 read and take their own type (RFC-0025); int and i64 are int
+                fd.type = name_is(tn, "int") || name_is(tn, "i64") ? TY_INT : (tid)(TY_NARROW + widths[k].width);
                 fd.extra = widths[k].width;
                 bytes = widths[k].bytes;
             }
@@ -7529,7 +7607,7 @@ static bool declare_index(comp *c) {
                            : NULL;
     if (!key)
         return type_error(c, "the key is a field of the record the table holds");
-    if (key->type != TY_INT && key->type != TY_STR)
+    if (key->type != TY_INT && key->type != TY_STR && !is_narrow(key->type)) // a narrow integer field too (RFC-0025)
         return type_error(c, "the key of an index is an integer field or a str(N) field");
     g.key = (uint32_t)(key - (const field *)c->fields.ptr);
     g.capacity = 4; // slots: a power of two, at least twice the rows
@@ -7551,7 +7629,7 @@ static bool item_value(comp *c, tid *type, int64_t *value) {
     switch (c->tok.kind) {
     case PNX_T_INT:
     case PNX_T_CHAR:
-        *type = TY_INT;
+        *type = c->tok.kind == PNX_T_CHAR ? char_type(c, &c->tok) : TY_INT;
         *value = c->tok.integer;
         return true;
     case PNX_T_STRING:
@@ -7600,7 +7678,7 @@ static bool row_values(comp *c, uint32_t gi, uint32_t row) {
         const field *fd = (const field *)c->fields.ptr + rec->first + k;
         tid     type;
         int64_t v;
-        if (!item_value(c, &type, &v))
+        if (!item_value(c, &type, &v) || !item_narrow(c, &type, v, fd->type))
             return false;
         if (type == TY_NONE ? !is_row(fd->type) : type != fd->type)
             return type_error(c, "a value has another type than its field");
@@ -7658,7 +7736,7 @@ static bool row_item(comp *c) {
     if (g->record == NONE) { // a list of values: one value, pushed
         tid     type;
         int64_t v;
-        if (!item_value(c, &type, &v))
+        if (!item_value(c, &type, &v) || !item_narrow(c, &type, v, g->type))
             return false;
         if (type != g->type)
             return type_error(c, "the value has another type than the cells of the list");
@@ -7766,7 +7844,7 @@ static bool assign_item(comp *c) {
         tid     type;
         int64_t v = c->tok.integer;
         if (c->tok.kind == PNX_T_INT || c->tok.kind == PNX_T_CHAR) {
-            type = TY_INT;
+            type = c->tok.kind == PNX_T_CHAR ? char_type(c, &c->tok) : TY_INT;
         } else if (is_word(c, PNX_KW_true) || is_word(c, PNX_KW_false)) {
             type = TY_BOOL;
             v = is_word(c, PNX_KW_true);
@@ -7783,6 +7861,8 @@ static bool assign_item(comp *c) {
             type = TY_STR;
             v = at;
         }
+        if (!item_narrow(c, &type, v, g->type))
+            return false;
         if (type != g->type)
             return type_error(c, "a value has another type than the cells of the array");
         if (k >= g->capacity)
@@ -8205,6 +8285,11 @@ static bool serialize(comp *c, const image *im, uint8_t **out, size_t *out_len) 
         pnx_globalrec rec = {.kind = g->kind == GK_ARRAY ? PNX_G_ARRAY : g->kind == GK_LIST ? PNX_G_LIST : PNX_G_INT,
                              .elem_bytes = 8,
                              .capacity = g->kind == GK_SCALAR ? 1 : g->capacity};
+        if (g->kind != GK_SCALAR && g->record == NONE && !g->strcap && is_narrow(g->type)) { // cells at the width (RFC-0025)
+            const uint32_t width = g->type - TY_NARROW;
+            rec.elem_bytes = pnx_width_bytes_of(width);
+            rec.reserved = (width + 1) << 8;
+        }
         if (g->record != NONE) {
             rec.kind = g->kind == GK_ARRAY ? PNX_G_TABLE : g->kind == GK_POOL ? PNX_G_POOL : PNX_G_ROWS;
             rec.elem_bytes = ((const record *)c->records.ptr + g->record)->size;
@@ -8242,7 +8327,7 @@ static bool serialize(comp *c, const image *im, uint8_t **out, size_t *out_len) 
             put_text(rec.type, sizeof rec.type, type_name(c, g->type));
         }
         if (g->bound)
-            rec.reserved = 2; // meant to be bound by the host
+            rec.reserved |= 2; // meant to be bound by the host
         if (g->shared)
             rec.reserved |= 4; // given by pinax_share(); beside an index's key kind
         __builtin_memcpy(p, &rec, sizeof rec);

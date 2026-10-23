@@ -20,7 +20,7 @@ buffer hex 128
 word dump () out contents hex encode.hex_encode or_else (e) end  hex contents io.println  hex clear end
 word demo (or fail)
   0 items idx to a
-  513 a to item.id  "pinax" a to item.name  -3 a to item.delta
+  513 u16 a to item.id  "pinax" a to item.name  -3 a to item.delta
   a out bytes.pack or_fail
   dump
   cat ("packed_size ", a bytes.packed_size, ", written ", out contents str.len) io.println
@@ -31,7 +31,7 @@ word demo (or fail)
   cat ("the row is unchanged: ", b item.name) io.println
   out clear
   0 wires idx to w
-  258 w to wire.id  7 w to wire.count
+  258 u16 w to wire.id  7 u32 w to wire.count
   w out bytes.pack or_fail
   dump
 end

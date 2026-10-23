@@ -122,6 +122,7 @@ typedef struct pnx_global {
     uint32_t key;    // an index: its key field, PNX_FIELD(table, offset, extra)
     bool     key_is_str;
     bool     shared; // declared `shared`: another state's storage, or none until pinax_share() gives it
+    uint8_t  width;  // an array, list or queue of values: the width code of a cell (PNX_W_64: 8 bytes)
 } pnx_global;
 
 // The instructions that change the global they name (in BX, C, a wide form's second word or a
@@ -356,6 +357,7 @@ void        pnx_checks_report(const pinax_state *state, void (*put)(void *user, 
 bool pnx_parse_int(const uint8_t *bytes, uint32_t length, int64_t *out);
 // Decimal text of `value` into `out`; returns its length (at most 20).
 uint32_t pnx_format_int(int64_t value, uint8_t out[24]);
+uint32_t pnx_format_uint(uint64_t value, uint8_t out[24]); // a u64 (RFC-0025): the bits as an unsigned number
 // dec(N) (RFC-0019): `value` scaled by 10^scale as text ("-0.05"), and back. Reading takes an
 // optional sign, digits, and a point followed by at most `scale` digits.
 uint32_t pnx_format_dec(int64_t value, uint32_t scale, uint8_t out[24]);

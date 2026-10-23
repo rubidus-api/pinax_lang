@@ -15,8 +15,8 @@ buffer wire 32
 buffer hex 64
 word demo (or fail)
   0 headers idx to h
-  0x50494e58 h to header.magic           rem "PINX"
-  1 h to header.version
+  0x50494e58 u32 h to header.magic           rem "PINX"
+  1 u16 h to header.version
   300 h to header.length
   h wire bytes.pack or_fail
   wire contents hex encode.hex_encode or_fail

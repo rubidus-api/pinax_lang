@@ -11,6 +11,6 @@ row shelf ("Thinking Forth", 1984, 300)
 row shelf lua ("Programming in Lua", 2003)          rem a named row; pages left out: 0
 word show (b shelf) cat (b book.year, " ", b book.title, ", ", b book.pages, " pages") io.println end
 shelf do (b shelf) b show end each
-2016 lua to book.year                               rem value, row, to record.field
-388 lua to book.pages
+2016 u16 lua to book.year                               rem value, row, to record.field
+388 u16 lua to book.pages
 lua show

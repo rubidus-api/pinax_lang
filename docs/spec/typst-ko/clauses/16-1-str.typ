@@ -35,7 +35,7 @@
   [`starts_with` `ends_with` `contains`], [`(s str, part gives bool)`], [],
   [`find` `find_last`], [`(s str, part gives int or fail)`], [처음, 마지막으로 나온 자리. 없으면 `err.not_found`],
   [`compare`], [`(str, str gives int)`], [바이트 차례로 견주어 음수, 0, 양수],
-  [`byte_at`], [`(s str, i int gives int)`], [바이트 `i`. 범위 밖이면 결함 `range`],
+  [`byte_at`], [`(s str, i int gives u8)`], [바이트 `i`. 범위 밖이면 결함 `range`],
   [`char_count`], [`(str gives int)`], [UTF-8 글자의 수],
   [`is_utf8`], [`(str gives bool)`], [올바른 UTF-8 인가],
 )
@@ -63,10 +63,11 @@
 === 줄기와 버퍼에 쓰기
 
 #para("7")[줄기(10.6)를 내는 낱말:
-- `s sep str.split` --- `sep` 으로 가른 조각. 빈 조각도 낸다.
+- `s sep str.split` --- `sep` 으로 가른 조각. 빈 조각도 낸다. `sep` 은 `str` 이거나 바이트 하나(`u8` 상수, 보통
+  문자 리터럴)다. `cut` 과 `try_cut` 의 `sep` 도 같다.
 - `s str.words` --- 공백으로 가른 조각. 빈 조각은 내지 않는다.
 - `s str.lines` --- 줄. 줄 끝의 LF 와 CR LF 는 빼고 낸다.
-- `s str.bytes` --- 바이트(`int`).
+- `s str.bytes` --- 바이트(`u8`).
 - `s str.chars` --- UTF-8 글자 하나씩의 뷰(`str`).]
 
 #para("8")[버퍼에 쓰는 낱말:

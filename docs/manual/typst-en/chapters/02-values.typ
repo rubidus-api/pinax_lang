@@ -138,7 +138,9 @@ follow in your head. Give the values names instead (named inputs in chapter 3, l
 
 This book mostly uses four types:
 - `int` --- 64-bit integers, written in decimal, hexadecimal (`0xff`) or binary (`0b101`), with underscores between
-  digits if you like. A character `'A'` is the `int` that is its number.
+  digits if you like. A character `'A'` is the `u8` of its byte. `u8` `u16` `u32` `u64` `i8` `i16` `i32` are the
+  integer types of those widths: `255 u8` makes one from an `int`, `raw` gives the `int` back, and none of them mixes
+  with `int` in arithmetic.
 - `bool` --- `true` and `false`; comparison words (`lt` `eq` …) give them and `if` takes them.
 - `str` --- strings; chapter 5 covers them.
 - `err` --- the reason for a failure; see chapter 8.

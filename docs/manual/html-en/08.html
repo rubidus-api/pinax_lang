@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>7 Records, pools, indexes - The Pinax Manual</title><link rel="stylesheet" href="style.css"></head><body><nav class="top"><a href="index.html">Start</a> · <a href="07.html">Previous</a> · <a href="09.html">Next</a> · <a href="../html-ko/08.html">한국어</a></nav><main><h2>7 Records, pools, indexes</h2><div class="box opening"><p><strong>Builds on</strong>: Chapter 6 (collections), chapter 5 (stored text).</p><p><strong>Questions this chapter answers</strong></p><ul><li>How are data with several fields held?</li><li>How are linked data such as trees and lists built without pointers?</li><li>How do I find a row by its name?</li></ul></div><h3>7.1 Records and rows</h3><p><code>record … end</code> is a sequence of fields, each with a width (<code>u8</code> <code>u16</code> <code>i32</code> <code>int</code> <code>bool</code> <code>str(N)</code> …). Records do not travel as values. You declare a list (or array, or pool) of records and handle its <strong>rows</strong>. A row’s type is named after its table.</p><div class="example run"><p class="ex-file"><code>07-records.pnx</code></p><pre><code data-lang="pinax"><span style="color: #d73948">use</span> io
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>7 Records, pools, indexes - The Pinax Manual</title><link rel="stylesheet" href="style.css"></head><body><nav class="top"><a href="index.html">Start</a> · <a href="07.html">Previous</a> · <a href="09.html">Next</a> · <a href="../html-ko/08.html">한국어</a></nav><main><h2>7 Records, pools, indexes</h2><div class="box opening"><p><strong>Builds on</strong>: Chapter 6 (collections), chapter 5 (stored text).</p><p><strong>Questions this chapter answers</strong></p><ul><li>How are data with several fields held?</li><li>How are linked data such as trees and lists built without pointers?</li><li>How do I find a row by its name?</li></ul></div><h3>7.1 Records and rows</h3><p><code>record … end</code> is a sequence of fields, each with a type (<code>u8</code> <code>u16</code> <code>i32</code> <code>int</code> <code>bool</code> <code>str(N)</code> …): a <code>u8</code> field reads as a <code>u8</code> and takes a <code>u8</code> only (<code>2016 u16 b to book.year</code>). Records do not travel as values. You declare a list (or array, or pool) of records and handle its <strong>rows</strong>. A row’s type is named after its table.</p><div class="example run"><p class="ex-file"><code>07-records.pnx</code></p><pre><code data-lang="pinax"><span style="color: #d73948">use</span> io
 <span style="color: #d73948">record</span> book
   title <span style="color: #d73948">str</span>(<span style="color: #b60157">32</span>)
   year <span style="color: #d73948">u16</span>
@@ -11,8 +11,8 @@
 <span style="color: #d73948">row</span> shelf lua (<span style="color: #198810">"Programming in Lua"</span>, <span style="color: #b60157">2003</span>)          <span style="color: #74747c">rem a named row; pages left out: 0</span>
 <span style="color: #d73948">word</span> show (b shelf) <span style="color: #d73948">cat</span> (b book.year, <span style="color: #198810">" "</span>, b book.title, <span style="color: #198810">", "</span>, b book.pages, <span style="color: #198810">" pages"</span>) io.println <span style="color: #d73948">end</span>
 shelf <span style="color: #d73948">do</span> (b shelf) b show <span style="color: #d73948">end</span> each
-<span style="color: #b60157">2016</span> lua <span style="color: #d73948">to</span> book.year                               <span style="color: #74747c">rem value, row, to record.field</span>
-<span style="color: #b60157">388</span> lua <span style="color: #d73948">to</span> book.pages
+<span style="color: #b60157">2016</span> <span style="color: #d73948">u16</span> lua <span style="color: #d73948">to</span> book.year                               <span style="color: #74747c">rem value, row, to record.field</span>
+<span style="color: #b60157">388</span> <span style="color: #d73948">u16</span> lua <span style="color: #d73948">to</span> book.pages
 lua show
 </code></pre><p class="ex-label">Output</p><pre><code data-lang="text">$ pnx 07-records.pnx
 1978 The C Programming Language, 228 pages
@@ -27,8 +27,8 @@ lua show
 <span style="color: #d73948">list</span> path point <span style="color: #b60157">4</span>
 <span style="color: #d73948">word</span> add_point (x <span style="color: #d73948">int</span>, y <span style="color: #d73948">int</span> <span style="color: #d73948">or</span> <span style="color: #d73948">fail</span>)
   path add_row <span style="color: #d73948">or_fail</span> <span style="color: #d73948">to</span> p                         <span style="color: #74747c">rem a new, zeroed row at the end</span>
-  x p <span style="color: #d73948">to</span> point.x
-  y p <span style="color: #d73948">to</span> point.y
+  x <span style="color: #d73948">i32</span> p <span style="color: #d73948">to</span> point.x
+  y <span style="color: #d73948">i32</span> p <span style="color: #d73948">to</span> point.y
 <span style="color: #d73948">end</span>
 <span style="color: #d73948">word</span> walk (<span style="color: #d73948">or</span> <span style="color: #d73948">fail</span>) <span style="color: #b60157">0</span> <span style="color: #b60157">0</span> add_point <span style="color: #d73948">or_fail</span>  <span style="color: #b60157">3</span> <span style="color: #b60157">4</span> add_point <span style="color: #d73948">or_fail</span>  <span style="color: #b60157">6</span> <span style="color: #b60157">0</span> add_point <span style="color: #d73948">or_fail</span> <span style="color: #d73948">end</span>
 walk <span style="color: #d73948">or_else</span> (e) e err_text io.println <span style="color: #d73948">end</span>
@@ -152,10 +152,10 @@ the row is given back
 <span style="color: #d73948">word</span> register (name <span style="color: #d73948">str</span>, age <span style="color: #d73948">int</span> <span style="color: #d73948">or</span> <span style="color: #d73948">fail</span>)
   users add_row <span style="color: #d73948">or_fail</span> <span style="color: #d73948">to</span> u
   name u <span style="color: #d73948">to</span> user.name
-  age u <span style="color: #d73948">to</span> user.age
+  age <span style="color: #d73948">u8</span> u <span style="color: #d73948">to</span> user.age
   u by_name insert <span style="color: #d73948">or_fail</span>                          <span style="color: #74747c">rem without this, lookup does not see it</span>
 <span style="color: #d73948">end</span>
-<span style="color: #d73948">word</span> age_of (name <span style="color: #d73948">str</span> <span style="color: #d73948">gives</span> <span style="color: #d73948">int</span> <span style="color: #d73948">or</span> <span style="color: #d73948">fail</span>) name by_name lookup <span style="color: #d73948">or_fail</span> user.age <span style="color: #d73948">end</span>
+<span style="color: #d73948">word</span> age_of (name <span style="color: #d73948">str</span> <span style="color: #d73948">gives</span> <span style="color: #d73948">int</span> <span style="color: #d73948">or</span> <span style="color: #d73948">fail</span>) name by_name lookup <span style="color: #d73948">or_fail</span> user.age raw <span style="color: #d73948">end</span>
 <span style="color: #198810">"park"</span> <span style="color: #b60157">41</span> register <span style="color: #d73948">or_else</span> (e) e err_text io.println <span style="color: #d73948">end</span>
 <span style="color: #198810">"kim"</span> <span style="color: #b60157">31</span> register <span style="color: #d73948">or_else</span> (e) <span style="color: #d73948">cat</span> (<span style="color: #198810">"kim again: "</span>, e err_text) io.println <span style="color: #d73948">end</span>
 <span style="color: #d73948">word</span> show (name <span style="color: #d73948">str</span>) <span style="color: #d73948">cat</span> (name, <span style="color: #198810">": "</span>, name age_of <span style="color: #d73948">or_else</span> (e) <span style="color: #b60157">-1</span> <span style="color: #d73948">end</span>) io.println <span style="color: #d73948">end</span>

@@ -15,7 +15,7 @@ END
 end
 word demo (or fail)
   users add_row or_fail to u
-  "lee" u to user.name  7 u to user.id  true u to user.admin
+  "lee" u to user.name  7 u16 u to user.id  true u to user.admin
   u out json.pack or_fail
   out contents io.println
   users add_row or_fail to v

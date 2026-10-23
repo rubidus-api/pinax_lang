@@ -9,9 +9,9 @@ str or fail)` 이다(바이트가 모자라거나 모양이 틀리면 `err.forma
 #para("2")[
 #table(columns: (auto, 1fr), inset: 5pt, stroke: 0.5pt + luma(170),
   [*낱말*], [*바이트*],
-  [`put_u8` `put_u16` `put_u32` `put_u64` \ `put_i8` `put_i16` `put_i32` `put_i64`], [그 폭의 정수. 작은 끝이 먼저],
+  [`put_u8` `put_u16` `put_u32` `put_u64` \ `put_i8` `put_i16` `put_i32` `put_i64`], [이름이 말하는 타입의 값(7.6; `put_i64` 는 `int`). 작은 끝이 먼저],
   [같은 이름 뒤에 `_be`], [큰 끝이 먼저],
-  [`get_u8` … `get_i64`, `get_u16_be` …], [위의 짝. `u8` `u16` `u32` 는 0 이상으로 읽는다. `u64` 는 64 비트를 그대로 `int` 에 담는다(위 비트가 서면 음수)],
+  [`get_u8` … `get_i64`, `get_u16_be` …], [위의 짝. 이름이 말하는 타입의 값을 준다(`get_i64` 는 `int`)],
   [`put_varint` `get_varint`], [LEB128. 값을 부호 없는 64 비트로 보고 7 비트씩 쓴다(음수는 10 바이트)],
   [`put_str` `get_str`], [길이(varint) 다음에 바이트],
 )]

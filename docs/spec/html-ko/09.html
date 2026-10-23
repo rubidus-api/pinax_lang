@@ -161,11 +161,11 @@ grid: 0
 <span style="color: #d73948">list</span> south city <span style="color: #b60157">4</span>
 <span style="color: #d73948">word</span> add_city (l <span style="color: #d73948">list</span> city, s <span style="color: #d73948">str</span>, n <span style="color: #d73948">int</span> <span style="color: #d73948">or</span> <span style="color: #d73948">fail</span>)
   l add_row <span style="color: #d73948">or_fail</span> <span style="color: #d73948">to</span> r                    <span style="color: #74747c">rem r is a row of l</span>
-  s r <span style="color: #d73948">to</span> city.name  n r <span style="color: #d73948">to</span> city.people
+  s r <span style="color: #d73948">to</span> city.name  n <span style="color: #d73948">i32</span> r <span style="color: #d73948">to</span> city.people
 <span style="color: #d73948">end</span>
 <span style="color: #d73948">word</span> largest (l <span style="color: #d73948">list</span> city <span style="color: #d73948">gives</span> <span style="color: #d73948">str</span>)
   <span style="color: #198810">""</span> <span style="color: #d73948">to</span> best  <span style="color: #b60157">-1</span> <span style="color: #d73948">to</span> most
-  l <span style="color: #d73948">do</span> (r l) r city.people most gt <span style="color: #d73948">if</span> r city.people <span style="color: #d73948">to</span> most  r city.name <span style="color: #d73948">to</span> best <span style="color: #d73948">end</span> <span style="color: #d73948">end</span> each
+  l <span style="color: #d73948">do</span> (r l) r city.people raw most gt <span style="color: #d73948">if</span> r city.people raw <span style="color: #d73948">to</span> most  r city.name <span style="color: #d73948">to</span> best <span style="color: #d73948">end</span> <span style="color: #d73948">end</span> each
   best
 <span style="color: #d73948">end</span>
 <span style="color: #d73948">word</span> demo (<span style="color: #d73948">or</span> <span style="color: #d73948">fail</span>)
@@ -192,10 +192,10 @@ seoul busan
   l <span style="color: #d73948">do</span> (x <span style="color: #d73948">int</span> <span style="color: #d73948">gives</span> <span style="color: #d73948">bool</span>) x n gt <span style="color: #d73948">end</span> out filter_into <span style="color: #d73948">or_fail</span>
 <span style="color: #d73948">end</span>
 <span style="color: #d73948">word</span> large (l <span style="color: #d73948">list</span> city, n <span style="color: #d73948">int</span> <span style="color: #d73948">or</span> <span style="color: #d73948">fail</span>)
-  l <span style="color: #d73948">do</span> (r l <span style="color: #d73948">gives</span> <span style="color: #d73948">bool</span>) r city.people n gt <span style="color: #d73948">end</span> big filter_into <span style="color: #d73948">or_fail</span>    <span style="color: #74747c">rem rows of l copied</span>
+  l <span style="color: #d73948">do</span> (r l <span style="color: #d73948">gives</span> <span style="color: #d73948">bool</span>) r city.people raw n gt <span style="color: #d73948">end</span> big filter_into <span style="color: #d73948">or_fail</span>    <span style="color: #74747c">rem rows of l copied</span>
 <span style="color: #d73948">end</span>
 <span style="color: #d73948">word</span> demo (<span style="color: #d73948">or</span> <span style="color: #d73948">fail</span>)
-  cities <span style="color: #d73948">do</span> (r cities <span style="color: #d73948">gives</span> <span style="color: #d73948">int</span>) r city.people <span style="color: #d73948">end</span> counts map_into <span style="color: #d73948">or_fail</span>
+  cities <span style="color: #d73948">do</span> (r cities <span style="color: #d73948">gives</span> <span style="color: #d73948">int</span>) r city.people raw <span style="color: #d73948">end</span> counts map_into <span style="color: #d73948">or_fail</span>
   counts <span style="color: #b60157">2</span> high above <span style="color: #d73948">or_fail</span>
   cities <span style="color: #b60157">2</span> large <span style="color: #d73948">or_fail</span>
   <span style="color: #d73948">cat</span> (high len, <span style="color: #198810">" "</span>, big len, <span style="color: #198810">" "</span>, <span style="color: #b60157">0</span> big idx city.name) io.println

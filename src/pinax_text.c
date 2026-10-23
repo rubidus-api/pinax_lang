@@ -105,6 +105,11 @@ uint32_t pnx_format_int(int64_t value, uint8_t out[24]) {
     const proven_fmt_result_t r = proven_u8str_append_fmt(&text, "{}", proven_arg_i64(value));
     return r.err == PROVEN_OK ? (uint32_t)r.written : 0;
 }
+uint32_t pnx_format_uint(uint64_t value, uint8_t out[24]) {
+    proven_u8str_t text = proven_u8str_borrow(out, 24);
+    const proven_fmt_result_t r = proven_u8str_append_fmt(&text, "{}", proven_arg_u64(value));
+    return r.err == PROVEN_OK ? (uint32_t)r.written : 0;
+}
 
 uint32_t pnx_find(const uint8_t *bytes, uint32_t length, const uint8_t *part, uint32_t part_length) {
     if (part_length == 0)

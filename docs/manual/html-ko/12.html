@@ -143,8 +143,8 @@ kim,3,true
 <span style="color: #d73948">buffer</span> hex <span style="color: #b60157">64</span>
 <span style="color: #d73948">word</span> demo (<span style="color: #d73948">or</span> <span style="color: #d73948">fail</span>)
   <span style="color: #b60157">0</span> headers idx <span style="color: #d73948">to</span> h
-  <span style="color: #b60157">0x50494e58</span> h <span style="color: #d73948">to</span> header.magic           <span style="color: #74747c">rem "PINX"</span>
-  <span style="color: #b60157">1</span> h <span style="color: #d73948">to</span> header.version
+  <span style="color: #b60157">0x50494e58</span> <span style="color: #d73948">u32</span> h <span style="color: #d73948">to</span> header.magic           <span style="color: #74747c">rem "PINX"</span>
+  <span style="color: #b60157">1</span> <span style="color: #d73948">u16</span> h <span style="color: #d73948">to</span> header.version
   <span style="color: #b60157">300</span> h <span style="color: #d73948">to</span> header.length
   h wire bytes.pack <span style="color: #d73948">or_fail</span>
   wire contents hex encode.hex_encode <span style="color: #d73948">or_fail</span>

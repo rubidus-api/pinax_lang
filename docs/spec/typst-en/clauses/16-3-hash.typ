@@ -6,9 +6,9 @@
 host words.
 #table(columns: (auto, auto, 1fr), inset: 5pt, stroke: 0.5pt + luma(170),
   [*Word*], [*Signature*], [*Meaning*],
-  [`crc32`], [`(str gives int)`], [CRC-32 (IEEE 802.3, as zlib), from 0 to 2#super[32]−1],
-  [`fnv1a`], [`(str gives int)`], [64-bit FNV-1a],
-  [`hash64`], [`(str gives int)`], [SipHash-2-4 with the key 0],
+  [`crc32`], [`(str gives u32)`], [CRC-32 (IEEE 802.3, as zlib)],
+  [`fnv1a`], [`(str gives u64)`], [64-bit FNV-1a],
+  [`hash64`], [`(str gives u64)`], [SipHash-2-4 with the key 0],
 )]
 
 #ex("spec", "16-hash.pnx")

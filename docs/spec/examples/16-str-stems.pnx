@@ -10,7 +10,7 @@ first line
 second line
 END
 str.lines do (l str) cat ("line: ", l) io.println end each
-"hi" str.bytes do (b int) b str.to_str io.print " " io.print end each
+"hi" str.bytes do (b u8) b str.to_str io.print " " io.print end each
 "" io.println
 "가a!" str.chars do (c str) cat ("<", c, " ", c str.len, ">") io.print end each
 "" io.println

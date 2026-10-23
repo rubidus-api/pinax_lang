@@ -6,9 +6,9 @@
 준다.
 #table(columns: (auto, auto, 1fr), inset: 5pt, stroke: 0.5pt + luma(170),
   [*낱말*], [*서명*], [*뜻*],
-  [`crc32`], [`(str gives int)`], [CRC-32 (IEEE 802.3, zlib 과 같음). 0 부터 2#super[32]−1],
-  [`fnv1a`], [`(str gives int)`], [64 비트 FNV-1a],
-  [`hash64`], [`(str gives int)`], [키가 0 인 SipHash-2-4],
+  [`crc32`], [`(str gives u32)`], [CRC-32 (IEEE 802.3, zlib 과 같음)],
+  [`fnv1a`], [`(str gives u64)`], [64 비트 FNV-1a],
+  [`hash64`], [`(str gives u64)`], [키가 0 인 SipHash-2-4],
 )]
 
 #ex("spec", "16-hash.pnx")

@@ -9,9 +9,9 @@ words are `(s str gives value, rest str or fail)` (`err.format` when the bytes r
 #para("2")[
 #table(columns: (auto, 1fr), inset: 5pt, stroke: 0.5pt + luma(170),
   [*Word*], [*Bytes*],
-  [`put_u8` `put_u16` `put_u32` `put_u64` \ `put_i8` `put_i16` `put_i32` `put_i64`], [an integer of that width, least significant byte first],
+  [`put_u8` `put_u16` `put_u32` `put_u64` \ `put_i8` `put_i16` `put_i32` `put_i64`], [a value of the type the name says (7.6; `put_i64` an `int`), least significant byte first],
   [the same names with `_be`], [most significant byte first],
-  [`get_u8` … `get_i64`, `get_u16_be` …], [their pairs; `u8` `u16` `u32` read as non-negative; `u64` puts the 64 bits into the `int` as they are (negative when the top bit is set)],
+  [`get_u8` … `get_i64`, `get_u16_be` …], [their pairs: a value of the type the name says (`get_i64` an `int`)],
   [`put_varint` `get_varint`], [LEB128: the value as an unsigned 64-bit number, 7 bits at a time (a negative takes 10 bytes)],
   [`put_str` `get_str`], [a length (varint), then the bytes],
 )]

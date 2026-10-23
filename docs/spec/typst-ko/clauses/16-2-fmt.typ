@@ -6,10 +6,10 @@
 작은 언어(`%08x` 같은 것)는 없다. 결과는 구역에 쓴다.
 #table(columns: (auto, auto, 1fr), inset: 5pt, stroke: 0.5pt + luma(170),
   [*낱말*], [*서명*], [*뜻*],
-  [`hex` `bin`], [`(int gives str)`], [십육진(소문자), 이진. 음수는 64 비트 2 의 보수로],
-  [`hex_pad`], [`(n int, width int gives str)`], [십육진을 앞에 0 을 채워 `width` 자리로],
-  [`zero_pad`], [`(n int, width int gives str)`], [십진을 앞에 0 을 채워 `width` 자리로. 부호도 자리를 차지한다],
-  [`append_hex`], [`(n int, buf or fail)`], [십육진을 버퍼에 붙인다],
+  [`hex` `bin`], [`(n gives str)`], [십육진(소문자), 이진. `n` 은 `int` 나 좁은 정수(7.6): `int` 의 음수는 64 비트 2 의 보수로, 좁은 정수는 그 폭의 비트로],
+  [`hex_pad`], [`(n, width int gives str)`], [십육진을 앞에 0 을 채워 `width` 자리로. `n` 은 `hex` 와 같다],
+  [`zero_pad`], [`(n, width int gives str)`], [십진을 앞에 0 을 채워 `width` 자리로. 부호도 자리를 차지한다. `n` 은 `int` 나 좁은 정수(`u64` 는 부호 없이)],
+  [`append_hex`], [`(n, buf or fail)`], [십육진을 버퍼에 붙인다. `n` 은 `hex` 와 같다],
 )
 십진은 `str.to_str`, 버퍼에 붙이는 십진은 `append_int`(15.3)다. `hex_pad` 와 `zero_pad` 의 `width` 가 음수이거나
 2#super[32] 이상이면 결함 `range`, 구역이 모자라면 결함 `full` 이다.]

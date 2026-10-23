@@ -184,6 +184,8 @@ enum {
     X(NARITH, 0x3c, PNX_K_I, PNX_K_I, PNX_K_I, PNX_F_ABC, PNX_X_IMM, 0, "wrr") \
     X(NCHK, 0x3d, PNX_K_I, PNX_K_I, PNX_K_I, PNX_F_ABC, PNX_X_IMM, 1, "wrr") \
     X(NUN, 0x3e, PNX_K_I, PNX_K_I, PNX_K_NONE, PNX_F_ABC, PNX_X_IMM, 0, "wr-") \
+    X(RCATU, 0xf3, PNX_K_S, PNX_K_I, PNX_K_NONE, PNX_F_ABC, PNX_X_NONE, 0, "mr-") \
+    X(RCATUW, 0xf4, PNX_K_S, PNX_K_I, PNX_K_I, PNX_F_ABC, PNX_X_NONE, 0, "mrr") \
     /* jumps */ \
     X(JEQ, 0x48, PNX_K_I, PNX_K_I, PNX_K_J, PNX_F_ABC, PNX_X_NONE, 0, "rr-") \
     X(JNE, 0x49, PNX_K_I, PNX_K_I, PNX_K_J, PNX_F_ABC, PNX_X_NONE, 0, "rr-") \
@@ -416,7 +418,7 @@ enum {
 // records, integer constants, string constant records, code, string bytes, line records, local
 // records; in this order, native byte order.
 #define PNX_MAGIC "PNXB"
-#define PNX_CONTAINER_VERSION 3
+#define PNX_CONTAINER_VERSION 4
 #define PNX_ORDER_MARK 0x0102
 
 // A container carries one load: what the program gains. Its records are numbered on from the
@@ -472,11 +474,15 @@ typedef struct pnx_wordrec {
     uint32_t reserved2; // 0; keeps the record a multiple of 8 bytes, as the records after it are read in place
 } pnx_wordrec;
 
+// For an array, a list or a queue of values, elem_bytes is the bytes of one cell (1, 2, 4 or 8:
+// the narrow types of RFC-0025 are stored at their width) and bits 8 to 15 of `reserved` hold
+// the width code (PNX_W_*) plus one; the low byte of `reserved` says bound (2) or shared (4).
 typedef struct pnx_globalrec {
     char     name[32];
     char     type[32]; // the type as declared, for pinax_global_find(); may be empty
     uint32_t kind, elem_bytes, capacity, reserved;
 } pnx_globalrec;
+#define PNX_GREC_WIDTH(rec) (((rec)->reserved >> 8) & 0xffu) // 0: 64-bit cells; else a width code plus one
 
 typedef struct pnx_importrec {
     char module[16];

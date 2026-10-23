@@ -36,7 +36,7 @@ characters (`chars` `char_count` `is_utf8`) read UTF-8. Changing case (`upper` `
   [`starts_with` `ends_with` `contains`], [`(s str, part gives bool)`], [],
   [`find` `find_last`], [`(s str, part gives int or fail)`], [the first, last position; `err.not_found` when absent],
   [`compare`], [`(str, str gives int)`], [negative, zero or positive, comparing in byte order],
-  [`byte_at`], [`(s str, i int gives int)`], [byte `i`; out of range is the fault `range`],
+  [`byte_at`], [`(s str, i int gives u8)`], [byte `i`; out of range is the fault `range`],
   [`char_count`], [`(str gives int)`], [the number of UTF-8 characters],
   [`is_utf8`], [`(str gives bool)`], [is it valid UTF-8],
 )
@@ -65,10 +65,11 @@ The words that read numbers can fail.
 === Stems and writing into buffers
 
 #para("7")[Words that make stems (10.6):
-- `s sep str.split` --- the pieces between `sep`s, empty ones included;
+- `s sep str.split` --- the pieces between `sep`s, empty ones included; `sep` is a `str` or one byte (a `u8` constant,
+  usually a character literal), as for `cut` and `try_cut`;
 - `s str.words` --- the pieces between white space, no empty ones;
 - `s str.lines` --- the lines, without their LF or CR LF;
-- `s str.bytes` --- the bytes (`int`);
+- `s str.bytes` --- the bytes (`u8`);
 - `s str.chars` --- one view (`str`) for each UTF-8 character.]
 
 #para("8")[Words that write into a buffer:

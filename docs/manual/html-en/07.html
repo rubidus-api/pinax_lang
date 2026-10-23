@@ -23,12 +23,12 @@ day 3 is fine
   i int = 7
 </code></pre></div><h3>6.2 Lists</h3><p>A <code>list</code> is an array whose length grows from 0 up to its capacity. <code>push</code> adds at the end and <code>pop</code> takes from the end. Only indexes below the length may be used.</p><div class="example run"><p class="ex-file"><code>06-list.pnx</code></p><pre><code data-lang="pinax"><span style="color: #d73948">use</span> io
 <span style="color: #d73948">use</span> <span style="color: #d73948">str</span>
-<span style="color: #d73948">list</span> stack <span style="color: #d73948">int</span> <span style="color: #b60157">4</span>                            <span style="color: #74747c">rem grows from 0 to 4</span>
+<span style="color: #d73948">list</span> stack <span style="color: #d73948">u8</span> <span style="color: #b60157">4</span>                             <span style="color: #74747c">rem grows from 0 to 4</span>
 <span style="color: #d73948">word</span> balanced (s <span style="color: #d73948">str</span> <span style="color: #d73948">gives</span> <span style="color: #d73948">bool</span>)            <span style="color: #74747c">rem are the brackets of s balanced?</span>
   stack clear
-  s <span style="color: #d73948">str</span>.bytes <span style="color: #d73948">do</span> (b <span style="color: #d73948">int</span>)
+  s <span style="color: #d73948">str</span>.bytes <span style="color: #d73948">do</span> (b <span style="color: #d73948">u8</span>)
     b <span style="color: #b60157">'('</span> eq <span style="color: #d73948">if</span> b stack push <span style="color: #d73948">or_else</span> (e) <span style="color: #d73948">end</span> <span style="color: #d73948">end</span>
-    b <span style="color: #b60157">')'</span> eq <span style="color: #d73948">if</span> stack pop <span style="color: #d73948">or_else</span> (e) <span style="color: #b60157">0</span> <span style="color: #d73948">end</span> drop <span style="color: #d73948">end</span>
+    b <span style="color: #b60157">')'</span> eq <span style="color: #d73948">if</span> stack pop <span style="color: #d73948">or_else</span> (e) <span style="color: #b60157">0</span> <span style="color: #d73948">u8</span> <span style="color: #d73948">end</span> drop <span style="color: #d73948">end</span>
   <span style="color: #d73948">end</span> each
   stack is_empty
 <span style="color: #d73948">end</span>

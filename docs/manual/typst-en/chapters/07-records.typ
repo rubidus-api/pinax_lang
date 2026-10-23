@@ -10,7 +10,8 @@
 
 == Records and rows
 
-`record … end` is a sequence of fields, each with a width (`u8` `u16` `i32` `int` `bool` `str(N)` …). Records do not
+`record … end` is a sequence of fields, each with a type (`u8` `u16` `i32` `int` `bool` `str(N)` …): a `u8` field reads
+as a `u8` and takes a `u8` only (`2016 u16 b to book.year`). Records do not
 travel as values. You declare a list (or array, or pool) of records and handle its #strong[rows]. A row's type is named
 after its table.
 

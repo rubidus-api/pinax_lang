@@ -6,7 +6,7 @@ use fmt
 -7 str.to_str io.println
 0xff str.to_str io.println                   rem 255
 1_000_000 str.to_str io.println
-'A' str.to_str io.println                    rem a character is its number
+'A' str.to_str io.println                    rem a character is a u8, its byte
 3 4 lt if "3 < 4 is true" else "false" end io.println
 "a string" str.len str.to_str io.println
 255 fmt.hex io.println

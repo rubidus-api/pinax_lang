@@ -7,8 +7,8 @@ buffer out 64
 buffer hex 128
 word dump () out contents hex encode.hex_encode or_else (e) end  hex contents io.println  hex clear end
 word demo (or fail)
-  258 out bytes.put_u16 or_fail            rem little end first: 02 01
-  258 out bytes.put_u16_be or_fail         rem big end first: 01 02
+  258 u16 out bytes.put_u16 or_fail            rem little end first: 02 01
+  258 u16 out bytes.put_u16_be or_fail         rem big end first: 01 02
   300 out bytes.put_varint or_fail         rem LEB128: ac 02
   "hi" out bytes.put_str or_fail           rem a varint length, then the bytes
   dump

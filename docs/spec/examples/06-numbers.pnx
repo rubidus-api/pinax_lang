@@ -7,5 +7,5 @@ use str
 0755 str.to_str io.println          rem decimal: there is no octal form
 -42 str.to_str io.println           rem the sign is part of the number
 -9223372036854775808 str.to_str io.println
-'A' str.to_str io.println           rem a character is an int: one byte
+'A' str.to_str io.println           rem a character is a u8: one byte
 U'가' str.to_str io.println          rem U'..' is one code point

@@ -185,7 +185,9 @@ give an `int` (the width for 0); `byte_swap` reverses the bytes of the width. `r
 
 #para("5")[A narrow integer is, as `int` is, the type of globals, of cells of arrays and lists, of values of queues, of
 parameters and results and of host word signatures (19.2), and the base of a declared type (7.4), as in `type opcode
-u8`. A host word takes and gives the value as one 64-bit integer.]
+u8`. A cell of an array, list or queue and a field of a record take the bytes of the width (`array a u8 1024` is
+1024 bytes); one global is an 8-byte place. A character literal is a `u8` or a `u32` (6.5). `case` compares a narrow
+integer (10.3). A host word takes and gives the value as one 64-bit integer.]
 
 #ex("spec", "07-narrow.pnx")
 

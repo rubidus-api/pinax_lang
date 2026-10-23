@@ -231,12 +231,21 @@ PNX_COND(JSEQ) {
 
 PNX_OP(GETG) { __builtin_memcpy(&R[OP_A(w)], st->globals[PNX_GX(st, OP_BX(w))].ptr, 8); return PNX_R_OK; }
 PNX_OP(SETG) { __builtin_memcpy(st->globals[PNX_GX(st, OP_BX(w))].ptr, &R[OP_A(w)], 8); return PNX_R_OK; }
+// A cell of an array, list or queue of values: elem_bytes wide, read and written at the width
+// (RFC-0025: a narrow type's cells are its bytes; an int, bool, err or dec(N) cell is 8).
+static_assert(__BYTE_ORDER__ == __ORDER_LITTLE_ENDIAN__, "narrow cells are stored as the low bytes of the value");
+PNX_INLINE int64_t pnx_cell_get(const pnx_global *g, uint64_t index) {
+    return pnx_load_width(g->ptr + index * g->elem_bytes, g->width);
+}
+PNX_INLINE void pnx_cell_put(const pnx_global *g, uint64_t index, int64_t value) {
+    __builtin_memcpy(g->ptr + index * g->elem_bytes, &value, g->elem_bytes); // little-endian: the low bytes
+}
 PNX_OP(AGET) {
     const pnx_global *g = &st->globals[PNX_GX(st, x)];
     const uint64_t index = (uint64_t)R[OP_B(w)];
     if (index >= g->length)
         return PINAX_ERR_RANGE;
-    __builtin_memcpy(&R[OP_A(w)], g->ptr + index * 8, 8);
+    R[OP_A(w)] = pnx_cell_get(g, index);
     return PNX_R_OK;
 }
 PNX_OP(ASET) {
@@ -244,7 +253,7 @@ PNX_OP(ASET) {
     const uint64_t index = (uint64_t)R[OP_B(w)];
     if (index >= g->length)
         return PINAX_ERR_RANGE;
-    __builtin_memcpy(g->ptr + index * 8, &R[OP_A(w)], 8);
+    pnx_cell_put(g, index, R[OP_A(w)]);
     return PNX_R_OK;
 }
 PNX_OP(ROW) {
@@ -578,7 +587,7 @@ PNX_OP(LPUSH) {
         st->fail = PINAX_ERR_FULL;
         return PNX_R_FAILED;
     }
-    __builtin_memcpy(g->ptr + (size_t)g->length * 8, &R[OP_A(w)], 8);
+    pnx_cell_put(g, g->length, R[OP_A(w)]);
     ++g->length;
     return PNX_R_OK;
 }
@@ -589,7 +598,7 @@ PNX_OP(LPOP) {
         return PNX_R_FAILED;
     }
     --g->length;
-    __builtin_memcpy(&R[OP_A(w)], g->ptr + (size_t)g->length * 8, 8);
+    R[OP_A(w)] = pnx_cell_get(g, g->length);
     return PNX_R_OK;
 }
 // Appends a copy of row R[A] of table x (a list or an array of the same record) to the
@@ -779,7 +788,7 @@ PNX_OP(QPUT) {
         return PNX_R_FAILED;
     }
     const uint32_t at = (uint32_t)(((uint64_t)g->head + g->length) % g->capacity);
-    __builtin_memcpy(g->ptr + (size_t)at * 8, &R[OP_A(w)], 8);
+    pnx_cell_put(g, at, R[OP_A(w)]);
     ++g->length;
     ++st->qturn;
     return PNX_R_OK;
@@ -790,7 +799,7 @@ PNX_OP(QTAKE) {
         st->fail = PINAX_ERR_RANGE;
         return PNX_R_FAILED;
     }
-    __builtin_memcpy(&R[OP_A(w)], g->ptr + (size_t)g->head * 8, 8);
+    R[OP_A(w)] = pnx_cell_get(g, g->head);
     g->head = g->head + 1 == g->capacity ? 0 : g->head + 1;
     --g->length;
     ++st->qturn;
@@ -802,7 +811,7 @@ PNX_OP(QPEEK) {
         st->fail = PINAX_ERR_RANGE;
         return PNX_R_FAILED;
     }
-    __builtin_memcpy(&R[OP_A(w)], g->ptr + (size_t)g->head * 8, 8);
+    R[OP_A(w)] = pnx_cell_get(g, g->head);
     return PNX_R_OK;
 }
 
@@ -974,6 +983,16 @@ PNX_OP(RCATW) { // a minus sign stays in front of the zeros
         const int64_t width = R[OP_C(w)];
         return r != PNX_R_OK ? r : pnx_append_padded(st, &S[OP_A(w)], digits + 1, n - 1, width > 0 ? width - 1 : width, '0', false);
     }
+    return pnx_append_padded(st, &S[OP_A(w)], digits, n, R[OP_C(w)], '0', false);
+}
+PNX_OP(RCATU) { // a u64 as an unsigned number (RFC-0025)
+    uint8_t digits[24];
+    const uint32_t n = pnx_format_uint((uint64_t)R[OP_B(w)], digits);
+    return pnx_region_append(st, &S[OP_A(w)], digits, n);
+}
+PNX_OP(RCATUW) {
+    uint8_t digits[24];
+    const uint32_t n = pnx_format_uint((uint64_t)R[OP_B(w)], digits);
     return pnx_append_padded(st, &S[OP_A(w)], digits, n, R[OP_C(w)], '0', false);
 }
 PNX_OP(RPADL) {

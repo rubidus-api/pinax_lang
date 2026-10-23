@@ -79,8 +79,9 @@ assign-item = "assign" NAME "(" value { "," value } ")" ;
 ```
 
 #para("1")[`array NAME type capacity` makes an #term("array") with that many cells. An array is always full: `len` is
-its capacity. The element type is `int`, `bool`, `err`, `dec(N)`, `str(N)`, a declared type or the name of a
-record.]
+its capacity. The element type is `int`, `bool`, `err`, `dec(N)`, `str(N)`, a narrow integer (7.6), a declared type or
+the name of a record. A cell of a narrow integer takes the bytes of its width, a cell of any other value 8 bytes; the
+cells of lists and queues are the same.]
 
 #para("2")[`i ARRAY idx` reads cell `i`; `v i set ARRAY` stores into cell `i`; a cell of a collection parameter (9.9) is stored the same way. Numbers count from 0. For an array of
 records `idx` gives a row (8.8), not a value.]
@@ -153,7 +154,8 @@ from an empty one `err.range`.]
 #para("1")[`buffer NAME capacity` makes a #term("buffer") of that many bytes: a sequence of bytes that can be changed,
 for building text piece by piece.]
 
-#para("2")[`s BUF append`, `n BUF append_int` (decimal) and `b BUF append_byte` add at the end; when there is not
+#para("2")[`s BUF append`, `n BUF append_int` (decimal; `n` an `int` or a narrow integer) and `b BUF append_byte` (`b` a
+`u8`) add at the end; when there is not
 enough room they fail with `err.full` and add nothing. `BUF contents` gives a `str` view of what it holds now.
 `n BUF truncate` cuts the length to `n`. `BUF clear` sets the length to 0.]
 
@@ -175,8 +177,9 @@ row-item = [ "export" ] "row" NAME [ NAME ] "(" value { "," value } ")" ;
 value    = literal | NAME ;                         (* NAME: a const, a row name, none *)
 ```
 
-#para("1")[`record NAME … end` makes a #term("record") type, a sequence of fields, each with a width. An integer field
-reads as `int`, a `bool` field as `bool`, a `dec(N)` field as `dec(N)` (8 bytes), a `str(N)` field as a `str` view. A field whose type is the name of a table
+#para("1")[`record NAME … end` makes a #term("record") type, a sequence of fields, each with a width. An `int` or `i64` field
+reads as `int`, a `u8` … `i32` field as that narrow integer (7.6), a `bool` field as `bool`, a `dec(N)` field as
+`dec(N)` (8 bytes), a `str(N)` field as a `str` view. A field takes a value of its type only. A field whose type is the name of a table
 holds a row of that table.]
 
 #para("2")[Records are not handled as values. One declares an array, list or pool of records (a #term("table")) and
@@ -204,8 +207,9 @@ the layout in memory.]
 
 #part("Faults")
 
-#para("8")[Storing a value that does not fit a narrow integer field is the fault `overflow`; it is not cut (mask it
-with `bit_and` first to store part of it). Reading or storing a field of the none row is the fault `range`.]
+#para("8")[An `int` stored into a narrow integer field is converted first (`n u8`); a value that does not fit the width
+makes that conversion the fault `overflow` (7.6). Nothing is cut: to store the low bits take a word such as `low_u8`.
+Reading or storing a field of the none row is the fault `range`.]
 #ex("spec", "08-record-narrow.pnx")
 
 == Pools <decl-pool>

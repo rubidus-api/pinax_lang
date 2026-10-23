@@ -7,8 +7,8 @@ end
 list path point 4
 word add_point (x int, y int or fail)
   path add_row or_fail to p                         rem a new, zeroed row at the end
-  x p to point.x
-  y p to point.y
+  x i32 p to point.x
+  y i32 p to point.y
 end
 word walk (or fail) 0 0 add_point or_fail  3 4 add_point or_fail  6 0 add_point or_fail end
 walk or_else (e) e err_text io.println end

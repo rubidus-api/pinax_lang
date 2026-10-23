@@ -134,7 +134,8 @@ a run that ends with a fault opened are closed by the state, calling their close
 == Binding <host-bind>
 
 #para("1")[`pinax_bind(state, global, memory, bytes)` changes the storage of a global declared `bound` (8.12) to host
-memory; the size shall match the declaration. Script and host read and write the same bytes without copying.
+memory; the size shall match the declaration: for an array, the cells times the bytes of a cell (the width of a narrow
+integer, 8 for any other value; 8.4). Script and host read and write the same bytes without copying.
 `pinax_global_find` tells where a declared global is and how large it is.]
 
 #ex("spec", "19-bind.c")

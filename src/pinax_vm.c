@@ -490,6 +490,8 @@ pinax_err pnx_execute(pinax_state *st) {
         RUN(SCMP)
         RUN(RCATX)
         RUN(RCATW)
+        RUN(RCATU)
+        RUN(RCATUW)
         RUN(RCATXW)
         RUN(RPADL)
         RUN(RPADR)
@@ -801,7 +803,8 @@ pinax_err pnx_execute(pinax_state *st) {
             // a shared global is chosen only to be read: LCOPYR writes the one in its BX
             const bool writes = pnx_writes_global(next & 0xffu) && ((next & 0xffu) != PNX_LCOPYR || OP_BX(next) == PNX_GSELECTED);
             if (gi >= st->head->n_globals || st->globals[gi].kind != OP_B(w) ||
-                (elem && st->globals[gi].elem_bytes != elem) || (writes && st->globals[gi].shared))
+                (elem && st->globals[gi].elem_bytes != (elem & 0xffffu)) ||
+                ((elem >> 16) && st->globals[gi].width != (elem >> 16) - 1) || (writes && st->globals[gi].shared))
                 FAULT(PINAX_ERR_STATE);
             st->gsel = (uint32_t)gi;
             NEXT();

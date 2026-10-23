@@ -1639,7 +1639,7 @@ static uint64_t storage_bytes(const pnx_globalrec *rec) {
     case PNX_G_INT: return 8;
     case PNX_G_ARRAY:
     case PNX_G_LIST:
-    case PNX_G_QUEUE: return (uint64_t)rec->capacity * 8;
+    case PNX_G_QUEUE: return (uint64_t)rec->capacity * rec->elem_bytes;
     case PNX_G_BUFFER: return (uint64_t)rec->capacity + 8;
     case PNX_G_TABLE:
     case PNX_G_ROWS: return (uint64_t)rec->capacity * rec->elem_bytes;
@@ -1813,10 +1813,16 @@ pinax_err pnx_load_container(pinax_state *st, pinax_str bytecode) {
         if (!terminated(rec->name, sizeof rec->name) || !terminated(rec->type, sizeof rec->type) || rec->capacity == 0)
             goto rollback;
         switch (rec->kind) {
-        case PNX_G_INT:
         case PNX_G_ARRAY:
         case PNX_G_LIST:
-        case PNX_G_QUEUE:
+        case PNX_G_QUEUE: { // cells of a width (RFC-0025): the bytes and the code must agree
+            const uint32_t width = PNX_GREC_WIDTH(rec);
+            if (width > PNX_W_COUNT || rec->elem_bytes != (width ? width_bytes[width - 1] : 8u) ||
+                (rec->reserved & 0xffu) > 4 || rec->reserved >> 16)
+                goto rollback;
+            break;
+        }
+        case PNX_G_INT:
         case PNX_G_BUFFER: break;
         case PNX_G_TABLE:
         case PNX_G_ROWS:
@@ -1843,7 +1849,7 @@ pinax_err pnx_load_container(pinax_state *st, pinax_str bytecode) {
         }
         bytes = storage_bytes(rec);
         const bool shared = rec->kind == PNX_G_INDEX ? (rec->reserved & 4u) != 0
-                          : rec->kind != PNX_G_TASKS && rec->reserved == 4;
+                          : rec->kind != PNX_G_TASKS && (rec->reserved & 0xffu) == 4;
         if (shared && (rec->kind == PNX_G_QUEUE || rec->kind == PNX_G_POOL))
             goto rollback;
         err = PINAX_ERR_NO_ROOM;
@@ -1854,7 +1860,11 @@ pinax_err pnx_load_container(pinax_state *st, pinax_str bytecode) {
         if (!g->ptr && !shared)
             goto rollback;
         g->kind = rec->kind;
-        g->elem_bytes = rec->kind == PNX_G_TABLE || rec->kind == PNX_G_ROWS || rec->kind == PNX_G_POOL ? rec->elem_bytes : 8;
+        g->elem_bytes = rec->kind == PNX_G_TABLE || rec->kind == PNX_G_ROWS || rec->kind == PNX_G_POOL ||
+                                rec->kind == PNX_G_ARRAY || rec->kind == PNX_G_LIST || rec->kind == PNX_G_QUEUE
+                            ? rec->elem_bytes
+                            : 8;
+        g->width = (uint8_t)(PNX_GREC_WIDTH(rec) ? PNX_GREC_WIDTH(rec) - 1 : PNX_W_64);
         g->capacity = rec->kind == PNX_G_INT ? 1 : rec->capacity;
         g->length = rec->kind == PNX_G_LIST || rec->kind == PNX_G_ROWS || rec->kind == PNX_G_QUEUE ? 0 : g->capacity;
         st->qturn += rec->kind == PNX_G_QUEUE; // a new queue: a task waiting for a queue looks again
@@ -2763,12 +2773,12 @@ pinax_err pinax_bind(pinax_state *st, const char *global, void *memory, size_t b
         if (!text_equal(recs[k].name, global))
             continue;
         pnx_global *g = &st->globals[k];
-        if (recs[k].reserved != 2)
+        if ((recs[k].reserved & 0xffu) != 2)
             return fail(st, PINAX_ERR_STATE, "the script did not declare this global bound");
         if (st->frozen)
             return fail(st, PINAX_ERR_STATE, "the state lent a global with pinax_share: its storage stays");
-        const size_t want = g->kind == PNX_G_INT || g->kind == PNX_G_ARRAY ? (size_t)g->capacity * 8
-                            : g->kind == PNX_G_TABLE                       ? (size_t)g->capacity * g->elem_bytes
+        const size_t want = g->kind == PNX_G_INT                          ? 8
+                            : g->kind == PNX_G_ARRAY || g->kind == PNX_G_TABLE ? (size_t)g->capacity * g->elem_bytes
                             : g->kind == PNX_G_BUFFER                      ? (size_t)g->capacity + 8
                                                                            : 0;
         if (!want)
@@ -2874,7 +2884,7 @@ static_assert(sizeof(pnx_share_head) == 64 && sizeof(pnx_share_entry) % 16 == 0,
 static uint64_t share_bytes(uint32_t kind, uint64_t capacity, uint64_t elem_bytes) {
     switch (kind) {
     case PNX_G_INT: return 8;
-    case PNX_G_ARRAY: case PNX_G_LIST: return capacity * 8;
+    case PNX_G_ARRAY: case PNX_G_LIST: return capacity * elem_bytes;
     case PNX_G_BUFFER: return capacity + 8;
     case PNX_G_TABLE: case PNX_G_ROWS: return capacity * elem_bytes;
     case PNX_G_INDEX: return capacity * 4;

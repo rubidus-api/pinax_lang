@@ -146,8 +146,8 @@ escape    = "\\" | '\"' | "\'" | "\a" | "\b" | "\f" | "\n" | "\r" | "\t" | "\v" 
 BOOL      = "true" | "false" ;
 ```
 
-#para("1")[The value of a #term("character literal") is an `int`: the value of one byte without a prefix, of one code
-point with `U` (`'A'` is 65, `U'가'` is 44032).]
+#para("1")[The value of a #term("character literal") is, without a prefix, the `u8` of one byte, and with `U` the `u32` of
+one code point (7.6; `'A'` is the `u8` 65, `U'가'` the `u32` 44032).]
 
 #para("2")[The value of a #term("string literal") is a `str`. The fourteen escapes above are the only ones, each of a
 fixed length. `\u` and `\U` put a Unicode code point (not a surrogate, at most U+10FFFF) as UTF-8; `\x` puts one byte.]

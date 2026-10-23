@@ -238,7 +238,7 @@ freed by the script: counter at 2
 twice = 2
 closed by the state: counter at 1
 broken: PINAX_ERR_DIV_ZERO
-</code></pre></div><h3>19.7 묶기</h3><p class="para"><span class="pn">(1)</span> <code>pinax_bind(state, 전역, 메모리, 바이트)</code> 는 <code>bound</code> 로 선언한 전역(8.12)의 저장소를 호스트 메모리로 바꾼다. 크기는 선언과 같아야 한다. 스크립트와 호스트는 복사 없이 같은 바이트를 읽고 쓴다. <code>pinax_global_find</code> 는 선언한 전역의 자리와 크기를 알려 준다.</p><div class="example embed"><p class="ex-file"><code>19-bind.c</code></p><pre><code data-lang="c"><span style="color: #d73948">#include</span> <span style="color: #198810">"</span><span style="color: #198810">pinax.h</span><span style="color: #198810">"</span>
+</code></pre></div><h3>19.7 묶기</h3><p class="para"><span class="pn">(1)</span> <code>pinax_bind(state, 전역, 메모리, 바이트)</code> 는 <code>bound</code> 로 선언한 전역(8.12)의 저장소를 호스트 메모리로 바꾼다. 크기는 선언과 같아야 한다: 배열은 칸 수 곱하기 칸의 바이트(좁은 정수는 폭, 다른 값은 8; 8.4). 스크립트와 호스트는 복사 없이 같은 바이트를 읽고 쓴다. <code>pinax_global_find</code> 는 선언한 전역의 자리와 크기를 알려 준다.</p><div class="example embed"><p class="ex-file"><code>19-bind.c</code></p><pre><code data-lang="c"><span style="color: #d73948">#include</span> <span style="color: #198810">"</span><span style="color: #198810">pinax.h</span><span style="color: #198810">"</span>
 <span style="color: #d73948">#include</span> <span style="color: #198810">&lt;</span><span style="color: #198810">stdio.h</span><span style="color: #198810">&gt;</span>
 
 <span style="color: #d73948">int</span> <span style="color: #4b69c6">main</span>(<span style="color: #d73948">void</span>) {

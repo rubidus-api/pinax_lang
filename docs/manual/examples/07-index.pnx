@@ -11,10 +11,10 @@ row users ("lee", 25)
 word register (name str, age int or fail)
   users add_row or_fail to u
   name u to user.name
-  age u to user.age
+  age u8 u to user.age
   u by_name insert or_fail                          rem without this, lookup does not see it
 end
-word age_of (name str gives int or fail) name by_name lookup or_fail user.age end
+word age_of (name str gives int or fail) name by_name lookup or_fail user.age raw end
 "park" 41 register or_else (e) e err_text io.println end
 "kim" 31 register or_else (e) cat ("kim again: ", e err_text) io.println end
 word show (name str) cat (name, ": ", name age_of or_else (e) -1 end) io.println end

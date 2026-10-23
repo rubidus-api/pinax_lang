@@ -8,11 +8,11 @@ list north city 4
 list south city 4
 word add_city (l list city, s str, n int or fail)
   l add_row or_fail to r                    rem r is a row of l
-  s r to city.name  n r to city.people
+  s r to city.name  n i32 r to city.people
 end
 word largest (l list city gives str)
   "" to best  -1 to most
-  l do (r l) r city.people most gt if r city.people to most  r city.name to best end end each
+  l do (r l) r city.people raw most gt if r city.people raw to most  r city.name to best end end each
   best
 end
 word demo (or fail)

@@ -12,7 +12,7 @@ buffer out 128
 "" io.println
 word demo (or fail)
   users add_row or_fail to u
-  "lee, jr" u to user.name  7 u to user.id  true u to user.admin
+  "lee, jr" u to user.name  7 u16 u to user.id  true u to user.admin
   u out csv.pack or_fail                               rem a line, quoted where needed
   "x" out csv.put or_fail  5 out csv.put_int or_fail  false out csv.put_bool or_fail  out csv.end_line or_fail
   out contents io.print

@@ -77,7 +77,7 @@ never be reached and is refused.]
 
 == Choosing <control-case>
 
-#para("1")[`value case branches… end` takes the `int` or `str` on top, compares it with the values of the branches and
+#para("1")[`value case branches… end` takes the `int`, narrow integer (7.6), `err` or `str` on top, compares it with the values of the branches and
 runs the body of the first equal one. The values of a branch are literals or `const`s of this source; several values
 go in parentheses with commas. When no branch matches, the `otherwise` body runs. Every branch shall leave the same
 stack.]
