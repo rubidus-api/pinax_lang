@@ -17,8 +17,8 @@ host's choice.]
 the name of the C function is a core word or a reserved word, or holds characters that are not those of a name (it is
 then written in quotes), `as` is required.]
 
-#para("3")[The signature may have: as arguments `int` (and `bool`, declared types and other values represented as
-`int`), handles, `str` and `cstr`; as the result one `int` or handle, or none. `or fail` goes only with a handle result:
+#para("3")[The signature may have: as arguments `int` (and `bool`, narrow integers (7.6), declared types and other values
+represented as `int`), handles, `str` and `cstr`; as the result one `int` or handle, or none. `or fail` goes only with a handle result:
 a null pointer from the function is a failure. `cstr` is a type of this signature only.]
 
 #para("4")[How the function is called: every `int` and every handle's object pointer is one `intptr_t` argument; a

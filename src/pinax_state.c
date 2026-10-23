@@ -295,6 +295,77 @@ bool pnx_signature_counts(const char *sig, pnx_counts *out) {
     return true;
 }
 
+bool pnx_signature_widths(const char *sig, uint8_t args[PNX_MAX_WIDTHS], uint8_t results[PNX_MAX_WIDTHS]) {
+    static const char *const names[] = {"u8", "u16", "u32", "u64", "i8", "i16", "i32"};
+    __builtin_memset(args, 0, PNX_MAX_WIDTHS);
+    __builtin_memset(results, 0, PNX_MAX_WIDTHS);
+    const char *p = sig;
+    while (*p == ' ')
+        ++p;
+    if (*p++ != '(')
+        return false;
+    bool     in_results = false;
+    unsigned tokens = 0, n_args = 0, n_results = 0;
+    const char *type = NULL;
+    size_t      type_len = 0;
+    for (;;) {
+        while (*p == ' ')
+            ++p;
+        const char *start = p;
+        while (is_name_char(*p))
+            ++p;
+        const size_t len = (size_t)(p - start);
+        const bool is_gives = len && token_is(start, len, "gives"), is_or = len && token_is(start, len, "or");
+        if (len && !is_gives && !is_or) {
+            ++tokens;
+            type = start;
+            type_len = len;
+            continue;
+        }
+        if (tokens) { // a parameter ended: an integer one unless it is a str or a cstr
+            if (!token_is(type, type_len, "str") && !token_is(type, type_len, "cstr")) {
+                uint8_t width = 0;
+                for (unsigned k = 0; k < 7; ++k) {
+                    if (k != PNX_W_64 && token_is(type, type_len, names[k]))
+                        width = (uint8_t)(k + 1);
+                }
+                unsigned *n = in_results ? &n_results : &n_args;
+                if (*n < PNX_MAX_WIDTHS)
+                    (in_results ? results : args)[*n] = width;
+                else if (width)
+                    return false;
+                ++*n;
+            }
+            tokens = 0;
+        }
+        if (is_gives) {
+            in_results = true;
+        } else if (is_or) {
+            break; // "or fail" ends it; pnx_signature_counts checked the rest
+        } else if (*p == ',') {
+            ++p;
+        } else if (*p == ')') {
+            break;
+        } else {
+            return false;
+        }
+    }
+    return true;
+}
+
+// The widths of a host word's narrow results, kept with it (RFC-0025).
+static bool host_widths(pnx_host *h) {
+    uint8_t args[PNX_MAX_WIDTHS], results[PNX_MAX_WIDTHS];
+    if (!pnx_signature_widths(h->signature, args, results))
+        return false;
+    for (unsigned k = PNX_HOST_WIDTHS; k < PNX_MAX_WIDTHS; ++k) {
+        if (results[k])
+            return false;
+    }
+    __builtin_memcpy(h->res_width, results, PNX_HOST_WIDTHS);
+    return true;
+}
+
 // ---- opening ---------------------------------------------------------------------------
 
 pinax_err pinax_open(pinax_mem block, const pinax_config *config, pinax_state **out) {
@@ -419,7 +490,7 @@ pinax_err pinax_register(pinax_state *st, const char *module, const pinax_word_d
         if (!defs[k].name || !defs[k].signature || !defs[k].fn || !copy_text(h->module, sizeof h->module, module) ||
             !copy_text(h->name, sizeof h->name, defs[k].name) ||
             !copy_text(h->signature, sizeof h->signature, defs[k].signature) ||
-            !pnx_signature_counts(h->signature, &h->counts))
+            !pnx_signature_counts(h->signature, &h->counts) || !host_widths(h))
             return fail(st, PINAX_ERR_ARGUMENT, "host word: bad name or signature");
         h->fn = defs[k].fn;
         h->user = defs[k].user;
@@ -2634,6 +2705,15 @@ pinax_err pinax_run(pinax_state *st, pinax_word word, const pinax_args *args) {
     const pnx_counts n = st->word_counts[word];
     if ((n.int_args && !(args && args->i)) || (n.str_args && !(args && args->s)))
         return fail(st, PINAX_ERR_ARGUMENT, "arguments missing");
+    if (n.int_args) { // an argument of a narrow type must be a value of it (RFC-0025)
+        uint8_t aw[PNX_MAX_WIDTHS], rw[PNX_MAX_WIDTHS];
+        if (pnx_signature_widths(rec->signature, aw, rw)) {
+            for (uint32_t k = 0; k < n.int_args && k < PNX_MAX_WIDTHS; ++k) {
+                if (!pnx_width_holds(args->i[k], aw[k]))
+                    return fail(st, PINAX_ERR_ARGUMENT, "an argument lies outside the range of its narrow integer type");
+            }
+        }
+    }
     if (st->host_cur)
         return run_nested(st, word, args);
     if (rec->int_cells > st->int_slots || rec->str_cells > st->str_slots)
@@ -3066,8 +3146,11 @@ static pinax_err wake(pinax_state *st, const pnx_wait *w, int64_t *ibank, pnx_sc
     const pnx_counts n = w->host->counts;
     if ((n.int_results && !(results && results->ri)) || (n.str_results && !(results && results->rs)))
         return PINAX_ERR_ARGUMENT;
-    for (uint32_t k = 0; k < n.int_results; ++k)
+    for (uint32_t k = 0; k < n.int_results; ++k) {
+        if (k < PNX_HOST_WIDTHS && !pnx_width_holds(results->ri[k], w->host->res_width[k])) // RFC-0025
+            return PINAX_ERR_OVERFLOW;
         ibank[w->ia + n.int_args + k] = results->ri[k];
+    }
     for (uint32_t k = 0; k < n.str_results; ++k) {
         const pinax_str s = results->rs[k];
         if (s.len > region_len - *region_used)
@@ -3303,7 +3386,8 @@ pinax_err pnx_extern_link(pinax_state *st, const char *module, const char *name,
     if (!copy_text(made.module, sizeof made.module, module) || !copy_text(made.name, sizeof made.name, name) ||
         !copy_text(made.signature, sizeof made.signature, signature))
         return fail(st, PINAX_ERR_ARGUMENT, "extern: the library or function name is too long");
-    if (!pnx_signature_counts(made.signature, &made.counts) || !extern_layout(st, made.signature, &made))
+    if (!pnx_signature_counts(made.signature, &made.counts) || !extern_layout(st, made.signature, &made) ||
+        !host_widths(&made))
         return fail(st, PINAX_ERR_TYPE,
                     "extern: int, handle, str and cstr arguments (eight for C at most), one int or handle result; "
                     "or fail only with a handle result");

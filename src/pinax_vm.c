@@ -167,6 +167,12 @@ static pinax_err host_call(pinax_state *st, const pnx_host *h, int64_t *ia, pnx_
         }
         return err;
     }
+    for (uint32_t k = 0; k < n.int_results && k < PNX_HOST_WIDTHS; ++k) { // a result of a narrow type (RFC-0025)
+        if (!pnx_width_holds(ia[n.int_args + k], h->res_width[k])) {
+            *fault = true;
+            return PINAX_ERR_OVERFLOW;
+        }
+    }
     for (uint32_t k = 0; k < n.str_results; ++k) {
         pnx_scell *cell = &sa[n.str_args + k];
         if (rs[k].len > UINT32_MAX) {

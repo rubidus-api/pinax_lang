@@ -15,6 +15,8 @@
 #define PNX_MAX_STR_ARGS 8
 static_assert(PNX_SEG_HOST + PNX_MAX_STR_ARGS <= PNX_SEG_KEPT, "every string argument of a run has a segment");
 #define PNX_MAX_STR_RESULTS 4
+#define PNX_MAX_WIDTHS 16 // integer arguments or results of a signature whose narrow types are checked (RFC-0025)
+#define PNX_HOST_WIDTHS 8 // of those, the results a host word keeps the widths of
 
 // A string value: bytes `offset .. offset + length` of a segment. Never an address, so the
 // block can be copied or mapped elsewhere and the value still holds.
@@ -87,6 +89,10 @@ typedef struct pnx_host {
     void         *user;
     uint32_t      flags;
     pnx_counts    counts;
+    // the narrow types of the results (RFC-0025): per integer result, a width code plus one, or 0
+    // where the value is an int, a u64 or anything else that takes 64 bits. Arguments need no
+    // check: the compiler typed them. A narrow result beyond the eighth refuses the registration.
+    uint8_t       res_width[PNX_HOST_WIDTHS];
     // a C function named by `extern`: how its arguments are laid out for the call
     pinax_extern_fn ext;
     uint8_t       ext_n, ext_result; // parameters; the result: PNX_XA_NONE, PNX_XA_INT or a handle
@@ -335,6 +341,23 @@ extern const pnx_opinfo pnx_ops_info[PNX_OP_COUNT];
 
 // Counts the int and str parameters and results of "(a int, b str gives r int or fail)".
 bool pnx_signature_counts(const char *signature, pnx_counts *out);
+// The narrow types of a signature (RFC-0025): for the first PNX_MAX_WIDTHS integer arguments and
+// results, a width code plus one where the type is u8 u16 u32 i8 i16 i32, else 0. False when a
+// narrow type lies beyond that many.
+bool pnx_signature_widths(const char *signature, uint8_t args[PNX_MAX_WIDTHS], uint8_t results[PNX_MAX_WIDTHS]);
+// Whether `value` is one of the width that `code_plus_one` names (0: every value).
+static inline bool pnx_width_holds(int64_t value, uint8_t code_plus_one) {
+    switch (code_plus_one) {
+    case 0: return true;
+    case PNX_W_U8 + 1: return value >= 0 && value <= 255;
+    case PNX_W_U16 + 1: return value >= 0 && value <= 65535;
+    case PNX_W_U32 + 1: return value >= 0 && value <= 4294967295ll;
+    case PNX_W_I8 + 1: return value >= -128 && value <= 127;
+    case PNX_W_I16 + 1: return value >= -32768 && value <= 32767;
+    case PNX_W_I32 + 1: return value >= -2147483648ll && value <= 2147483647ll;
+    default: return true;
+    }
+}
 
 // Runs from state->pc until the top word returns, faults, fails or the budget runs out.
 pinax_err pnx_execute(pinax_state *state);

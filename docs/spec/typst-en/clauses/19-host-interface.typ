@@ -53,7 +53,10 @@ user pointer and flags. Signatures are checked once, here. Register words before
 #para("2")[A host function receives `(call, user, args)`. Arguments and results are in arrays by type: integers (and
 `bool`, characters, handles and declared types over `int`) in `args->i[]` and `args->ri[]`, strings in `args->s[]` and
 `args->rs[]`, in the order of the signature, counted from 0 within each type. The integer pointers point straight at the
-state's slots.]
+state's slots. A narrow integer of the signature (7.6) travels as one 64-bit slot, and after the function returns the
+processor checks the range of each result: outside it is the fault `overflow` (the result of a waiting word gets the
+same check in `pinax_complete` and ends with that code). An argument of `pinax_run` outside its narrow type is
+`PINAX_ERR_ARGUMENT`, and nothing runs.]
 
 #para("3")[When the function returns something other than `PINAX_OK`, a word whose signature has `or fail` fails with
 that code (11.2), and a word without it ends the run with a fault.]
