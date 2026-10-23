@@ -2,7 +2,7 @@
 #show: document-setup.with(
   title: "Pinax 표준",
   subtitle: "끼워 쓰는 스크립트 언어 Pinax 의 정의",
-  version: "0.9.0 판",
+  version: "0.9.1 판",
   date: "2026년 10월")
 
 #include "clauses/01-scope.typ"
