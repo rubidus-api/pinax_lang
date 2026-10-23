@@ -94,7 +94,8 @@ typedef struct pinax_config {
 PINAX_API pinax_err pinax_open(pinax_mem block, const pinax_config *config, pinax_state **out);
 PINAX_API void      pinax_close(pinax_state *state); /* closes the handles still open */
 
-/* After PINAX_ERR_NO_ROOM: the block size that would have been enough. */
+/* After PINAX_ERR_NO_ROOM: at least the block size that would have been enough (the size of
+ * what was being taken when the block ran out; a load may take more after that). */
 PINAX_API size_t    pinax_needed(const pinax_state *state);
 /* Text of the last failure, valid until the next call on this state. */
 PINAX_API pinax_str pinax_error_text(const pinax_state *state);

@@ -22,7 +22,7 @@ static void report(pinax_state *st, const char *what, pinax_err err) {
 }
 
 int main(void) {
-    static unsigned char block[256 * 1024];
+    static unsigned char block[256 * 1024]; /* the state takes about 150 KB, a load its working memory */
     pinax_config config = {.struct_size = sizeof config, .region_bytes = 4096, .budget = 10000};
     pinax_state *st;
     pinax_err err = pinax_open((pinax_mem){block, sizeof block}, &config, &st);

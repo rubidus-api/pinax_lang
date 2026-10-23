@@ -88,7 +88,8 @@ typedef struct entry {
 // The names written in a signature. They are wanted while the source that wrote them is
 // compiled (to bind inputs, to print the signature); the tables kept for later loads drop them.
 typedef struct signames {
-    name in[MAX_PARAMS], out[MAX_PARAMS];
+    uint8_t n_in;          // the inputs' names come first, then the results'
+    name    all[];         // as many as the signature has parameters: taken once, at its exact size
 } signames;
 
 typedef struct sig {
@@ -100,7 +101,11 @@ typedef struct sig {
 } sig;
 
 static name sig_in_name(const sig *s, uint32_t k) {
-    return s->names ? s->names->in[k] : (name){0};
+    return s->names ? s->names->all[k] : (name){0};
+}
+
+static name sig_out_name(const sig *s, uint32_t k) {
+    return s->names ? s->names->all[s->names->n_in + k] : (name){0};
 }
 
 typedef struct wordsym {
@@ -159,6 +164,7 @@ typedef struct shot {
 
 typedef struct block {
     uint8_t  kind;
+    uint8_t  depth;      // its place in fn.blocks
     bool     has_else, has_out, targeted;
     name     name;       // loop name
     uint32_t head;       // loop: first instruction
@@ -198,7 +204,10 @@ typedef struct vec {
 typedef struct fn {
     entry    stack[MAX_STACK];
     uint32_t depth;
-    block    blocks[MAX_BLOCKS];
+    // The blocks open here, by depth. A record is taken from the working memory the first time a
+    // block is open at that depth and kept for the next ones: a body pays for the nesting it has,
+    // not for the deepest nesting allowed (and the records never move).
+    block   *blocks[MAX_BLOCKS];
     uint32_t n_blocks;
     local    locals[MAX_LOCALS];
     uint32_t n_locals;
@@ -897,7 +906,8 @@ static bool parse_sig(comp *c, sig *s) {
         return syntax(c, "a signature is expected here: ( inputs gives results )");
     if (!advance(c))
         return false;
-    bool outputs = false, any_named = false, any_bare = false;
+    bool outputs = false, any_named = false, any_bare = false, names_written = false;
+    name in_names[MAX_PARAMS] = {0}, out_names[MAX_PARAMS] = {0};
     for (;;) {
         if (c->tok.kind == PNX_T_RPAREN)
             break;
@@ -984,21 +994,15 @@ static bool parse_sig(comp *c, sig *s) {
         uint8_t *count = outputs ? &s->n_out : &s->n_in;
         if (*count == MAX_PARAMS)
             return syntax(c, "too many parameters");
-        if (param.length && !s->names && !c->drop_names) {
-            s->names = arena_alloc(c, sizeof(signames));
-            if (!s->names)
-                return false;
-        }
+        names_written = names_written || param.length;
         if (outputs) {
             s->out[*count] = t;
             s->out_owned[*count] = owned;
-            if (s->names)
-                s->names->out[*count] = param;
+            out_names[*count] = param;
         } else {
             s->in[*count] = t;
             s->in_owned[*count] = owned;
-            if (s->names)
-                s->names->in[*count] = param;
+            in_names[*count] = param;
             if (param.length)
                 any_named = true;
             else
@@ -1018,6 +1022,14 @@ static bool parse_sig(comp *c, sig *s) {
     if (any_named && any_bare)
         return type_error(c, "inputs are all named or all bare types, not a mix");
     s->named = any_named;
+    if (names_written && !c->drop_names) {
+        s->names = arena_alloc(c, sizeof(signames) + sizeof(name) * ((size_t)s->n_in + s->n_out));
+        if (!s->names)
+            return false;
+        s->names->n_in = s->n_in;
+        __builtin_memcpy(s->names->all, in_names, sizeof(name) * s->n_in);
+        __builtin_memcpy(s->names->all + s->n_in, out_names, sizeof(name) * s->n_out);
+    }
     return advance(c); // past the ")"
 }
 
@@ -1040,7 +1052,7 @@ static bool sig_text(const comp *c, const sig *s, char *out, size_t cap) {
             PUT("gives ", 6);
         }
         for (uint32_t k = 0; k < count; ++k) {
-            const name pn = !s->names ? (name){0} : side ? s->names->out[k] : s->names->in[k];
+            const name pn = side ? sig_out_name(s, k) : sig_in_name(s, k);
             const tid kt = side ? s->out[k] : s->in[k];
             if (is_block(kt)) { // word (effect), written out
                 char inner[72];
@@ -1814,7 +1826,7 @@ static bool name_is_free(comp *c, name n) {
     if (find_local(c->f, n) || name_is_global(c, n))
         return type_error(c, "this name is already visible here; a new name may not hide it");
     for (uint32_t k = 0; k < c->f->n_blocks; ++k) {
-        if (c->f->blocks[k].name.length && name_eq(c->f->blocks[k].name, n))
+        if (c->f->blocks[k]->name.length && name_eq(c->f->blocks[k]->name, n))
             return type_error(c, "this name is already visible here; a new name may not hide it");
     }
     return true;
@@ -3048,8 +3060,11 @@ static block *open_block(comp *c, uint8_t kind) {
         syntax(c, "blocks are nested too deeply");
         return NULL;
     }
-    block *b = &f->blocks[f->n_blocks++];
+    block *b = f->blocks[f->n_blocks];
+    if (!b && !(b = f->blocks[f->n_blocks] = arena_alloc(c, sizeof(block))))
+        return NULL;
     __builtin_memset(b, 0, sizeof *b);
+    b->depth = (uint8_t)f->n_blocks++;
     b->kind = kind;
     b->exits = b->else_jump = b->next_test = NONE;
     b->locals_mark = f->n_locals;
@@ -3067,7 +3082,7 @@ static block *open_block(comp *c, uint8_t kind) {
 
 // Locals made inside a block end with it.
 static void close_scope(fn *f, const block *b) {
-    while (f->n_defers && f->defers[f->n_defers - 1].block > (uint32_t)(b - f->blocks))
+    while (f->n_defers && f->defers[f->n_defers - 1].block > b->depth)
         --f->n_defers;
     for (uint32_t k = b->locals_mark; k < f->n_locals; ++k) {
         if (f->locals[k].drec != NONE)
@@ -3104,7 +3119,7 @@ static bool do_if(comp *c) {
 
 static bool do_else(comp *c) {
     fn *f = c->f;
-    block *b = f->n_blocks ? &f->blocks[f->n_blocks - 1] : NULL;
+    block *b = f->n_blocks ? f->blocks[f->n_blocks - 1] : NULL;
     if (!b || b->kind != B_IF || b->has_else)
         return syntax(c, "else without an open if");
     if (!f->dead) {
@@ -3209,7 +3224,7 @@ static bool leave_target(comp *c, block **out) {
             return false;
     }
     for (uint32_t k = f->n_blocks; k-- > 0;) {
-        block *b = &f->blocks[k];
+        block *b = f->blocks[k];
         if (b->kind == B_DO)
             return error_at(c, PINAX_ERR_SYNTAX, at.line, at.column,
                             "a loop is not left from inside a do block; the block is its own loop");
@@ -3241,7 +3256,7 @@ static bool do_leave(comp *c, pnx_word_id which) {
         return error_at(c, PINAX_ERR_TYPE, at.line, at.column,
                         "where a loop is left the stack must be as it was when the loop began");
     target->targeted = true;
-    const uint32_t from = (uint32_t)(target - f->blocks) + 1;
+    const uint32_t from = target->depth + 1;
     if (defers_from(f, from)) { // the defers inside the loop run on the way out
         lstate states[MAX_LOCALS];
         save_owns(f, states);
@@ -3275,7 +3290,7 @@ static bool do_leave(comp *c, pnx_word_id which) {
 
 static bool end_loop(comp *c, block *b) {
     fn *f = c->f;
-    if (!f->dead && !emit_defers(c, (uint32_t)(b - f->blocks) + 1)) // the end of one turn leaves the body
+    if (!f->dead && !emit_defers(c, b->depth + 1)) // the end of one turn leaves the body
         return false;
     if (!f->dead) {
         if (!settle_all(c))
@@ -3505,7 +3520,7 @@ static bool case_test(comp *c, block *b, int64_t value, bool last, uint32_t *bod
 // A token directly inside case ... end: the values of a branch, otherwise, or the end.
 static bool case_item(comp *c) {
     fn *f = c->f;
-    block *b = &f->blocks[f->n_blocks - 1];
+    block *b = f->blocks[f->n_blocks - 1];
     if (is_word(c, PNX_KW_end)) {
         land(c, &b->next_test);
         if (!b->has_otherwise && emit(c, PNX_ABX(PNX_FAULT, 0, PINAX_ERR_RANGE)) == NONE)
@@ -3564,7 +3579,7 @@ static bool case_item(comp *c) {
 
 static bool end_of(comp *c, block *b) {
     fn *f = c->f;
-    block *parent = b - 1;
+    block *parent = f->blocks[b->depth - 1]; // the case this branch belongs to
     if (!f->dead) {
         if (!settle_all(c))
             return false;
@@ -4297,7 +4312,7 @@ static bool copy_row(comp *c, uint32_t row, uint32_t dst, uint32_t from) {
 
 static bool end_do(comp *c, block *b) {
     fn *f = c->f;
-    if (!f->dead && !emit_defers(c, (uint32_t)(b - f->blocks) + 1)) // each run of the body leaves it
+    if (!f->dead && !emit_defers(c, b->depth + 1)) // each run of the body leaves it
         return false;
     if (b->use == USE_WITH || b->use == USE_BY)
         return end_rex_block(c, b);
@@ -6619,7 +6634,7 @@ static bool do_defer(comp *c) {
     fn *f = c->f;
     if (f->is_top)
         return syntax(c, "defer belongs inside a definition");
-    if (f->n_blocks && f->blocks[f->n_blocks - 1].kind != B_LOOP && f->blocks[f->n_blocks - 1].kind != B_DO)
+    if (f->n_blocks && f->blocks[f->n_blocks - 1]->kind != B_LOOP && f->blocks[f->n_blocks - 1]->kind != B_DO)
         return syntax(c, "defer is written right in a word's body, a loop's body or a do block, not in a branch");
     if (f->n_defers == MAX_DEFERS)
         return syntax(c, "a word has at most 16 defers");
@@ -6644,7 +6659,7 @@ static bool body_token(comp *c) {
     if (c->see)
         see_line(c, c->tok.line);
     const pnx_token t = c->tok;
-    if (f->n_blocks && f->blocks[f->n_blocks - 1].kind == B_CASE)
+    if (f->n_blocks && f->blocks[f->n_blocks - 1]->kind == B_CASE)
         return case_item(c);
     if (c->data_only && t.kind == PNX_T_RESERVED && t.word != PNX_KW_true && t.word != PNX_KW_false &&
         t.word != PNX_KW_to && t.word != PNX_KW_set)
@@ -6759,7 +6774,7 @@ static bool body_token(comp *c) {
     case PNX_KW_end: {
         if (f->n_blocks == 0)
             return syntax(c, "end without anything open");
-        block *b = &f->blocks[f->n_blocks - 1];
+        block *b = f->blocks[f->n_blocks - 1];
         switch (b->kind) {
         case B_IF: return end_if(c, b) && advance(c);
         case B_LOOP: return end_loop(c, b) && advance(c);
@@ -6825,12 +6840,19 @@ static bool finish_registers(comp *c, fn *f, uint16_t cells[2]) {
 }
 
 static void fn_reset(fn *f, bool is_top) {
-    const vec code = f->code, lines = f->lines;
+    // the storage of the body before stays for the next one: its code, lines and debug records,
+    // and the block records taken so far
+    const vec code = f->code, lines = f->lines, dlocals = f->dlocals;
+    block *blocks[MAX_BLOCKS];
+    __builtin_memcpy(blocks, f->blocks, sizeof blocks);
     __builtin_memset(f, 0, sizeof *f);
+    __builtin_memcpy(f->blocks, blocks, sizeof blocks);
     f->code = code;
     f->code.n = 0;
     f->lines = lines;
     f->lines.n = 0;
+    f->dlocals = dlocals;
+    f->dlocals.n = 0;
     f->def_at = NONE;
     f->tail_at = NONE;
     f->is_top = is_top;

@@ -6,7 +6,7 @@
 #include <stdio.h>
 #include <string.h>
 
-static unsigned char block[256 * 1024];
+static unsigned char block[256 * 1024]; /* the state takes about 150 KB, a load its working memory */
 
 int main(void) {
     pinax_config config = {.struct_size = sizeof config, .budget = 50000};

@@ -19,6 +19,13 @@ A host has four jobs:
 
 #ex("manual", "14-host.c")
 
+#qa[How big must the block be?][Opening takes about 150 KB with the defaults. Most of it is the main run's region (64 KB)
+and the integer bank (32 KB), which `config.region_bytes` and `config.int_slots` can shrink. While a load runs, what is
+left of the block is the compiler's working memory: about 20 KB for a small source, about 1 KB per word, and 64 KB more
+when there is a constant pattern. When the load ends only the program stays and the working memory is free again. The
+256 KB of the examples is plenty for a short script; for a long one, after `PINAX_ERR_NO_ROOM`, open again with at
+least the size `pinax_needed` gives. That size is a lower bound, so it may fall short once more.]
+
 Arguments and results pass in arrays by type: integers in `args->i[]` and `args->ri[]`, strings in `args->s[]` and
 `args->rs[]`. When a host word returns something other than `PINAX_OK`, a word whose signature has `or fail` fails (the
 script takes it with `or_else`), and a word without it becomes a fault.
