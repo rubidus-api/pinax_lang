@@ -1720,7 +1720,7 @@ static uint64_t storage_bytes(const pnx_globalrec *rec) {
         return (uint64_t)rec->capacity *
                (sizeof(pnx_task) + (uint64_t)rec->elem_bytes * (PNX_TASK_INTS * 8 + PNX_TASK_STRS * sizeof(pnx_scell) +
                                                                  sizeof(pnx_frame)) +
-                ((rec->reserved + 15u) & ~15u));
+                ((PNX_TASKS_REGION(rec) + 15u) & ~15u));
     default: return 0;
     }
 }
@@ -1913,7 +1913,7 @@ pinax_err pnx_load_container(pinax_state *st, pinax_str bytecode) {
             break;
         }
         case PNX_G_TASKS: // elem_bytes: the call depth of a task; reserved: the bytes of its region
-            if (rec->capacity > 4096 || rec->elem_bytes == 0 || rec->elem_bytes > 4096 || rec->reserved > (1u << 24))
+            if (rec->capacity > 4096 || rec->elem_bytes == 0 || rec->elem_bytes > 4096 || PNX_TASKS_REGION(rec) > (1u << 24))
                 goto rollback;
             break;
         default: goto rollback;
@@ -1950,7 +1950,7 @@ pinax_err pnx_load_container(pinax_state *st, pinax_str bytecode) {
         if (rec->kind == PNX_G_TASKS) { // every task gets its registers, its control stack and its region
             pnx_task *tasks = (pnx_task *)(void *)g->ptr;
             uint8_t  *room = (uint8_t *)(tasks + g->capacity);
-            const uint32_t depth = rec->elem_bytes, region = (rec->reserved + 15u) & ~15u;
+            const uint32_t depth = rec->elem_bytes, region = (PNX_TASKS_REGION(rec) + 15u) & ~15u;
             if ((uint64_t)(room - st->region) + bytes > UINT32_MAX) {
                 why = "block too large for tasks: their regions must lie within 4 GiB of the main one";
                 goto rollback;
@@ -1967,7 +1967,8 @@ pinax_err pnx_load_container(pinax_state *st, pinax_str bytecode) {
                 t->ctrl = (pnx_frame *)(void *)room;
                 room += (size_t)depth * sizeof(pnx_frame);
                 t->region_base = (uint32_t)(room - st->region);
-                t->region_bytes = rec->reserved;
+                t->region_bytes = PNX_TASKS_REGION(rec);
+                t->apart = (rec->reserved & PNX_TASKS_APART) != 0;
                 room += region;
             }
             g->head = g->capacity - 1; // run_all takes the slot after the one it took last: slot 0 first
@@ -2587,9 +2588,31 @@ static void fault_locals(pinax_state *st) {
     }
 }
 
+void pnx_note_task_fault(pinax_state *st, pinax_err err) {
+    char kept[sizeof st->where];
+    __builtin_memcpy(kept, st->where, sizeof kept);
+    fault_place(st, err);
+    __builtin_memcpy(st->task_where, st->where, sizeof st->task_where);
+    __builtin_memcpy(st->where, kept, sizeof kept); // the run's own fault text is not this
+    fault_locals(st);
+    ++st->task_faults;
+    st->task_fault_kept = true;
+}
+
+uint64_t pinax_task_faults(const pinax_state *st, pinax_str *last) {
+    if (!st)
+        return 0;
+    if (last)
+        *last = (pinax_str){(const unsigned char *)st->task_where, __builtin_strlen(st->task_where)};
+    return st->task_faults;
+}
+
+
 static pinax_err deliver(pinax_state *st, pinax_err err, const pinax_args *results) {
-    if (err == PINAX_OK)
+    if (err == PINAX_OK && !st->task_fault_kept)
         st->fault_n = 0;
+    if (err != PINAX_SUSPENDED && err != PINAX_WAITING)
+        st->task_fault_kept = false;
     if (err != PINAX_OK) {
         if (err != PINAX_SUSPENDED && err != PINAX_WAITING) {
             fault_locals(st);

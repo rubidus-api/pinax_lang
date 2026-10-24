@@ -253,6 +253,22 @@ pinax_err pnx_exec_end(pinax_state *st, pinax_err result, uint32_t at, uint32_t 
     return result;
 }
 
+bool pnx_fault_apart(pinax_state *st, pinax_err result, uint32_t at, uint32_t ibase, uint32_t sbase) {
+    if (!st->task || !st->task->apart || result == PINAX_ERR_DEADLOCK || st->nest != 0)
+        return false;
+    st->fault_pc = at;
+#if defined(PINAX_CHECK_PROOFS) // RFC-0023: a check the loader proved away must never fire
+    if (pnx_proven_fired(st, st->ibank + ibase, st->fault_pc, result))
+        __builtin_trap();
+#endif
+    st->fault_ibase = ibase;
+    st->fault_sbase = sbase;
+    pnx_fault_banks(st);
+    pnx_note_task_fault(st, result);
+    task_leave(st, true); // the task is over; whoever resumed it goes on
+    return true;
+}
+
 // The budget ran out at `at` (the CHECK, which runs again when the run goes on).
 pinax_err pnx_exec_suspend(pinax_state *st, uint32_t at, uint32_t ibase, uint32_t sbase, uint32_t depth,
                            uint64_t count) {

@@ -77,8 +77,8 @@ having no `or fail`.]
 == Faults <errors-fault>
 
 #para("1")[A fault ends the run on the spot. It is the return value of the host function that started the run
-(`pinax_run`, `pinax_load` and so on). A fault inside a task also ends the whole run and every task (14.4). The state
-remains and takes the next run.]
+(`pinax_run`, `pinax_load` and so on). A fault inside a task also ends the whole run and every task, unless the
+task's group is declared `apart` (14.4). The state remains and takes the next run.]
 
 #para("2")[Faults come from:
 - arithmetic overflow (`overflow`) and division by zero (`div_zero`) --- 7.1, 15.1;

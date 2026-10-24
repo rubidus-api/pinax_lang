@@ -11,6 +11,7 @@ pnx test file.pnx
 pnx repl
 pnx see file.pnx
 pnx fmt file.pnx
+pnx export-c file.pnx [NAME]
 ```]
 
 == Running <pnx-run>
@@ -80,3 +81,7 @@ does; the checks still run.]
 breaks and remarks stay where they are. Formatting the result again changes nothing.]
 
 #ex("spec", "20-fmt.pnx")
+
+#para("3")[`pnx export-c file.pnx [NAME]` loads the file as `pnx file.pnx` does but runs none of its code, and
+writes the program's code as C to standard output: a file that defines the table `NAME` (`pnx_native` when left out)
+for `pinax_native_attach` (19.11).]

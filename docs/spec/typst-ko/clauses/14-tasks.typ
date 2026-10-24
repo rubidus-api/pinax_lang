@@ -4,7 +4,7 @@
 
 #part("구문")
 ```ebnf
-tasks-decl = "tasks" NAME size [ size [ size ] ] ;   (* count, call depth, region bytes *)
+tasks-decl = "tasks" NAME size [ size [ size ] ] [ "apart" ] ;   (* count, call depth, region bytes *)
 ```
 
 #para("1")[*작업*은 한 상태 안에서 번갈아 도는 실행 흐름이다. 작업은 스스로 양보하는 자리(`yield`, 기다리는
@@ -13,7 +13,8 @@ tasks-decl = "tasks" NAME size [ size [ size ] ] ;   (* count, call depth, regio
 
 #para("2")[`tasks 이름 수 [깊이 [구역]]` 은 #term("작업 묶음", en: "task group")을 선언한다. 묶음은 작업을 `수`
 개까지 담는다. 작업마다 자기 호출 깊이(`깊이`)와 자기 구역(`구역` 바이트)이 있다. 줄이면 처리기의 기본값이다.
-묶음의 이름은 그 묶음의 작업을 가리키는 값의 타입이다.]
+묶음의 이름은 그 묶음의 작업을 가리키는 값의 타입이다. 끝에 `apart` 를 쓰면 묶음의 작업 하나에서 난 결함이 그 작업만
+끝낸다(14.4 (3a)). `apart` 는 그 자리에서만 선언의 낱말이다.]
 
 == 만들기와 돌리기 <tasks-run>
 
@@ -56,8 +57,8 @@ tasks-decl = "tasks" NAME size [ size [ size ] ] ;   (* count, call depth, regio
 #ex("spec", "14-queue-wait.pnx")
 
 #para("2")[큐를 기다리는 작업은 어떤 큐든 바뀌기 전에는 다시 돌지 않는다. `run_all` 이 남은 작업이 모두 큐를
-기다리고 호스트를 기다리는 작업은 없다는 것을 알면, 이제 큐를 바꿀 것이 없다: 이것이 결함 `deadlock` 이다. 작업
-안의 결함처럼 모든 작업을 끝낸다. 호스트를 기다리는 작업이 있으면 상태는 전처럼 기다리고(`PINAX_WAITING`), 그
+기다리고 호스트를 기다리는 작업은 없다는 것을 알면, 이제 큐를 바꿀 것이 없다: 이것이 결함 `deadlock` 이다.
+`apart` 없는 묶음의 작업 안의 결함처럼(14.4) 모든 작업을 끝낸다. `apart` 묶음의 작업도 끝낸다. 호스트를 기다리는 작업이 있으면 상태는 전처럼 기다리고(`PINAX_WAITING`), 그
 작업이 이어 돌며 하는 일이 다른 작업을 풀 수 있다.]
 
 #ex("spec", "14-deadlock.pnx")
@@ -89,9 +90,14 @@ tasks-decl = "tasks" NAME size [ size [ size ] ] ;   (* count, call depth, regio
 
 #part("결함")
 
-#para("3")[작업 안의 결함은 그 실행 전체와 모든 작업을 끝낸다. 결함은 주 실행의 결함처럼 호스트에게 간다.
-상태는 남아 다음 실행을 받는다.]
+#para("3")[`apart` 없는 묶음의 작업 안의 결함은 그 실행 전체와 모든 작업을 끝낸다. 결함은 주 실행의 결함처럼 호스트에게
+간다. 상태는 남아 다음 실행을 받는다.]
 #ex("spec", "14-fault.pnx")
+
+#para("3a")[`apart` 로 선언한 묶음의 작업 안의 결함은 그 작업만 끝낸다. 그 자리는 다시 비고, 그 작업을 이어 돌린 쪽은
+작업이 끝났을 때처럼 이어 간다. `run_all` 은 다음 작업을 잡고, `resume` 은 `true` 를 준다. 작업이 그때까지 저장한 것은
+남는다. 실행은 계속되고, 호스트는 `pinax_task_faults` 로 그 결함을 안다(19.10 (3)).]
+#ex("spec", "14-apart.pnx")
 
 #para("4")[두 작업이 같은 구역을 쓰는 일은 12.3 의 검사가 보지 않는다. 작업마다 자기 구역이 있으므로 보통은
 일어나지 않는다.]

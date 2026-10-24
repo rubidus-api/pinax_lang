@@ -10,6 +10,7 @@ pnx test file.pnx
 pnx repl
 pnx see file.pnx
 pnx fmt file.pnx
+pnx export-c file.pnx [NAME]
 ```]
 
 == 돌리기 <pnx-run>
@@ -76,3 +77,6 @@ test = "test" NAME { body } "end" ;
 그대로다. 고친 글을 다시 고쳐도 같다.]
 
 #ex("spec", "20-fmt.pnx")
+
+#para("3")[`pnx export-c file.pnx [NAME]` 은 `pnx file.pnx` 처럼 파일을 적재하되 그 코드는 하나도 돌리지 않고, 프로그램의
+코드를 C 로 표준 출력에 쓴다. `pinax_native_attach`(19.11)에 줄 표 `NAME`(빠지면 `pnx_native`)을 정의하는 파일이다.]

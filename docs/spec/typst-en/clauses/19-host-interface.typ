@@ -229,3 +229,25 @@ instructions run. It is for choosing the block and the capacities.]
 with their values at that time (up to 16; text cut to its first 32 bytes, and shown only when its bytes lie in memory
 the state can vouch for). They are what `pnx` shows below a fault
 (11.3).]
+
+#para("3")[`pinax_task_faults` gives how many tasks of `apart` groups (14.4 (3a)) ended with a fault since the state
+opened, and where the last one happened and why, in the form of a fault's place (`module:line: error`).
+After the run that had it, `pinax_fault_local` reads that task's locals, until the next run ends.]
+
+== Exported code <host-native>
+
+#para("1")[`pnx export-c` (20 (3)) writes a program's code as C. The host compiles that file with `pinax_native.h` of
+the same build and gets one `pinax_native` table. `pinax_native_attach(state, table)` makes the state run its code
+through the table from the first run at which the program is the one exported: the same code, the same start of
+every word, the same build. Given before the loads, it serves a load's own code too. While the program differs (after
+another load) the table is not used; `NULL` takes it back.]
+
+#para("2")[A program and a host see the same as interpreted: results, faults with their places and locals, failures,
+the budget (a run stops at the same CHECKs), waiting and tasks. Exported code does not make the checks the loader
+proved cannot fire (20 (1b)); a build with `PINAX_CHECK_PROOFS` makes them and stops the program when one fires.]
+
+#para("3")[An image or a clone does not carry the table: attach it again. Attaching while a run is suspended or waits
+is `PINAX_ERR_STATE`; a table whose `struct_size` is another is `PINAX_ERR_ARGUMENT`.]
+
+#para("4")[The table is data the host vouches for, as an image is (4 (2a)): only its hash is checked, not its machine
+code. For exported code the guarantee of 4 (2a) holds as far as the loader's proofs are right.]

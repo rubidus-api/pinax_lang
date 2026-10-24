@@ -554,6 +554,11 @@ suspended:
     return pnx_exec_suspend(st, (uint32_t)(pc - code), ibase, sbase, depth, count);
 
 finished:
+    if (result != PINAX_OK && pnx_fault_apart(st, result, (uint32_t)(pc - code), ibase, sbase)) {
+        LOAD_CTX(); // a task of an `apart` set faulted: it alone ends (RFC-0029)
+        result = PINAX_OK;
+        NEXT();
+    }
     return pnx_exec_end(st, result, (uint32_t)(pc - code), ibase, sbase, R, floor, left, count);
 }
 

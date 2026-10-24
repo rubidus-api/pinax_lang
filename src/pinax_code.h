@@ -399,6 +399,7 @@ enum {
     PNX_G_POOL,   // capacity records of elem_bytes bytes, then per slot a 32-bit generation (odd while
                   // the slot is handed out) and a 32-bit link of the free list
     PNX_G_TASKS,  // capacity tasks; elem_bytes is the call depth of each, reserved the bytes of its region
+                  // (and PNX_TASKS_APART: a fault in one of them ends that task only, RFC-0029)
     PNX_G_COUNT
 };
 
@@ -482,6 +483,8 @@ typedef struct pnx_globalrec {
     char     type[32]; // the type as declared, for pinax_global_find(); may be empty
     uint32_t kind, elem_bytes, capacity, reserved;
 } pnx_globalrec;
+#define PNX_TASKS_APART (1u << 31) // in `reserved` of a set of tasks declared `apart` (RFC-0029 P-L1)
+#define PNX_TASKS_REGION(rec) ((rec)->reserved & ~PNX_TASKS_APART) // the bytes of each task's region
 #define PNX_GREC_WIDTH(rec) (((rec)->reserved >> 8) & 0xffu) // 0: 64-bit cells; else a width code plus one
 
 typedef struct pnx_importrec {

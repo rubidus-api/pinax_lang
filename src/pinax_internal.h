@@ -180,6 +180,7 @@ typedef struct pnx_task {
     uint8_t          state;
     bool             cancelled, yielded;
     bool             blocked;    // it yielded for a queue, when the queue count was blocked_at
+    bool             apart;      // its set is declared `apart`: a fault ends this task only (RFC-0029)
     uint64_t         blocked_at;
     pnx_wait         wait;       // the host operation it waits for
     pinax_err        wake_fail;  // what the operation failed with, for the failure word it goes on at
@@ -294,6 +295,9 @@ struct pinax_state {
     uint32_t fault_pc;             // where the last run ended with a fault: the code word after the instruction
     const uint8_t *lines;          // pnx_linerec records, head->n_lines of them (not aligned)
     char     where[112];           // "module:line: error" of the last fault, for pinax_error_text()
+    char     task_where[112];      // the same of the last task of an `apart` set that faulted (RFC-0029)
+    uint64_t task_faults;          // how many such tasks ended with a fault
+    bool     task_fault_kept;      // this run had one: its locals stay readable after the run ends well
     uint32_t fault_ibase, fault_sbase; // the register windows of the word that faulted
     int64_t   *fault_ibank;            // in the banks of the run it faulted in (a task's, perhaps),
     pnx_scell *fault_sbank;            // until fault_locals() has read them
@@ -407,6 +411,10 @@ uint64_t pnx_native_hash(const pinax_state *st);
 pinax_err pnx_run_code(pinax_state *st);
 // The program's code as C (pinax_export.c): `name` is the table's name. 0 when `cap` is too small.
 size_t pnx_export_c(const pinax_state *st, const char *name, char *out, size_t cap);
+// A fault in a task of an `apart` set (RFC-0029 P-L1): noted (pnx_note_task_fault), the task ended, the
+// state left in the context of whoever resumed it. False when the fault ends the run as before.
+bool pnx_fault_apart(pinax_state *st, pinax_err result, uint32_t at, uint32_t ibase, uint32_t sbase);
+void pnx_note_task_fault(pinax_state *st, pinax_err err);
 // The two ways out of a run that pnx_execute, pnx_step and exported code share (pinax_vm.c).
 pinax_err pnx_exec_end(pinax_state *st, pinax_err result, uint32_t at, uint32_t ibase, uint32_t sbase,
                        const int64_t *R, uint32_t floor, uint64_t left, uint64_t count);

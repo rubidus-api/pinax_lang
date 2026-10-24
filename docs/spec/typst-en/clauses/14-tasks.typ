@@ -4,7 +4,7 @@
 
 #part("Syntax")
 ```ebnf
-tasks-decl = "tasks" NAME size [ size [ size ] ] ;   (* count, call depth, region bytes *)
+tasks-decl = "tasks" NAME size [ size [ size ] ] [ "apart" ] ;   (* count, call depth, region bytes *)
 ```
 
 #para("1")[A *task* is a flow of execution that takes turns with others inside one state. Tasks change only where one
@@ -13,7 +13,8 @@ comes in between two yields of one task. Tasks are not threads: a state runs on 
 
 #para("2")[`tasks NAME count [depth [region]]` declares a #term("task group") of up to `count` tasks. Each task has its
 own call depth (`depth`) and its own region (`region` bytes); left out, they are the processor's defaults. The name of
-the group is the type of the values that refer to its tasks.]
+the group is the type of the values that refer to its tasks. Written last, `apart` makes a fault inside one of the
+group's tasks end that task only (14.4 (3a)); `apart` is a word of the declaration only in that place.]
 
 == Making and running tasks <tasks-run>
 
@@ -58,7 +59,8 @@ once, cancelling is not looked at.]
 
 #para("2")[A task that waits for a queue does not run again until some queue has changed. When `run_all` finds that
 every task left waits for a queue and none waits for the host, nothing can change a queue any more: that is the fault
-`deadlock`. Like a fault inside a task, it ends every task. While a task waits for the host, the state waits
+`deadlock`. Like a fault inside a task of a group without `apart` (14.4), it ends every task, those of `apart`
+groups too. While a task waits for the host, the state waits
 (`PINAX_WAITING`) as before; what that task does when it goes on can free the others.]
 
 #ex("spec", "14-deadlock.pnx")
@@ -90,9 +92,14 @@ through globals and queues.]
 
 #part("Faults")
 
-#para("3")[A fault inside a task ends the whole run and every task. The fault goes to the host like a fault of the main
-run. The state remains and takes the next run.]
+#para("3")[A fault inside a task of a group without `apart` ends the whole run and every task. The fault goes to the
+host like a fault of the main run. The state remains and takes the next run.]
 #ex("spec", "14-fault.pnx")
+
+#para("3a")[A fault inside a task of a group declared `apart` ends that task only. Its slot is free again, and
+whoever resumed it goes on as after the task's end: `run_all` takes the next task, `resume` gives `true`. What the
+task stored until then stays. The run goes on; the host learns of the fault through `pinax_task_faults` (19.10 (3)).]
+#ex("spec", "14-apart.pnx")
 
 #para("4")[Two tasks using the same region are not followed by the check of 12.3. Each task has a region of its own, so
 this does not normally happen.]

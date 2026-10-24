@@ -112,9 +112,13 @@ To give up on one request (a timeout, a client that went away), the host complet
 `PINAX_ERR_CANCELLED`. The word fails in the task that waits, `or_else` takes the failure, and the other requests are not
 touched. `pinax_abort` would end the whole run, and every request of the state with it.
 
+A fault in one request must not end the others. Declare the group of the request tasks `apart` (chapter 13): a task
+that faults then ends alone, and the host counts such faults, and reads where the last one happened, with
+`pinax_task_faults` (standard 19.10).
+
 #qa[What if the word that waits has no `or fail`?][Then a failure from the host can only become a fault, and a fault ends
-the whole run: every request of the state. A word the host may give up on is declared `or fail`, as `fetch` is above
-(standard 19.8).]
+the whole run: every request of the state, unless the group is `apart`. A word the host may give up on is declared
+`or fail`, as `fetch` is above (standard 19.8).]
 
 A task gives way only where it waits or yields. A request that computes for a long time holds the other requests of its
 state back until it waits or ends. The budget stops the whole state, not one task. Long work goes to a state of its own,
@@ -124,6 +128,22 @@ or gives way in its loop with `yield`.
 stores is seen by another. But a clone copies the whole state, its fixed parts and its program, for every request, and
 it must be closed again. A task costs only its own region and frames, as declared with `tasks` (standard 14 (2)). The
 tasks of one state share its globals, so what belongs to one request stays in its locals.]
+
+== Faster: the code as C
+
+When a program spends its time in integer loops, array work or many small words, its code can be compiled with the
+host's C compiler. `pnx export-c prog.pnx > prog_native.c` writes it, without running any of it; the host compiles
+that file next to its own (it includes `pinax_native.h`, which `./nob dist` writes beside `pinax.h`), and calls
+`pinax_native_attach(state, &pnx_native)` before or after loading the same program. Nothing else changes: results,
+faults, the budget, waiting and tasks are as before, and the state runs interpreted again when it loads something
+else (standard 19.11).
+
+#qa[How much faster is it?][Integer loops run two to seven times as fast, the checks the loader proved cannot fire
+being left out. Work in the library's string functions, and calls into the host, change little.]
+
+#mistake[Exported code is a separate program that no longer needs the state][It is not. It works on the state as the
+interpreter does, and the interpreter itself still does some instructions for it. Compile it with the same build of
+Pinax that exported it: another build's hash differs, and the table is then never used.]
 
 == In a web page and in node
 
@@ -159,4 +179,6 @@ and clones, and `extern` are in clauses 18 and 19 of the standard, with examples
   go on (19.8).
 - Each request is a task of its own. One request is given up by completing its token with a failure, the whole run by
   `pinax_abort` (14, 19.5, 19.8).
+- A group declared `apart` loses only the task that faults (14.4 (3a), 19.10).
+- Exported code runs a program's code compiled as C, with the same behaviour (19.11).
 ]

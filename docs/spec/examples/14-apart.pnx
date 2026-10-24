@@ -1,0 +1,12 @@
+rem run
+use io
+tasks workers 3 16 1024 apart
+word work (n int) cat ("100 / ", n, " = ", 100 n div) io.println end
+word demo ()
+  do 4 work end workers spawn or_else (e) return end drop
+  do 0 work end workers spawn or_else (e) return end drop   rem this one divides by zero
+  do 5 work end workers spawn or_else (e) return end drop
+  workers run_all
+  "the others finished" io.println
+end
+demo

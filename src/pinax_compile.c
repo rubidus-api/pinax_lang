@@ -7204,8 +7204,9 @@ static bool declare_extern(comp *c) {
 
 static bool declared_size(comp *c, uint32_t *out);
 
-// tasks NAME count [depth [region]] : a set of tasks (RFC-0005). Each has its own registers
-// for `depth` levels of calls and its own `region` bytes for the strings it builds.
+// tasks NAME count [depth [region]] [apart] : a set of tasks (RFC-0005). Each has its own registers
+// for `depth` levels of calls and its own `region` bytes for the strings it builds. `apart`: a
+// fault in one of them ends that task only (RFC-0029 P-L1).
 static bool declare_tasks(comp *c) {
     if (!advance(c))
         return false;
@@ -7231,6 +7232,11 @@ static bool declare_tasks(comp *c) {
             if (!advance(c))
                 return false;
         }
+    }
+    if (c->tok.kind == PNX_T_NAME && name_eq(tok_name(c), cname("apart"))) { // a word only in this place
+        g.key |= PNX_TASKS_APART;
+        if (!advance(c))
+            return false;
     }
     if (g.capacity > 4096)
         return syntax(c, "a set holds at most 4096 tasks");

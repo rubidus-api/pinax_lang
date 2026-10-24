@@ -40,7 +40,7 @@ decl        = "const" NAME literal
             | "record" NAME { field | "big_endian" } "end"
             | "type" NAME ( "int" | "bool" | "str" | "dec" "(" INT ")" )
             | "index" NAME NAME PATH
-            | "tasks" NAME size [ size [ size ] ]
+            | "tasks" NAME size [ size [ size ] ] [ "apart" ]
             | "extern" c-name "(" effect ")" "from" STRING [ "as" NAME ]
             | "test" NAME { body } "end" ;
 size        = INT | NAME ;

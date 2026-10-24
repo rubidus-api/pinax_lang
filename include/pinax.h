@@ -318,6 +318,11 @@ PINAX_API pinax_err pinax_eval_value(const pinax_state *state, uint32_t index, p
  * most 16 locals are kept, while their names, types and str bytes fit in 1 KB; a str value is
  * cut to its first 32 bytes. Valid until the next run that ends, with a fault or without. */
 PINAX_API pinax_err pinax_fault_local(const pinax_state *state, uint32_t index, pinax_str *name, pinax_value *out);
+/* A task of a set declared `apart` (tasks NAME count depth region apart) that faults ends alone;
+ * the run goes on. This counts them since the state opened; `last`, when not NULL, gets where the
+ * last one happened and why ("module:line: error"), and pinax_fault_local() reads its locals until
+ * the next run ends. */
+PINAX_API uint64_t pinax_task_faults(const pinax_state *state, pinax_str *last);
 
 /* ---- running ----------------------------------------------------------------------- */
 

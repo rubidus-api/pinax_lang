@@ -74,6 +74,11 @@ A fault in one task ends the whole run --- the other tasks stop too. The state r
 
 #ex("manual", "13-fault.pnx")
 
+When the tasks do work that must not take the others down with it (requests of a server, jobs from a queue), declare
+the group `apart`. Then a fault ends only the task that has it; the others go on, and so does the run.
+
+#ex("manual", "13-apart.pnx")
+
 `TASK cancel` makes that task's next `yield`, or its wait for a queue, fail with `cancelled`. The task takes the failure with `or_else`, tidies up
 and ends. Cancelling does not stop a task by force.
 
@@ -89,5 +94,5 @@ a turn to. So the same word serves inside a task and outside.]
 - Tasks share data through globals and queues; `wait_take` and `wait_put` wait for a queue, and a run where every
   task waits for one is the fault `deadlock` (14.3).
 - Blocks given to `spawn` do not see the locals around them (14.4).
-- A fault in a task ends the whole run (14.4).
+- A fault in a task ends the whole run (14.4), or only that task when its group is declared `apart` (14.4 (3a)).
 ]
