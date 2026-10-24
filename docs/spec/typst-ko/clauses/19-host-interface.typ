@@ -203,6 +203,8 @@ global, bytes, from)` 은 (1a) 와 같은 검사로 파일의 전역 `from` 을 
 `PINAX_ERR_NOT_FOUND` 로 거절된다. 핸들은 닫힌 채(닫는 함수 없이), 묶은 전역은 자기 저장소로 돌아와 있다.
 `pinax_clone` 은 한 번에 저장하고 다른 덩이에서 연다.]
 
+#para("2a")[복제는 `pinax_image_size(source)` 바이트 이상의 덩이에서 열린다. 더 작은 덩이는 `PINAX_ERR_NO_ROOM` 이다.]
+
 #ex("spec", "19-image.c")
 
 == 재기와 결함의 지역 변수 <host-measure>

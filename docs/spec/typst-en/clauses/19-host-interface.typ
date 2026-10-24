@@ -215,6 +215,9 @@ an image.]
 are given, runs are refused with `PINAX_ERR_NOT_FOUND`. Handles come back closed (without their close functions), and
 bound globals back on their own storage. `pinax_clone` saves and opens in another block in one call.]
 
+#para("2a")[A clone opens in a block of `pinax_image_size(source)` bytes or more; a smaller block is
+`PINAX_ERR_NO_ROOM`.]
+
 #ex("spec", "19-image.c")
 
 == Measuring, and the locals of a fault <host-measure>
