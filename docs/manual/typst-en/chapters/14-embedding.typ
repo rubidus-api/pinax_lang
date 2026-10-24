@@ -93,6 +93,38 @@ Programs that run as several processes share a file instead. The program that ma
 parameter. The processor sees whether a word changes a collection parameter, itself or through the words it passes it
 to, and refuses only a shared collection given to such a word (standard 8.13).]
 
+== Serving many requests
+
+A server takes many requests at once, and most of their time goes in waiting: for a database, a file, another server.
+A host word that waits inside its C function holds the thread and the whole state. So a host word that waits is
+registered with `PINAX_WORD_AWAITABLE`. It keeps a token with `pinax_call_pending`, starts the operation and returns
+`PINAX_PENDING`. The task that called it waits, and the other tasks of the state go on. When no task can go on,
+`pinax_run` or `pinax_resume` returns `PINAX_WAITING`. The host's own event loop finishes the operations with
+`pinax_complete` and calls `pinax_resume` again.
+
+Each request is served by a task of its own (chapter 13). The block of `spawn` sees no locals, so the id of the request
+goes to the task through a queue. The task ends with its request, and the bytes it made in its region go with it. When
+every task of the group is taken, `spawn` fails with `full`, and the script answers "busy" at once.
+
+#ex("manual", "14-requests.c")
+
+To give up on one request (a timeout, a client that went away), the host completes its token with a failure, here
+`PINAX_ERR_CANCELLED`. The word fails in the task that waits, `or_else` takes the failure, and the other requests are not
+touched. `pinax_abort` would end the whole run, and every request of the state with it.
+
+#qa[What if the word that waits has no `or fail`?][Then a failure from the host can only become a fault, and a fault ends
+the whole run: every request of the state. A word the host may give up on is declared `or fail`, as `fetch` is above
+(standard 19.8).]
+
+A task gives way only where it waits or yields. A request that computes for a long time holds the other requests of its
+state back until it waits or ends. The budget stops the whole state, not one task. Long work goes to a state of its own,
+or gives way in its loop with `yield`.
+
+#qa[Why not a clone of the state for every request?][It works, and it keeps the requests apart: nothing one request
+stores is seen by another. But a clone copies the whole state, its fixed parts and its program, for every request, and
+it must be closed again. A task costs only its own region and frames, as declared with `tasks` (standard 14 (2)). The
+tasks of one state share its globals, so what belongs to one request stays in its locals.]
+
 == In a web page and in node
 
 `./nob wasm` builds the core as the WebAssembly module `build/wasm/pinax.wasm` and puts the JavaScript module
@@ -123,4 +155,8 @@ and clones, and `extern` are in clauses 18 and 19 of the standard, with examples
   (17.4).
 - Data that is only read is declared `shared` and read as one copy through `pinax_share` (8.13, 19.7).
 - Several processes map one file written with `pinax_share_save` (`pinax_map_file`) and read it together (19.7).
+- A host word that waits is registered awaitable and finished later with `pinax_complete`; meanwhile the other tasks
+  go on (19.8).
+- Each request is a task of its own. One request is given up by completing its token with a failure, the whole run by
+  `pinax_abort` (14, 19.5, 19.8).
 ]
