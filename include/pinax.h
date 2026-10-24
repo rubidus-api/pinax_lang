@@ -386,6 +386,25 @@ PINAX_API pinax_err pinax_image_open(pinax_mem block, pinax_str image, const pin
  * extern functions and bound globals are given again; the source is not changed. */
 PINAX_API pinax_err pinax_clone(const pinax_state *source, pinax_mem block, pinax_state **out);
 
+/* ---- exported code ------------------------------------------------------------------ */
+
+/* The code of a program written out as C by `pnx export-c` and compiled by the host with its own
+ * build (it includes pinax_native.h, which ./nob dist writes beside this header). That file
+ * defines one pinax_native. The table is the host's: like an image, it is trusted, and only
+ * its hash is checked. */
+typedef struct pinax_native {
+    size_t    struct_size;               /* sizeof(pinax_native) */
+    uint64_t  hash;                      /* the program and the build it was exported from */
+    pinax_err (*run)(pinax_state *state); /* runs the state's code from where the run stands */
+} pinax_native;
+/* Runs the state's code through `native` from now on. It may be given before the loads that make
+ * the program: it is used from the first run (the code of a load included) at which the
+ * program's hash is native->hash, and not while the program differs (after a later load, say).
+ * Results, faults, budget and waiting are those of the interpreter. NULL takes it back. An
+ * image or a clone of the state does not carry it. PINAX_ERR_ARGUMENT for a table of another
+ * struct_size; PINAX_ERR_STATE while a run is not finished. */
+PINAX_API pinax_err pinax_native_attach(pinax_state *state, const pinax_native *native);
+
 /* ---- measuring --------------------------------------------------------------------- */
 
 typedef struct pinax_stats {

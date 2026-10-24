@@ -9052,6 +9052,8 @@ static pinax_err load_source(pinax_state *st, const char *file, pinax_str source
     if (err != PINAX_OK)
         return err;
     st->symbols = keep.next;
+    if (has_top && st->export_only) // pnx export-c: the code as it stands right before it would run (RFC-0028)
+        return PINAX_OK;
 
     if (has_top) { // code outside definitions runs once, now
         const uint64_t budget = st->budget;

@@ -40,5 +40,6 @@ str or fail)` 이다(바이트가 모자라거나 모양이 틀리면 `err.forma
 
 #part("결함")
 
-#para("7")[쓰는 값이 폭에 맞지 않으면 결함 `overflow` 다. 자르지 않는다.]
+#para("7")[쓰는 값은 낱말 이름이 말하는 타입이다(`put_u8` 이면 `u8`, 7.6). `int` 는 먼저 그 타입으로 바꾸고(`n u8`), 범위
+밖의 값은 거기서 결함 `overflow` 다. 자르지 않는다.]
 #ex("spec", "16-bytes-narrow.pnx")

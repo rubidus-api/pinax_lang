@@ -103,6 +103,8 @@ for f in "$src_dir"/*.pnx; do
         fault)
             [ $status = 1 ] || { fail "$n" "exit $status, wanted 1 (a fault)" "$o"; continue; }
             grep -q ':[0-9]*: ' "$e" || { fail "$n" "no fault message" "$e"; continue; }
+            # a load refusal says file:line:column; a fault says file:line only
+            grep -q "^$n:[0-9]*:[0-9]*: " "$e" && { fail "$n" "refused at load, not a fault" "$e"; continue; }
             { echo "\$ $cmd"; cat "$o" "$e"; } >"$out" ;;
         see-refused)
             [ $status = 1 ] || { fail "$n" "exit $status, wanted 1 (refused)" "$o"; continue; }

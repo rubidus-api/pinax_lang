@@ -333,6 +333,13 @@ struct pinax_state {
     bool     from_image; // opened from an image: host words are given again by name (D0036)
     bool     frozen;     // lent a global with pinax_share(): it neither runs nor loads again
     bool     load_runs;  // the code of a load runs: shared globals not given yet read as empty
+    // exported code (RFC-0028): the table the host attached, and whether it is in use for the program
+    // as it stands (native_code: the length of the code it was bound to; another length unbinds it)
+    const pinax_native *native;
+    bool                native_bound;
+    uint32_t            native_code;
+    uint64_t            native_runs; // runs that went through it (for the tests)
+    bool                export_only; // pnx export-c: a load compiles and checks its code and runs none of it
     pnx_program before_load; // what that load would be undone to
     // redefine: the record of the word whose code a load traded, as it was, until the load is final
     // (a failed load, or one whose code faults, puts it back: pnx_program_restore)
@@ -390,6 +397,21 @@ static inline bool pnx_width_holds(int64_t value, uint8_t code_plus_one) {
 
 // Runs from state->pc until the top word returns, faults, fails or the budget runs out.
 pinax_err pnx_execute(pinax_state *state);
+// One instruction of the run that stands in the state (RFC-0028): PNX_STEP_ON when it went on, with the
+// pc, bases, depth and budget put back into the state; otherwise how the run ended, stopped or waits.
+#define PNX_STEP_ON ((pinax_err)0x7ffffff1)
+pinax_err pnx_step(pinax_state *state);
+// The hash an exported program carries: the code, where each word starts, and the layout of this build.
+uint64_t pnx_native_hash(const pinax_state *st);
+// Runs the code from where the run stands: through the attached exported code when it is the program's.
+pinax_err pnx_run_code(pinax_state *st);
+// The program's code as C (pinax_export.c): `name` is the table's name. 0 when `cap` is too small.
+size_t pnx_export_c(const pinax_state *st, const char *name, char *out, size_t cap);
+// The two ways out of a run that pnx_execute, pnx_step and exported code share (pinax_vm.c).
+pinax_err pnx_exec_end(pinax_state *st, pinax_err result, uint32_t at, uint32_t ibase, uint32_t sbase,
+                       const int64_t *R, uint32_t floor, uint64_t left, uint64_t count);
+pinax_err pnx_exec_suspend(pinax_state *st, uint32_t at, uint32_t ibase, uint32_t sbase, uint32_t depth,
+                           uint64_t count);
 
 // RFC-0023: what the loader proved of an instruction's run-time check (state->proven).
 enum {

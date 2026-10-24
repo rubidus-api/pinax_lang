@@ -546,11 +546,12 @@ static int run(int argc, char **argv) {
     const bool seeing = argc > 1 && strcmp(argv[1], "see") == 0 && !checking;
     const bool formatting = argc > 1 && strcmp(argv[1], "fmt") == 0;
     const bool talking = argc == 2 && strcmp(argv[1], "repl") == 0;
-    const int  at = checking ? 3 : testing || seeing || formatting ? 2 : 1;
+    const bool exporting = argc > 1 && strcmp(argv[1], "export-c") == 0;
+    const int  at = checking ? 3 : testing || seeing || formatting || exporting ? 2 : 1;
     if (argc <= at) {
         fprintf(stderr, "usage: pnx [--lib NAME=PATH]... file.pnx [arguments]\n       pnx test file.pnx\n"
                         "       pnx repl\n       pnx see file.pnx\n       pnx see --checks file.pnx\n"
-                        "       pnx fmt file.pnx\n");
+                        "       pnx fmt file.pnx\n       pnx export-c file.pnx [NAME]   (the code as C, RFC-0028)\n");
         return 2;
     }
     if (formatting) {
@@ -586,6 +587,12 @@ static int run(int argc, char **argv) {
         return 2;
     }
     pinax_host_set_args(argc - at, (const char *const *)(argv + at));
+    if (exporting)
+        state->export_only = true; // compile and check, run nothing
+#if defined(PNX_WITH_NATIVE) // a pnx with a program's exported code linked in (tests/tools/export_check.sh)
+    extern const pinax_native PNX_WITH_NATIVE;
+    pinax_native_attach(state, &PNX_WITH_NATIVE);
+#endif
     if (talking) {
         const int status = repl(state, block_bytes);
         pinax_close(state);
@@ -627,7 +634,29 @@ static int run(int argc, char **argv) {
         status = run_tests(state, plain ? module : "");
     } else if (checking) {
         pnx_checks_report(state, put_text, stdout);
+    } else if (exporting) {
+        const char *name = argc > at + 1 ? argv[at + 1] : "pnx_native";
+        size_t      cap = 1u << 20, len = 0;
+        char       *text = NULL;
+        for (;;) { // the text's length is known once written: grow until it fits
+            char *bigger = realloc(text, cap);
+            if (!bigger)
+                break;
+            text = bigger;
+            if ((len = pnx_export_c(state, name, text, cap)) != 0)
+                break;
+            cap *= 4;
+        }
+        if (len)
+            fwrite(text, 1, len, stdout);
+        else
+            status = 2;
+        free(text);
     }
+#if defined(PNX_WITH_NATIVE)
+    if (getenv("PNX_NATIVE_SAY"))
+        fprintf(stderr, "pnx: %llu runs through the exported code\n", (unsigned long long)state->native_runs);
+#endif
     fflush(stdout);
     pinax_close(state);
     free(block);

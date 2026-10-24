@@ -40,5 +40,6 @@ only when every field can be read; when it fails the row is unchanged.]
 
 #part("Faults")
 
-#para("7")[A value that does not fit the width written is the fault `overflow`; it is not cut.]
+#para("7")[The value written has the type the word's name says (`u8` for `put_u8`, 7.6). An `int` is made into that
+type first (`n u8`), and a value outside its range is the fault `overflow` there; nothing is cut.]
 #ex("spec", "16-bytes-narrow.pnx")

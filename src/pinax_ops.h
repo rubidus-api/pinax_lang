@@ -53,6 +53,219 @@
                                        [[maybe_unused]] const int64_t *R,                          \
                                        [[maybe_unused]] const pnx_scell *S, uint32_t w)
 
+// CALL and CALLR once the word is known: the callee's window above the caller's, the caller's frame
+// pushed (it goes on at `back`), the peaks counted. Shared by the interpreter and exported code (RFC-0028).
+PNX_INLINE int pnx_enter_word(pinax_state *st, const pnx_wordrec *callee, uint32_t w, uint32_t back, uint32_t *ibase,
+                              uint32_t *sbase, uint32_t *depth) {
+    const uint32_t new_ibase = *ibase + OP_A(w), new_sbase = *sbase + OP_B(w);
+    if (*depth >= st->depth_max || new_ibase + callee->int_cells > st->int_slots ||
+        new_sbase + callee->str_cells > st->str_slots)
+        return PINAX_ERR_DEPTH;
+    st->ctrl[(*depth)++] = (pnx_frame){back, *ibase, *sbase, 0};
+    if (*depth > st->depth_peak)
+        st->depth_peak = *depth;
+    if (new_ibase + callee->int_cells > st->int_peak)
+        st->int_peak = new_ibase + callee->int_cells;
+    if (new_sbase + callee->str_cells > st->str_peak)
+        st->str_peak = new_sbase + callee->str_cells;
+    *ibase = new_ibase;
+    *sbase = new_sbase;
+    return PNX_R_OK;
+}
+
+// TCALL: the callee takes the caller's window; it must fit.
+PNX_INLINE int pnx_tail_word(pinax_state *st, const pnx_wordrec *callee, uint32_t ibase, uint32_t sbase) {
+    if (ibase + callee->int_cells > st->int_slots || sbase + callee->str_cells > st->str_slots)
+        return PINAX_ERR_DEPTH;
+    if (ibase + callee->int_cells > st->int_peak)
+        st->int_peak = ibase + callee->int_cells;
+    if (sbase + callee->str_cells > st->str_peak)
+        st->str_peak = sbase + callee->str_cells;
+    return PNX_R_OK;
+}
+
+// How the interpreter runs each instruction that is one call of its function (RFC-0028): RUN calls
+// pnx_op_NAME and faults on a result other than 0; RUN2 also takes the second word; RUNG names a global
+// in C (NAME) or in the second word (NAMEW); RUNF, RUNFG and RUNF2 can fail, and skip the failure word
+// that follows on success; RUNJ is a compare and branch by pnx_cond_NAME. pinax_exec.h expands it into
+// the interpreter's cases and pinax_export.c into what it writes, so the two cannot differ.
+#define PNX_RUN_KINDS(X) \
+    X(RUN, MOVI) \
+    X(RUN, MOVS) \
+    X(RUN, LOADI) \
+    X(RUN, LOADK) \
+    X(RUN, LOADKS) \
+    X(RUN, ADD) \
+    X(RUN, SUB) \
+    X(RUN, MUL) \
+    X(RUN, DIV) \
+    X(RUN, MOD) \
+    X(RUN, NEG) \
+    X(RUN, ADDI) \
+    X(RUN, MULI) \
+    X(RUN, DIVI) \
+    X(RUN, MODI) \
+    X(RUN, ANDI) \
+    X(RUN, ORI) \
+    X(RUN, XORI) \
+    X(RUN, SHLI) \
+    X(RUN, SHRI) \
+    X(RUN, USHRI) \
+    X(RUN, WMULI) \
+    X(RUN, DRESC) \
+    X(RUN, WADD) \
+    X(RUN, WSUB) \
+    X(RUN, WMUL) \
+    X(RUN, AND) \
+    X(RUN, OR) \
+    X(RUN, XOR) \
+    X(RUN, SHL) \
+    X(RUN, SHR) \
+    X(RUN, USHR) \
+    X(RUNJ, JEQ) \
+    X(RUNJ, JNE) \
+    X(RUNJ, JLT) \
+    X(RUNJ, JLE) \
+    X(RUNJ, JEQI) \
+    X(RUNJ, JNEI) \
+    X(RUNJ, JLTI) \
+    X(RUNJ, JGEI) \
+    X(RUN, GETG) \
+    X(RUN, SETG) \
+    X(RUNG, AGET) \
+    X(RUNG, ASET) \
+    X(RUNG, ROW) \
+    X(RUN2, FGET) \
+    X(RUN2, FSET) \
+    X(RUN2, FGETS) \
+    X(RUN2, FSETS) \
+    X(RUN, SLEN) \
+    X(RUN, SBYTE) \
+    X(RUNJ, JSEQ) \
+    X(RUNF, SNEXT) \
+    X(RUN, SCUT) \
+    X(RUNF, TOINT) \
+    X(RUN, BCLEAR) \
+    X(RUNFG, BPUT) \
+    X(RUNFG, BPUTS) \
+    X(RUN, BVIEW) \
+    X(RUNF, SGET) \
+    X(RUNF, SGETS) \
+    X(RUNJ, JSNE) \
+    X(RUN, GETFAIL) \
+    X(RUN, RMARK) \
+    X(RUN, RCATS) \
+    X(RUN, RCATI) \
+    X(RUN, RCATB) \
+    X(RUN, RCATD) \
+    X(RUNF, STODEC) \
+    X(RUN, GLEN) \
+    X(RUN, GCLEAR) \
+    X(RUN, GCAP) \
+    X(RUNF, LPUSH) \
+    X(RUNF, LPOP) \
+    X(RUNF, LPUSHS) \
+    X(RUNF, LPOPS) \
+    X(RUNF2, LCOPYR) \
+    X(RUNF, SFIND) \
+    X(RUNF, SWORD) \
+    X(RUN, ERRTEXT) \
+    X(RUNF, ADDROW) \
+    X(RUNF, BCAT) \
+    X(RUNF, BCATI) \
+    X(RUN, STAKE) \
+    X(RUN, SSKIP) \
+    X(RUN, STAKEL) \
+    X(RUN, SSKIPL) \
+    X(RUN, SPRE) \
+    X(RUN, SSUF) \
+    X(RUN, SHAS) \
+    X(RUNFG, IXGET) \
+    X(RUNFG, IXGETS) \
+    X(RUNF, IXPUT) \
+    X(RUN, IXDEL) \
+    X(RUN2, SREPL) \
+    X(RUNF, QPUT) \
+    X(RUNF, QTAKE) \
+    X(RUNF, QPEEK) \
+    X(RUNF, PALLOC) \
+    X(RUN, PFREE) \
+    X(RUNG, PALIVE) \
+    X(RUN, SETFAIL) \
+    X(RUN, RTOP) \
+    X(RUN, RCUT) \
+    X(RUN, RFREE) \
+    X(RUN, SCUTS) \
+    X(RUNF, SCUTSF) \
+    X(RUN, STRIM) \
+    X(RUNF, SLINE) \
+    X(RUNF, SNEXTS) \
+    X(RUNF, SFINDL) \
+    X(RUN, SCMP) \
+    X(RUN, RCATX) \
+    X(RUN, RCATW) \
+    X(RUN, RCATU) \
+    X(RUN, RCATUW) \
+    X(RUN, RCATXW) \
+    X(RUN, RPADL) \
+    X(RUN, RPADR) \
+    X(RUN, SUTF) \
+    X(RUNF, TOINTB) \
+    X(RUN, SSPAN) \
+    X(RUNF, SCHAR) \
+    X(RUN, RCASE) \
+    X(RUN, RREP) \
+    X(RUN, SHASH) \
+    X(RUNF, PMATCH) \
+    X(RUN, PCAP) \
+    X(RUNF, PNEXT) \
+    X(RUN2, PREPL) \
+    X(RUNF, XMATCH) \
+    X(RUNF, XCUT) \
+    X(RUNF2, XNEXT) \
+    X(RUNF2, XSPLIT) \
+    X(RUN, XCAPI) \
+    X(RUNF2, XSTEP) \
+    X(RUN2, XREPL) \
+    X(RUNF, XCOMP) \
+    X(RUNFG, BENC) \
+    X(RUN, BTRUNC) \
+    X(RUNF, FITW) \
+    X(RUN2, NARITH) \
+    X(RUNF2, NCHK) \
+    X(RUN2, NUN) \
+    X(RUNF, JNEXT) \
+    X(RUNF, JSKIP) \
+    X(RUNFG, JPUTI) \
+    X(RUNFG, JPUTS) \
+    X(RUNF, CNEXT) \
+    X(RUNFG, CPUTS) \
+    X(RUNFG, CPUTI) \
+    X(RUN, VLEN) \
+    X(RUN, SATADD) \
+    X(RUN, SATSUB) \
+    X(RUN, SATMUL) \
+    X(RUN, UDIV) \
+    X(RUN, UMOD) \
+    X(RUN, ROTL) \
+    X(RUN, ROTR) \
+    X(RUN, MULHI) \
+    X(RUN, UMULHI) \
+    X(RUN, FDIV) \
+    X(RUN, FMOD) \
+    X(RUN, ULT) \
+    X(RUN, ULE) \
+    X(RUN, ABS) \
+    X(RUN, BNOT) \
+    X(RUN, POPC) \
+    X(RUN, CLZ) \
+    X(RUN, CTZ) \
+    X(RUN, BSWAP) \
+    X(RUNF, CHKADD) \
+    X(RUNF, CHKSUB) \
+    X(RUNF, CHKMUL) \
+    X(RUNF, CHKDIV)
+
 static const uint8_t pnx_width_bytes[PNX_W_COUNT] = {1, 2, 4, 8, 1, 2, 4};
 
 PNX_INLINE int64_t pnx_load_width(const uint8_t *p, uint32_t width) {

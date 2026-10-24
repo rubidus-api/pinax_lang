@@ -2661,7 +2661,7 @@ static pinax_err run_nested(pinax_state *st, pinax_word word, const pinax_args *
     st->depth_floor = depth;
     st->fail = PINAX_ERR_FAILED;
     ++st->nest;
-    pinax_err err = pnx_execute(st);
+    pinax_err err = pnx_run_code(st);
     --st->nest;
     st->host_cur = host; // the host words that word called have come and gone
     st->host_ia = host_ia;
@@ -2761,7 +2761,7 @@ pinax_err pinax_run(pinax_state *st, pinax_word word, const pinax_args *args) {
     st->left = st->budget;
     st->charge = 0;
     st->fail = PINAX_ERR_FAILED;
-    return deliver(st, pnx_execute(st), args);
+    return deliver(st, pnx_run_code(st), args);
 }
 
 pinax_err pinax_resume(pinax_state *st, const pinax_args *results) {
@@ -2787,7 +2787,7 @@ pinax_err pinax_resume(pinax_state *st, const pinax_args *results) {
         if (st->task)
             pnx_tasks_abort(st);
     } else {
-        run = pnx_execute(st);
+        run = pnx_run_code(st);
     }
     const pinax_err err = deliver(st, run, results);
     if (st->loading && err != PINAX_SUSPENDED && err != PINAX_WAITING) { // the load ends here: done, or failed and undone
@@ -3561,6 +3561,53 @@ static uint64_t image_layout(void) {
     return pnx_symbols_layout(hash);
 }
 
+// ---- exported code (RFC-0028) -------------------------------------------------------------
+
+uint64_t pnx_native_hash(const pinax_state *st) {
+    uint64_t hash = image_layout();
+#if defined(PINAX_BUDGET_EACH)
+    hash = (hash ^ 0x45414348u) * 0x100000001b3u; // a build that charges every instruction counts otherwise
+#endif
+#if defined(PINAX_CHECK_PROOFS)
+    hash = (hash ^ 0x50524f46u) * 0x100000001b3u;
+#endif
+    const uint32_t n_code = st->head ? st->head->n_code : 0, n_words = st->head ? st->head->n_words : 0;
+    hash = (hash ^ n_code) * 0x100000001b3u;
+    for (uint32_t k = 0; k < n_code; ++k)
+        hash = (hash ^ st->code[k]) * 0x100000001b3u;
+    hash = (hash ^ n_words) * 0x100000001b3u;
+    for (uint32_t k = 0; k < n_words; ++k)
+        hash = (hash ^ ((uint64_t)st->words[k].entry << 32 | st->words[k].length)) * 0x100000001b3u;
+    return hash;
+}
+
+pinax_err pnx_run_code(pinax_state *st) {
+    if (st->native) {
+        const uint32_t n_code = st->head ? st->head->n_code : 0;
+        if (st->native_bound && st->native_code != n_code)
+            st->native_bound = false; // a load changed the program
+        if (!st->native_bound && pnx_native_hash(st) == st->native->hash) {
+            st->native_bound = true;
+            st->native_code = n_code;
+        }
+        if (st->native_bound) {
+            ++st->native_runs;
+            return st->native->run(st);
+        }
+    }
+    return pnx_execute(st);
+}
+
+pinax_err pinax_native_attach(pinax_state *st, const pinax_native *native) {
+    if (!st || (native && (native->struct_size != sizeof *native || !native->run)))
+        return PINAX_ERR_ARGUMENT;
+    if (st->suspended || st->host_cur || st->loading)
+        return fail(st, PINAX_ERR_STATE, "a run is not finished");
+    st->native = native;
+    st->native_bound = false;
+    return PINAX_OK;
+}
+
 size_t pinax_image_size(const pinax_state *st) {
     return st ? sizeof(pnx_image_head) + st->used : 0;
 }
@@ -3734,6 +3781,9 @@ pinax_err pinax_image_open(pinax_mem block, pinax_str image, const pinax_config 
         }
     }
     st->from_image = true;
+    st->native = NULL; // exported code is attached again, as host words are given again
+    st->native_bound = false;
+    st->native_runs = 0;
     st->frozen = st->load_runs = false; // what the saved state lent stays with it
     // operations a run waited for will not be completed by this process: they come back interrupted
     if (st->main_wait.token)
