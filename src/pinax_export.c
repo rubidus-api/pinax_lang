@@ -107,8 +107,10 @@ static void on_fault(out *o, uint32_t next) {
     put(o, "u; goto fault; }");
 }
 
-static void call_op(out *o, uint32_t op, bool wide, uint32_t w, const char *x) {
+static void call_op(out *o, uint32_t op, bool wide, bool proven, uint32_t w, const char *x) {
     put_fn(o, "pnx_op_", op, wide);
+    if (proven) // RFC-0028 P3: the loader proved its check cannot fire
+        put(o, "_unchecked");
     put(o, "(st, R, S, ");
     put_hex(o, w, 8);
     put(o, "u, ");
@@ -123,6 +125,17 @@ size_t pnx_export_c(const pinax_state *st, const char *name, char *buffer, size_
     put(&o, "/* Written by pnx export-c (RFC-0028): the code of one program as C. Do not edit; export again\n"
             " * after the program changes. Compile with the build that wrote it and attach the table below with\n"
             " * pinax_native_attach(). */\n#include \"pinax_native.h\"\n\n");
+    put(&o, "// The run's place into the state, one instruction by the interpreter, and the place back out of it.\n"
+            "#define PNX_STEP_OUT()                                                                         \\\n"
+            "    do {                                                                                       \\\n"
+            "        st->pc = at; st->int_base = ibase; st->str_base = sbase; st->depth = depth;              \\\n"
+            "        st->depth_floor = floor; st->left = left; st->instructions += count; count = 0;          \\\n"
+            "        const pinax_err e = pnx_step(st);                                                        \\\n"
+            "        if (e != PNX_STEP_ON)                                                                    \\\n"
+            "            return e;                                                                            \\\n"
+            "        at = st->pc; ibase = st->int_base; sbase = st->str_base; depth = st->depth;              \\\n"
+            "        floor = st->depth_floor; left = st->left; R = st->ibank + ibase; S = st->sbank + sbase;  \\\n"
+            "    } while (0)\n\n");
     put(&o, "static pinax_err run_");
     put(&o, name);
     put(&o, "(pinax_state *st) {\n"
@@ -175,8 +188,9 @@ size_t pnx_export_c(const pinax_state *st, const char *name, char *buffer, size_
         case K_RUNG:
         case K_RUNGW: {
             const bool wide = op_kind[op] == K_RUNGW;
+            const bool proven = st->proven && st->proven[i] != PNX_PROVEN_NONE && pnx_checked_op(op);
             put(&o, "if ((r = ");
-            call_op(&o, op, wide, w, op_kind[op] == K_RUN ? "0" : op_kind[op] == K_RUNG ? narrow : second);
+            call_op(&o, op, wide, proven, w, op_kind[op] == K_RUN ? "0" : op_kind[op] == K_RUNG ? narrow : second);
             put(&o, ") != PNX_R_OK) ");
             on_fault(&o, after);
             break;
@@ -187,7 +201,7 @@ size_t pnx_export_c(const pinax_state *st, const char *name, char *buffer, size_
         case K_RUNFGW: { // success skips the failure word that follows
             const bool wide = op_kind[op] == K_RUNFGW;
             put(&o, "if ((r = ");
-            call_op(&o, op, wide, w, op_kind[op] == K_RUNF ? "0" : op_kind[op] == K_RUNFG ? narrow : second);
+            call_op(&o, op, wide, false, w, op_kind[op] == K_RUNF ? "0" : op_kind[op] == K_RUNFG ? narrow : second);
             put(&o, ") == PNX_R_OK) ");
             go_to(&o, after + 1);
             put(&o, " if (r != PNX_R_FAILED) ");
@@ -246,10 +260,14 @@ size_t pnx_export_c(const pinax_state *st, const char *name, char *buffer, size_
                 put(&o, "u; goto step; } { const pnx_frame f = st->ctrl[--depth]; at = f.pc; ibase = f.int_base; "
                         "sbase = f.str_base; R = st->ibank + ibase; S = st->sbank + sbase; goto go; }");
                 break;
-            default:
+            default: // the interpreter does it; mostly the run goes on right after it
                 put(&o, "at = ");
                 put_u(&o, i);
-                put(&o, "u; goto step; /* ");
+                put(&o, "u; PNX_STEP_OUT(); if (at == ");
+                put_u(&o, after);
+                put(&o, "u) ");
+                go_to(&o, after);
+                put(&o, " goto go; /* ");
                 put(&o, op_name[op] ? op_name[op] : "?");
                 put(&o, " */");
                 break;
@@ -259,21 +277,13 @@ size_t pnx_export_c(const pinax_state *st, const char *name, char *buffer, size_
         i = after;
     }
     put(&o, "step: // the interpreter runs this one instruction, and the run goes on from where it stands then\n"
-            "    st->pc = at; st->int_base = ibase; st->str_base = sbase; st->depth = depth; st->depth_floor = floor;\n"
-            "    st->left = left; st->instructions += count; count = 0;\n"
-            "    {\n"
-            "        const pinax_err e = pnx_step(st);\n"
-            "        if (e != PNX_STEP_ON)\n"
-            "            return e;\n"
-            "    }\n"
-            "    at = st->pc; ibase = st->int_base; sbase = st->str_base; depth = st->depth; floor = st->depth_floor;\n"
-            "    left = st->left; R = st->ibank + ibase; S = st->sbank + sbase;\n"
+            "    PNX_STEP_OUT();\n"
             "    goto go;\n"
             "fault:\n"
             "    return pnx_exec_end(st, (pinax_err)r, next, ibase, sbase, R, floor, left, count);\n"
             "suspend:\n"
             "    return pnx_exec_suspend(st, at, ibase, sbase, depth, count);\n"
-            "}\n\n");
+            "}\n#undef PNX_STEP_OUT\n\n");
     put(&o, "const pinax_native ");
     put(&o, name);
     put(&o, " = {sizeof(pinax_native), ");

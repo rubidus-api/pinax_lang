@@ -524,6 +524,121 @@ PNX_OP(FSETS) {
     return PNX_R_OK;
 }
 
+// RFC-0028 P3 (RFC-0023 P2): the instructions whose check the loader proved cannot fire
+// (state->proven), as exported code runs them: without that check. Arithmetic wraps rather than
+// overflowing in C, so a wrong proof gives a wrong number, not undefined behaviour; a check the proof
+// does not cover (a field's width, a string's length) stays. In the --proofs build the check is made
+// all the same and stops the program with a trap when it fires, as pnx_proven_fired does for the
+// interpreter. The interpreter never calls these (D0054).
+#if defined(PINAX_CHECK_PROOFS)
+#define PNX_PROVEN_HOLDS(fires) \
+    do {                        \
+        if (fires)              \
+            __builtin_trap();   \
+    } while (0)
+#else
+#define PNX_PROVEN_HOLDS(fires) ((void)0)
+#endif
+PNX_INLINE int64_t pnx_wrap_add(int64_t a, int64_t b) { return (int64_t)((uint64_t)a + (uint64_t)b); }
+PNX_INLINE int64_t pnx_wrap_sub(int64_t a, int64_t b) { return (int64_t)((uint64_t)a - (uint64_t)b); }
+PNX_INLINE int64_t pnx_wrap_mul(int64_t a, int64_t b) { return (int64_t)((uint64_t)a * (uint64_t)b); }
+PNX_OP(ADD_unchecked) {
+    [[maybe_unused]] int64_t r;
+    PNX_PROVEN_HOLDS(ckd_add(&r, R[OP_B(w)], R[OP_C(w)]));
+    R[OP_A(w)] = pnx_wrap_add(R[OP_B(w)], R[OP_C(w)]);
+    return PNX_R_OK;
+}
+PNX_OP(SUB_unchecked) {
+    [[maybe_unused]] int64_t r;
+    PNX_PROVEN_HOLDS(ckd_sub(&r, R[OP_B(w)], R[OP_C(w)]));
+    R[OP_A(w)] = pnx_wrap_sub(R[OP_B(w)], R[OP_C(w)]);
+    return PNX_R_OK;
+}
+PNX_OP(MUL_unchecked) {
+    [[maybe_unused]] int64_t r;
+    PNX_PROVEN_HOLDS(ckd_mul(&r, R[OP_B(w)], R[OP_C(w)]));
+    R[OP_A(w)] = pnx_wrap_mul(R[OP_B(w)], R[OP_C(w)]);
+    return PNX_R_OK;
+}
+PNX_OP(NEG_unchecked) {
+    PNX_PROVEN_HOLDS(R[OP_B(w)] == INT64_MIN);
+    R[OP_A(w)] = pnx_wrap_sub(0, R[OP_B(w)]);
+    return PNX_R_OK;
+}
+PNX_OP(ADDI_unchecked) {
+    [[maybe_unused]] int64_t r;
+    PNX_PROVEN_HOLDS(ckd_add(&r, R[OP_B(w)], (int64_t)OP_SC(w)));
+    R[OP_A(w)] = pnx_wrap_add(R[OP_B(w)], (int64_t)OP_SC(w));
+    return PNX_R_OK;
+}
+PNX_OP(MULI_unchecked) {
+    [[maybe_unused]] int64_t r;
+    PNX_PROVEN_HOLDS(ckd_mul(&r, R[OP_B(w)], (int64_t)OP_SC(w)));
+    R[OP_A(w)] = pnx_wrap_mul(R[OP_B(w)], (int64_t)OP_SC(w));
+    return PNX_R_OK;
+}
+PNX_OP(AGET_unchecked) {
+    const pnx_global *g = &st->globals[PNX_GX(st, x)];
+    const uint64_t index = (uint64_t)R[OP_B(w)];
+    PNX_PROVEN_HOLDS(index >= g->length);
+    R[OP_A(w)] = pnx_cell_get(g, index);
+    return PNX_R_OK;
+}
+PNX_OP(ASET_unchecked) {
+    const pnx_global *g = &st->globals[PNX_GX(st, x)];
+    const uint64_t index = (uint64_t)R[OP_B(w)];
+    PNX_PROVEN_HOLDS(index >= g->length);
+    pnx_cell_put(g, index, R[OP_A(w)]);
+    return PNX_R_OK;
+}
+PNX_OP(ROW_unchecked) {
+    const uint64_t index = (uint64_t)R[OP_B(w)];
+    PNX_PROVEN_HOLDS(index >= st->globals[PNX_GX(st, x)].length);
+    R[OP_A(w)] = (int64_t)index + 1;
+    return PNX_R_OK;
+}
+// The row of a proven field access: what pnx_row_of gives when it passes.
+PNX_INLINE uint64_t pnx_row_proven(const pnx_global *g, int64_t value) {
+    [[maybe_unused]] uint64_t checked;
+    PNX_PROVEN_HOLDS(pnx_row_of(g, value, &checked) != PNX_R_OK);
+    return g->kind == PNX_G_POOL ? (uint32_t)(uint64_t)value - 1u : (uint64_t)value - 1u;
+}
+PNX_OP(FGET_unchecked) {
+    const pnx_global *g = &st->globals[PNX_GF(st, x)];
+    const uint64_t row = pnx_row_proven(g, R[OP_B(w)]);
+    R[OP_A(w)] = pnx_load_width(g->ptr + row * g->elem_bytes + ((x >> 12) & 0xfffu), x >> 24);
+    return PNX_R_OK;
+}
+PNX_OP(FSET_unchecked) {
+    const pnx_global *g = &st->globals[PNX_GF(st, x)];
+    const int64_t value = R[OP_A(w)];
+    const uint64_t row = pnx_row_proven(g, R[OP_B(w)]);
+    if (!pnx_fits_width(value, x >> 24))
+        return PINAX_ERR_OVERFLOW;
+    __builtin_memcpy(g->ptr + row * g->elem_bytes + ((x >> 12) & 0xfffu), &value, pnx_width_bytes[x >> 24]);
+    return PNX_R_OK;
+}
+PNX_OP(FGETS_unchecked) {
+    const pnx_global *g = &st->globals[PNX_GF(st, x)];
+    const uint64_t row = pnx_row_proven(g, R[OP_B(w)]);
+    const uint8_t *field = g->ptr + row * g->elem_bytes + ((x >> 12) & 0xfffu);
+    const uint32_t length = field[0] <= (x >> 24) ? field[0] : x >> 24;
+    S[OP_A(w)] = (pnx_scell){PNX_SEG_GLOBAL, length, (uint64_t)(field + 1 - st->segment[PNX_SEG_GLOBAL])};
+    return PNX_R_OK;
+}
+PNX_OP(FSETS_unchecked) {
+    const pnx_global *g = &st->globals[PNX_GF(st, x)];
+    const pnx_scell value = S[OP_A(w)];
+    const uint64_t row = pnx_row_proven(g, R[OP_B(w)]);
+    if (value.length > (x >> 24))
+        return PINAX_ERR_RANGE;
+    uint8_t *field = g->ptr + row * g->elem_bytes + ((x >> 12) & 0xfffu);
+    field[0] = (uint8_t)value.length;
+    __builtin_memmove(field + 1, pnx_view_bytes(st, value), value.length);
+    return PNX_R_OK;
+}
+
+
 // ---- strings ----------------------------------------------------------------------------
 
 PNX_OP(SLEN) { R[OP_A(w)] = S[OP_B(w)].length; return PNX_R_OK; }
