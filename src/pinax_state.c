@@ -2135,6 +2135,16 @@ static void *moved_to(const piece *pieces, uint32_t n, const void *p) {
 }
 #define RELOC(field) ((field) = (typeof(field))moved_to(pieces, n, (const void *)(field)))
 
+typedef struct compacted {
+    const piece *pieces;
+    uint32_t     n;
+} compacted;
+
+static void *compacted_to(void *user, const void *p) {
+    const compacted *c = user;
+    return moved_to(c->pieces, c->n, p);
+}
+
 void pnx_load_done(pinax_state *st) {
     st->undo_pending = false;
     pnx_compact(st);
@@ -2144,7 +2154,8 @@ void pnx_compact(pinax_state *st) {
     if (!st->head || st->suspended || st->loading || st->host_cur || st->nest || st->frozen || pnx_tasks_alive(st))
         return;
     const pnx_head *h = st->head;
-    const uint32_t  most = h->n_globals + PNX_PARTS + 2;
+    pnx_symbols    *sy = &st->symbols;
+    const uint32_t  most = h->n_globals + PNX_PARTS + PNX_SYMS + sy->n_chunks + 2;
     const size_t    mark = st->used;
     piece *pieces = take(st, (size_t)most * sizeof(piece), 8); // the list of live pieces, as scratch above them all
     if (!pieces) {
@@ -2163,8 +2174,12 @@ void pnx_compact(pinax_state *st) {
         if (!g->shared && g->own >= floor && g->own < st->block + mark)
             pieces[n++] = (piece){g->own, (size_t)storage_bytes(&recs[k]), 0};
     }
-    if (st->symbols)
-        pieces[n++] = (piece){st->symbols, pnx_symbols_bytes(st->symbols), 0};
+    for (unsigned t = 0; sy->kept && t < PNX_SYMS; ++t) { // the compiler's tables, at their capacity
+        if (sy->ptr[t] && sy->cap[t])
+            pieces[n++] = (piece){sy->ptr[t], pnx_symbols_bytes(st, t), 0};
+    }
+    for (uint32_t k = 0; sy->kept && k < sy->n_chunks; ++k)
+        pieces[n++] = (piece){sy->chunk[k], sy->chunk_cap[k], 0};
     for (uint32_t i = 1; i < n; ++i) { // by address; nearly in order already
         const piece p = pieces[i];
         uint32_t    j = i;
@@ -2187,11 +2202,9 @@ void pnx_compact(pinax_state *st) {
     for (unsigned part = 0; part < PNX_PARTS; ++part)
         part_set(st, part, moved_to(pieces, n, part_get(st, part)));
     RELOC(st->segment[PNX_SEG_GLOBAL]);
-    if (st->symbols) {
-        const void *from = st->symbols;
-        RELOC(st->symbols);
-        if (st->symbols != from)
-            pnx_symbols_move(st->symbols, from, (const uint8_t *)st->symbols - (const uint8_t *)from);
+    if (sy->kept) {
+        compacted moves = {pieces, n};
+        pnx_symbols_relocate(st, compacted_to, &moves);
     }
     for (uint32_t k = 0; k < h->n_globals; ++k) {
         pnx_global *g = &st->globals[k];
@@ -3537,7 +3550,8 @@ static uint64_t image_layout(void) {
     const uint64_t parts[] = {sizeof(pinax_state), sizeof(pnx_task), sizeof(pnx_global), sizeof(pnx_host),
                               sizeof(pnx_handle_slot), sizeof(pnx_handle_type), sizeof(pnx_context),
                               sizeof(pnx_scell), sizeof(pnx_frame), sizeof(pnx_counts), sizeof(void *),
-                              offsetof(pinax_state, symbols), offsetof(pinax_state, handles), offsetof(pinax_state, counts),
+                              offsetof(pinax_state, symbols), sizeof(pnx_symbols), offsetof(pinax_state, handles),
+                              offsetof(pinax_state, counts),
                               offsetof(pinax_state, globals), offsetof(pinax_state, main), offsetof(pnx_task, ctx),
                               offsetof(pnx_global, own), offsetof(pnx_global, shared), offsetof(pnx_host, fn), PNX_OP_COUNT, PNX_CONTAINER_VERSION,
                               PINAX_FORMAT, pnx_static_len, PNX_SEG_COUNT, PNX_MAX_HOSTS, PNX_MAX_HANDLE_TYPES};
@@ -3588,6 +3602,10 @@ static void *moved(moving *m, const void *p) {
     return (void *)(a + (uintptr_t)m->by);
 }
 #define MOVE(field) ((field) = (typeof(field))moved(&m, (const void *)(field)))
+
+static void *image_moved(void *user, const void *p) {
+    return moved(user, p);
+}
 
 // A string value whose bytes are not in the block as it is now (a host's text, bound memory,
 // anything an image cannot carry) becomes empty.
@@ -3650,12 +3668,8 @@ pinax_err pinax_image_open(pinax_mem block, pinax_str image, const pinax_config 
     MOVE(st->word_counts), MOVE(st->imports), MOVE(st->globals), MOVE(st->lines), MOVE(st->localrecs);
     MOVE(st->proven);
     MOVE(st->task), MOVE(st->main.ibank), MOVE(st->main.sbank), MOVE(st->main.ctrl), MOVE(st->main_wait.host);
-    if (st->symbols) {
-        const void *from = st->symbols;
-        MOVE(st->symbols);
-        if (!m.bad)
-            pnx_symbols_move(st->symbols, from, m.by);
-    }
+    if (st->symbols.kept && !pnx_symbols_relocate(st, image_moved, &m))
+        m.bad = true;
     if (m.bad)
         return PINAX_ERR_FORMAT;
     for (uint32_t k = 0; k < PNX_SEG_COUNT; ++k) { // the segments in the block move; the rest are let go

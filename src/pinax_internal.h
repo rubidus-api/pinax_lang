@@ -212,6 +212,35 @@ enum {
     PNX_PARTS
 };
 
+// The compiler's declaration tables, kept for the next load (RFC-0026): each a segment of the
+// block with a count and a capacity that a load appends to in place, as the program's parts are;
+// a full one is taken again at twice the size and the old one is dead room. Their items are the
+// compiler's own (pinax_compile.c). The names they hold lie in the name chunks, which do not move
+// while the state is in use: a full chunk is followed by a bigger one. The six name indexes hold
+// entry numbers (`n` entries indexed, `cap` slots, and one slot more that counts the slots filled).
+// Kept here by value, so that a load that fails puts them back with the rest of the program.
+enum {
+    PNX_SYM_WORDS, PNX_SYM_CONSTS, PNX_SYM_GLOBALS, PNX_SYM_RECORDS, PNX_SYM_FIELDS, PNX_SYM_BTYPES,
+    PNX_SYM_DTYPES, PNX_SYM_SRCMODS, PNX_SYM_EXTERNS, PNX_SYM_RTYPES,
+    PNX_SYM_TABLES,
+    PNX_SYM_IX = PNX_SYM_TABLES, // the indexes of words, consts, globals, records, externs, dtypes
+    PNX_SYM_OPENED = PNX_SYM_IX + 6, // the session's modules: the name a line wrote, and the module
+    PNX_SYMS
+};
+#define PNX_NAME_CHUNKS 24
+
+typedef struct pnx_symbols {
+    void       *ptr[PNX_SYMS];
+    uint32_t    n[PNX_SYMS], cap[PNX_SYMS];
+    uint8_t    *chunk[PNX_NAME_CHUNKS];
+    uint32_t    chunk_used[PNX_NAME_CHUNKS], chunk_cap[PNX_NAME_CHUNKS];
+    uint32_t    n_chunks;
+    bool        kept; // a source was loaded: the tables are the compiler's
+    // the session of pinax_eval(): its module number (UINT32_MAX before the first line); the
+    // modules its lines opened are the part PNX_SYM_OPENED
+    uint32_t    session;
+} pnx_symbols;
+
 // What a load changes, kept so that a failed load can put it back: the counts by value, the
 // parts and their capacities, and the rest of what points at the program.
 typedef struct pnx_program {
@@ -221,7 +250,7 @@ typedef struct pnx_program {
     uint32_t        caps[PNX_PARTS];
     pnx_global     *globals; // parts[PNX_PART_GLOBALS], for the readers that name it
     const uint8_t  *seg_const, *seg_global;
-    void           *symbols;
+    pnx_symbols     symbols;
     size_t          used;
     uint32_t        n_hosts;
 } pnx_program;
@@ -310,7 +339,7 @@ struct pinax_state {
     pnx_wordrec undo_word;
     uint32_t    undo_old, undo_new;
     bool        undo_pending;
-    void    *symbols;   // the compiler's declaration tables, kept for the next load (pinax_compile.c)
+    pnx_symbols symbols; // the compiler's declaration tables, kept for the next load (pinax_compile.c)
     pinax_err   fail;
     const char *error_text;
     void (*diag)(void *user, pinax_str file, uint32_t line, uint32_t column, pinax_str message);
@@ -399,11 +428,11 @@ int      pnx_encode(uint32_t kind, const uint8_t *in, uint32_t length, uint8_t *
 extern const char pnx_static_text[];
 extern const uint32_t pnx_static_len; // bytes of pnx_static_text
 
-// Images (D0036), from pinax_compile.c: the kept declaration tables at `symbols` were made at
-// `from` and now lie `by` bytes further on; and the sizes of the compiler's kept structs,
-// mixed into the layout hash of an image.
-void     pnx_symbols_move(void *symbols, const void *from, ptrdiff_t by);
-size_t   pnx_symbols_bytes(const void *symbols); // the bytes of the kept tables, as one piece
+// From pinax_compile.c: the bytes of the storage of kept table `table` (PNX_SYM_*), as a piece of
+// the block; and after the block moved (compaction, an image), every pointer of the kept tables
+// is given to `where`, which says where it lies now (NULL: nowhere it may point).
+size_t   pnx_symbols_bytes(const pinax_state *state, unsigned table);
+bool     pnx_symbols_relocate(pinax_state *state, void *(*where)(void *user, const void *p), void *user);
 // After a load that declared: the live pieces of the program move down over the copies a load
 // left behind, so that the block holds one (RFC-0024). Does nothing while a run, a load, a host
 // word or a task is in the middle of something.

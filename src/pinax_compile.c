@@ -332,11 +332,18 @@ typedef struct trunc_edge {
 
 // Entries of a table by name (name_first), once the table is long: a source of many names would
 // otherwise cost the square of its length to compile. `slot` holds entry numbers (NONE: empty), a
-// power of two of them, at least twice the entries; the first `n` entries are in it.
+// power of two of them, at least twice the entries; the first `n` entries are in it. The state
+// keeps the index with its table (RFC-0026). slot[cap] counts the slots filled: a load that failed
+// may have left slots for entries that are gone, which are only candidates (a lookup compares the
+// name and the range), and the index is made again once the filled slots reach half of it.
 typedef struct nindex {
     uint32_t *slot;
     uint32_t  cap, n;
 } nindex;
+
+static size_t index_bytes(uint32_t cap) {
+    return cap ? ((size_t)cap + 2) * sizeof(uint32_t) : 0; // the count, and a word to keep 8-byte sizes
+}
 
 typedef struct comp {
     pinax_state *st;
@@ -347,9 +354,10 @@ typedef struct comp {
     fn          *f, *word_fn, *top_fn;
     vec          words;    // wordsym
     vec          imports;  // uint32_t: index into st->hosts
-    vec          iconst;   // int64_t
-    vec          sconst;   // pnx_sconst
-    vec          strbytes; // uint8_t
+    vec          iconst;   // int64_t: those of this load (the program's lie below base_iconst)
+    vec          sconst;   // pnx_sconst: those of this load, numbered on from base_sconst
+    vec          strbytes; // uint8_t: those of this load, at offsets from base_strbytes on
+    uint32_t     base_iconst, base_sconst, base_strbytes; // what the program holds already, read in place
     vec          consts;   // constant
     vec          globals;  // globalsym
     vec          records;  // record
@@ -371,6 +379,7 @@ typedef struct comp {
     struct counts {
         uint32_t words, consts, globals, records, dtypes, externs;
     } base;
+    uint32_t     sym_base[PNX_SYM_TABLES]; // the entries of each kept table before this load
     vec          externs;   // externsym
     // pinax_eval(): every line belongs to one module, the session, so a line sees what the
     // lines before it declared and the modules they opened
@@ -448,6 +457,8 @@ static void *arena_alloc(comp *c, size_t bytes) {
 }
 
 // Room for one more element; the old storage is left behind in the arena.
+static bool vec_own(comp *c, vec *v, size_t elem, unsigned table);
+
 static void *vec_push(comp *c, vec *v, size_t elem) {
     if (v->n == v->cap) {
         const uint32_t cap = v->cap ? v->cap * 2 : 32;
@@ -459,7 +470,9 @@ static void *vec_push(comp *c, vec *v, size_t elem) {
         v->ptr = p;
         v->cap = cap;
     }
-    return (uint8_t *)v->ptr + (size_t)v->n++ * elem;
+    uint8_t *slot = (uint8_t *)v->ptr + (size_t)v->n++ * elem;
+    __builtin_memset(slot, 0, elem); // a kept table's spare room may hold what a failed load wrote
+    return slot;
 }
 
 // ---- tokens -------------------------------------------------------------------------------
@@ -500,16 +513,20 @@ static uint32_t name_hash(name n) {
 // is in the table, and no table gets shorter while a source compiles. False when there is no room:
 // the table is then looked through entry by entry.
 static bool nindex_fill(comp *c, nindex *ix, const vec *v, size_t size) {
-    if (v->n * 2u > ix->cap) {
+    if (ix->n > v->n)
+        ix->n = v->n;
+    const uint64_t filled = ix->cap ? ix->slot[ix->cap] : 0;
+    if (!ix->cap || (filled + v->n - ix->n) * 2u > ix->cap) {
         uint32_t cap = 256;
         while (cap < v->n * 4u)
             cap *= 2;
-        const size_t bytes = (size_t)cap * 4;
+        const size_t bytes = index_bytes(cap);
         if (bytes > (size_t)(c->arena_end - c->arena))
             return false;
         ix->slot = (uint32_t *)(void *)c->arena;
         c->arena += bytes;
-        __builtin_memset(ix->slot, 0xff, bytes);
+        __builtin_memset(ix->slot, 0xff, (size_t)cap * sizeof(uint32_t));
+        ix->slot[cap] = ix->slot[cap + 1] = 0;
         ix->cap = cap;
         ix->n = 0;
     }
@@ -518,6 +535,7 @@ static bool nindex_fill(comp *c, nindex *ix, const vec *v, size_t size) {
         while (ix->slot[at] != 0xffffffffu)
             at = (at + 1) & (ix->cap - 1);
         ix->slot[at] = ix->n;
+        ++ix->slot[ix->cap];
     }
     return true;
 }
@@ -1284,17 +1302,28 @@ static void land(comp *c, uint32_t *chain) {
     f->tail_at = NONE; // another path arrives here
 }
 
+// String constant `k` and its bytes: the program's, read in place, or this load's.
+static pnx_sconst sconst_at(const comp *c, uint32_t k, const uint8_t **bytes) {
+    const pinax_state *st = c->st;
+    const pnx_sconst   x = k < c->base_sconst ? st->sconst[k] : ((const pnx_sconst *)c->sconst.ptr)[k - c->base_sconst];
+    *bytes = x.offset < c->base_strbytes ? st->segment[PNX_SEG_CONST] + x.offset
+                                         : (const uint8_t *)c->strbytes.ptr + (x.offset - c->base_strbytes);
+    return x;
+}
+
+// One constant per value within a load; a value an earlier load holds too is held again (a few
+// bytes), so that a load does not search the whole program.
 static uint32_t add_iconst(comp *c, int64_t value) {
     int64_t *all = c->iconst.ptr;
     for (uint32_t k = 0; k < c->iconst.n; ++k) {
         if (all[k] == value)
-            return k;
+            return c->base_iconst + k;
     }
     int64_t *slot = vec_push(c, &c->iconst, sizeof(int64_t));
     if (!slot)
         return NONE;
     *slot = value;
-    return c->iconst.n - 1;
+    return c->base_iconst + c->iconst.n - 1;
 }
 
 static bool load_int(comp *c, uint32_t reg, int64_t value) {
@@ -3482,11 +3511,9 @@ static bool case_value(comp *c, block *b, int64_t *value) {
     for (uint32_t k = 0; k < b->n_values; ++k) {
         bool same = b->values[k] == *value;
         if (type == TY_STR && !same) {
-            const pnx_sconst *all = c->sconst.ptr;
-            const pnx_sconst x = all[b->values[k]], y = all[*value];
-            same = x.length == y.length &&
-                   __builtin_memcmp((const uint8_t *)c->strbytes.ptr + x.offset,
-                                    (const uint8_t *)c->strbytes.ptr + y.offset, x.length) == 0;
+            const uint8_t   *xb, *yb;
+            const pnx_sconst x = sconst_at(c, (uint32_t)b->values[k], &xb), y = sconst_at(c, (uint32_t)*value, &yb);
+            same = x.length == y.length && __builtin_memcmp(xb, yb, x.length) == 0;
         }
         if (same)
             return type_error(c, "this value is already in an earlier branch of the case");
@@ -5125,7 +5152,7 @@ static bool push_string(comp *c, uint32_t index);
 
 // Bytes added as a string constant (a program of rex).
 static bool add_bytes(comp *c, const uint8_t *bytes, uint32_t length, uint32_t *index) {
-    const uint32_t offset = c->strbytes.n;
+    const uint32_t offset = c->base_strbytes + c->strbytes.n;
     for (uint32_t k = 0; k < length; ++k) {
         uint8_t *b = vec_push(c, &c->strbytes, 1);
         if (!b)
@@ -5136,9 +5163,9 @@ static bool add_bytes(comp *c, const uint8_t *bytes, uint32_t length, uint32_t *
     if (!k)
         return false;
     *k = (pnx_sconst){offset, length};
-    if (c->sconst.n - 1 > 0xffffu)
+    if (c->base_sconst + c->sconst.n - 1 > 0xffffu)
         return syntax(c, "too many string constants");
-    *index = c->sconst.n - 1;
+    *index = c->base_sconst + c->sconst.n - 1;
     return true;
 }
 
@@ -5165,10 +5192,11 @@ static bool rex_word(comp *c, uint32_t id) {
             return type_error(c, "rx takes a string literal or a const name; a pattern made while running is rex.compile");
         if (!c->rx_buf && !(c->rx_buf = arena_alloc(c, PNX_REX_BUF)))
             return false;
-        const pnx_sconst *k = (const pnx_sconst *)c->sconst.ptr + (pat.lit - 1);
+        const uint8_t    *text;
+        const pnx_sconst  k = sconst_at(c, pat.lit - 1u, &text);
         const char       *why = NULL;
         uint32_t          at = 0;
-        const uint32_t    n = pnx_rex_compile((const uint8_t *)c->strbytes.ptr + k->offset, k->length, c->rx_buf,
+        const uint32_t    n = pnx_rex_compile(text, k.length, c->rx_buf,
                                               PNX_REX_BUF, &why, &at);
         if (!n)
             return syntax(c, why ? why : "the pattern makes a program too large");
@@ -5251,9 +5279,10 @@ static bool ptn_word(comp *c, uint32_t id) {
     const entry pat = f->stack[f->depth - args + 1];
     if (!pat.lit)
         return type_error(c, "a pattern is a string literal or a const name, so that it is checked at load");
-    const pnx_sconst *k = (const pnx_sconst *)c->sconst.ptr + (pat.lit - 1);
+    const uint8_t    *text;
+    const pnx_sconst  k = sconst_at(c, pat.lit - 1u, &text);
     const char       *why;
-    if (!pnx_ptn_check((const uint8_t *)c->strbytes.ptr + k->offset, k->length, &why))
+    if (!pnx_ptn_check(text, k.length, &why))
         return syntax(c, why);
     for (uint32_t j = 1; j <= args; ++j) {
         if (!settle(c, f->depth - j))
@@ -6248,7 +6277,7 @@ static bool builtin(comp *c, const struct builtin *w) {
 // Adds the text of a string token to the constants.
 static bool add_string(comp *c, const pnx_token *tp, uint32_t *index) {
     const pnx_token t = *tp;
-    const uint32_t offset = c->strbytes.n;
+    const uint32_t offset = c->strbytes.n; // in this load's bytes
     uint32_t length = 0;
     if (t.body_length) {
         // room first: the decoded text is never longer than the body
@@ -6268,10 +6297,10 @@ static bool add_string(comp *c, const pnx_token *tp, uint32_t *index) {
     pnx_sconst *k = vec_push(c, &c->sconst, sizeof(pnx_sconst));
     if (!k)
         return false;
-    *k = (pnx_sconst){offset, length};
-    if (c->sconst.n - 1 > 0xffffu)
+    *k = (pnx_sconst){c->base_strbytes + offset, length};
+    if (c->base_sconst + c->sconst.n - 1 > 0xffffu)
         return syntax(c, "too many string constants");
-    *index = c->sconst.n - 1;
+    *index = c->base_sconst + c->sconst.n - 1;
     return true;
 }
 
@@ -7732,6 +7761,8 @@ static bool row_item(comp *c) {
     if (!advance(c))
         return false;
     const uint32_t gi = c->tok.kind == PNX_T_NAME ? find_global(c, tok_name(c)) : NONE;
+    if (gi != NONE && gi < c->sym_base[PNX_SYM_GLOBALS] && !vec_own(c, &c->globals, sizeof(globalsym), PNX_SYM_GLOBALS))
+        return false; // it counts the rows of a list an earlier load declared
     globalsym *g = gi == NONE ? NULL : (globalsym *)c->globals.ptr + gi;
     if (!g || g->kind != GK_LIST || g->forward)
         return type_error(c, "row adds to a declared list: row name (values)");
@@ -7914,9 +7945,15 @@ static bool assign_item(comp *c) {
 // Words are stored in the order of their code. Each definition was compiled into the word
 // buffer and copied out here; the code outside definitions follows as one last word.
 typedef struct image {
-    vec code;  // uint32_t, all words
-    vec lines; // uint32_t, the source line of each code word (0 for the code of earlier loads)
+    vec      code;  // uint32_t, the words of this load: the program's code lies below `base`
+    vec      lines; // uint32_t, the source line of each code word of this load
+    uint32_t base;  // the code words the program holds already
 } image;
+
+// The number of the next code word.
+static uint32_t im_pc(const image *im) {
+    return im->base + im->code.n;
+}
 
 static bool append_code(comp *c, image *im, const fn *f) {
     for (uint32_t k = 0; k < f->code.n; ++k) {
@@ -7952,7 +7989,7 @@ static bool store_pending(comp *c, image *im) {
             if (all[k].code && (!next || all[k].word < next->word))
                 next = &all[k];
         }
-        ((wordsym *)c->words.ptr + next->word)->entry = im->code.n;
+        ((wordsym *)c->words.ptr + next->word)->entry = im_pc(im);
         for (uint32_t k = 0; k < next->n; ++k) {
             uint32_t *slot = vec_push(c, &im->code, sizeof(uint32_t));
             uint32_t *line = slot ? vec_push(c, &im->lines, sizeof(uint32_t)) : NULL;
@@ -8080,7 +8117,7 @@ static bool compile(comp *c, image *im, bool *has_top) {
         } else if (is_word(c, PNX_KW_word) || is_word(c, PNX_KW_test)) {
             if (!definition(c, is_word(c, PNX_KW_test)))
                 return false;
-            ((wordsym *)c->words.ptr + c->def_index)->entry = im->code.n;
+            ((wordsym *)c->words.ptr + c->def_index)->entry = im_pc(im);
             if (!append_code(c, im, c->word_fn) || !store_pending(c, im))
                 return false;
             c->see_line = 0;
@@ -8182,7 +8219,7 @@ static bool compile(comp *c, image *im, bool *has_top) {
     fn *top = c->top_fn;
     if (top->n_blocks)
         return syntax(c, "the source ends inside an open block");
-    for (uint32_t k = 0; k < c->globals.n; ++k) {
+    for (uint32_t k = c->sym_base[PNX_SYM_GLOBALS]; k < c->globals.n; ++k) { // earlier loads announced none left
         if (((const globalsym *)c->globals.ptr + k)->forward)
             return type_error(c, "a table announced by forward is never declared");
     }
@@ -8218,7 +8255,7 @@ static bool compile(comp *c, image *im, bool *has_top) {
             w->sig = c->eval_sig;
         w->name = cname(LOAD_WORD);
         w->module = c->module;
-        w->entry = im->code.n;
+        w->entry = im_pc(im);
         // a line of a session gives results: their registers count even when only constants
         // were left (`1 "a" drop` leaves 1 without using a register before the return)
         if (!finish_word(c, top, c->words.n - 1) || !append_code(c, im, top))
@@ -8235,13 +8272,13 @@ static bool serialize(comp *c, const image *im, uint8_t **out, size_t *out_len) 
     const pnx_head     base = st->head ? *st->head : (pnx_head){0};
     // line records: one wherever the line changes in the new code
     vec runs = {0};
-    for (uint32_t k = base.n_code, line = 0; k < im->code.n; ++k) {
+    for (uint32_t k = 0, line = 0; k < im->code.n; ++k) {
         const uint32_t here = ((const uint32_t *)im->lines.ptr)[k];
-        if (k == base.n_code || here != line) {
+        if (k == 0 || here != line) {
             pnx_linerec *rec = vec_push(c, &runs, sizeof(pnx_linerec));
             if (!rec)
                 return false;
-            *rec = (pnx_linerec){k, here};
+            *rec = (pnx_linerec){im->base + k, here};
             line = here;
         }
         const uint32_t op = ((const uint32_t *)im->code.ptr)[k] & 0xffu;
@@ -8255,10 +8292,10 @@ static bool serialize(comp *c, const image *im, uint8_t **out, size_t *out_len) 
         .n_words = c->words.n - base.n_words,
         .n_globals = c->globals.n - base.n_globals,
         .n_imports = c->imports.n - base.n_imports,
-        .n_iconst = c->iconst.n - base.n_iconst,
-        .n_sconst = c->sconst.n - base.n_sconst,
-        .n_code = im->code.n - base.n_code,
-        .n_strbytes = c->strbytes.n - base.n_strbytes,
+        .n_iconst = c->iconst.n,
+        .n_sconst = c->sconst.n,
+        .n_code = im->code.n,
+        .n_strbytes = c->strbytes.n,
         .n_lines = runs.n,
         .n_locals = c->localrecs.n,
         .base_words = base.n_words,
@@ -8287,7 +8324,7 @@ static bool serialize(comp *c, const image *im, uint8_t **out, size_t *out_len) 
     p += sizeof head;
     for (uint32_t k = base.n_words; k < c->words.n; ++k) {
         const wordsym *w = (const wordsym *)c->words.ptr + k;
-        const uint32_t next = k + 1 < c->words.n ? ((const wordsym *)c->words.ptr + k + 1)->entry : im->code.n;
+        const uint32_t next = k + 1 < c->words.n ? ((const wordsym *)c->words.ptr + k + 1)->entry : im_pc(im);
         pnx_wordrec rec = {.entry = w->entry, .length = next - w->entry, .int_cells = w->cells[0], .str_cells = w->cells[1],
                            .counted = 1, .fails = w->sig.fails, .module = (uint8_t)w->module};
         uint32_t in[2], out[2];
@@ -8365,18 +8402,18 @@ static bool serialize(comp *c, const image *im, uint8_t **out, size_t *out_len) 
         p += sizeof rec;
     }
     if (head.n_iconst)
-        __builtin_memcpy(p, (const int64_t *)c->iconst.ptr + base.n_iconst, (size_t)head.n_iconst * 8);
+        __builtin_memcpy(p, c->iconst.ptr, (size_t)head.n_iconst * 8);
     p += (size_t)head.n_iconst * 8;
     if (head.n_sconst)
-        __builtin_memcpy(p, (const pnx_sconst *)c->sconst.ptr + base.n_sconst, (size_t)head.n_sconst * sizeof(pnx_sconst));
+        __builtin_memcpy(p, c->sconst.ptr, (size_t)head.n_sconst * sizeof(pnx_sconst));
     p += (size_t)head.n_sconst * sizeof(pnx_sconst);
     if (head.n_code) { // forward words are of this load alone: only its code holds calls to patch
-        patch_forward_calls(c, (uint32_t *)im->code.ptr + base.n_code, head.n_code);
-        __builtin_memcpy(p, (const uint32_t *)im->code.ptr + base.n_code, (size_t)head.n_code * 4);
+        patch_forward_calls(c, im->code.ptr, head.n_code);
+        __builtin_memcpy(p, im->code.ptr, (size_t)head.n_code * 4);
     }
     p += (size_t)head.n_code * 4;
     if (head.n_strbytes)
-        __builtin_memcpy(p, (const uint8_t *)c->strbytes.ptr + base.n_strbytes, head.n_strbytes);
+        __builtin_memcpy(p, c->strbytes.ptr, head.n_strbytes);
     p += head.n_strbytes;
     if (head.n_lines)
         __builtin_memcpy(p, runs.ptr, (size_t)head.n_lines * sizeof(pnx_linerec));
@@ -8392,204 +8429,151 @@ static bool serialize(comp *c, const image *im, uint8_t **out, size_t *out_len) 
     return true;
 }
 
-// ---- the declarations, kept for the next load (RFC-0014) -----------------------------------
+// ---- the declarations, kept for the next load (RFC-0014, RFC-0026) --------------------------
 
-// What a load leaves in the block for the loads after it: the compiler's tables in one piece,
-// with every name it holds copied in, so the host may let go of the source.
-typedef struct symtab {
-    vec    words, consts, globals, records, fields, btypes, dtypes, srcmods, externs, rtypes;
-    size_t bytes;
-    // the session of pinax_eval(): its module number (NONE before the first line) and the
-    // modules its lines opened
-    uint32_t session, n_opened;
-    name     opened[MAX_MODULES], opened_real[MAX_MODULES];
-} symtab;
+// The state keeps the compiler's tables for the loads after it, as parts of its own
+// (pnx_symbols): while a load is compiled, the compiler's vectors are those parts, and a new entry
+// goes into a part's spare capacity. A full part is copied into the working memory at twice the
+// size (vec_push), and at the end of the load taken again in the block. So a load costs what it
+// brings: the entries of earlier loads are read where they lie, and never written (vec_own).
+#define TABLES(X)                                                                                            \
+    X(words, wordsym, PNX_SYM_WORDS) X(consts, constant, PNX_SYM_CONSTS) X(globals, globalsym, PNX_SYM_GLOBALS) \
+    X(records, record, PNX_SYM_RECORDS) X(fields, field, PNX_SYM_FIELDS) X(btypes, sig, PNX_SYM_BTYPES)         \
+    X(dtypes, dtype, PNX_SYM_DTYPES) X(srcmods, name, PNX_SYM_SRCMODS) X(externs, externsym, PNX_SYM_EXTERNS)  \
+    X(rtypes, rtype, PNX_SYM_RTYPES)
+#define INDEXES(X) X(ix_words, 0) X(ix_consts, 1) X(ix_globals, 2) X(ix_records, 3) X(ix_externs, 4) X(ix_dtypes, 5)
+
+// A module a line of the session opened: the name it wrote, and the module it stands for.
+typedef struct opened {
+    name alias, real;
+} opened;
+
+static const size_t table_item[PNX_SYM_TABLES] = {
+#define X(v, t_, k) [k] = sizeof(t_),
+    TABLES(X)
+#undef X
+};
+
+size_t pnx_symbols_bytes(const pinax_state *st, unsigned table) {
+    const size_t cap = st->symbols.cap[table];
+    return table < PNX_SYM_TABLES ? cap * table_item[table]
+           : table == PNX_SYM_OPENED ? cap * sizeof(opened)
+                                     : index_bytes((uint32_t)cap);
+}
+
+// The kept tables seen as the compiler's vectors.
+typedef struct tables {
+    vec of[PNX_SYM_TABLES];
+} tables;
 
 typedef void name_fn(name *n, void *user);
 
-static void each_name(symtab *t, name_fn *f, void *user) {
-    for (uint32_t k = 0; k < t->words.n; ++k) {
-        wordsym *w = (wordsym *)t->words.ptr + k;
-        f(&w->name, user);
-    }
-    for (uint32_t k = 0; k < t->consts.n; ++k)
-        f(&((constant *)t->consts.ptr + k)->name, user);
-    for (uint32_t k = 0; k < t->globals.n; ++k)
-        f(&((globalsym *)t->globals.ptr + k)->name, user);
-    for (uint32_t k = 0; k < t->records.n; ++k)
-        f(&((record *)t->records.ptr + k)->name, user);
-    for (uint32_t k = 0; k < t->fields.n; ++k)
-        f(&((field *)t->fields.ptr + k)->name, user);
-    for (uint32_t k = 0; k < t->dtypes.n; ++k)
-        f(&((dtype *)t->dtypes.ptr + k)->name, user);
-    for (uint32_t k = 0; k < t->srcmods.n; ++k)
-        f((name *)t->srcmods.ptr + k, user);
-    for (uint32_t k = 0; k < t->externs.n; ++k)
-        f(&((externsym *)t->externs.ptr + k)->name, user);
-    for (uint32_t k = 0; k < t->n_opened; ++k) {
-        f(&t->opened[k], user);
-        f(&t->opened_real[k], user);
-    }
+// Every name of the entries from from[t] on of each table (from NULL: every entry).
+static void each_name(const tables *t, const uint32_t *from, name_fn *f, void *user) {
+#define FROM(k) (from ? from[k] : 0u)
+    for (uint32_t k = FROM(PNX_SYM_WORDS); k < t->of[PNX_SYM_WORDS].n; ++k)
+        f(&((wordsym *)t->of[PNX_SYM_WORDS].ptr + k)->name, user);
+    for (uint32_t k = FROM(PNX_SYM_CONSTS); k < t->of[PNX_SYM_CONSTS].n; ++k)
+        f(&((constant *)t->of[PNX_SYM_CONSTS].ptr + k)->name, user);
+    for (uint32_t k = FROM(PNX_SYM_GLOBALS); k < t->of[PNX_SYM_GLOBALS].n; ++k)
+        f(&((globalsym *)t->of[PNX_SYM_GLOBALS].ptr + k)->name, user);
+    for (uint32_t k = FROM(PNX_SYM_RECORDS); k < t->of[PNX_SYM_RECORDS].n; ++k)
+        f(&((record *)t->of[PNX_SYM_RECORDS].ptr + k)->name, user);
+    for (uint32_t k = FROM(PNX_SYM_FIELDS); k < t->of[PNX_SYM_FIELDS].n; ++k)
+        f(&((field *)t->of[PNX_SYM_FIELDS].ptr + k)->name, user);
+    for (uint32_t k = FROM(PNX_SYM_DTYPES); k < t->of[PNX_SYM_DTYPES].n; ++k)
+        f(&((dtype *)t->of[PNX_SYM_DTYPES].ptr + k)->name, user);
+    for (uint32_t k = FROM(PNX_SYM_SRCMODS); k < t->of[PNX_SYM_SRCMODS].n; ++k)
+        f((name *)t->of[PNX_SYM_SRCMODS].ptr + k, user);
+    for (uint32_t k = FROM(PNX_SYM_EXTERNS); k < t->of[PNX_SYM_EXTERNS].n; ++k)
+        f(&((externsym *)t->of[PNX_SYM_EXTERNS].ptr + k)->name, user);
+#undef FROM
 }
 
-#define TABLES(X)                                                                                            \
-    X(words, wordsym) X(consts, constant) X(globals, globalsym) X(records, record) X(fields, field)          \
-    X(btypes, sig) X(dtypes, dtype) X(srcmods, name) X(externs, externsym) X(rtypes, rtype)
-
-// A name whose bytes will not outlive this load lies in the source, in the working memory, or in
-// the tables kept by the load before (which the block takes back once these replace them).
-typedef struct keeper {
-    const uint8_t *lo[3], *hi[3];
-    uint8_t       *at;
-    size_t         total;
-} keeper;
-
-static bool passing(const keeper *k, const name *n) {
-    const uint8_t *p = (const uint8_t *)n->text;
-    if (!n->length)
-        return false;
-    for (unsigned r = 0; r < 3; ++r) {
-        if (p >= k->lo[r] && p < k->hi[r])
-            return true;
-    }
-    return false;
-}
-
-static void name_size(name *n, void *user) {
-    keeper *k = user;
-    if (passing(k, n))
-        k->total += n->length;
-}
-
-static void name_keep(name *n, void *user) {
-    keeper *k = user;
-    if (passing(k, n)) {
-        __builtin_memcpy(k->at, n->text, n->length);
-        n->text = (void *)k->at;
-        k->at += n->length;
-    }
-}
-
-typedef struct shift {
-    const uint8_t *lo, *hi;
-    ptrdiff_t      by;
-} shift;
-
-static void name_shift(name *n, void *user) {
-    const shift *s = user;
-    const uint8_t *p = (const uint8_t *)n->text;
-    if (n->length && p >= s->lo && p < s->hi)
-        n->text = (void *)(p + s->by);
-}
-
-// The tables as one piece in the working memory.
-static symtab *keep_symbols(comp *c, pinax_str source, const uint8_t *work) {
-    symtab now = {c->words, c->consts, c->globals, c->records, c->fields, c->btypes, c->dtypes, c->srcmods,
-                  c->externs, c->rtypes, 0, NONE, 0, {{0}}, {{0}}};
-    const symtab *old = c->st->symbols;
-    if (c->eval) { // this line's session: its number and what it has opened by now
-        now.session = c->module;
-        now.n_opened = c->n_modules;
-        __builtin_memcpy(now.opened, c->modules, sizeof now.opened);
-        __builtin_memcpy(now.opened_real, c->module_real, sizeof now.opened_real);
-    } else if (old) {
-        now.session = old->session;
-        now.n_opened = old->n_opened;
-        __builtin_memcpy(now.opened, old->opened, sizeof now.opened);
-        __builtin_memcpy(now.opened_real, old->opened_real, sizeof now.opened_real);
-    }
-    const uint8_t *const old_at = (const uint8_t *)old;
-    keeper k = {{source.ptr, work, old_at}, {source.ptr + source.len, c->arena_end, old ? old_at + old->bytes : NULL}, NULL, 0};
-    each_name(&now, name_size, &k);
-    size_t bytes = sizeof(symtab) + ((k.total + 7u) & ~(size_t)7u);
-#define X(v, t) bytes += ((size_t)now.v.n * sizeof(t) + 7u) & ~(size_t)7u;
-    TABLES(X)
-#undef X
-    uint8_t *p = arena_alloc(c, bytes);
-    if (!p)
-        return NULL;
-    symtab *t = (symtab *)p;
-    p += sizeof(symtab);
-#define X(v, t_)                                                          \
-    t->v = (vec){p, now.v.n, now.v.n};                                    \
-    if (now.v.n)                                                          \
-        __builtin_memcpy(p, now.v.ptr, (size_t)now.v.n * sizeof(t_));     \
-    p += ((size_t)now.v.n * sizeof(t_) + 7u) & ~(size_t)7u;
-    TABLES(X)
-#undef X
-    for (uint32_t k = 0; k < t->words.n; ++k) // the names of parameters stay behind
-        ((wordsym *)t->words.ptr + k)->sig.names = NULL;
-    for (uint32_t k = 0; k < t->btypes.n; ++k)
-        ((sig *)t->btypes.ptr + k)->names = NULL;
-    t->bytes = bytes;
-    t->session = now.session;
-    t->n_opened = now.n_opened;
-    __builtin_memcpy(t->opened, now.opened, sizeof t->opened);
-    __builtin_memcpy(t->opened_real, now.opened_real, sizeof t->opened_real);
-    k.at = p;
-    each_name(t, name_keep, &k);
+static tables kept_tables(const pnx_symbols *s) {
+    tables t;
+    for (unsigned k = 0; k < PNX_SYM_TABLES; ++k)
+        t.of[k] = (vec){s->ptr[k], s->n[k], s->cap[k]};
     return t;
 }
 
-// The tables have moved by `by` bytes: what points into them moves along.
-static void move_symbols(symtab *t, const uint8_t *from, ptrdiff_t by) {
-    const size_t bytes = t->bytes;
-#define X(v, t_) t->v.ptr = (uint8_t *)t->v.ptr + by;
-    TABLES(X)
-#undef X
-    shift s = {from, from + bytes, by};
-    each_name(t, name_shift, &s);
+// The names of the session's modules from `from` on.
+static void each_session_name(pnx_symbols *s, uint32_t from, name_fn *f, void *user) {
+    for (uint32_t k = from; k < s->n[PNX_SYM_OPENED]; ++k) {
+        opened *o = (opened *)s->ptr[PNX_SYM_OPENED] + k;
+        f(&o->alias, user);
+        f(&o->real, user);
+    }
 }
 
-void pnx_symbols_move(void *symbols, const void *from, ptrdiff_t by) {
-    move_symbols(symbols, from, by);
+typedef struct relocation {
+    void *(*where)(void *user, const void *p);
+    void *user;
+    bool  bad;
+} relocation;
+
+static void *relocated(relocation *r, const void *p) {
+    if (!p)
+        return NULL;
+    void *to = r->where(r->user, p);
+    if (!to)
+        r->bad = true;
+    return to;
 }
 
-size_t pnx_symbols_bytes(const void *symbols) {
-    return ((const symtab *)symbols)->bytes;
+static void name_relocate(name *n, void *user) {
+    if (n->length)
+        n->text = relocated(user, n->text);
+    else
+        n->text = NULL;
+}
+
+bool pnx_symbols_relocate(pinax_state *st, void *(*where)(void *user, const void *p), void *user) {
+    pnx_symbols *s = &st->symbols;
+    relocation   r = {where, user, false};
+    bool         names_moved = false;
+    for (unsigned k = 0; k < PNX_SYMS; ++k)
+        s->ptr[k] = relocated(&r, s->ptr[k]);
+    for (uint32_t k = 0; k < s->n_chunks; ++k) {
+        uint8_t *const to = relocated(&r, s->chunk[k]);
+        names_moved = names_moved || to != s->chunk[k];
+        s->chunk[k] = to;
+    }
+    if (names_moved && !r.bad) { // the names follow their chunks (rarely: chunks only move after a part grew)
+        const tables t = kept_tables(s);
+        each_name(&t, NULL, name_relocate, &r);
+        each_session_name(s, 0, name_relocate, &r);
+    }
+    return !r.bad;
 }
 
 // FNV-1a over the sizes and a few places of what the kept tables hold: an image made by a
 // build that lays them out otherwise is refused.
 uint64_t pnx_symbols_layout(uint64_t hash) {
-    const uint64_t parts[] = {sizeof(symtab), sizeof(wordsym), sizeof(constant), sizeof(globalsym), sizeof(record),
+    const uint64_t parts[] = {sizeof(wordsym), sizeof(constant), sizeof(globalsym), sizeof(record),
                               sizeof(field), sizeof(sig), sizeof(dtype), sizeof(name), sizeof(externsym), sizeof(rtype),
                               offsetof(wordsym, sig), offsetof(wordsym, writes), offsetof(globalsym, record),
-                              offsetof(field, offset),
-                              offsetof(symtab, bytes), MAX_PARAMS};
+                              offsetof(field, offset), sizeof(opened), MAX_PARAMS, PNX_SYMS, PNX_NAME_CHUNKS};
     for (size_t k = 0; k < sizeof parts / sizeof parts[0]; ++k)
         hash = (hash ^ parts[k]) * 0x100000001b3u;
     return hash;
 }
 
-// The tables of the loads before this one, copied into the working memory to grow there.
+// The tables of the loads before this one, read where they lie; the imports are copied (a few).
 static bool take_symbols(comp *c, image *im) {
     const pinax_state *st = c->st;
-    const symtab *t = st->symbols;
-    if (!t)
+    const pnx_symbols *s = &st->symbols;
+    if (!s->kept)
         return true;
-#define COPY(dst, src, count, type_)                                       \
-    if (count) {                                                           \
-        void *p = arena_alloc(c, (size_t)(count) * sizeof(type_));         \
-        if (!p)                                                            \
-            return false;                                                  \
-        __builtin_memcpy(p, src, (size_t)(count) * sizeof(type_));         \
-        dst = (vec){p, (uint32_t)(count), (uint32_t)(count)};              \
-    }
-#define X(v, t_) COPY(c->v, t->v.ptr, t->v.n, t_)
+#define X(v, t_, k)                                \
+    c->v = (vec){s->ptr[k], s->n[k], s->cap[k]};   \
+    c->sym_base[k] = s->n[k];
     TABLES(X)
 #undef X
-    const pnx_head *h = st->head;
-    COPY(c->iconst, st->iconst, h->n_iconst, int64_t)
-    COPY(c->sconst, st->sconst, h->n_sconst, pnx_sconst)
-    COPY(c->strbytes, st->segment[PNX_SEG_CONST], h->n_strbytes, uint8_t)
-    COPY(im->code, st->code, h->n_code, uint32_t)
-    if (h->n_code) { // the lines of that code are kept as records; these are placeholders
-        void *p = arena_alloc(c, (size_t)h->n_code * sizeof(uint32_t));
-        if (!p)
-            return false;
-        im->lines = (vec){p, h->n_code, h->n_code};
-    }
+#define X(ix, i) c->ix = (nindex){s->ptr[PNX_SYM_IX + i], s->cap[PNX_SYM_IX + i], s->n[PNX_SYM_IX + i]};
+    INDEXES(X)
+#undef X
+    const pnx_head *h = st->head; // the code and the constants are read in place too
     if (h->n_imports) {
         uint32_t *p = arena_alloc(c, (size_t)h->n_imports * sizeof(uint32_t));
         if (!p)
@@ -8598,16 +8582,195 @@ static bool take_symbols(comp *c, image *im) {
             p[k] = (uint32_t)(st->imports[k] - st->hosts);
         c->imports = (vec){p, h->n_imports, h->n_imports};
     }
-#undef COPY
+    c->base_iconst = h->n_iconst;
+    c->base_sconst = h->n_sconst;
+    c->base_strbytes = h->n_strbytes;
+    im->base = h->n_code;
     c->base = (struct counts){c->words.n, c->consts.n, c->globals.n, c->records.n, c->dtypes.n, c->externs.n};
     return true;
 }
 
+// The entries of a kept table are not written by a load, so that a load that fails leaves them
+// as they were: a load that changes one (a `row` of an earlier list counts its rows) works on a
+// copy of the table, which it keeps when it is final.
+static bool vec_own(comp *c, vec *v, size_t elem, unsigned table) {
+    if (!v->n || v->ptr != c->st->symbols.ptr[table])
+        return true;
+    void *p = arena_alloc(c, (size_t)v->cap * elem);
+    if (!p)
+        return false;
+    __builtin_memcpy(p, v->ptr, (size_t)v->n * elem);
+    v->ptr = p;
+    return true;
+}
+
+// What a load leaves for the loads after it, beside its container: each table that left its part
+// (it grew, or was copied to be written), each index made again, and a new chunk of names. They lie
+// in the working memory until the loader is done with the container, then are taken in the block.
+typedef struct parcel {
+    uint8_t *at;      // in the working memory, then where it was parked
+    uint8_t *made_at; // in the working memory
+    size_t   bytes;
+    uint32_t what; // PNX_SYM_*, or PARCEL_CHUNK, or PARCEL_CONTAINER
+} parcel;
+#define PARCEL_CHUNK     PNX_SYMS
+#define PARCEL_CONTAINER (PNX_SYMS + 1)
+#define MAX_PARCELS      (PNX_SYMS + 2)
+
+typedef struct keeping {
+    parcel      p[MAX_PARCELS];
+    uint32_t    n;
+    pnx_symbols next; // the kept tables after this load, pointing into the parcels while they lie there
+    size_t      name_bytes;
+    uint8_t    *name_at;
+} keeping;
+
+static void name_size(name *n, void *user) {
+    ((keeping *)user)->name_bytes += n->length;
+}
+
+static void name_keep(name *n, void *user) {
+    keeping *k = user;
+    if (!n->length) {
+        n->text = NULL;
+        return;
+    }
+    __builtin_memcpy(k->name_at, n->text, n->length);
+    n->text = k->name_at;
+    k->name_at += n->length;
+}
+
+
+static void parcel_add(keeping *k, void *at, size_t bytes, uint32_t what) {
+    k->p[k->n++] = (parcel){at, at, bytes, what};
+}
+
+// The tables after this load, made ready to be kept: every name of a new entry (and of the
+// session) copied into the names, the parameter names dropped, and the parcels listed.
+static bool keep_symbols(comp *c, keeping *k) {
+    const pnx_symbols *old = &c->st->symbols;
+    tables             now;
+#define X(v, t_, i) now.of[i] = c->v;
+    TABLES(X)
+#undef X
+    for (uint32_t i = c->sym_base[PNX_SYM_WORDS]; i < c->words.n; ++i) // the names of parameters stay behind
+        ((wordsym *)c->words.ptr + i)->sig.names = NULL;
+    for (uint32_t i = c->sym_base[PNX_SYM_BTYPES]; i < c->btypes.n; ++i)
+        ((sig *)c->btypes.ptr + i)->names = NULL;
+    k->next = old->kept ? *old : (pnx_symbols){.session = NONE};
+    k->next.kept = true;
+    // this line's session: its number, and the modules opened since the line before (those
+    // opened before are kept already, with their names)
+    const uint32_t opened_before = old->kept ? old->n[PNX_SYM_OPENED] : 0;
+    const uint32_t opened_now = c->eval ? c->n_modules : opened_before;
+    if (c->eval)
+        k->next.session = c->module;
+    k->name_bytes = 0;
+    each_name(&now, c->sym_base, name_size, k);
+    for (uint32_t i = opened_before; i < opened_now; ++i)
+        k->name_bytes += c->modules[i].length + c->module_real[i].length;
+    if (k->name_bytes) { // in the last chunk while it has room, else in a new one twice its size
+        pnx_symbols *s = &k->next;
+        const uint32_t last = s->n_chunks - 1;
+        if (s->n_chunks && s->chunk_cap[last] - s->chunk_used[last] >= k->name_bytes) {
+            k->name_at = s->chunk[last] + s->chunk_used[last];
+            s->chunk_used[last] += (uint32_t)k->name_bytes;
+        } else {
+            size_t cap = s->n_chunks ? (size_t)s->chunk_cap[last] * 2 : 4096;
+            if (cap < k->name_bytes)
+                cap = (k->name_bytes + 15u) & ~(size_t)15u;
+            if (s->n_chunks == PNX_NAME_CHUNKS || cap > UINT32_MAX)
+                return error(c, PINAX_ERR_NO_ROOM, "the state holds too many names");
+            uint8_t *p = arena_alloc(c, cap);
+            if (!p)
+                return false;
+            parcel_add(k, p, cap, PARCEL_CHUNK);
+            k->name_at = p;
+            s->chunk[s->n_chunks] = p;
+            s->chunk_used[s->n_chunks] = (uint32_t)k->name_bytes;
+            s->chunk_cap[s->n_chunks] = (uint32_t)cap;
+            ++s->n_chunks;
+        }
+        each_name(&now, c->sym_base, name_keep, k);
+        for (uint32_t i = opened_before; i < opened_now; ++i) {
+            name_keep(&c->modules[i], k);
+            name_keep(&c->module_real[i], k);
+        }
+    }
+    if (opened_now > opened_before) { // in the part's room, or in a part of room for all
+        opened *to = k->next.ptr[PNX_SYM_OPENED];
+        if (opened_now > k->next.cap[PNX_SYM_OPENED]) {
+            if (!(to = arena_alloc(c, MAX_MODULES * sizeof(opened))))
+                return false;
+            if (opened_before)
+                __builtin_memcpy(to, k->next.ptr[PNX_SYM_OPENED], opened_before * sizeof(opened));
+            parcel_add(k, to, MAX_MODULES * sizeof(opened), PNX_SYM_OPENED);
+            k->next.ptr[PNX_SYM_OPENED] = to;
+            k->next.cap[PNX_SYM_OPENED] = MAX_MODULES;
+        }
+        for (uint32_t i = opened_before; i < opened_now; ++i)
+            to[i] = (opened){c->modules[i], c->module_real[i]};
+        k->next.n[PNX_SYM_OPENED] = opened_now;
+    }
+#define X(v, t_, i)                                                     \
+    if (c->v.ptr != old->ptr[i] && c->v.ptr)                            \
+        parcel_add(k, c->v.ptr, (size_t)c->v.cap * sizeof(t_), i);      \
+    k->next.ptr[i] = c->v.ptr, k->next.n[i] = c->v.n, k->next.cap[i] = c->v.cap;
+    TABLES(X)
+#undef X
+#define X(ix, i)                                                                     \
+    if (c->ix.slot != old->ptr[PNX_SYM_IX + i] && c->ix.slot)                        \
+        parcel_add(k, c->ix.slot, index_bytes(c->ix.cap), PNX_SYM_IX + i);           \
+    k->next.ptr[PNX_SYM_IX + i] = c->ix.slot, k->next.n[PNX_SYM_IX + i] = c->ix.n,   \
+    k->next.cap[PNX_SYM_IX + i] = c->ix.cap;
+    INDEXES(X)
+#undef X
+    return true;
+}
+
+// Where a name written into the new chunk lies once the chunk is in the block.
+typedef struct name_move {
+    const uint8_t *lo, *hi;
+    ptrdiff_t      by;
+} name_move;
+
+static void name_follow(name *n, void *user) {
+    const name_move *m = user;
+    if (n->length && n->text >= m->lo && n->text < m->hi)
+        n->text += m->by;
+}
+
+// The parcels, taken in the block now that the loader is done: the tables point at them.
+static bool place_parcels(pinax_state *st, keeping *k, const uint32_t *from) {
+    name_move moved = {NULL, NULL, 0};
+    for (uint32_t i = 0; i < k->n; ++i) {
+        parcel *p = &k->p[i];
+        if (p->what == PARCEL_CONTAINER)
+            continue;
+        uint8_t *to = pnx_take(st, p->bytes, 16);
+        if (!to)
+            return false;
+        __builtin_memcpy(to, p->at, p->bytes);
+        if (p->what == PARCEL_CHUNK) {
+            k->next.chunk[k->next.n_chunks - 1] = to;
+            moved = (name_move){p->made_at, p->made_at + p->bytes, to - p->made_at};
+        } else {
+            k->next.ptr[p->what] = to;
+        }
+    }
+    if (moved.lo) { // the new entries' names, and the session's, lie in the new chunk
+        const tables t = kept_tables(&k->next);
+        each_name(&t, from, name_follow, &moved);
+        each_session_name(&k->next, 0, name_follow, &moved);
+    }
+    return true;
+}
+
 pinax_str pnx_module_name(const pinax_state *st, uint32_t number) {
-    const symtab *t = st->symbols;
+    const pnx_symbols *s = &st->symbols;
     pinax_str out = {(const unsigned char *)"", 0};
-    if (t && number < t->srcmods.n) {
-        const name *n = (const name *)t->srcmods.ptr + number;
+    if (s->kept && number < s->n[PNX_SYM_SRCMODS]) {
+        const name *n = (const name *)s->ptr[PNX_SYM_SRCMODS] + number;
         if (n->length)
             out = (pinax_str){(const unsigned char *)n->text, n->length};
     }
@@ -8615,9 +8778,9 @@ pinax_str pnx_module_name(const pinax_state *st, uint32_t number) {
 }
 
 uint32_t pnx_module_number(const pinax_state *st, const char *text, size_t length) {
-    const symtab *t = st->symbols;
-    for (uint32_t k = 0; t && k < t->srcmods.n; ++k) {
-        const name *n = (const name *)t->srcmods.ptr + k;
+    const pnx_symbols *s = &st->symbols;
+    for (uint32_t k = 0; s->kept && k < s->n[PNX_SYM_SRCMODS]; ++k) {
+        const name *n = (const name *)s->ptr[PNX_SYM_SRCMODS] + k;
         if (n->length == length && length && __builtin_memcmp(n->text, text, length) == 0)
             return k;
     }
@@ -8650,10 +8813,10 @@ pinax_err pinax_eval_value(const pinax_state *st, uint32_t index, pinax_value *o
     const tid type = st->eval_type[index];
     // the type's name, from the declarations the state keeps
     comp view = {.st = (pinax_state *)st};
-    const symtab *t = st->symbols;
-    if (t) {
-        view.globals = t->globals;
-        view.dtypes = t->dtypes;
+    const pnx_symbols *t = &st->symbols;
+    if (t->kept) {
+        view.globals = (vec){t->ptr[PNX_SYM_GLOBALS], t->n[PNX_SYM_GLOBALS], t->cap[PNX_SYM_GLOBALS]};
+        view.dtypes = (vec){t->ptr[PNX_SYM_DTYPES], t->n[PNX_SYM_DTYPES], t->cap[PNX_SYM_DTYPES]};
     }
     const name n = type_name(&view, type);
     const tid base = base_of(&view, type);
@@ -8743,7 +8906,7 @@ static pinax_err load_source(pinax_state *st, const char *file, pinax_str source
         st->error_text = "the state lent a global with pinax_share: it does not change any more";
         return PINAX_ERR_STATE;
     }
-    if (st->head && !st->symbols) {
+    if (st->head && !st->symbols.kept) {
         st->error_text = "a state that loaded bytecode takes no source after it";
         return PINAX_ERR_STATE;
     }
@@ -8764,7 +8927,6 @@ static pinax_err load_source(pinax_state *st, const char *file, pinax_str source
                    .redefine_new = NONE};
     c.arena = tail < end ? tail : end;
     c.arena_end = end;
-    const uint8_t *const work = c.arena;
     c.lx = &c.lexer;
     pnx_lex_init(&c.lexer, source.ptr, source.len);
 
@@ -8772,7 +8934,8 @@ static pinax_err load_source(pinax_state *st, const char *file, pinax_str source
     bool     has_top = false;
     uint8_t *container = NULL;
     size_t   length = 0;
-    symtab  *tables = NULL;
+    keeping  keep = {0};
+    bool     kept = false;
     c.word_fn = arena_alloc(&c, sizeof(fn));
     c.top_fn = c.word_fn ? arena_alloc(&c, sizeof(fn)) : NULL;
     if (c.top_fn && take_symbols(&c, &im)) {
@@ -8786,13 +8949,16 @@ static pinax_err load_source(pinax_state *st, const char *file, pinax_str source
                 self = (name){(void *)text, (uint32_t)self_len};
             }
         }
-        const symtab *kept_before = st->symbols;
-        const bool    resumed = eval && kept_before && kept_before->session != NONE;
+        const pnx_symbols *kept_before = &st->symbols;
+        const bool         resumed = eval && kept_before->kept && kept_before->session != NONE;
         if (resumed) { // a further line of the session: its module, and the modules it has opened
             c.module = (uint16_t)kept_before->session;
-            c.n_modules = kept_before->n_opened;
-            __builtin_memcpy(c.modules, kept_before->opened, sizeof c.modules);
-            __builtin_memcpy(c.module_real, kept_before->opened_real, sizeof c.module_real);
+            c.n_modules = kept_before->n[PNX_SYM_OPENED];
+            for (uint32_t k = 0; k < c.n_modules; ++k) {
+                const opened *o = (const opened *)kept_before->ptr[PNX_SYM_OPENED] + k;
+                c.modules[k] = o->alias;
+                c.module_real[k] = o->real;
+            }
         } else {
             c.module = (uint16_t)c.srcmods.n;
         }
@@ -8815,7 +8981,7 @@ static pinax_err load_source(pinax_state *st, const char *file, pinax_str source
         c.top_fn->sig = &no_results;
         c.f = c.top_fn;
         if (compile(&c, &im, &has_top) && truncs_ok(&c) && serialize(&c, &im, &container, &length))
-            tables = keep_symbols(&c, source, work);
+            kept = keep_symbols(&c, &keep);
     }
     if (c.err != PINAX_OK) {
         st->error_text = c.message;
@@ -8836,31 +9002,45 @@ static pinax_err load_source(pinax_state *st, const char *file, pinax_str source
     const uint32_t n_values = eval ? c.eval_sig.n_out : 0;
     for (uint32_t k = 0; k < n_values; ++k)
         st->eval_type[k] = c.eval_sig.out[k];
-    const symtab *session_before = st->symbols;
-    const bool    declared = !eval || c.words.n != c.base.words + (has_top ? 1u : 0u) || c.consts.n != c.base.consts ||
-                             c.globals.n != c.base.globals || c.records.n != c.base.records ||
-                             c.dtypes.n != c.base.dtypes || c.externs.n != c.base.externs ||
-                             !session_before || session_before->session == NONE ||
-                             c.n_modules != session_before->n_opened;
+    const pnx_symbols *session_before = &st->symbols;
+    const bool         declared = !eval || c.words.n != c.base.words + (has_top ? 1u : 0u) || c.consts.n != c.base.consts ||
+                                  c.globals.n != c.base.globals || c.records.n != c.base.records ||
+                                  c.dtypes.n != c.base.dtypes || c.externs.n != c.base.externs ||
+                                  !session_before->kept || session_before->session == NONE ||
+                                  c.n_modules != session_before->n[PNX_SYM_OPENED];
+    (void)kept;
 
-    // The tables and the container move to the very end of the block, out of the way of the
-    // loader, which takes its room from the front; the block is shortened for that moment.
-    // The tables were made last and lie higher, so they move first.
-    const size_t   table_bytes = tables->bytes;
-    const uint8_t *const made_at = (const uint8_t *)tables;
-    uint8_t *const parked_tables = end - table_bytes;
-    __builtin_memmove(parked_tables, tables, table_bytes);
-    uint8_t *const parked = parked_tables - length;
-    __builtin_memmove(parked, container, length);
+    // The container and the parcels move to the very end of the block, out of the way of the
+    // loader, which takes its room from the front; the block is shortened for that moment. They
+    // move in the order of their places, the highest first, each to above the next, so that none
+    // is written over before it moved (all lie 8-byte aligned in the working memory).
+    parcel_add(&keep, container, length, PARCEL_CONTAINER);
+    for (uint32_t i = 1; i < keep.n; ++i) { // by place, highest first; a handful
+        const parcel p = keep.p[i];
+        uint32_t     j = i;
+        while (j > 0 && keep.p[j - 1].at < p.at)
+            keep.p[j] = keep.p[j - 1], --j;
+        keep.p[j] = p;
+    }
+    uint8_t *top = end, *lowest_kept = end;
+    size_t   parcel_bytes = 0;
+    for (uint32_t i = 0; i < keep.n; ++i) {
+        parcel *p = &keep.p[i];
+        top = (uint8_t *)((uintptr_t)(top - p->bytes) & ~(uintptr_t)7u);
+        __builtin_memmove(top, p->at, p->bytes);
+        p->at = top;
+        if (p->what == PARCEL_CONTAINER)
+            container = top;
+        else
+            lowest_kept = top, parcel_bytes += p->bytes;
+    }
     const size_t full = st->block_len;
-    st->block_len = (size_t)(parked - st->block);
-    const pinax_str bytes = {parked, length};
+    st->block_len = (size_t)(top - st->block);
+    const pinax_str bytes = {container, length};
     pinax_err err = pnx_load_container(st, bytes);
-    symtab *kept = NULL;
     if (err == PINAX_OK) {
-        st->block_len = (size_t)(parked_tables - st->block);
-        kept = pnx_take(st, table_bytes, 8);
-        if (!kept) {
+        st->block_len = (size_t)(lowest_kept - st->block);
+        if (!place_parcels(st, &keep, c.sym_base)) {
             pnx_program_restore(st, &before);
             st->error_text = "block too small for the code and its globals";
             err = PINAX_ERR_NO_ROOM;
@@ -8868,12 +9048,10 @@ static pinax_err load_source(pinax_state *st, const char *file, pinax_str source
     }
     st->block_len = full;
     if (err == PINAX_ERR_NO_ROOM)
-        st->needed += length + table_bytes;
+        st->needed += length + parcel_bytes;
     if (err != PINAX_OK)
         return err;
-    __builtin_memcpy(kept, parked_tables, table_bytes);
-    move_symbols(kept, made_at, (const uint8_t *)kept - made_at);
-    st->symbols = kept;
+    st->symbols = keep.next;
 
     if (has_top) { // code outside definitions runs once, now
         const uint64_t budget = st->budget;
