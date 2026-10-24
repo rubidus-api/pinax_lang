@@ -26,7 +26,8 @@ collector and no pointers at run time.
   room is an error value, not a crash, and there are no collection pauses.
 - **Safe to run untrusted code.** No source, and no bytecode the loader accepts, reads or writes outside the memory the
   host gave it; with an instruction budget every run comes back. A wrong program is refused at load or stops with a
-  fault, and never brings the host down.
+  fault, and never brings the host down. The C functions a host registers are the host's own code and outside this
+  promise; a script reaches only the words the host registered.
 
 ## Not goals
 
@@ -82,6 +83,8 @@ registers the C functions scripts may call, loads source and runs words:
 
 static pinax_err tenfold(pinax_call *call, void *user, const pinax_args *args) {
     (void)call; (void)user;
+    if (args->i[0] > INT64_MAX / 10 || args->i[0] < INT64_MIN / 10)
+        return PINAX_ERR_OVERFLOW;              /* as the script's own mul would: a fault */
     args->ri[0] = args->i[0] * 10;
     return PINAX_OK;
 }

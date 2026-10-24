@@ -17,6 +17,8 @@ second: a word runs when it is called
 <span style="color: #74747c">/*</span><span style="color: #74747c"> A host word: the script calls it as calc.tenfold. </span><span style="color: #74747c">*/</span>
 <span style="color: #d73948">static</span> pinax_err <span style="color: #4b69c6">tenfold</span>(pinax_call <span style="color: #d73948">*</span>call, <span style="color: #d73948">void</span> <span style="color: #d73948">*</span>user, <span style="color: #d73948">const</span> pinax_args <span style="color: #d73948">*</span>args) {
     (<span style="color: #d73948">void</span>)call; (<span style="color: #d73948">void</span>)user;
+    <span style="color: #d73948">if</span> (args-&gt;i[<span style="color: #b60157">0</span>] <span style="color: #d73948">&gt;</span> INT64_MAX <span style="color: #d73948">/</span> <span style="color: #b60157">10</span> <span style="color: #d73948">||</span> args-&gt;i[<span style="color: #b60157">0</span>] <span style="color: #d73948">&lt;</span> INT64_MIN <span style="color: #d73948">/</span> <span style="color: #b60157">10</span>)
+        <span style="color: #d73948">return</span> PINAX_ERR_OVERFLOW;              <span style="color: #74747c">/*</span><span style="color: #74747c"> as the script's own mul would: a fault </span><span style="color: #74747c">*/</span>
     args-&gt;ri[<span style="color: #b60157">0</span>] <span style="color: #d73948">=</span> args-&gt;i[<span style="color: #b60157">0</span>] <span style="color: #d73948">*</span> <span style="color: #b60157">10</span>;
     <span style="color: #d73948">return</span> PINAX_OK;
 }

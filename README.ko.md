@@ -24,7 +24,8 @@ Pinax 는 호스트 프로그램 안에서 돌도록 만든 언어입니다. 호
   추락이 아니라 오류 값이 나오고, 수거로 인한 멈춤이 없습니다.
 - **믿지 못하는 코드도 돌릴 수 있습니다.** 어떤 소스도, 적재기가 받아들인 어떤 바이트코드도 호스트가 준 메모리 밖을 읽거나
   쓰지 않습니다. 명령 예산을 주면 실행은 언제나 돌아옵니다. 틀린 프로그램은 적재 때 거절되거나 결함으로 멈출 뿐,
-  호스트를 무너뜨리지 않습니다.
+  호스트를 무너뜨리지 않습니다. 호스트가 등록한 C 함수는 호스트 자신의 코드라서 이 약속 밖에 있고, 스크립트는 호스트가
+  등록한 낱말에만 닿습니다.
 
 ## 목표가 아닌 것
 
@@ -79,6 +80,8 @@ build/native/pnx hello.pnx        # 1 to 100 is 5050
 
 static pinax_err tenfold(pinax_call *call, void *user, const pinax_args *args) {
     (void)call; (void)user;
+    if (args->i[0] > INT64_MAX / 10 || args->i[0] < INT64_MIN / 10)
+        return PINAX_ERR_OVERFLOW;              /* as the script's own mul would: a fault */
     args->ri[0] = args->i[0] * 10;
     return PINAX_OK;
 }
