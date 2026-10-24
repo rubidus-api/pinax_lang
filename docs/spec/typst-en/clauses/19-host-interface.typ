@@ -99,8 +99,9 @@ never ends.]
 
 #para("1c")[A load into a state that already holds a program appends what the new source adds to the program and
 checks the new words only, so the bound of (1b) holds for the lines of a session and for modules loaded one by one.
-What grows with the whole program is the copy of the declaration tables, small per word; the pass that decides
-which words yield covers the words the load brings, and the whole program only when the load redefines a word. The room the program takes in the block grows with what was declared: when a part has no room
+The declaration tables are kept the same way: a load reads what earlier loads declared where it lies and appends
+only its own declarations. The pass that decides which words yield covers the words the load brings, and the whole
+program only when the load redefines a word. The room the program takes in the block grows with what was declared: when a part has no room
 left to append to, the processor moves that part to a larger place, and when the load has ended it takes back the
 room it left; while a task (clause 14) is alive it does not, and the next load after the task has ended does.
 `redefine` appends the new body and leaves the old code where it was. The room used is read from `block_bytes_used`
