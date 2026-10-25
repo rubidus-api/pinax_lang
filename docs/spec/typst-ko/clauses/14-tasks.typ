@@ -111,4 +111,16 @@ tasks-decl = "tasks" NAME size [ size [ size ] ] [ "apart" ] ;   (* count, call 
   ([작업의 호출 깊이가 1 부터 4096 밖], "the call depth of a task is 1 to 4096"),
   ([작업의 구역이 16 MiB 를 넘음], "the region of a task is at most 16 MiB"),
   ([자료 소스의 `tasks`], "a data source runs no code and declares no tasks"),
+  ([`int` 가 아닌 값에 `task_tag`], "task_tag takes an int"),
 )
+
+== 작업의 이름 <tasks-tag>
+
+#para("1")[`n task_tag`(`int gives`)는 도는 작업에 #term("꼬리표", en: "tag")를 준다. 꼬리표는 그 묶음이 `apart` 로 선언되었을 때
+작업의 결함과 함께 호스트에게 알려지는 `int` 다(14.4 (3a), 19.10 (3)). 작업의 꼬리표는 작업이 주기 전까지 0 이고, 나중의
+`task_tag` 가 앞의 것을 바꾼다. 작업이 아닌 주 실행에서 이 낱말은 아무것도 하지 않는다. 꼬리표는 작업의 일부이고, 상은
+그것을 지닌다.]
+
+#para("2")[작업은 자기가 맡을 일을 `spawn` 뒤에 큐나 전역에서 받으므로(14.4 (2)), 이름도 그때 정한다. 요청마다 번호를 주는
+호스트는 작업에 그 번호를 건네고, 작업은 그것을 꼬리표로 준다.]
+#ex("spec", "14-tag.pnx")

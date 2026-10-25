@@ -114,7 +114,8 @@ enum {
 // runs task R[B] until it yields or ends and gives 1 in R[A] when it has ended. TYIELD gives
 // the run back to whoever resumed the task; it fails with cancelled once the task was
 // cancelled (TCANCEL); outside a task it does nothing. TDONE says whether a task has ended.
-// TRUNALL G resumes the tasks of set G in turn until all have ended.
+// TRUNALL G resumes the tasks of set G in turn until all have ended. TTAG A sets the running task's tag
+// to R[A] (RFC-0029 P-L6: what the host is told when the task faults); outside a task it does nothing.
 // X(name, number, A, B, C, shape, second word, fails, roles)
 // The numbers are those of format 1 (RFC-0012): one range for each kind of instruction, with
 // room left in every range. "roles" says what the instruction does with the registers named
@@ -327,6 +328,7 @@ enum {
     X(TSPAWNW, 0xd6, PNX_K_I, PNX_K_I, PNX_K_NONE, PNX_F_ABC, PNX_X_GLOBAL, 1, "wr-") \
     X(TRESUMEW, 0xd7, PNX_K_I, PNX_K_I, PNX_K_NONE, PNX_F_ABC, PNX_X_GLOBAL, 0, "wr-") \
     X(TDONEW, 0xd8, PNX_K_I, PNX_K_I, PNX_K_NONE, PNX_F_ABC, PNX_X_GLOBAL, 0, "wr-") \
+    X(TTAG, 0xdb, PNX_K_I, PNX_K_NONE, PNX_K_NONE, PNX_F_ABC, PNX_X_NONE, 0, "r--") \
     /* more collections */ \
     X(LCOPYR, 0xe0, PNX_K_I, PNX_K_NONE, PNX_K_NONE, PNX_F_GLOBAL, PNX_X_GLOBAL, 1, "r--") \
     X(BENC, 0xe1, PNX_K_S, PNX_K_IMM, PNX_K_G, PNX_F_ABC, PNX_X_NONE, 1, "r--") \

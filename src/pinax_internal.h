@@ -181,6 +181,7 @@ typedef struct pnx_task {
     bool             cancelled, yielded;
     bool             blocked;    // it yielded for a queue, when the queue count was blocked_at
     bool             apart;      // its set is declared `apart`: a fault ends this task only (RFC-0029)
+    int64_t          tag;        // what the task named itself with (task_tag, RFC-0029 P-L6); 0 at spawn
     uint64_t         blocked_at;
     pnx_wait         wait;       // the host operation it waits for
     pinax_err        wake_fail;  // what the operation failed with, for the failure word it goes on at
@@ -298,6 +299,8 @@ struct pinax_state {
     char     task_where[112];      // the same of the last task of an `apart` set that faulted (RFC-0029)
     uint64_t task_faults;          // how many such tasks ended with a fault
     bool     task_fault_kept;      // this run had one: its locals stay readable after the run ends well
+    pinax_task_fault_fn on_task_fault; // told of each such fault as it happens (RFC-0029 P-L6)
+    void              *on_task_fault_user;
     uint32_t fault_ibase, fault_sbase; // the register windows of the word that faulted
     int64_t   *fault_ibank;            // in the banks of the run it faulted in (a task's, perhaps),
     pnx_scell *fault_sbank;            // until fault_locals() has read them

@@ -234,6 +234,13 @@ the state can vouch for). They are what `pnx` shows below a fault
 opened, and where the last one happened and why, in the form of a fault's place (`module:line: error`).
 After the run that had it, `pinax_fault_local` reads that task's locals, until the next run ends.]
 
+#para("3a")[`pinax_on_task_fault(state, fn, user)` has the state call `fn(user, state, fault)` once for each such
+fault, at the fault, before the task's slot is used again. `fault` gives the fault, the task's tag (14.5) and its
+place in the same form. Several tasks that fault in one run are told one by one. Inside `fn`,
+`pinax_fault_local` reads the locals of that task. The run is in the middle, so `fn` may call only the functions
+that read the state: `pinax_fault_local`, `pinax_task_faults`, `pinax_error_text`. `NULL` takes the function away.
+An image and a clone forget it, as they forget host words (19.9).]
+
 == Exported code <host-native>
 
 #para("1")[`pnx export-c` (20 (3)) writes a program's code as C. The host compiles that file with `pinax_native.h` of

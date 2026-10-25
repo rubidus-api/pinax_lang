@@ -121,7 +121,7 @@
   [`raw`], [`(D gives 바탕)`], [선언한 타입의 값을 바탕 타입으로(7.4)],
   [`err_text`], [`(err gives str)`], [오류 번호의 이름(11.1)],
   [`assert`], [`(bool)`], [거짓이면 결함 `failed`],
-  [`spawn` `run_all` `resume` `is_done` `cancel` `yield`], [14절], [작업],
+  [`spawn` `run_all` `resume` `is_done` `cancel` `yield` `task_tag`], [14절], [작업],
 )]
 
 #part("진단")

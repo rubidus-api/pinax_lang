@@ -2597,6 +2597,19 @@ void pnx_note_task_fault(pinax_state *st, pinax_err err) {
     fault_locals(st);
     ++st->task_faults;
     st->task_fault_kept = true;
+    if (st->on_task_fault) {
+        const pinax_task_fault fault = {err, st->task ? st->task->tag : 0,
+                                        {(const unsigned char *)st->task_where, __builtin_strlen(st->task_where)}};
+        st->on_task_fault(st->on_task_fault_user, st, &fault);
+    }
+}
+
+pinax_err pinax_on_task_fault(pinax_state *st, pinax_task_fault_fn fn, void *user) {
+    if (!st)
+        return PINAX_ERR_ARGUMENT;
+    st->on_task_fault = fn;
+    st->on_task_fault_user = fn ? user : NULL;
+    return PINAX_OK;
 }
 
 uint64_t pinax_task_faults(const pinax_state *st, pinax_str *last) {
@@ -3807,6 +3820,8 @@ pinax_err pinax_image_open(pinax_mem block, pinax_str image, const pinax_config 
     st->native = NULL; // exported code is attached again, as host words are given again
     st->native_bound = false;
     st->native_runs = 0;
+    st->on_task_fault = NULL; // and so is the task fault callback
+    st->on_task_fault_user = NULL;
     st->frozen = st->load_runs = false; // what the saved state lent stays with it
     // operations a run waited for will not be completed by this process: they come back interrupted
     if (st->main_wait.token)

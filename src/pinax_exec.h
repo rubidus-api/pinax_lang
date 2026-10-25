@@ -343,6 +343,7 @@ pinax_err PNX_EXEC_NAME(pinax_state *st) {
             t->cancelled = t->yielded = t->blocked = false;
             t->wake_fail = t->wake_fault = PINAX_OK;
             t->wait.token = 0;
+            t->tag = 0;
             t->ptn = (pnx_ptn_found){0}; // a capture is a view of what this task matched
             t->ctx = (pnx_context){t->ibank,       t->sbank,     t->ctrl, t->int_slots, t->str_slots,
                                    t->depth_max,   t->region_base, t->region_base + t->region_bytes,

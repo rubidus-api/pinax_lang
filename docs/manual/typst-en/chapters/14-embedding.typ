@@ -113,8 +113,10 @@ To give up on one request (a timeout, a client that went away), the host complet
 touched. `pinax_abort` would end the whole run, and every request of the state with it.
 
 A fault in one request must not end the others. Declare the group of the request tasks `apart` (chapter 13): a task
-that faults then ends alone, and the host counts such faults, and reads where the last one happened, with
-`pinax_task_faults` (standard 19.10).
+that faults then ends alone. The host must still answer that request, so the task names itself with the request's id
+(`id task_tag`, standard 14.5) as soon as it has it. The function the host gave `pinax_on_task_fault` is called at
+every such fault with that tag, here for the third request, whose id runs past the array `served`. Several faults
+in one run are told one by one (standard 19.10).
 
 #qa[What if the word that waits has no `or fail`?][Then a failure from the host can only become a fault, and a fault ends
 the whole run: every request of the state, unless the group is `apart`. A word the host may give up on is declared
@@ -179,6 +181,7 @@ and clones, and `extern` are in clauses 18 and 19 of the standard, with examples
   go on (19.8).
 - Each request is a task of its own. One request is given up by completing its token with a failure, the whole run by
   `pinax_abort` (14, 19.5, 19.8).
-- A group declared `apart` loses only the task that faults (14.4 (3a), 19.10).
+- A group declared `apart` loses only the task that faults; the host is told of each with the task's tag (14.4
+  (3a), 14.5, 19.10).
 - Exported code runs a program's code compiled as C, with the same behaviour (19.11).
 ]

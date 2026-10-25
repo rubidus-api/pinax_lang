@@ -121,7 +121,7 @@ plain words on an unsigned type and do not take a signed one. The bit words work
   [`raw`], [`(D gives base)`], [a value of a declared type as its base type (7.4)],
   [`err_text`], [`(err gives str)`], [the name of an error code (11.1)],
   [`assert`], [`(bool)`], [the fault `failed` when false],
-  [`spawn` `run_all` `resume` `is_done` `cancel` `yield`], [clause 14], [tasks],
+  [`spawn` `run_all` `resume` `is_done` `cancel` `yield` `task_tag`], [clause 14], [tasks],
 )]
 
 #part("Diagnostics")

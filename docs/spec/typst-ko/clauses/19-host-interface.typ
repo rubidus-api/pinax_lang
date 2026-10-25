@@ -219,6 +219,12 @@ global, bytes, from)` 은 (1a) 와 같은 검사로 파일의 전역 `from` 을 
 어디서 왜 났는지를 결함의 자리 꼴(`module:line: error`)로 준다. 그 결함이 난 실행 뒤에는 `pinax_fault_local` 이 다음
 실행이 끝날 때까지 그 작업의 지역 변수를 읽는다.]
 
+#para("3a")[`pinax_on_task_fault(state, fn, user)` 를 부르면 상태는 그런 결함마다 한 번, 결함이 난 그때, 그 작업의 자리가
+다시 쓰이기 전에 `fn(user, state, fault)` 를 부른다. `fault` 는 결함, 작업의 꼬리표(14.5), 같은 꼴의 자리를 준다. 한
+실행에서 여러 작업이 결함을 내면 하나씩 알린다. `fn` 안에서 `pinax_fault_local` 은 그 작업의 지역 변수를 읽는다. 실행이
+한창이므로 `fn` 은 상태를 읽는 함수만 부를 수 있다: `pinax_fault_local`, `pinax_task_faults`, `pinax_error_text`.
+`NULL` 은 그 함수를 뗀다. 상과 복제는 호스트 낱말을 잊듯 이것도 잊는다(19.9).]
+
 == 내보낸 코드 <host-native>
 
 #para("1")[`pnx export-c`(20 (3))는 프로그램의 코드를 C 로 쓴다. 호스트는 그 파일을 같은 빌드의 `pinax_native.h` 와 함께

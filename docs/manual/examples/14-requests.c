@@ -5,16 +5,18 @@
 /* Requests as tasks. web.next gives the id of the next request (-1: no more). Each request is
  * served by a task of its own, which asks the host for a page with web.fetch. fetch waits: it
  * keeps a token and returns PINAX_PENDING, so the other tasks go on. The host answers the first
- * fetch, and gives up on the second as a timeout would: a failure, which the task takes. */
-static const int64_t arriving[] = {1, 2, -1};
+ * fetch, and gives up on the second as a timeout would: a failure, which the task takes. The
+ * third request faults (the array `served` was sized for ids 0 to 2), and only its task ends: the
+ * group is `apart`, the task named itself with its id, and the host is told and answers it. */
+static const int64_t arriving[] = {1, 2, 3, -1};
 static int next_at;
 static pinax_err web_next(pinax_call *call, void *user, const pinax_args *args) {
     (void)call; (void)user;
-    args->ri[0] = arriving[next_at < 2 ? next_at++ : 2];
+    args->ri[0] = arriving[next_at < 3 ? next_at++ : 3];
     return PINAX_OK;
 }
 
-static pinax_token fetching[2];
+static pinax_token fetching[3];
 static int n_fetching;
 static pinax_err web_fetch(pinax_call *call, void *user, const pinax_args *args) {
     (void)user; (void)args;
@@ -26,6 +28,11 @@ static pinax_err web_reply(pinax_call *call, void *user, const pinax_args *args)
     (void)call; (void)user;
     printf("request %lld: %.*s\n", (long long)args->i[0], (int)args->s[0].len, (const char *)args->s[0].ptr);
     return PINAX_OK;
+}
+
+static void faulted(void *user, const pinax_state *state, const pinax_task_fault *fault) {
+    (void)user; (void)state;
+    printf("request %lld: 500 (%.*s)\n", (long long)fault->tag, (int)fault->where.len, (const char *)fault->where.ptr);
 }
 
 int main(void) {
@@ -40,13 +47,17 @@ int main(void) {
         {"reply", "(id int, body str)", web_reply, NULL, 0},
     };
     pinax_register(st, "web", words, 3);
+    pinax_on_task_fault(st, faulted, NULL);
     static const char source[] =
         "use web\n"
-        "tasks requests 4\n"
+        "tasks requests 4 apart\n"
         "queue incoming int 4\n"
+        "array served int 3\n"
         "word serve ()\n"
         "  incoming take or_return to id\n"
+        "  id task_tag\n"
         "  id web.fetch or_else (e) cat (\"gave up: \", e err_text) end to page\n"
+        "  id served idx 1 add  id set served\n"
         "  id page web.reply\n"
         "end\n"
         "word start (id int)\n"
@@ -70,6 +81,7 @@ int main(void) {
     pinax_str page = {(const unsigned char *)"page one", 8};
     pinax_complete(st, fetching[0], PINAX_OK, &(pinax_args){.rs = &page}); /* the first fetch came back */
     pinax_complete(st, fetching[1], PINAX_ERR_CANCELLED, NULL);             /* the second took too long */
+    pinax_complete(st, fetching[2], PINAX_OK, &(pinax_args){.rs = &page});
     err = pinax_resume(st, &(pinax_args){0});
     printf("%s\n", err == PINAX_OK ? "PINAX_OK" : "?");
     pinax_close(st);

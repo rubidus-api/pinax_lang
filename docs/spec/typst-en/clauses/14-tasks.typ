@@ -113,4 +113,16 @@ this does not normally happen.]
   ([a call depth of a task outside 1 to 4096], "the call depth of a task is 1 to 4096"),
   ([a region of a task above 16 MiB], "the region of a task is at most 16 MiB"),
   ([`tasks` in a data source], "a data source runs no code and declares no tasks"),
+  ([`task_tag` on a value that is not an `int`], "task_tag takes an int"),
 )
+
+== Naming a task <tasks-tag>
+
+#para("1")[`n task_tag` (`int gives`) gives the running task a #term("tag"): an `int` the host is told with the
+task's fault when its group is declared `apart` (14.4 (3a), 19.10 (3)). A task's tag is 0 until it gives one; a later
+`task_tag` replaces it. In the main run, which is not a task, the word does nothing. The tag is a part of the task,
+and an image keeps it.]
+
+#para("2")[A task learns what it serves after `spawn`, from a queue or a global (14.4 (2)), so it names itself
+then. A host that gives each request a number tells its tasks the number, and the task gives it as its tag.]
+#ex("spec", "14-tag.pnx")

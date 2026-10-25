@@ -1762,7 +1762,7 @@ enum {
     BW_APPEND, BW_APPEND_BYTE, BW_APPEND_INT, BW_CONTENTS, BW_TAKE, BW_SKIP, BW_TAKE_LAST, BW_SKIP_LAST,
     BW_STARTS_WITH, BW_ENDS_WITH, BW_CONTAINS, BW_LOOKUP, BW_INSERT, BW_REMOVE, BW_REPLACE, BW_PUT, BW_PEEK,
     BW_ALLOC, BW_FREE, BW_IS_ALIVE, BW_COUNT, BW_ANY, BW_ALL, BW_FIRST, BW_EACH_INDEX, BW_MAP_INTO, BW_FILTER_INTO, BW_MINIMUM, BW_MAXIMUM,
-    BW_SPAWN, BW_YIELD, BW_RESUME, BW_IS_DONE, BW_CANCEL, BW_RUN_ALL,
+    BW_SPAWN, BW_YIELD, BW_RESUME, BW_IS_DONE, BW_CANCEL, BW_RUN_ALL, BW_TASK_TAG,
     BW_SLICE, BW_CUT, BW_TRY_CUT, BW_TRIM, BW_TRIM_LEFT, BW_TRIM_RIGHT, BW_LINES, BW_SPLIT, BW_FIND_LAST, BW_COMPARE,
     BW_HEX, BW_BIN, BW_HEX_PAD, BW_ZERO_PAD, BW_PAD_LEFT, BW_PAD_RIGHT, BW_CALL, BW_MARK, BW_RELEASE, BW_REGION_FREE,
     BW_SPAN, BW_CHARS, BW_JOIN_INTO, BW_UPPER, BW_LOWER, BW_REPEAT, BW_TO_INT_BASE, BW_IS_UTF8, BW_CHAR_COUNT,
@@ -1797,6 +1797,7 @@ static const struct builtin {
     {"map_into", BW_MAP_INTO, 0}, {"filter_into", BW_FILTER_INTO, 0},
     {"spawn", BW_SPAWN, 0},     {"yield", BW_YIELD, 0},    {"resume", BW_RESUME, 0},
     {"is_done", BW_IS_DONE, 0}, {"cancel", BW_CANCEL, 0},  {"run_all", BW_RUN_ALL, 0},
+    {"task_tag", BW_TASK_TAG, 0},
     {"wait_take", BW_WAIT_TAKE, 0}, {"wait_put", BW_WAIT_PUT, 0},
     {"rescale", BW_RESCALE, 0}, {"to_dec", BW_TO_DEC, 1},
     {"minimum", BW_MINIMUM, 0}, {"maximum", BW_MAXIMUM, 0},
@@ -6146,6 +6147,15 @@ static bool builtin(comp *c, const struct builtin *w) {
         return settle_all(c) && emit_g(c, PNX_TSPAWN, top_slot(c, BANK_I, 1), ra, gi) != NONE &&
                guard_op(c, row_type(gi));
     }
+    case BW_TASK_TAG: // n task_tag : the running task's tag, told to the host when it faults (RFC-0029 P-L6)
+        if (!need(c, 1))
+            return false;
+        if (f->stack[f->depth - 1].type != TY_INT)
+            return type_error(c, "task_tag takes an int");
+        if (!reg_of(c, f->depth - 1, &ra))
+            return false;
+        --f->depth;
+        return emit(c, PNX_ABC(PNX_TTAG, ra, 0, 0)) != NONE && advance(c);
     case BW_YIELD: // gives the run to whoever resumed this task; fails once the task was cancelled
         return settle_all(c) && emit(c, PNX_ABX(PNX_TYIELD, 0, 0)) != NONE && guard_op(c, TY_NONE);
     case BW_RESUME:

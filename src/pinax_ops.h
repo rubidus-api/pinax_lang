@@ -91,6 +91,7 @@ PNX_INLINE int pnx_tail_word(pinax_state *st, const pnx_wordrec *callee, uint32_
 // the interpreter's cases and pinax_export.c into what it writes, so the two cannot differ.
 #define PNX_RUN_KINDS(X) \
     X(RUN, MOVI) \
+    X(RUN, TTAG) \
     X(RUN, MOVS) \
     X(RUN, LOADI) \
     X(RUN, LOADK) \
@@ -351,6 +352,11 @@ PNX_INLINE int pnx_row_of(const pnx_global *g, int64_t value, uint64_t *row) {
 // ---- moving -----------------------------------------------------------------------------
 
 PNX_OP(MOVI) { R[OP_A(w)] = R[OP_B(w)]; return PNX_R_OK; }
+PNX_OP(TTAG) { // RFC-0029 P-L6
+    if (st->task)
+        st->task->tag = R[OP_A(w)];
+    return PNX_R_OK;
+}
 PNX_OP(MOVS) { S[OP_A(w)] = S[OP_B(w)]; return PNX_R_OK; }
 PNX_OP(LOADI) { R[OP_A(w)] = OP_SBX(w); return PNX_R_OK; }
 PNX_OP(LOADK) { R[OP_A(w)] = st->iconst[OP_BX(w)]; return PNX_R_OK; }

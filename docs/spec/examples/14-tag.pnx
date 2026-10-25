@@ -1,0 +1,16 @@
+rem run
+use io
+tasks workers 2 16 1024 apart
+queue jobs int 4
+word work ()
+  jobs wait_take or_return to n
+  n task_tag                     rem the host is told this tag if the task faults
+  cat ("job ", n, ": ", 100 n div) io.println
+end
+word demo ()
+  4 jobs wait_put or_return  5 jobs wait_put or_return
+  do work end workers spawn or_else (e) return end drop
+  do work end workers spawn or_else (e) return end drop
+  workers run_all
+end
+demo

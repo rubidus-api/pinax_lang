@@ -323,6 +323,18 @@ PINAX_API pinax_err pinax_fault_local(const pinax_state *state, uint32_t index, 
  * last one happened and why ("module:line: error"), and pinax_fault_local() reads its locals until
  * the next run ends. */
 PINAX_API uint64_t pinax_task_faults(const pinax_state *state, pinax_str *last);
+/* What a task of an `apart` set was told it is (n task_tag; 0 if it never said) and how it ended. */
+typedef struct pinax_task_fault {
+    pinax_err err;   /* the fault */
+    int64_t   tag;   /* the task's tag */
+    pinax_str where; /* "module:line: error", valid during the call */
+} pinax_task_fault;
+/* Called once for each task of an `apart` set that faults, at the fault, before the task's slot is
+ * used again; inside it pinax_fault_local() reads that task's locals. It may call only the functions
+ * that read the state (pinax_fault_local, pinax_task_faults, pinax_error_text): the run is in the
+ * middle. NULL removes it. An image and a clone forget it, as they forget host words. */
+typedef void (*pinax_task_fault_fn)(void *user, const pinax_state *state, const pinax_task_fault *fault);
+PINAX_API pinax_err pinax_on_task_fault(pinax_state *state, pinax_task_fault_fn fn, void *user);
 
 /* ---- running ----------------------------------------------------------------------- */
 
