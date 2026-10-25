@@ -1915,6 +1915,12 @@ pinax_err pnx_load_container(pinax_state *st, pinax_str bytecode) {
         case PNX_G_TASKS: // elem_bytes: the call depth of a task; reserved: the bytes of its region
             if (rec->capacity > 4096 || rec->elem_bytes == 0 || rec->elem_bytes > 4096 || PNX_TASKS_REGION(rec) > (1u << 24))
                 goto rollback;
+            if (rec->reserved & PNX_TASKS_TURNS) { // the turn limit, after "tasks" (RFC-0029 P-L3)
+                uint64_t turns;
+                __builtin_memcpy(&turns, rec->type + 16, sizeof turns);
+                if (turns == 0 || turns > INT64_MAX)
+                    goto rollback;
+            }
             break;
         default: goto rollback;
         }
@@ -1969,6 +1975,10 @@ pinax_err pnx_load_container(pinax_state *st, pinax_str bytecode) {
                 t->region_base = (uint32_t)(room - st->region);
                 t->region_bytes = PNX_TASKS_REGION(rec);
                 t->apart = (rec->reserved & PNX_TASKS_APART) != 0;
+                t->turns = 0;
+                if (rec->reserved & PNX_TASKS_TURNS)
+                    __builtin_memcpy(&t->turns, rec->type + 16, sizeof t->turns);
+                st->turn_limits = st->turn_limits || t->turns;
                 room += region;
             }
             g->head = g->capacity - 1; // run_all takes the slot after the one it took last: slot 0 first
@@ -2794,7 +2804,7 @@ pinax_err pinax_run(pinax_state *st, pinax_word word, const pinax_args *args) {
     st->region_floor = 0;
     st->ends_task = false;
     st->resume_dst = UINT32_MAX;
-    st->left = st->budget;
+    st->left = st->budget ? st->budget : st->turn_limits ? UINT64_MAX : 0; // a turn limit counts `left`
     st->charge = 0;
     st->fail = PINAX_ERR_FAILED;
     return deliver(st, pnx_run_code(st), args);
@@ -2810,6 +2820,9 @@ pinax_err pinax_resume(pinax_state *st, const pinax_args *results) {
     if (st->main_wait.token)
         return PINAX_WAITING; // the operation the main run waits for has not been completed
     st->left = st->budget > st->owed ? st->budget : st->owed;
+    if (!st->budget && st->turn_limits)
+        st->left = UINT64_MAX;
+    st->left = pnx_turns_again(st, st->left); // a task with a turn limit runs on with what is left of its turn
     st->waiting = false;
     st->owed = 0;
     pinax_err run = st->main_fault;

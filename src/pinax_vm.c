@@ -76,11 +76,26 @@ static void task_enter(pinax_state *st, pnx_task *t, uint32_t dst) {
         st->fail = t->wake_fail;
         t->wake_fail = PINAX_OK;
     }
+    if (t->turns) { // a turn of its own starts (RFC-0029 P-L3): the run's `left` is the smaller of the two
+        t->rest = t->turns;
+        t->outer = st->left;
+        t->cut = t->rest <= t->outer;
+        t->given = t->cut ? t->rest : t->outer;
+        st->left = t->given;
+    }
+}
+
+// What a task with a turn limit used of `left` since it was settled. A host word may run the state
+// again inside it (PINAX_FIND_NESTED), which sets `left` anew: then nothing is counted.
+static uint64_t turn_used(const pnx_task *t, uint64_t left) {
+    return t->given > left ? t->given - left : 0;
 }
 
 // The running task gives the run back to its resumer: it yielded, or (`ended`) it is over.
 static void task_leave(pinax_state *st, bool ended) {
     pnx_task *t = st->task;
+    if (t->turns) // the run gets back its `left`, less what the turn used
+        st->left = t->outer - turn_used(t, st->left);
     if (ended) {
         t->state = PNX_TASK_FREE;
         ++t->generation;
@@ -267,6 +282,42 @@ bool pnx_fault_apart(pinax_state *st, pinax_err result, uint32_t at, uint32_t ib
     pnx_note_task_fault(st, result);
     task_leave(st, true); // the task is over; whoever resumed it goes on
     return true;
+}
+
+bool pnx_turn_out(pinax_state *st, uint64_t left) {
+    const pnx_task *holder = st->task;
+    while (holder && !holder->turns)
+        holder = holder->parent; // a task another one resumed runs on that one's turn
+    if (holder && holder->cut) {
+        st->owed = 0;
+        return true;
+    }
+    for (pnx_task *t = st->task; t; t = t->parent) {
+        if (t->turns) {
+            const uint64_t used = turn_used(t, left);
+            t->rest -= used < t->rest ? used : t->rest;
+            left = t->outer - used;
+        }
+    }
+    return false;
+}
+
+uint64_t pnx_turns_again(pinax_state *st, uint64_t left) {
+    uint32_t n = 0;
+    for (const pnx_task *t = st->task; t; t = t->parent)
+        ++n;
+    while (n--) { // from the task the main run resumed inwards
+        pnx_task *t = st->task;
+        for (uint32_t k = 0; k < n; ++k)
+            t = t->parent;
+        if (t->turns) {
+            t->outer = left;
+            t->cut = t->rest <= left;
+            t->given = t->cut ? t->rest : left;
+            left = t->given;
+        }
+    }
+    return left;
 }
 
 // The budget ran out at `at` (the CHECK, which runs again when the run goes on).

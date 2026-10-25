@@ -253,6 +253,7 @@ typedef struct globalsym {
     uint32_t record;   // NONE, or the record a table holds
     uint32_t rows;     // rows written by `row` items so far
     uint32_t table, key; // an index: its table (a global) and its key field (in comp.fields)
+    uint64_t turns;      // a set of tasks: its turn limit, 0 for none (RFC-0029 P-L3)
     uint16_t module;   // the source module it was declared in (set when the load is done)
     bool     exported; // visible to other modules as module.name
 } globalsym;
@@ -7241,6 +7242,13 @@ static bool declare_tasks(comp *c) {
             g.key = (uint32_t)c->tok.integer;
             if (!advance(c))
                 return false;
+            if (c->tok.kind == PNX_T_INT) { // its turn limit (RFC-0029 P-L3)
+                if (c->tok.integer < 1)
+                    return syntax(c, "the turn limit of a task is at least 1");
+                g.turns = (uint64_t)c->tok.integer;
+                if (!advance(c))
+                    return false;
+            }
         }
     }
     if (c->tok.kind == PNX_T_NAME && name_eq(tok_name(c), cname("apart"))) { // a word only in this place
@@ -8372,6 +8380,8 @@ static bool serialize(comp *c, const image *im, uint8_t **out, size_t *out_len) 
             rec.kind = PNX_G_TASKS;
             rec.elem_bytes = g->table; // the call depth
             rec.reserved = g->key;     // the bytes of the region
+            if (g->turns)
+                rec.reserved |= PNX_TASKS_TURNS;
         } else if (g->kind == GK_QUEUE) {
             rec.kind = PNX_G_QUEUE;
         } else if (g->strcap) { // text cells are rows of one length byte and N bytes
@@ -8398,6 +8408,8 @@ static bool serialize(comp *c, const image *im, uint8_t **out, size_t *out_len) 
             put_text(rec.type, sizeof rec.type, cname("buffer"));
         } else if (g->kind == GK_TASKS) {
             put_text(rec.type, sizeof rec.type, cname("tasks"));
+            if (g->turns)
+                __builtin_memcpy(rec.type + 16, &g->turns, sizeof g->turns);
         } else if (g->kind != GK_INDEX) {
             put_text(rec.type, sizeof rec.type, type_name(c, g->type));
         }

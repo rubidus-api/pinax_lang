@@ -1,0 +1,16 @@
+rem run
+use io
+tasks workers 2 16 1024 5000 apart  rem a turn: at most 5000 before the task yields, waits or ends
+word stuck () 0 to i loop i 1 add to i end end                      rem never yields
+word steady ()
+  0 to i
+  loop i 1 add to i  i 100000 eq until  i 100 mod 0 eq if yield or_return end end
+  cat ("steady counted to ", i) io.println
+end
+word demo ()
+  do stuck end workers spawn or_else (e) return end drop
+  do steady end workers spawn or_else (e) return end drop
+  workers run_all
+  "the stuck task was stopped; the steady one finished" io.println
+end
+demo

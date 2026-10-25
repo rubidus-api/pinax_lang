@@ -4,15 +4,16 @@
 
 #part("Syntax")
 ```ebnf
-tasks-decl = "tasks" NAME size [ size [ size ] ] [ "apart" ] ;   (* count, call depth, region bytes *)
+tasks-decl = "tasks" NAME size [ size [ size [ size ] ] ] [ "apart" ] ;   (* count, call depth, region bytes, turn limit *)
 ```
 
 #para("1")[A *task* is a flow of execution that takes turns with others inside one state. Tasks change only where one
 gives way on its own (`yield`, or a host word that waits). So even when two tasks use the same global, no other task
 comes in between two yields of one task. Tasks are not threads: a state runs on one thread at a time (5.1).]
 
-#para("2")[`tasks NAME count [depth [region]]` declares a #term("task group") of up to `count` tasks. Each task has its
-own call depth (`depth`) and its own region (`region` bytes); left out, they are the processor's defaults. The name of
+#para("2")[`tasks NAME count [depth [region [turns]]]` declares a #term("task group") of up to `count` tasks. Each task
+has its own call depth (`depth`) and its own region (`region` bytes); left out, they are the processor's defaults.
+`turns`, when it is written, is the group's turn limit (14.6). The name of
 the group is the type of the values that refer to its tasks. Written last, `apart` makes a fault inside one of the
 group's tasks end that task only (14.4 (3a)); `apart` is a word of the declaration only in that place.]
 
@@ -114,6 +115,7 @@ this does not normally happen.]
   ([a region of a task above 16 MiB], "the region of a task is at most 16 MiB"),
   ([`tasks` in a data source], "a data source runs no code and declares no tasks"),
   ([`task_tag` on a value that is not an `int`], "task_tag takes an int"),
+  ([a turn limit below 1], "the turn limit of a task is at least 1"),
 )
 
 == Naming a task <tasks-tag>
@@ -126,3 +128,20 @@ and an image keeps it.]
 #para("2")[A task learns what it serves after `spawn`, from a queue or a global (14.4 (2)), so it names itself
 then. A host that gives each request a number tells its tasks the number, and the task gives it as its tag.]
 #ex("spec", "14-tag.pnx")
+
+== Turn limits <tasks-turns>
+
+#para("1")[A #term("turn") of a task lasts from the moment it gets the run (from `run_all` or `resume`) until it yields,
+waits or ends. A group declared with a turn limit (14 (2)) allows each turn of its tasks at most that many
+instructions, counted as the budget counts them (19.5): the cost of each check at a back branch or a call, and the
+bytes scanned. The count starts again at every turn.]
+
+#para("2")[A task that runs past its turn limit faults with `cancelled` at that point. It cannot take the fault as a
+failure, since nothing there is written to take one. In a group declared `apart` the task ends alone (14.4 (3a)), and
+the host is told as of any such fault (19.10 (3a)). In a group without `apart` the fault ends the run, as any fault
+inside a task does (14.4 (3)). So a task that loops without yielding is stopped without stopping the others.]
+#ex("spec", "14-turns.pnx")
+
+#para("3")[The limit and the budget are counted apart. When the budget runs out inside a turn, the run is suspended
+and the turn goes on with what was left of it when the host resumes the run. A task another task resumes runs on
+the turn of the one that resumed it, and counts against it too.]

@@ -124,7 +124,9 @@ the whole run: every request of the state, unless the group is `apart`. A word t
 
 A task gives way only where it waits or yields. A request that computes for a long time holds the other requests of its
 state back until it waits or ends. The budget stops the whole state, not one task. Long work goes to a state of its own,
-or gives way in its loop with `yield`.
+or gives way in its loop with `yield`. To stop a request that runs too long, give its group a turn limit, the fourth
+size of `tasks requests 64 32 8192 1000000 apart`. A task that runs past it without yielding or waiting faults with
+`cancelled`, ends alone, and is answered from the fault callback (standard 14.6).
 
 #qa[Why not a clone of the state for every request?][It works, and it keeps the requests apart: nothing one request
 stores is seen by another. But a clone copies the whole state, its fixed parts and its program, for every request, and
@@ -182,6 +184,6 @@ and clones, and `extern` are in clauses 18 and 19 of the standard, with examples
 - Each request is a task of its own. One request is given up by completing its token with a failure, the whole run by
   `pinax_abort` (14, 19.5, 19.8).
 - A group declared `apart` loses only the task that faults; the host is told of each with the task's tag (14.4
-  (3a), 14.5, 19.10).
+  (3a), 14.5, 19.10). A turn limit stops a task that never yields (14.6).
 - Exported code runs a program's code compiled as C, with the same behaviour (19.11).
 ]

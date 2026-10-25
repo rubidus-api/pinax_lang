@@ -182,6 +182,11 @@ typedef struct pnx_task {
     bool             blocked;    // it yielded for a queue, when the queue count was blocked_at
     bool             apart;      // its set is declared `apart`: a fault ends this task only (RFC-0029)
     int64_t          tag;        // what the task named itself with (task_tag, RFC-0029 P-L6); 0 at spawn
+    // its turn limit (RFC-0029 P-L3; 0: none). While it runs, the run's `left` is the smaller of what is
+    // left of its turn and of the run: `given` when that was settled, `outer` the run's then, `rest` the
+    // turn's then, `cut` when the turn was the smaller
+    uint64_t         turns, rest, outer, given;
+    bool             cut;
     uint64_t         blocked_at;
     pnx_wait         wait;       // the host operation it waits for
     pinax_err        wake_fail;  // what the operation failed with, for the failure word it goes on at
@@ -300,6 +305,7 @@ struct pinax_state {
     uint64_t task_faults;          // how many such tasks ended with a fault
     bool     task_fault_kept;      // this run had one: its locals stay readable after the run ends well
     pinax_task_fault_fn on_task_fault; // told of each such fault as it happens (RFC-0029 P-L6)
+    bool     turn_limits;          // a set of tasks has a turn limit: `left` is counted even with no budget
     void              *on_task_fault_user;
     uint32_t fault_ibase, fault_sbase; // the register windows of the word that faulted
     int64_t   *fault_ibank;            // in the banks of the run it faulted in (a task's, perhaps),
@@ -418,6 +424,11 @@ size_t pnx_export_c(const pinax_state *st, const char *name, char *out, size_t c
 // state left in the context of whoever resumed it. False when the fault ends the run as before.
 bool pnx_fault_apart(pinax_state *st, pinax_err result, uint32_t at, uint32_t ibase, uint32_t sbase);
 void pnx_note_task_fault(pinax_state *st, pinax_err err);
+// The run's `left` ran out at a CHECK (RFC-0029 P-L3): true when it was a task's turn that ran out, and
+// the task faults with cancelled; otherwise the budget ran out, each task with a turn limit keeps what is
+// left of its turn, and the run suspends. pnx_turns_again settles `left` again when the run resumes.
+bool     pnx_turn_out(pinax_state *st, uint64_t left);
+uint64_t pnx_turns_again(pinax_state *st, uint64_t left);
 // The two ways out of a run that pnx_execute, pnx_step and exported code share (pinax_vm.c).
 pinax_err pnx_exec_end(pinax_state *st, pinax_err result, uint32_t at, uint32_t ibase, uint32_t sbase,
                        const int64_t *R, uint32_t floor, uint64_t left, uint64_t count);

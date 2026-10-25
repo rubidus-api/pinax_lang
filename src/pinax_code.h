@@ -401,7 +401,8 @@ enum {
     PNX_G_POOL,   // capacity records of elem_bytes bytes, then per slot a 32-bit generation (odd while
                   // the slot is handed out) and a 32-bit link of the free list
     PNX_G_TASKS,  // capacity tasks; elem_bytes is the call depth of each, reserved the bytes of its region
-                  // (and PNX_TASKS_APART: a fault in one of them ends that task only, RFC-0029)
+                  // (and PNX_TASKS_APART: a fault in one of them ends that task only, RFC-0029; and
+                  // PNX_TASKS_TURNS: they have a turn limit)
     PNX_G_COUNT
 };
 
@@ -486,7 +487,11 @@ typedef struct pnx_globalrec {
     uint32_t kind, elem_bytes, capacity, reserved;
 } pnx_globalrec;
 #define PNX_TASKS_APART (1u << 31) // in `reserved` of a set of tasks declared `apart` (RFC-0029 P-L1)
-#define PNX_TASKS_REGION(rec) ((rec)->reserved & ~PNX_TASKS_APART) // the bytes of each task's region
+// in `reserved` of a set of tasks with a turn limit (RFC-0029 P-L3): the limit is a uint64_t at byte 16 of
+// `type`, after the text "tasks" and its zero (a reader without turn limits takes the bit for a region
+// past 16 MiB and refuses the set)
+#define PNX_TASKS_TURNS (1u << 30)
+#define PNX_TASKS_REGION(rec) ((rec)->reserved & ~(PNX_TASKS_APART | PNX_TASKS_TURNS)) // the bytes of each task's region
 #define PNX_GREC_WIDTH(rec) (((rec)->reserved >> 8) & 0xffu) // 0: 64-bit cells; else a width code plus one
 
 typedef struct pnx_importrec {

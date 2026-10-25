@@ -12,7 +12,7 @@ pinax_err PNX_EXEC_NAME(pinax_state *st) {
     uint32_t floor = st->depth_floor;
     int64_t *R = st->ibank + ibase;
     pnx_scell *S = st->sbank + sbase;
-    const uint64_t budget = st->budget;
+    const uint64_t budget = st->budget || st->turn_limits; // a turn limit counts `left` (RFC-0029 P-L3)
     uint64_t left = st->left, count = 0;
     uint32_t w = 0, gl = 0; // gl: the global of a task instruction, narrow or wide
     pinax_err result = PINAX_OK;
@@ -23,9 +23,10 @@ pinax_err PNX_EXEC_NAME(pinax_state *st) {
         goto finished;                                                                             \
     } while (0)
     // Where the run stands goes into the state before a task takes over, and comes back out of
-    // it when another one is in place.
+    // it when another one is in place; with it `left`, which a turn limit changes then.
 #define SAVE_CTX()                                                                                 \
     do {                                                                                           \
+        st->left = left;                                                                           \
         st->pc = (uint32_t)(pc - code);                                                            \
         st->int_base = ibase;                                                                      \
         st->str_base = sbase;                                                                      \
@@ -34,6 +35,7 @@ pinax_err PNX_EXEC_NAME(pinax_state *st) {
     } while (0)
 #define LOAD_CTX()                                                                                 \
     do {                                                                                           \
+        left = st->left;                                                                           \
         pc = code + st->pc;                                                                        \
         ibase = st->int_base;                                                                      \
         sbase = st->str_base;                                                                      \
@@ -552,9 +554,14 @@ waiting: // like suspended; the host goes on with pinax_resume() after pinax_com
     return PINAX_WAITING;
 
 suspended:
+    if (pnx_turn_out(st, left)) { // a task's turn ran out, not the budget: the task faults (RFC-0029 P-L3)
+        ++pc;
+        FAULT(PINAX_ERR_CANCELLED);
+    }
     return pnx_exec_suspend(st, (uint32_t)(pc - code), ibase, sbase, depth, count);
 
 finished:
+    st->left = left;
     if (result != PINAX_OK && pnx_fault_apart(st, result, (uint32_t)(pc - code), ibase, sbase)) {
         LOAD_CTX(); // a task of an `apart` set faulted: it alone ends (RFC-0029)
         result = PINAX_OK;
