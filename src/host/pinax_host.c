@@ -13,6 +13,7 @@
 
 #include <stdatomic.h>
 #include <stdint.h>
+#include <string.h>
 
 static proven_u8str_view_t view_of(pinax_str s) {
     return (proven_u8str_view_t){s.ptr, s.len};
@@ -44,9 +45,35 @@ static pinax_err io_eprint(pinax_call *call, void *user, const pinax_args *args)
     return write_to(proven_sysio_stderr(), args->s[0], false);
 }
 
+// Where lines are read from: a file and the bytes read ahead of the script, ahead[at..end).
+// Standard input is read one byte at a time (size 1), so that a host that reads it too finds
+// the bytes after the line still there; a file of the module reads ahead (T083).
+typedef struct {
+    proven_file_t  file;
+    unsigned char *ahead;
+    size_t         at, end, size;
+} reader;
+
+// The next byte; false at the end of the input, and with *err set when the system refused.
+static bool next_byte(reader *r, unsigned char *byte, proven_err_t *err) {
+    if (r->at == r->end) {
+        const proven_result_size_t got = proven_fs_read(r->file, (proven_mem_mut_t){r->ahead, r->size});
+        if (got.err != PROVEN_OK && got.err != PROVEN_ERR_EOF) {
+            *err = got.err;
+            return false;
+        }
+        if (got.err == PROVEN_ERR_EOF || got.value == 0)
+            return false;
+        r->at = 0;
+        r->end = got.value;
+    }
+    *byte = r->ahead[r->at++];
+    return true;
+}
+
 // Reads one line (without its line break) into the caller's region. Fails with not_found at
 // the end of the input and with full when the line does not fit.
-static pinax_err line_from(pinax_call *call, proven_file_t file, pinax_str *out) {
+static pinax_err line_from(pinax_call *call, reader *in, pinax_str *out) {
     enum { MOST = 4096 };
     pinax_mem room = pinax_call_alloc(call, MOST);
     if (!room.ptr)
@@ -54,12 +81,12 @@ static pinax_err line_from(pinax_call *call, proven_file_t file, pinax_str *out)
     unsigned char *line = room.ptr;
     size_t n = 0;
     for (;;) {
-        proven_byte_t byte;
-        const proven_result_size_t got = proven_fs_read(file, (proven_mem_mut_t){&byte, 1});
-        if (got.err != PROVEN_OK && got.err != PROVEN_ERR_EOF)
-            return from(got.err);
-        if (got.err == PROVEN_ERR_EOF || got.value == 0) { // the end: a last line may lack its line break
-            if (n == 0)
+        unsigned char byte;
+        proven_err_t  err = PROVEN_OK;
+        if (!next_byte(in, &byte, &err)) {
+            if (err != PROVEN_OK)
+                return from(err);
+            if (n == 0) // the end: a last line may lack its line break
                 return PINAX_ERR_NOT_FOUND;
             break;
         }
@@ -77,23 +104,25 @@ static pinax_err line_from(pinax_call *call, proven_file_t file, pinax_str *out)
 }
 static pinax_err io_read_line(pinax_call *call, void *user, const pinax_args *args) {
     (void)user;
-    return line_from(call, proven_sysio_stdin(), &args->rs[0]);
+    unsigned char one;
+    reader        in = {proven_sysio_stdin(), &one, 0, 0, 1};
+    return line_from(call, &in, &args->rs[0]);
 }
 
 // The buffer forms (RFC-0009 section 5): a line is appended to a buffer the script declared,
 // without its line break. At the end of the input the word fails with not_found; a line that
 // does not fit fails with full, and what fitted stays in the buffer.
-static pinax_err line_into(pinax_call *call, proven_file_t file, int64_t buffer) {
+static pinax_err line_into(pinax_call *call, reader *in, int64_t buffer) {
     const pinax_mem room = pinax_call_buffer(call, buffer, 0);
     unsigned char  *line = room.ptr;
     size_t          n = 0;
     bool            any = false;
     for (;;) {
-        proven_byte_t byte;
-        const proven_result_size_t got = proven_fs_read(file, (proven_mem_mut_t){&byte, 1});
-        if (got.err != PROVEN_OK && got.err != PROVEN_ERR_EOF)
-            return from(got.err);
-        if (got.err == PROVEN_ERR_EOF || got.value == 0) {
+        unsigned char byte;
+        proven_err_t  err = PROVEN_OK;
+        if (!next_byte(in, &byte, &err)) {
+            if (err != PROVEN_OK)
+                return from(err);
             if (!any)
                 return PINAX_ERR_NOT_FOUND;
             break;
@@ -114,7 +143,9 @@ static pinax_err line_into(pinax_call *call, proven_file_t file, int64_t buffer)
 }
 static pinax_err io_read_line_into(pinax_call *call, void *user, const pinax_args *args) {
     (void)user;
-    return line_into(call, proven_sysio_stdin(), args->i[0]);
+    unsigned char one;
+    reader        in = {proven_sysio_stdin(), &one, 0, 0, 1};
+    return line_into(call, &in, args->i[0]);
 }
 
 // ---- file ---------------------------------------------------------------------------------
@@ -124,10 +155,16 @@ static uint32_t file_type(void *user) {
     return (uint32_t)(uintptr_t)user;
 }
 
+// An open file of the module: what proven opened, and the bytes its reads took ahead.
+typedef struct {
+    reader        in;
+    unsigned char bytes[4096];
+} host_file;
+
 static void file_close_object(void *object, void *user) {
     (void)user;
-    proven_file_t *file = object;
-    (void)proven_fs_close(*file);
+    host_file *file = object;
+    (void)proven_fs_close(file->in.file);
     proven_allocator_t heap = proven_heap_allocator();
     heap.free_fn(heap.ctx, file);
 }
@@ -137,13 +174,13 @@ static pinax_err file_open(pinax_call *call, void *user, const pinax_args *args,
     const proven_result_file_t opened = proven_fs_open(heap, view_of(args->s[0]), mode);
     if (opened.err != PROVEN_OK)
         return from(opened.err);
-    const proven_result_mem_mut_t room = heap.alloc_fn(heap.ctx, sizeof(proven_file_t), _Alignof(proven_file_t));
+    const proven_result_mem_mut_t room = heap.alloc_fn(heap.ctx, sizeof(host_file), _Alignof(host_file));
     if (room.err != PROVEN_OK) {
         (void)proven_fs_close(opened.value);
         return PINAX_ERR_FULL;
     }
-    proven_file_t *file = (proven_file_t *)(void *)room.value.ptr;
-    *file = opened.value;
+    host_file *file = (host_file *)(void *)room.value.ptr;
+    file->in = (reader){opened.value, file->bytes, 0, 0, sizeof file->bytes};
     pinax_handle handle;
     const pinax_err err = pinax_handle_new(pinax_call_state(call), file_type(user), file, &handle);
     if (err != PINAX_OK) {
@@ -160,33 +197,42 @@ static pinax_err file_open_write(pinax_call *call, void *user, const pinax_args 
     return file_open(call, user, args, (proven_fs_mode_t)(PROVEN_FS_WRITE | PROVEN_FS_CREATE | PROVEN_FS_TRUNC));
 }
 static pinax_err file_write(pinax_call *call, void *user, const pinax_args *args) {
-    proven_file_t *file = pinax_handle_get(pinax_call_state(call), file_type(user), (pinax_handle)args->i[0]);
+    host_file *file = pinax_handle_get(pinax_call_state(call), file_type(user), (pinax_handle)args->i[0]);
     if (!file)
         return PINAX_ERR_STALE;
-    return from(proven_fs_write_all(*file, (proven_mem_view_t){args->s[0].ptr, args->s[0].len}));
+    return from(proven_fs_write_all(file->in.file, (proven_mem_view_t){args->s[0].ptr, args->s[0].len}));
 }
 static pinax_err file_read_line(pinax_call *call, void *user, const pinax_args *args) {
-    proven_file_t *file = pinax_handle_get(pinax_call_state(call), file_type(user), (pinax_handle)args->i[0]);
+    host_file *file = pinax_handle_get(pinax_call_state(call), file_type(user), (pinax_handle)args->i[0]);
     if (!file)
         return PINAX_ERR_STALE;
-    return line_from(call, *file, &args->rs[0]);
+    return line_from(call, &file->in, &args->rs[0]);
 }
 static pinax_err file_read_line_into(pinax_call *call, void *user, const pinax_args *args) {
-    proven_file_t *file = pinax_handle_get(pinax_call_state(call), file_type(user), (pinax_handle)args->i[0]);
+    host_file *file = pinax_handle_get(pinax_call_state(call), file_type(user), (pinax_handle)args->i[0]);
     if (!file)
         return PINAX_ERR_STALE;
-    return line_into(call, *file, args->i[1]);
+    return line_into(call, &file->in, args->i[1]);
 }
 // (f file, buf buffer gives n int or fail): appends what one read gives to the buffer; n is 0
 // at the end of the file. Fails with full when the buffer has no room left.
 static pinax_err file_read(pinax_call *call, void *user, const pinax_args *args) {
-    proven_file_t *file = pinax_handle_get(pinax_call_state(call), file_type(user), (pinax_handle)args->i[0]);
+    host_file *file = pinax_handle_get(pinax_call_state(call), file_type(user), (pinax_handle)args->i[0]);
     if (!file)
         return PINAX_ERR_STALE;
     const pinax_mem room = pinax_call_buffer(call, args->i[1], 0);
     if (!room.len)
         return PINAX_ERR_FULL;
-    const proven_result_size_t got = proven_fs_read(*file, (proven_mem_mut_t){room.ptr, room.len});
+    reader *in = &file->in;
+    if (in->at < in->end) { // what a line read took ahead comes first
+        const size_t n = in->end - in->at < room.len ? in->end - in->at : room.len;
+        memcpy(room.ptr, in->ahead + in->at, n);
+        in->at += n;
+        (void)pinax_call_buffer(call, args->i[1], n);
+        args->ri[0] = (int64_t)n;
+        return PINAX_OK;
+    }
+    const proven_result_size_t got = proven_fs_read(in->file, (proven_mem_mut_t){room.ptr, room.len});
     if (got.err != PROVEN_OK && got.err != PROVEN_ERR_EOF)
         return from(got.err);
     const size_t n = got.err == PROVEN_ERR_EOF ? 0 : got.value;
@@ -196,7 +242,7 @@ static pinax_err file_read(pinax_call *call, void *user, const pinax_args *args)
 }
 static pinax_err file_close(pinax_call *call, void *user, const pinax_args *args) {
     pinax_state *state = pinax_call_state(call);
-    proven_file_t *file = pinax_handle_get(state, file_type(user), (pinax_handle)args->i[0]);
+    host_file *file = pinax_handle_get(state, file_type(user), (pinax_handle)args->i[0]);
     if (!file)
         return PINAX_ERR_STALE; // a fault: the word has no `or fail`
     const pinax_err err = pinax_handle_release(state, file_type(user), (pinax_handle)args->i[0]);
