@@ -304,9 +304,6 @@ struct pinax_state {
     char     task_where[112];      // the same of the last task of an `apart` set that faulted (RFC-0029)
     uint64_t task_faults;          // how many such tasks ended with a fault
     bool     task_fault_kept;      // this run had one: its locals stay readable after the run ends well
-    pinax_task_fault_fn on_task_fault; // told of each such fault as it happens (RFC-0029 P-L6)
-    bool     turn_limits;          // a set of tasks has a turn limit: `left` is counted even with no budget
-    void              *on_task_fault_user;
     uint32_t fault_ibase, fault_sbase; // the register windows of the word that faulted
     int64_t   *fault_ibank;            // in the banks of the run it faulted in (a task's, perhaps),
     pnx_scell *fault_sbank;            // until fault_locals() has read them
@@ -378,6 +375,16 @@ struct pinax_state {
     uint32_t         n_handle_types, handle_slots, handle_free, handles_open, handles_peak;
     uint32_t         run_serial; // counts runs; see pnx_handle_slot.run
     pnx_ptn_found    ptn;        // the main run's last ptn.match
+    // cold, and last so that they move none of the fields a run reads (RFC-0029)
+    bool                turn_limits;   // a set of tasks has a turn limit: `left` is counted even with no budget
+    uint64_t            counted;       // budget or turn_limits, set when a run starts: `left` is counted
+    pinax_task_fault_fn on_task_fault; // told of each fault of an `apart` task as it happens (P-L6)
+    void               *on_task_fault_user;
+    struct pnx_capacity {              // the capacities the host gave for `host` (pinax_capacity, P-L2)
+        char     name[48];             // a module's name, a point and a global's name
+        uint32_t value;
+    } capacities[16];
+    uint32_t n_capacities;
 };
 
 // The instruction table as data: operand kinds, shape, second word (pinax_code.h).
@@ -426,8 +433,18 @@ bool pnx_fault_apart(pinax_state *st, pinax_err result, uint32_t at, uint32_t ib
 void pnx_note_task_fault(pinax_state *st, pinax_err err);
 // The run's `left` ran out at a CHECK (RFC-0029 P-L3): true when it was a task's turn that ran out, and
 // the task faults with cancelled; otherwise the budget ran out, each task with a turn limit keeps what is
-// left of its turn, and the run suspends. pnx_turns_again settles `left` again when the run resumes.
-bool     pnx_turn_out(pinax_state *st, uint64_t left);
+// left of its turn, and the run suspends. What `left` still held (less than the CHECK's cost) is dropped
+// either way, as a suspension drops it. pnx_turns_again settles `left` again when the run resumes.
+bool     pnx_turn_out(pinax_state *st);
+// Exported code's two ways out (RFC-0028, RFC-0029): at a fault, and where `left` ran out. Each gives
+// PNX_STEP_ON when the run goes on from where the state says (a task of an `apart` set ended alone):
+// pnx_run_code then enters the exported code again. So that code never reloads `left` itself.
+pinax_err pnx_exec_fault(pinax_state *st, pinax_err result, uint32_t at, uint32_t ibase, uint32_t sbase,
+                         const int64_t *R, uint32_t floor, uint64_t left, uint64_t count);
+// pnx_exec_out takes six arguments, as pnx_exec_suspend does, and the depth floor from the state (where
+// exported code keeps it right): two more arguments, or storing them first, cost the hot loop of exported
+// code 16 to 20 percent (measured, int_loop).
+pinax_err pnx_exec_out(pinax_state *st, uint32_t at, uint32_t ibase, uint32_t sbase, uint32_t depth, uint64_t count);
 uint64_t pnx_turns_again(pinax_state *st, uint64_t left);
 // The two ways out of a run that pnx_execute, pnx_step and exported code share (pinax_vm.c).
 pinax_err pnx_exec_end(pinax_state *st, pinax_err result, uint32_t at, uint32_t ibase, uint32_t sbase,

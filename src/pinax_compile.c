@@ -416,6 +416,7 @@ typedef struct comp {
     pinax_err    err;
     const char  *message;
     uint32_t     line, column;
+    char         note[112]; // a message made for this error (one that names something); as st->where
 } comp;
 
 // ---- errors and memory ------------------------------------------------------------------
@@ -7214,6 +7215,7 @@ static bool declare_extern(comp *c) {
 }
 
 static bool declared_size(comp *c, uint32_t *out);
+static bool declared_capacity(comp *c, name decl, uint32_t *out);
 
 // tasks NAME count [depth [region]] [apart] : a set of tasks (RFC-0005). Each has its own registers
 // for `depth` levels of calls and its own `region` bytes for the strings it builds. `apart`: a
@@ -7228,7 +7230,7 @@ static bool declare_tasks(comp *c) {
         return type_error(c, "this name is already defined");
     if (g.name.length > 31)
         return syntax(c, "a global name is at most 31 bytes long");
-    if (!advance(c) || !declared_size(c, &g.capacity))
+    if (!advance(c) || !declared_capacity(c, g.name, &g.capacity))
         return false;
     if (c->tok.kind == PNX_T_INT) { // the call depth of a task
         if (c->tok.integer < 1 || c->tok.integer > 4096)
@@ -7380,6 +7382,34 @@ static bool declare_global(comp *c) {
 }
 
 // A size in a declaration: an integer literal or the name of an int const.
+// The capacity of the declaration `decl`: a size, or `host` for the number the host gave
+// (pinax_capacity, RFC-0029 P-L2), by the name "decl" in the first source and "module.decl" in any.
+static bool declared_capacity(comp *c, name decl, uint32_t *out) {
+    if (c->tok.kind != PNX_T_NAME || !name_eq(tok_name(c), cname("host"))) // a word only in this place
+        return declared_size(c, out);
+    const name self = ((const name *)c->srcmods.ptr)[c->module];
+    for (uint32_t k = 0; k < c->st->n_capacities; ++k) {
+        const struct pnx_capacity *e = &c->st->capacities[k];
+        const name given = cname(e->name);
+        const bool plain = c->module == 0 && name_eq(given, decl);
+        const bool full = given.length == self.length + 1 + decl.length && self.length &&
+                          __builtin_memcmp(given.text, self.text, self.length) == 0 && given.text[self.length] == '.' &&
+                          __builtin_memcmp(given.text + self.length + 1, decl.text, decl.length) == 0;
+        if (plain || full) {
+            *out = e->value;
+            return advance(c);
+        }
+    }
+    const name parts[] = {cname("the host gave no capacity for "), c->module ? self : cname(""),
+                          cname(c->module ? "." : ""), decl, cname(" (pinax_capacity)")};
+    uint32_t at = 0;
+    for (uint32_t k = 0; k < sizeof parts / sizeof parts[0]; ++k)
+        for (uint32_t i = 0; i < parts[k].length && at + 1 < sizeof c->note; ++i)
+            c->note[at++] = (char)parts[k].text[i];
+    c->note[at] = 0;
+    return syntax(c, c->note);
+}
+
 static bool declared_size(comp *c, uint32_t *out) {
     int64_t n;
     if (c->tok.kind == PNX_T_INT) {
@@ -7433,7 +7463,7 @@ static bool declare_collection(comp *c, uint8_t kind) {
     if (kind == GK_POOL && g.record == NONE)
         return type_error(c, "a pool holds records: pool name record size");
     if (!advance(c) || (g.record == NONE && g.type == TY_STR && !str_capacity(c, &g.strcap)) ||
-        (dec && !dec_scale(c, &g.type)) || !declared_size(c, &g.capacity))
+        (dec && !dec_scale(c, &g.type)) || !declared_capacity(c, g.name, &g.capacity))
         return false;
     if (slot) { // announced by forward: export on either line exports the table
         g.exported = slot->exported || c->exporting;
@@ -7641,7 +7671,7 @@ static bool declare_buffer(comp *c) {
         return type_error(c, "this name is already defined");
     if (g.name.length > 31)
         return syntax(c, "a global name is at most 31 bytes long");
-    if (!advance(c) || !declared_size(c, &g.capacity))
+    if (!advance(c) || !declared_capacity(c, g.name, &g.capacity))
         return false;
     if (c->globals.n >= REF_GLOBAL)
         return syntax(c, "too many globals");
@@ -9012,6 +9042,11 @@ static pinax_err load_source(pinax_state *st, const char *file, pinax_str source
             kept = keep_symbols(&c, &keep);
     }
     if (c.err != PINAX_OK) {
+        if (c.message == c.note) { // made on this stack: the state keeps its own copy
+            static_assert(sizeof c.note <= sizeof st->where, "a note fits where");
+            __builtin_memcpy(st->where, c.note, sizeof c.note);
+            c.message = st->where;
+        }
         st->error_text = c.message;
         st->n_hosts = before.n_hosts;
         if (eval && c.unfinished) { // the host reads on and gives the longer text

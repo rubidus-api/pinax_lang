@@ -1,0 +1,4 @@
+rem refused
+tasks handlers host 32 8192 apart     rem as many as the host serves at once
+list seen int host
+word count (gives n int) seen len end

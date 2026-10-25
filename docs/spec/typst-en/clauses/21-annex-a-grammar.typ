@@ -35,16 +35,17 @@ forward     = "forward" ( "array" | "list" | "pool" ) NAME
 
 (* 8: declarations *)
 declaration = [ "export" ] ( [ "bound" ] bindable | "shared" shareable | decl ) ;
-bindable    = "global" NAME type | "array" NAME type size | "buffer" NAME size ;
-shareable   = bindable | "list" NAME type size | "index" NAME NAME PATH ;
+bindable    = "global" NAME type | "array" NAME type capacity | "buffer" NAME capacity ;
+shareable   = bindable | "list" NAME type capacity | "index" NAME NAME PATH ;
 decl        = "const" NAME literal
-            | "list" NAME type size | "queue" NAME type size | "pool" NAME NAME size
+            | "list" NAME type capacity | "queue" NAME type capacity | "pool" NAME NAME capacity
             | "record" NAME { field | "big_endian" } "end"
             | "type" NAME ( "int" | "bool" | "str" | "dec" "(" INT ")" )
             | "index" NAME NAME PATH
-            | "tasks" NAME size [ size [ size ] ] [ "apart" ]
+            | "tasks" NAME capacity [ size [ size [ size ] ] ] [ "apart" ]
             | "extern" c-name "(" effect ")" "from" STRING [ "as" NAME ]
             | "test" NAME { body } "end" ;
+capacity    = size | "host" ;
 size        = INT | NAME ;
 field       = NAME NAME [ "(" size ")" ] ;
 c-name      = NAME | reserved-word | STRING ;

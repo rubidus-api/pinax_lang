@@ -12,7 +12,7 @@ pinax_err PNX_EXEC_NAME(pinax_state *st) {
     uint32_t floor = st->depth_floor;
     int64_t *R = st->ibank + ibase;
     pnx_scell *S = st->sbank + sbase;
-    const uint64_t budget = st->budget || st->turn_limits; // a turn limit counts `left` (RFC-0029 P-L3)
+    const uint64_t budget = st->counted; // the budget, or a turn limit (RFC-0029 P-L3): `left` is counted
     uint64_t left = st->left, count = 0;
     uint32_t w = 0, gl = 0; // gl: the global of a task instruction, narrow or wide
     pinax_err result = PINAX_OK;
@@ -63,8 +63,11 @@ pinax_err PNX_EXEC_NAME(pinax_state *st) {
 #define CASE(name) case PNX_##name:
 #if PNX_EXEC_STEP
 #define NEXT() goto stepped
+#define AGAIN() goto stepped
 #else
 #define NEXT() continue
+#define AGAIN() goto again // NEXT from outside the loop
+again:
 #endif
     for (;;) {
         BUDGET_STEP();
@@ -88,6 +91,7 @@ pinax_err PNX_EXEC_NAME(pinax_state *st) {
 #else
 #define NEXT() FIRST()
 #endif
+#define AGAIN() NEXT()
     FIRST();
     {
         {
@@ -554,7 +558,8 @@ waiting: // like suspended; the host goes on with pinax_resume() after pinax_com
     return PINAX_WAITING;
 
 suspended:
-    if (pnx_turn_out(st, left)) { // a task's turn ran out, not the budget: the task faults (RFC-0029 P-L3)
+    if (pnx_turn_out(st)) { // a task's turn ran out, not the budget: the task faults (RFC-0029 P-L3)
+        left = 0;           // as exported code does: what was left of it is dropped
         ++pc;
         FAULT(PINAX_ERR_CANCELLED);
     }
@@ -565,12 +570,13 @@ finished:
     if (result != PINAX_OK && pnx_fault_apart(st, result, (uint32_t)(pc - code), ibase, sbase)) {
         LOAD_CTX(); // a task of an `apart` set faulted: it alone ends (RFC-0029)
         result = PINAX_OK;
-        NEXT();
+        AGAIN();
     }
     return pnx_exec_end(st, result, (uint32_t)(pc - code), ibase, sbase, R, floor, left, count);
 }
 
 #undef FAULT
+#undef AGAIN
 #undef SAVE_CTX
 #undef LOAD_CTX
 #undef BUDGET_STEP

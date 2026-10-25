@@ -107,6 +107,14 @@ room it left; while a task (clause 14) is alive it does not, and the next load a
 `redefine` appends the new body and leaves the old code where it was. The room used is read from `block_bytes_used`
 of `pinax_stats`. A session line that only runs code takes no room.]
 
+#para("1d")[`pinax_capacity(state, name, value)` gives the number for a capacity written `host` (8 (4a)), before
+the load that has it. `name` is the declaration's name: the plain name for the first source loaded, and
+`module.name` for any source. Giving a name again replaces its number. The state keeps up to 16 names of up to 47
+bytes; a value is 1 to 2#super[31] − 1. A capacity may become a constant of the code (`capacity`, a check the
+loader proves against it), so exported code (19.11) made with one number may not be the code of a load with
+another; such a load runs without it.]
+#ex("spec", "19-capacity.c")
+
 #para("2")[`pinax_eval(state, text)` runs one line as a session does. All lines form one module (the session). What a
 line leaves is read with `pinax_eval_count` and `pinax_eval_value`.]
 

@@ -277,6 +277,12 @@ enum {
  *    pinax_run() is refused, and a fault met while resuming fails the load as above.
  *  - PINAX_LOAD_DATA: a source that does not finish inside its own small budget fails the load. */
 PINAX_API pinax_err pinax_load(pinax_state *state, const char *name, pinax_str source, uint32_t mode);
+/* A capacity a source writes `host` (`tasks handlers host`, `list seen int host`) is the number given
+ * here, before the load: `name` is the declaration's name, "handlers" for the first source loaded and
+ * "module.handlers" for a module's. Giving a name again replaces its number. A load that meets `host`
+ * for a name not given is refused with a message that names it. At most 16 names of up to 47 bytes;
+ * values 1 to 2^31 - 1. */
+PINAX_API pinax_err pinax_capacity(pinax_state *state, const char *name, uint32_t value);
 PINAX_API pinax_err pinax_load_bytecode(pinax_state *state, pinax_str bytecode);
 /* One line at the top level, as in an interactive session (the text may be several lines).
  *  - All the texts given to pinax_eval() are one module, the session: a line sees what the

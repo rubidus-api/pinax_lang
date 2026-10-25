@@ -8,21 +8,22 @@
 ```ebnf
 declaration = [ "export" ] ( [ "bound" ] bindable | "shared" shareable | decl ) ;
 bindable    = "global" NAME type
-            | "array"  NAME type size
-            | "buffer" NAME size ;
+            | "array"  NAME type capacity
+            | "buffer" NAME capacity ;
 shareable   = bindable
-            | "list"   NAME type size
+            | "list"   NAME type capacity
             | "index"  NAME NAME PATH ;
 decl        = "const"  NAME literal
-            | "list"   NAME type size
-            | "queue"  NAME type size
-            | "pool"   NAME NAME size
+            | "list"   NAME type capacity
+            | "queue"  NAME type capacity
+            | "pool"   NAME NAME capacity
             | "record" NAME { field | "big_endian" } "end"
             | "type"   NAME base
             | "index"  NAME NAME PATH
-            | "tasks"  NAME size [ size [ size ] ]
+            | "tasks"  NAME capacity [ size [ size [ size ] ] ] [ "apart" ]
             | "extern" c-name "(" effect ")" "from" STRING [ "as" NAME ]
             | "test"   NAME { body } "end" ;
+capacity    = size | "host" ;
 size        = INT | NAME ;                         (* NAME: a const *)
 ```
 
@@ -37,6 +38,12 @@ size        = INT | NAME ;                         (* NAME: a const *)
 
 #para("4")[용량(`size`)은 양의 정수 리터럴이거나 그런 값의 `const` 다. 용량은 적재 때 정해지고 돌 때 바뀌지
 않는다. 모든 저장소는 적재 때 상태의 덩이 안에 자리를 잡는다.]
+
+#para("4a")[배열, 버퍼, 목록, 큐, 풀, 작업 묶음의 용량은 `host` 로 쓸 수 있다. 그러면 그것은 호스트가 적재 전에 그 선언에
+준 수다(19.4 (1d)). 적재는 그 수를 거기에 적은 것처럼 다룬다. 호스트가 수를 주지 않은 선언에서 `host` 를 만난 적재는
+거절되고, 메시지가 그 선언의 이름을 댄다. `host` 는 그 자리에서만 선언의 낱말이다. 그 자리에서는 같은 이름의 상수를 찾지
+않는다.]
+#ex("spec", "08-host-capacity.pnx")
 
 #para("5")[전역, 배열의 칸, 목록·큐·풀의 칸, 버퍼, 레코드의 필드는 0 으로 시작한다(7 (3)).]
 
@@ -308,6 +315,7 @@ forward = "forward" ( "array" | "list" | "pool" ) NAME
 #diag(
   ([이미 있는 이름], "this name is already defined"),
   ([선언 앞에서 쓴 이름], "this name is not declared before this place"),
+  ([호스트가 수를 주지 않은 `host` 용량(메시지에 선언의 이름)], "the host gave no capacity for NAME (pinax_capacity)"),
   ([정의 밖의 `to` 가 전역이 아닌 이름에], "outside a definition `to` makes no new local; a global is written with set"),
   ([`assign` 의 값이 칸보다 많음], "assign has more values than the array has cells"),
   ([큐의 원소 타입이 `int` `bool` `err` `dec(N)` 밖], "a queue holds int, bool, err or dec(N) values"),

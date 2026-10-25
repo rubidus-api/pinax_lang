@@ -2614,6 +2614,27 @@ void pnx_note_task_fault(pinax_state *st, pinax_err err) {
     }
 }
 
+pinax_err pinax_capacity(pinax_state *st, const char *name, uint32_t value) {
+    if (!st || !name || value < 1 || value > 0x7fffffffu)
+        return PINAX_ERR_ARGUMENT;
+    const size_t len = __builtin_strlen(name);
+    if (len == 0 || len >= sizeof st->capacities[0].name)
+        return PINAX_ERR_ARGUMENT;
+    if (st->loading || st->host_cur)
+        return fail(st, PINAX_ERR_STATE, "a capacity is given before the load that uses it");
+    uint32_t k = 0;
+    while (k < st->n_capacities && __builtin_strcmp(st->capacities[k].name, name) != 0)
+        ++k;
+    if (k == st->n_capacities) {
+        if (k == sizeof st->capacities / sizeof st->capacities[0])
+            return fail(st, PINAX_ERR_NO_ROOM, "at most 16 capacities are given");
+        __builtin_memcpy(st->capacities[k].name, name, len + 1);
+        ++st->n_capacities;
+    }
+    st->capacities[k].value = value;
+    return PINAX_OK;
+}
+
 pinax_err pinax_on_task_fault(pinax_state *st, pinax_task_fault_fn fn, void *user) {
     if (!st)
         return PINAX_ERR_ARGUMENT;
@@ -2805,6 +2826,7 @@ pinax_err pinax_run(pinax_state *st, pinax_word word, const pinax_args *args) {
     st->ends_task = false;
     st->resume_dst = UINT32_MAX;
     st->left = st->budget ? st->budget : st->turn_limits ? UINT64_MAX : 0; // a turn limit counts `left`
+    st->counted = st->budget || st->turn_limits;
     st->charge = 0;
     st->fail = PINAX_ERR_FAILED;
     return deliver(st, pnx_run_code(st), args);
@@ -2822,6 +2844,7 @@ pinax_err pinax_resume(pinax_state *st, const pinax_args *results) {
     st->left = st->budget > st->owed ? st->budget : st->owed;
     if (!st->budget && st->turn_limits)
         st->left = UINT64_MAX;
+    st->counted = st->budget || st->turn_limits;
     st->left = pnx_turns_again(st, st->left); // a task with a turn limit runs on with what is left of its turn
     st->waiting = false;
     st->owed = 0;
@@ -3641,7 +3664,11 @@ pinax_err pnx_run_code(pinax_state *st) {
         }
         if (st->native_bound) {
             ++st->native_runs;
-            return st->native->run(st);
+            pinax_err err;
+            do // a task of an `apart` set that faulted ended alone: on from where the state stands
+                err = st->native->run(st);
+            while (err == PNX_STEP_ON);
+            return err;
         }
     }
     return pnx_execute(st);

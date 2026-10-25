@@ -8,21 +8,22 @@
 ```ebnf
 declaration = [ "export" ] ( [ "bound" ] bindable | "shared" shareable | decl ) ;
 bindable    = "global" NAME type
-            | "array"  NAME type size
-            | "buffer" NAME size ;
+            | "array"  NAME type capacity
+            | "buffer" NAME capacity ;
 shareable   = bindable
-            | "list"   NAME type size
+            | "list"   NAME type capacity
             | "index"  NAME NAME PATH ;
 decl        = "const"  NAME literal
-            | "list"   NAME type size
-            | "queue"  NAME type size
-            | "pool"   NAME NAME size
+            | "list"   NAME type capacity
+            | "queue"  NAME type capacity
+            | "pool"   NAME NAME capacity
             | "record" NAME { field | "big_endian" } "end"
             | "type"   NAME base
             | "index"  NAME NAME PATH
-            | "tasks"  NAME size [ size [ size ] ]
+            | "tasks"  NAME capacity [ size [ size [ size ] ] ] [ "apart" ]
             | "extern" c-name "(" effect ")" "from" STRING [ "as" NAME ]
             | "test"   NAME { body } "end" ;
+capacity    = size | "host" ;
 size        = INT | NAME ;                         (* NAME: a const *)
 ```
 
@@ -37,6 +38,13 @@ words and types cannot be made again either.]
 
 #para("4")[A capacity (`size`) is a positive integer literal or a `const` of one. Capacities are fixed at load and do
 not change while running. All storage is placed inside the state's block at load.]
+
+#para("4a")[The capacity of an array, a buffer, a list, a queue, a pool or a task group may be written `host`. Then it
+is the number the host gave for that declaration before the load (19.4 (1d)), and the load treats it as that number
+written there. A load that meets `host` for a declaration the host gave no number is refused, and the message names
+the declaration. `host` is a word of the declaration only in that place; a constant of that name is not looked up
+there.]
+#ex("spec", "08-host-capacity.pnx")
 
 #para("5")[Globals, cells of arrays, slots of lists, queues and pools, buffers and fields of records start at zero
 (7 (3)).]
@@ -316,6 +324,7 @@ given (19.7).]
 #diag(
   ([A name that exists already], "this name is already defined"),
   ([A name used before its declaration], "this name is not declared before this place"),
+  ([A capacity `host` the host gave no number for (the declaration's name in the message)], "the host gave no capacity for NAME (pinax_capacity)"),
   ([`to` outside a definition into a name that is not a global], "outside a definition `to` makes no new local; a global is written with set"),
   ([More `assign` values than cells], "assign has more values than the array has cells"),
   ([A queue of another element type than `int`, `bool`, `err`, `dec(N)`], "a queue holds int, bool, err or dec(N) values"),

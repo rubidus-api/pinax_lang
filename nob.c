@@ -15,7 +15,9 @@
 //   options: --target=win64   cross-compile with MinGW-w64 ($PINAX_WIN64_CC, default
 //                             x86_64-w64-mingw32-gcc); --sanitize (ASan + UBSan); --debug;
 //            --proofs (PINAX_CHECK_PROOFS: a run-time check the loader proved away stops the
-//            program if it fires, RFC-0023; for the tests, the examples and the fuzzer)
+//            program if it fires, RFC-0023; for the tests, the examples and the fuzzer);
+//            --switch (PINAX_SWITCH_DISPATCH: the interpreter dispatches with a plain switch, as
+//            for a compiler without computed goto)
 //
 // Two flag sets. Pinax's sources: -std=c23 -Wall -Wextra -pedantic -Werror. The vendored
 // proven_c_lib: its own set (no -pedantic, which rejects its __int128), see
@@ -98,6 +100,7 @@ typedef struct {
     bool sanitize;
     bool debug;
     bool proofs; // PINAX_CHECK_PROOFS: a proven check that fires stops the program (RFC-0023)
+    bool switch_dispatch; // PINAX_SWITCH_DISPATCH
 } target_t;
 
 static int run(const char *command) {
@@ -134,8 +137,8 @@ static bool exists(const char *path) {
 }
 
 static void build_dir(char *out, size_t cap, const target_t *t) {
-    snprintf(out, cap, "build/%s%s%s", t->name, t->sanitize ? "-asan" : (t->debug ? "-debug" : ""),
-             t->proofs ? "-proofs" : "");
+    snprintf(out, cap, "build/%s%s%s%s", t->name, t->sanitize ? "-asan" : (t->debug ? "-debug" : ""),
+             t->proofs ? "-proofs" : "", t->switch_dispatch ? "-switch" : "");
 }
 
 static void object_path(char *out, size_t cap, const char *objdir, const char *source) {
@@ -150,9 +153,9 @@ static void object_path(char *out, size_t cap, const char *objdir, const char *s
 
 static const char *mode_flags(const target_t *t) {
     static char buf[160];
-    snprintf(buf, sizeof buf, "%s %s%s", t->debug || t->sanitize ? "-O0 -g" : "-O2",
+    snprintf(buf, sizeof buf, "%s %s%s%s", t->debug || t->sanitize ? "-O0 -g" : "-O2",
              t->sanitize ? "-fsanitize=address,undefined -fno-omit-frame-pointer -fno-sanitize-recover=all" : "",
-             t->proofs ? " -DPINAX_CHECK_PROOFS" : "");
+             t->proofs ? " -DPINAX_CHECK_PROOFS" : "", t->switch_dispatch ? " -DPINAX_SWITCH_DISPATCH" : "");
     return buf;
 }
 
@@ -659,12 +662,14 @@ int main(int argc, char **argv) {
             t.debug = true;
         } else if (strcmp(a, "--proofs") == 0) {
             t.proofs = true;
+        } else if (strcmp(a, "--switch") == 0) {
+            t.switch_dispatch = true;
         } else if (a[0] != '-' && strcmp(command, "build") == 0) {
             command = a;
         } else {
             fprintf(stderr, "nob: unknown option %s\n"
                             "usage: ./nob [build|test|check|freestanding|wasm|dist|all|clean] "
-                            "[--target=native|win64] [--sanitize] [--debug] [--proofs]\n", a);
+                            "[--target=native|win64] [--sanitize] [--debug] [--proofs] [--switch]\n", a);
             return 2;
         }
     }

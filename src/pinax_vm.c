@@ -284,7 +284,8 @@ bool pnx_fault_apart(pinax_state *st, pinax_err result, uint32_t at, uint32_t ib
     return true;
 }
 
-bool pnx_turn_out(pinax_state *st, uint64_t left) {
+bool pnx_turn_out(pinax_state *st) {
+    uint64_t left = 0; // what was left, less than the CHECK's cost, is dropped
     const pnx_task *holder = st->task;
     while (holder && !holder->turns)
         holder = holder->parent; // a task another one resumed runs on that one's turn
@@ -318,6 +319,23 @@ uint64_t pnx_turns_again(pinax_state *st, uint64_t left) {
         }
     }
     return left;
+}
+
+pinax_err pnx_exec_fault(pinax_state *st, pinax_err result, uint32_t at, uint32_t ibase, uint32_t sbase,
+                         const int64_t *R, uint32_t floor, uint64_t left, uint64_t count) {
+    st->left = left;
+    if (pnx_fault_apart(st, result, at, ibase, sbase)) {
+        st->instructions += count;
+        return PNX_STEP_ON; // whoever resumed the task goes on: pnx_run_code enters the code again
+    }
+    return pnx_exec_end(st, result, at, ibase, sbase, R, floor, left, count);
+}
+
+pinax_err pnx_exec_out(pinax_state *st, uint32_t at, uint32_t ibase, uint32_t sbase, uint32_t depth, uint64_t count) {
+    if (pnx_turn_out(st)) // the turn ran out, not the budget: the task faults at the CHECK
+        return pnx_exec_fault(st, PINAX_ERR_CANCELLED, at + 1, ibase, sbase, st->ibank + ibase, st->depth_floor, 0,
+                              count);
+    return pnx_exec_suspend(st, at, ibase, sbase, depth, count);
 }
 
 // The budget ran out at `at` (the CHECK, which runs again when the run goes on).
