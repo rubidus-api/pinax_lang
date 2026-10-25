@@ -135,7 +135,7 @@ block   = "do" [ "(" effect ")" ] { body } "end" ;
   [배열, 목록의 이름], [칸의 값(레코드면 줄). 목록은 길이까지. 큐, 풀, 버퍼, 찾아보기는 줄기가 아니다],
   [`lo hi range`], [`lo` 부터 `hi` 앞까지의 `int`],
   [`s sep str.split`, `s str.lines`, `s str.words`, `s str.chars`], [`str` 뷰(16.1). `chars` 는 UTF-8 글자 하나씩],
-  [`s str.bytes`], [`int`: 바이트(16.1)],
+  [`s str.bytes`], [`u8`: 바이트(16.1)],
   [`s pat ptn.matches`, `s re rex.matches`, `s re rex.split`], [맞은 부분(16.6, 16.7)],
   [`s csv.fields`], [필드(16.9)],
 )]
