@@ -128,6 +128,10 @@ module (exported or not).]
 `pinax_resume` goes on where it stopped; the budget does not change results. A fault returns its code, and the state
 takes the next run.]
 
+#para("2a")[The budget counts the cost of each check at a back branch or a call, the bytes the string words scan, and
+each turn that `run_all` gives a task (14.1 (2)), which costs one. So every run of a container the processor accepts
+meets the budget, even one whose tasks spawn and end without a loop of their own.]
+
 #para("3")[While a run is stopped (`PINAX_SUSPENDED`, `PINAX_WAITING`), a new `pinax_run` is `PINAX_ERR_STATE`. The
 host either continues it to its end or gives it up with `pinax_abort`.]
 

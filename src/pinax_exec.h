@@ -494,6 +494,18 @@ again:
                     FAULT(PINAX_ERR_STATE);
                 goto waiting;
             }
+#if !defined(PINAX_BUDGET_EACH) // (that build counts this instruction each time it comes back)
+            // TRUNALL comes back to itself after every turn, a loop with no back branch: each turn it gives
+            // costs one, as a CHECK would, or tasks that spawn tasks and run them never meet the budget
+            if (budget) {
+                if (left == 0) {
+                    st->owed = 1;
+                    goto suspended;
+                }
+                --left;
+            }
+            ++count;
+#endif
             SAVE_CTX();
             task_enter(st, t, UINT32_MAX);
             LOAD_CTX();

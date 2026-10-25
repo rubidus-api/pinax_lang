@@ -338,6 +338,45 @@ pinax_err pnx_exec_out(pinax_state *st, uint32_t at, uint32_t ibase, uint32_t sb
     return pnx_exec_suspend(st, at, ibase, sbase, depth, count);
 }
 
+pinax_err pnx_step_host(pinax_state *st) {
+#if defined(PINAX_BUDGET_EACH) // every instruction counted: the interpreter's own step does that
+    return pnx_step(st);
+#else
+    const uint32_t *pc = st->code + st->pc;
+    const uint32_t  w = *pc++;
+    const bool      with_failure_word = (w & 0xffu) == PNX_HCALLF;
+    const uint32_t  ibase = st->int_base, sbase = st->str_base;
+    bool            fault;
+    uint64_t        token = 0;
+    const pinax_err err = host_call(st, st->imports[*pc], st->ibank + ibase + OP_A(w), st->sbank + sbase + OP_B(w), &fault,
+                                    &token);
+    ++pc;
+    st->pc = (uint32_t)(pc - st->code);
+    if (err == PINAX_PENDING) { // as the interpreter's AWAIT: the main run waits, a task gives the run back
+        pnx_task *const t = st->task;
+        pnx_wait *const wait = t ? &t->wait : &st->main_wait;
+        *wait = (pnx_wait){token, st->imports[pc[-1]], ibase + OP_A(w), sbase + OP_B(w), with_failure_word};
+        if (!t) {
+            st->waiting = true;
+            st->suspended = true;
+            return PINAX_WAITING;
+        }
+        task_leave(st, false);
+        t->state = PNX_TASK_WAITING;
+        return PNX_STEP_ON;
+    }
+    if (err == PINAX_OK) {
+        st->pc += with_failure_word; // past the failure word
+        return PNX_STEP_ON;
+    }
+    if (with_failure_word && !fault) {
+        st->fail = err; // the failure word is next
+        return PNX_STEP_ON;
+    }
+    return pnx_exec_fault(st, err, st->pc, ibase, sbase, st->ibank + ibase, st->depth_floor, st->left, 0);
+#endif
+}
+
 // The budget ran out at `at` (the CHECK, which runs again when the run goes on).
 pinax_err pnx_exec_suspend(pinax_state *st, uint32_t at, uint32_t ibase, uint32_t sbase, uint32_t depth,
                            uint64_t count) {

@@ -445,6 +445,9 @@ pinax_err pnx_exec_fault(pinax_state *st, pinax_err result, uint32_t at, uint32_
 // exported code keeps it right): two more arguments, or storing them first, cost the hot loop of exported
 // code 16 to 20 percent (measured, int_loop).
 pinax_err pnx_exec_out(pinax_state *st, uint32_t at, uint32_t ibase, uint32_t sbase, uint32_t depth, uint64_t count);
+// HCALL and HCALLF for exported code (RFC-0028 section 9, D0066): what pnx_step does for them, without the
+// interpreter's dispatch. The run's place is in the state before and after, as for pnx_step.
+pinax_err pnx_step_host(pinax_state *st);
 uint64_t pnx_turns_again(pinax_state *st, uint64_t left);
 // The two ways out of a run that pnx_execute, pnx_step and exported code share (pinax_vm.c).
 pinax_err pnx_exec_end(pinax_state *st, pinax_err result, uint32_t at, uint32_t ibase, uint32_t sbase,

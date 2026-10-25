@@ -106,7 +106,8 @@ Each request is served by a task of its own (chapter 13). The block of `spawn` s
 goes to the task through a queue. The task ends with its request, and the bytes it made in its region go with it. When
 every task of the group is taken, `spawn` fails with `full`, and the script answers "busy" at once. How many requests
 a state serves at once is the host's to know, so the script may write the count `host` (`tasks requests host`) and
-the host gives it with `pinax_capacity(state, "requests", 64)` before the load (standard 8 (4a), 19.4 (1d)).
+the host gives it with `pinax_capacity(state, "requests", 64)` before the load (standard 8 (4a), 19.4 (1d)). `pnx` gives
+it with `--capacity requests=64` (standard 20 (3a)).
 
 #ex("manual", "14-requests.c")
 

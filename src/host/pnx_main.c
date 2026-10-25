@@ -17,7 +17,9 @@
 // libraries given this way are opened, and only functions they define themselves are found, not
 // those of the libraries they depend on (the C library's `system`); with no --lib a
 // script that names a C function does not load. Calling C is outside the type checks: give
-// --lib only to scripts you trust.
+// --lib only to scripts you trust. --capacity NAME=N gives a capacity the script writes `host`
+// (`tasks handlers host`): NAME is a declaration of the file (it is given as NAME and as FILE.NAME),
+// or MODULE.NAME for a module it uses; N is 1 to 2^31 - 1 (RFC-0029 P-L2, D0066).
 //
 // Environment: PNX_BLOCK_KB sets the size of the state's memory block (default 16384).
 #if defined(__linux__)
@@ -83,6 +85,51 @@ static char *read_file(const char *path, size_t *length) {
     fclose(f);
     *length = n;
     return text;
+}
+
+// ---- --capacity: the capacities a script leaves to the host ---------------------------------
+
+enum { MAX_CAPACITIES = 16 };
+static struct {
+    char     name[48];
+    uint32_t value;
+} capacities[MAX_CAPACITIES];
+static int n_capacities;
+
+static bool take_capacity(const char *option) {
+    const char *eq = strchr(option, '=');
+    char       *end = NULL;
+    const long long n = eq ? strtoll(eq + 1, &end, 10) : 0;
+    if (!eq || eq == option || eq - option >= (ptrdiff_t)sizeof capacities[0].name || !eq[1] || *end || n < 1 ||
+        n > 0x7fffffff) {
+        fprintf(stderr, "pnx: --capacity takes NAME=N, N being 1 to 2147483647\n");
+        return false;
+    }
+    if (n_capacities == MAX_CAPACITIES) {
+        fprintf(stderr, "pnx: at most %d capacities\n", MAX_CAPACITIES);
+        return false;
+    }
+    memcpy(capacities[n_capacities].name, option, (size_t)(eq - option));
+    capacities[n_capacities].name[eq - option] = 0;
+    capacities[n_capacities++].value = (uint32_t)n;
+    return true;
+}
+
+// Each as given; a plain name also as the file's module's, since the modules it uses load first.
+static pinax_err give_capacities(pinax_state *state, const char *module) {
+    for (int k = 0; k < n_capacities; ++k) {
+        pinax_err err = pinax_capacity(state, capacities[k].name, capacities[k].value);
+        if (err == PINAX_OK && module[0] && !strchr(capacities[k].name, '.')) {
+            char full[96];
+            snprintf(full, sizeof full, "%.31s.%.47s", module, capacities[k].name); // a module name is at most 31 bytes
+            err = pinax_capacity(state, full, capacities[k].value);
+        }
+        if (err != PINAX_OK) {
+            fprintf(stderr, "pnx: --capacity %s: %s\n", capacities[k].name, err_name(err));
+            return err;
+        }
+    }
+    return PINAX_OK;
 }
 
 // ---- --lib: the libraries a script may name ----------------------------------------------
@@ -523,8 +570,8 @@ int main(int argc, char **argv) {
 #endif
     // options before the command; what follows is read as if they were not there
     int options = 0;
-    while (options + 2 < argc && strcmp(argv[1 + options], "--lib") == 0) {
-        if (!open_lib(argv[2 + options])) {
+    while (options + 2 < argc && (strcmp(argv[1 + options], "--lib") == 0 || strcmp(argv[1 + options], "--capacity") == 0)) {
+        if (strcmp(argv[1 + options], "--capacity") == 0 ? !take_capacity(argv[2 + options]) : !open_lib(argv[2 + options])) {
             close_libs();
             return 2;
         }
@@ -549,7 +596,7 @@ static int run(int argc, char **argv) {
     const bool exporting = argc > 1 && strcmp(argv[1], "export-c") == 0;
     const int  at = checking ? 3 : testing || seeing || formatting || exporting ? 2 : 1;
     if (argc <= at) {
-        fprintf(stderr, "usage: pnx [--lib NAME=PATH]... file.pnx [arguments]\n       pnx test file.pnx\n"
+        fprintf(stderr, "usage: pnx [--lib NAME=PATH]... [--capacity NAME=N]... file.pnx [arguments]\n       pnx test file.pnx\n"
                         "       pnx repl\n       pnx see file.pnx\n       pnx see --checks file.pnx\n"
                         "       pnx fmt file.pnx\n       pnx export-c file.pnx [NAME]   (the code as C, RFC-0028)\n");
         return 2;
@@ -594,6 +641,11 @@ static int run(int argc, char **argv) {
     pinax_native_attach(state, &PNX_WITH_NATIVE);
 #endif
     if (talking) {
+        if (give_capacities(state, "") != PINAX_OK) {
+            pinax_close(state);
+            free(block);
+            return 2;
+        }
         const int status = repl(state, block_bytes);
         pinax_close(state);
         free(block);
@@ -616,6 +668,11 @@ static int run(int argc, char **argv) {
         plain = is_name_byte(base[k]);
     if (plain)
         memcpy(module, base, stem);
+    if (give_capacities(state, plain ? module : "") != PINAX_OK) {
+        pinax_close(state);
+        free(block);
+        return 2;
+    }
     bool said = false;
     err = load_file(state, file_name, plain ? module : file_name, &said, seeing);
     if (err == PINAX_ERR_STATE && plain && !said && !seeing) { // the file is named like a module of the host

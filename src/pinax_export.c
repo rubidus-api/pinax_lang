@@ -126,11 +126,11 @@ size_t pnx_export_c(const pinax_state *st, const char *name, char *buffer, size_
             " * after the program changes. Compile with the build that wrote it and attach the table below with\n"
             " * pinax_native_attach(). */\n#include \"pinax_native.h\"\n\n");
     put(&o, "// The run's place into the state, one instruction by the interpreter, and the place back out of it.\n"
-            "#define PNX_STEP_OUT()                                                                         \\\n"
+            "#define PNX_STEP_OUT(step)                                                                     \\\n"
             "    do {                                                                                       \\\n"
             "        st->pc = at; st->int_base = ibase; st->str_base = sbase; st->depth = depth;              \\\n"
             "        st->depth_floor = floor; st->left = left; st->instructions += count; count = 0;          \\\n"
-            "        const pinax_err e = pnx_step(st);                                                        \\\n"
+            "        const pinax_err e = step(st);                                                            \\\n"
             "        if (e != PNX_STEP_ON)                                                                    \\\n"
             "            return e;                                                                            \\\n"
             "        at = st->pc; ibase = st->int_base; sbase = st->str_base; depth = st->depth;              \\\n"
@@ -263,7 +263,15 @@ size_t pnx_export_c(const pinax_state *st, const char *name, char *buffer, size_
             default: // the interpreter does it; mostly the run goes on right after it
                 put(&o, "at = ");
                 put_u(&o, i);
-                put(&o, "u; PNX_STEP_OUT(); if (at == ");
+                // a host call is done in place, without the interpreter's dispatch (D0066)
+                put(&o, op == PNX_HCALL || op == PNX_HCALLF ? "u; PNX_STEP_OUT(pnx_step_host); if (at == "
+                                                            : "u; PNX_STEP_OUT(pnx_step); if (at == ");
+                if (op == PNX_HCALLF) { // a good result goes on past the failure word
+                    put_u(&o, after + 1);
+                    put(&o, "u) ");
+                    go_to(&o, after + 1);
+                    put(&o, " if (at == ");
+                }
                 put_u(&o, after);
                 put(&o, "u) ");
                 go_to(&o, after);
@@ -277,7 +285,7 @@ size_t pnx_export_c(const pinax_state *st, const char *name, char *buffer, size_
         i = after;
     }
     put(&o, "step: // the interpreter runs this one instruction, and the run goes on from where it stands then\n"
-            "    PNX_STEP_OUT();\n"
+            "    PNX_STEP_OUT(pnx_step);\n"
             "    goto go;\n"
             "fault: // or a task of an `apart` set ends alone, and this is entered again where the run stands\n"
             "    return pnx_exec_fault(st, (pinax_err)r, next, ibase, sbase, R, floor, left, count);\n"
