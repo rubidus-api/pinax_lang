@@ -36,6 +36,11 @@ pnx export-c file.pnx [NAME]
 `N` 은 1 부터 2#super[31] − 1 까지이고, 16 개까지 준다. 이것이 없으면 `host` 를 쓴 소스는 적재 때 용량의 이름을 대며
 거절된다.]
 
+#para("3b")[스크립트가 `io.print` 와 `io.println` 으로 쓰는 것은 버퍼에 모였다가, 버퍼가 찰 때, `io.eprint`·
+`io.read_line`·`clock.sleep` 앞에서, 그리고 실행이 끝나거나 결함으로 멈출 때 쓰인다. 그래서 표준 출력과 표준 오류는
+스크립트가 쓴 차례대로 나온다. `pnx repl` 이 아니면 `io.read_line` 은 표준 입력을 미리 읽는다. 라이브러리를 품은
+호스트는 둘 다 버퍼 없이 쓰고 읽는다.]
+
 == 시험 <pnx-test>
 
 #part("구문")

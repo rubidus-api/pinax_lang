@@ -1,6 +1,7 @@
 // pinax_host.c - the standard host modules (see pinax_host.h). Written against pinax.h; the
 // operating system is reached through the vendored proven.
 #include "pinax_host.h"
+#include "pnx_streams.h"
 
 #include "pinax_proven.h"
 
@@ -32,16 +33,57 @@ static pinax_err write_to(proven_file_t file, pinax_str text, bool newline) {
         (void)proven_fs_write_all(file, (proven_mem_view_t){(const proven_byte_t *)"\n", 1});
     return PINAX_OK;
 }
+// pnx's own standard streams (pnx_streams.h): standard output kept in a buffer, standard input read
+// ahead. Off unless pnx turns it on; the process has one of each, and pnx runs one thread.
+static struct {
+    bool          out_kept, in_ahead;
+    size_t        out_n;
+    unsigned char out[65536];
+    unsigned char in[4096];
+} streams;
+
+void pnx_streams_own(bool read_ahead) {
+    streams.out_kept = true;
+    streams.in_ahead = read_ahead;
+}
+
+void pnx_streams_flush(void) {
+    if (streams.out_n)
+        (void)proven_fs_write_all(proven_sysio_stdout(), (proven_mem_view_t){streams.out, streams.out_n});
+    streams.out_n = 0;
+}
+
+static void keep_out(const unsigned char *bytes, size_t n) {
+    if (streams.out_n + n > sizeof streams.out)
+        pnx_streams_flush();
+    if (n > sizeof streams.out) {
+        (void)proven_fs_write_all(proven_sysio_stdout(), (proven_mem_view_t){bytes, n});
+        return;
+    }
+    memcpy(streams.out + streams.out_n, bytes, n);
+    streams.out_n += n;
+}
+
+static pinax_err to_stdout(pinax_str text, bool newline) {
+    if (!streams.out_kept)
+        return write_to(proven_sysio_stdout(), text, newline);
+    keep_out(text.ptr, text.len);
+    if (newline)
+        keep_out((const unsigned char *)"\n", 1);
+    return PINAX_OK;
+}
+
 static pinax_err io_print(pinax_call *call, void *user, const pinax_args *args) {
     (void)call, (void)user;
-    return write_to(proven_sysio_stdout(), args->s[0], false);
+    return to_stdout(args->s[0], false);
 }
 static pinax_err io_println(pinax_call *call, void *user, const pinax_args *args) {
     (void)call, (void)user;
-    return write_to(proven_sysio_stdout(), args->s[0], true);
+    return to_stdout(args->s[0], true);
 }
 static pinax_err io_eprint(pinax_call *call, void *user, const pinax_args *args) {
     (void)call, (void)user;
+    pnx_streams_flush(); // what was written before it comes first
     return write_to(proven_sysio_stderr(), args->s[0], false);
 }
 
@@ -102,11 +144,26 @@ static pinax_err line_from(pinax_call *call, reader *in, pinax_str *out) {
     out->len = n;
     return PINAX_OK;
 }
+// Standard input: one byte at a time, or for pnx through its read-ahead. Output kept back is written
+// first, so that a prompt shows before the line is read.
+static reader stdin_ahead;
+
+static reader *stdin_reader(reader *one_byte, unsigned char *one) {
+    pnx_streams_flush();
+    if (!streams.in_ahead) {
+        *one_byte = (reader){proven_sysio_stdin(), one, 0, 0, 1};
+        return one_byte;
+    }
+    if (!stdin_ahead.ahead)
+        stdin_ahead = (reader){proven_sysio_stdin(), streams.in, 0, 0, sizeof streams.in};
+    return &stdin_ahead;
+}
+
 static pinax_err io_read_line(pinax_call *call, void *user, const pinax_args *args) {
     (void)user;
     unsigned char one;
-    reader        in = {proven_sysio_stdin(), &one, 0, 0, 1};
-    return line_from(call, &in, &args->rs[0]);
+    reader        in;
+    return line_from(call, stdin_reader(&in, &one), &args->rs[0]);
 }
 
 // The buffer forms (RFC-0009 section 5): a line is appended to a buffer the script declared,
@@ -144,8 +201,8 @@ static pinax_err line_into(pinax_call *call, reader *in, int64_t buffer) {
 static pinax_err io_read_line_into(pinax_call *call, void *user, const pinax_args *args) {
     (void)user;
     unsigned char one;
-    reader        in = {proven_sysio_stdin(), &one, 0, 0, 1};
-    return line_into(call, &in, args->i[0]);
+    reader        in;
+    return line_into(call, stdin_reader(&in, &one), args->i[0]);
 }
 
 // ---- file ---------------------------------------------------------------------------------
@@ -328,6 +385,7 @@ static pinax_err clock_monotonic_ns(pinax_call *call, void *user, const pinax_ar
 }
 static pinax_err clock_sleep(pinax_call *call, void *user, const pinax_args *args) {
     (void)call, (void)user;
+    pnx_streams_flush(); // what was written before the wait shows during it
     if (args->i[0] < 0 || args->i[0] > UINT32_MAX)
         return PINAX_ERR_RANGE;
     proven_time_sleep((proven_u32)args->i[0]);

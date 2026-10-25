@@ -30,6 +30,7 @@
 #include "pinax_host.h"
 #include "pinax_internal.h" // pnx_checks_report
 #include "pnx_fmt.h"
+#include "pnx_streams.h"
 
 #include <stdio.h>
 #include <stdlib.h>
@@ -260,8 +261,9 @@ static void say(const char *line) {
         }
         return;
     }
+    pnx_streams_flush(); // what the script wrote comes first
     fputs(line, stdout);
-    fflush(stdout); // the host modules write without a buffer; keep the order
+    fflush(stdout); // and this before what it writes next
 }
 
 // What a line of the session left: 3 "abc" true err.full
@@ -345,6 +347,7 @@ static void diag(void *user, pinax_str file, uint32_t line, uint32_t column, pin
 static pinax_err finish(pinax_state *state, pinax_err err) {
     while (err == PINAX_SUSPENDED)
         err = pinax_resume(state, NULL);
+    pnx_streams_flush(); // what io kept back, before pnx writes anything of its own
     return err;
 }
 
@@ -634,6 +637,7 @@ static int run(int argc, char **argv) {
         return 2;
     }
     pinax_host_set_args(argc - at, (const char *const *)(argv + at));
+    pnx_streams_own(!talking); // the repl reads standard input itself: no read-ahead there
     if (exporting)
         state->export_only = true; // compile and check, run nothing
 #if defined(PNX_WITH_NATIVE) // a pnx with a program's exported code linked in (tests/tools/export_check.sh)
@@ -714,6 +718,7 @@ static int run(int argc, char **argv) {
     if (getenv("PNX_NATIVE_SAY"))
         fprintf(stderr, "pnx: %llu runs through the exported code\n", (unsigned long long)state->native_runs);
 #endif
+    pnx_streams_flush();
     fflush(stdout);
     pinax_close(state);
     free(block);
