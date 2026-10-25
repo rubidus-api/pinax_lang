@@ -143,5 +143,6 @@ inside a task does (14.4 (3)). So a task that loops without yielding is stopped 
 #ex("spec", "14-turns.pnx")
 
 #para("3")[The limit and the budget are counted apart. When the budget runs out inside a turn, the run is suspended
-and the turn goes on with what was left of it when the host resumes the run. A task another task resumes runs on
+and the turn goes on with what was left of it when the host resumes the run. What the budget still held then, less
+than the cost of the check it ran out at, counts against the turn as used. A task another task resumes runs on
 the turn of the one that resumed it, and counts against it too.]
