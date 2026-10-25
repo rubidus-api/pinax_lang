@@ -408,6 +408,12 @@ PINAX_API pinax_err pinax_image_open(pinax_mem block, pinax_str image, const pin
  * into the block and opened there. As after pinax_image_open(), host words, handle types,
  * extern functions and bound globals are given again; the source is not changed. */
 PINAX_API pinax_err pinax_clone(const pinax_state *source, pinax_mem block, pinax_state **out);
+/* pinax_clone with flags. PINAX_CLONE_KEEP_HOSTS: the clone keeps what the source was given in this
+ * process, with the same user pointers: its host words, handle types (close functions), extern
+ * functions and resolver, its exported code (pinax_native_attach) and its task fault function
+ * (pinax_on_task_fault). Bound globals are still bound again, and handles still do not pass. */
+enum { PINAX_CLONE_KEEP_HOSTS = 1u << 0 };
+PINAX_API pinax_err pinax_clone_with(const pinax_state *source, pinax_mem block, uint32_t flags, pinax_state **out);
 
 /* ---- exported code ------------------------------------------------------------------ */
 

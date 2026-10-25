@@ -133,7 +133,9 @@ size of `tasks requests 64 32 8192 1000000 apart`. A task that runs past it with
 #qa[Why not a clone of the state for every request?][It works, and it keeps the requests apart: nothing one request
 stores is seen by another. But a clone copies the whole state, its fixed parts and its program, for every request, and
 it must be closed again. A task costs only its own region and frames, as declared with `tasks` (standard 14 (2)). The
-tasks of one state share its globals, so what belongs to one request stays in its locals.]
+tasks of one state share its globals, so what belongs to one request stays in its locals. A host that clones takes
+`pinax_clone_with(source, block, PINAX_CLONE_KEEP_HOSTS, &clone)`: the clone keeps the source's host words and
+exported code, and runs without them being given again (standard 19.9 (2b)).]
 
 == Faster: the code as C
 

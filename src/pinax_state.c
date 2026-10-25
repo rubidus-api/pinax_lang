@@ -3893,6 +3893,29 @@ pinax_err pinax_clone(const pinax_state *source, pinax_mem block, pinax_state **
     return pinax_image_open(block, (pinax_str){(const unsigned char *)block.ptr, written}, &config, out);
 }
 
+pinax_err pinax_clone_with(const pinax_state *source, pinax_mem block, uint32_t flags, pinax_state **out) {
+    if (flags & ~(uint32_t)PINAX_CLONE_KEEP_HOSTS)
+        return PINAX_ERR_ARGUMENT;
+    const pinax_err err = pinax_clone(source, block, out);
+    if (err != PINAX_OK || !(flags & PINAX_CLONE_KEEP_HOSTS))
+        return err;
+    pinax_state *st = *out; // the same tables in the same order: what this process gave the source (RFC-0029 P-L4)
+    for (uint32_t k = 0; k < st->n_hosts; ++k) {
+        if (st->hosts[k].module[0] == '@') {
+            st->hosts[k].ext = source->hosts[k].ext; // its call stays extern_call, its user the clone's record
+        } else {
+            st->hosts[k].fn = source->hosts[k].fn;
+            st->hosts[k].user = source->hosts[k].user;
+        }
+    }
+    for (uint32_t k = 0; k < st->n_handle_types; ++k)
+        st->handle_types[k].close = source->handle_types[k].close, st->handle_types[k].user = source->handle_types[k].user;
+    st->resolve = source->resolve, st->resolve_user = source->resolve_user;
+    st->native = source->native;
+    st->on_task_fault = source->on_task_fault, st->on_task_fault_user = source->on_task_fault_user;
+    return PINAX_OK;
+}
+
 // A state opened from an image runs only when every host word and extern function of the
 // image is given again.
 static pinax_err hosts_given(pinax_state *st) {

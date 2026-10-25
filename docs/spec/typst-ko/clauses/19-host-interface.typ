@@ -212,6 +212,11 @@ global, bytes, from)` 은 (1a) 와 같은 검사로 파일의 전역 `from` 을 
 
 #para("2a")[복제는 `pinax_image_size(source)` 바이트 이상의 덩이에서 열린다. 더 작은 덩이는 `PINAX_ERR_NO_ROOM` 이다.]
 
+#para("2b")[`pinax_clone_with(source, block, flags, out)` 는 깃발을 받는 `pinax_clone` 이다. `PINAX_CLONE_KEEP_HOSTS` 를
+주면 복제는 이 프로세스에서 원본이 받은 것을 같은 `user` 포인터와 함께 지킨다. 호스트 낱말, 핸들 타입, `extern` 함수와
+해결 함수, 내보낸 코드(19.11), 작업 결함 함수(19.10 (3a))다. 그래서 바로 돈다. 묶인 전역은 다시 묶고 핸들은 넘어가지
+않는 것은 다른 복제와 같다. 모르는 깃발은 `PINAX_ERR_ARGUMENT` 다.]
+
 #ex("spec", "19-image.c")
 
 == 재기와 결함의 지역 변수 <host-measure>
@@ -230,7 +235,7 @@ global, bytes, from)` 은 (1a) 와 같은 검사로 파일의 전역 `from` 을 
 다시 쓰이기 전에 `fn(user, state, fault)` 를 부른다. `fault` 는 결함, 작업의 꼬리표(14.5), 같은 꼴의 자리를 준다. 한
 실행에서 여러 작업이 결함을 내면 하나씩 알린다. `fn` 안에서 `pinax_fault_local` 은 그 작업의 지역 변수를 읽는다. 실행이
 한창이므로 `fn` 은 상태를 읽는 함수만 부를 수 있다: `pinax_fault_local`, `pinax_task_faults`, `pinax_error_text`.
-`NULL` 은 그 함수를 뗀다. 상과 복제는 호스트 낱말을 잊듯 이것도 잊는다(19.9).]
+`NULL` 은 그 함수를 뗀다. 상과 복제는 호스트 낱말을 잊듯 이것도 잊는다(19.9). 복제가 그것을 지키면 예외다(19.9 (2b)).]
 
 == 내보낸 코드 <host-native>
 

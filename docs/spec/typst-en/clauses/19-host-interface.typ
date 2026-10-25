@@ -226,6 +226,12 @@ bound globals back on their own storage. `pinax_clone` saves and opens in anothe
 #para("2a")[A clone opens in a block of `pinax_image_size(source)` bytes or more; a smaller block is
 `PINAX_ERR_NO_ROOM`.]
 
+#para("2b")[`pinax_clone_with(source, block, flags, out)` is `pinax_clone` with flags. With
+`PINAX_CLONE_KEEP_HOSTS` the clone keeps what the source was given in this process, with the same `user` pointers:
+its host words, handle types, `extern` functions and resolver, its exported code (19.11) and its task fault function
+(19.10 (3a)). So it runs at once. Bound globals are bound again and handles do not pass, as for any clone. An
+unknown flag is `PINAX_ERR_ARGUMENT`.]
+
 #ex("spec", "19-image.c")
 
 == Measuring, and the locals of a fault <host-measure>
@@ -247,7 +253,7 @@ fault, at the fault, before the task's slot is used again. `fault` gives the fau
 place in the same form. Several tasks that fault in one run are told one by one. Inside `fn`,
 `pinax_fault_local` reads the locals of that task. The run is in the middle, so `fn` may call only the functions
 that read the state: `pinax_fault_local`, `pinax_task_faults`, `pinax_error_text`. `NULL` takes the function away.
-An image and a clone forget it, as they forget host words (19.9).]
+An image and a clone forget it, as they forget host words (19.9), unless the clone keeps them (19.9 (2b)).]
 
 == Exported code <host-native>
 
