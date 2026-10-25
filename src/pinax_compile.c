@@ -1309,7 +1309,8 @@ static pnx_sconst sconst_at(const comp *c, uint32_t k, const uint8_t **bytes) {
     const pinax_state *st = c->st;
     const pnx_sconst   x = k < c->base_sconst ? st->sconst[k] : ((const pnx_sconst *)c->sconst.ptr)[k - c->base_sconst];
     *bytes = x.offset < c->base_strbytes ? st->segment[PNX_SEG_CONST] + x.offset
-                                         : (const uint8_t *)c->strbytes.ptr + (x.offset - c->base_strbytes);
+             : c->strbytes.ptr             ? (const uint8_t *)c->strbytes.ptr + (x.offset - c->base_strbytes)
+                                           : (const uint8_t *)""; // an empty one, and this load has no bytes yet
     return x;
 }
 
