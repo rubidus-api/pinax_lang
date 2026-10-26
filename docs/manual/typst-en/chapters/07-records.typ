@@ -6,6 +6,7 @@
 - How are data with several fields held?
 - How are linked data such as trees and lists built without pointers?
 - How do I find a row by its name?
+- How do I read rows in order of a field?
 ]
 
 == Records and rows
@@ -81,7 +82,28 @@ is used with `cart` only; given to a field or a list of another table it is refu
 between two tables of the same record, read the fields one by one into a new row, or copy with `filter_into`
 (chapter 6).]
 
+== Rows in order
+
+`sort` puts the cells of an array or a list in order, from the smallest; `sort_desc` from the largest. Rows are not
+sorted that way: an index, a field or a global may keep a row by its number, and moving the rows would make those wrong.
+A list of row numbers is sorted instead, by a field of the rows: `order cities sort_by city.name`. The rows stay where
+they are and `order` says in which order to read them.
+
+#ex("manual", "07-sort.pnx")
+
+#ex("manual", "07-sort-rows.pnx")
+
+#qa[How do I sort by two fields?][Sort twice, the less important field first: `order t sort_by r.name` and then
+`order t sort_by_desc r.count` gives the largest counts first, and the same count by name. A sort keeps the order of
+equal keys, so the second sort leaves the first one's order among the rows it finds equal.]
+
+#mistake[`sort_desc` is `sort` read backwards][Only for cells, where two equal cells cannot be told apart. For row
+numbers it is not: `sort_by_desc` keeps equal keys in the order they had, as `sort_by` does, and reading a `sort_by`
+backwards would reverse them.]
+
 #summary[
+- Cells are sorted with `sort` and `sort_desc`; rows through a list of their numbers with `sort_by` and `sort_by_desc`,
+  which keep the order of equal keys (standard 15.3).
 - Records are handled as rows of tables; fields are read and stored as `RECORD.FIELD` (standard 8.8).
 - A row is a number checked on every use; a field of the none row is a fault (8.8).
 - A row of a pool is handed over once; a row given back is a fault (8.9, 12.4).

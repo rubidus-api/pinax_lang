@@ -133,6 +133,12 @@ a global, a constant, a type, a local outside. One name means one thing at one p
 #ex("spec", "09-shadow.pnx")
 #ex("spec", "09-shadow-word.pnx")
 
+#para("3")[A word of the language --- a reserved word, a core word, a word of clause 15 or 16 written without a module,
+a type --- is never a new name: not of a word, a declaration, a parameter, a local or a loop. A reserved word is not the
+name of a field either; another word of the language may be, since a field is always written after its record
+(8.8). The message says which word it is.]
+#ex("spec", "09-name-taken.pnx")
+
 == Recursion and tail calls <words-recursion>
 
 #para("1")[A word may call itself. No forward declaration is needed.]
@@ -236,6 +242,7 @@ with `add_row`.]
   ([`set` with the name of a local], "set writes a global; a local is written with to"),
   ([`set` with a name that is not a global], "set writes a declared global; there is none of this name"),
   ([Hiding a visible name], "this name is already visible here; a new name may not hide it"),
+  ([A word of the language as a new name (the word in the message)], "NAME is a word of the language; choose another name"),
   ([A signature unlike the forward declaration], "the definition has another signature than its forward declaration"),
   ([A collection of another kind or cells], "the collection given here is of another kind, or holds another type, than the parameter says"),
   ([A value where a collection goes], "this parameter takes an array, list, queue or buffer: give its name"),

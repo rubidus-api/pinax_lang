@@ -160,6 +160,8 @@ PNX_INLINE int pnx_tail_word(pinax_state *st, const pnx_wordrec *callee, uint32_
     X(RUN, RCATB) \
     X(RUN, RCATD) \
     X(RUNF, STODEC) \
+    X(RUN, SORT) \
+    X(RUN2, SORTBY) \
     X(RUN, GLEN) \
     X(RUN, GCLEAR) \
     X(RUN, GCAP) \
@@ -2395,6 +2397,116 @@ PNX_OP(IXDEL) { // nothing happens when the row is not in the index
         }
     }
     return PNX_R_OK;
+}
+
+// ---- sorting (RFC-0030) -------------------------------------------------------------------
+//
+// A merge sort, stable: runs of 8 by insertion, then merged in rounds between the items and the
+// spare room. An item is a cell of the collection sorted, or (str(N) cells) the number of a
+// cell. What two items are compared by is their key: the item itself as an integer of `width`,
+// or, from `rows` on, the bytes at `offset` in the row of `stride` bytes the item numbers.
+typedef struct pnx_sortkey {
+    const uint8_t *rows; // NULL: the item is its own key
+    uint32_t       stride, offset;
+    uint32_t       width; // a width code (PNX_W_*), or the N of a str(N) key
+    uint32_t       flags; // PNX_SORT_*
+} pnx_sortkey;
+
+// Sorts the n items of `size` bytes (1, 2, 4 or 8) at `items` by key k, with as many bytes of
+// spare room; PINAX_ERR_STATE for another size. Out of line, in pinax_vm.c: the dispatch loop
+// should not carry it.
+int pnx_sort_items(const pnx_sortkey *k, uint8_t *items, uint8_t *spare, uint32_t n, uint32_t size);
+
+// The work area for a sort of `bytes`: the largest array marked PNX_GLOBAL_WORK (the compiler adds
+// one to a load that sorts, of a cell for each cell the program may sort), or NULL.
+PNX_INLINE uint8_t *pnx_sort_work(pinax_state *st, uint64_t bytes) {
+    const uint32_t count = st->head->n_globals;
+    uint32_t       k = st->sort_work;
+    if (k >= count || !st->globals[k].work || (uint64_t)st->globals[k].capacity * 8 < bytes) {
+        uint32_t most = 0;
+        k = UINT32_MAX;
+        for (uint32_t i = 0; i < count; ++i) {
+            if (st->globals[i].work && st->globals[i].capacity > most)
+                most = st->globals[i].capacity, k = i;
+        }
+        if (k == UINT32_MAX || (uint64_t)most * 8 < bytes)
+            return NULL;
+        st->sort_work = k;
+    }
+    return st->globals[k].ptr;
+}
+
+// n log n instructions (a step of the merge costs about what an instruction does), charged
+// through the bytes the string words charge, 16 to an instruction.
+PNX_INLINE void pnx_sort_charge(pinax_state *st, uint32_t n) {
+    st->charge += (uint64_t)n * (uint32_t)(32 - __builtin_clz(n - 1)) * 16u;
+}
+
+PNX_OP(SORT) {
+    pnx_global *g = &st->globals[PNX_GX(st, OP_BX(w))];
+    const uint32_t n = g->length, flags = OP_A(w);
+    if (n < 2)
+        return PNX_R_OK;
+    if (n > 0x7fffffffu)
+        return PINAX_ERR_FULL;
+    uint8_t *work = pnx_sort_work(st, (uint64_t)n * 8);
+    if (!work)
+        return PINAX_ERR_FULL;
+    pnx_sort_charge(st, n);
+    if (!(flags & PNX_SORT_STR)) {
+        const pnx_sortkey k = {NULL, 0, 0, g->width, flags};
+        return pnx_sort_items(&k, g->ptr, work, n, g->elem_bytes);
+    }
+    // str(N) cells: their numbers are sorted, then the cells go to their places one cycle at a time
+    const uint32_t elem = g->elem_bytes;
+    if (elem == 0 || elem > 256)
+        return PINAX_ERR_STATE;
+    uint32_t *places = (uint32_t *)(void *)work;
+    for (uint32_t i = 0; i < n; ++i)
+        places[i] = i;
+    const pnx_sortkey k = {g->ptr, elem, 0, elem - 1, flags};
+    const int r = pnx_sort_items(&k, work, work + (size_t)n * 4, n, 4);
+    if (r != PNX_R_OK)
+        return r;
+    uint8_t held[256];
+    for (uint32_t start = 0; start < n; ++start) {
+        if (places[start] & 0x80000000u)
+            continue;
+        __builtin_memcpy(held, g->ptr + (size_t)start * elem, elem);
+        for (uint32_t at = start;;) {
+            const uint32_t from = places[at];
+            places[at] |= 0x80000000u;
+            if (from == start) {
+                __builtin_memcpy(g->ptr + (size_t)at * elem, held, elem);
+                break;
+            }
+            __builtin_memcpy(g->ptr + (size_t)at * elem, g->ptr + (size_t)from * elem, elem);
+            at = from;
+        }
+    }
+    return PNX_R_OK;
+}
+
+PNX_OP(SORTBY) {
+    pnx_global *g = &st->globals[PNX_GX(st, OP_BX(w))];
+    const pnx_global *t = &st->globals[PNX_GF(st, x)];
+    const uint32_t n = g->length;
+    for (uint32_t i = 0; i < n; ++i) { // every cell a row of the table, before anything moves
+        uint64_t row;
+        __builtin_memcpy(&row, g->ptr + (size_t)i * 8, 8);
+        if (row >= t->length)
+            return PINAX_ERR_RANGE;
+    }
+    if (n < 2)
+        return PNX_R_OK;
+    if (n > 0x7fffffffu)
+        return PINAX_ERR_FULL;
+    uint8_t *work = pnx_sort_work(st, (uint64_t)n * 8);
+    if (!work)
+        return PINAX_ERR_FULL;
+    pnx_sort_charge(st, n);
+    const pnx_sortkey k = {t->ptr, t->elem_bytes, (x >> 12) & 0xfffu, x >> 24, OP_A(w)};
+    return pnx_sort_items(&k, g->ptr, work, n, 8);
 }
 
 #endif // PINAX_OPS_H

@@ -129,6 +129,11 @@ set   = "set" ( NAME | PATH ) ;
 #ex("spec", "09-shadow.pnx")
 #ex("spec", "09-shadow-word.pnx")
 
+#para("3")[언어의 낱말 --- 예약어, 핵심 낱말, 모듈 없이 쓰는 15절과 16절의 낱말, 타입 --- 은 어디서도 새 이름이 될 수
+없다. 낱말, 선언, 매개변수, 지역 변수, 루프의 이름이 모두 그렇다. 예약어는 필드의 이름도 될 수 없다. 다른 언어의 낱말은
+필드의 이름이 될 수 있다. 필드는 늘 레코드 뒤에 쓰기 때문이다(8.8). 메시지는 그것이 어느 낱말인지 말한다.]
+#ex("spec", "09-name-taken.pnx")
+
 == 되부름과 꼬리 부름 <words-recursion>
 
 #para("1")[낱말은 자기를 부를 수 있다. 앞선 선언은 필요 없다.]
@@ -229,6 +234,7 @@ cell            = NAME [ "(" size ")" ] ;   (* int, bool, err, dec(N), str(N), �
   ([`set` 의 이름이 지역], "set writes a global; a local is written with to"),
   ([`set` 의 이름이 전역이 아님], "set writes a declared global; there is none of this name"),
   ([보이는 이름을 가림], "this name is already visible here; a new name may not hide it"),
+  ([언어의 낱말을 새 이름으로 씀(메시지에 그 낱말)], "NAME is a word of the language; choose another name"),
   ([앞선 선언과 다른 서명], "the definition has another signature than its forward declaration"),
   ([종류나 칸이 다른 모음], "the collection given here is of another kind, or holds another type, than the parameter says"),
   ([모음 자리에 값], "this parameter takes an array, list, queue or buffer: give its name"),

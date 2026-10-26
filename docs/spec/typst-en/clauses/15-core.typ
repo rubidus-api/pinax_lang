@@ -105,9 +105,37 @@ plain words on an unsigned type and do not take a signed one. The bit words work
   [`n c truncate`], [buffer, list], [cut the length to `n` (a list: 8.5 (2b))],
   [`c none` / `r is_none` / `r row_index`], [table of records], [the none row / is it none / the row's number],
   [`k x lookup` / `r x insert` / `r x remove`], [index], [find (`or fail`) / put in (`or fail`) / take out],
+  [`c sort` / `c sort_desc`], [array, list], [puts the cells in order, the smallest / the largest first ((3))],
+  [`o t sort_by r.f` / `o t sort_by_desc r.f`], [array or list of `int`; table of records], [puts the row numbers in order of field `f` of their rows ((4))],
 )]
 
 #para("2")[Examples are in clause 8.]
+
+#para("3")[`c sort` puts the cells of an array, or of a list up to its length, in order from the smallest; `c sort_desc`
+from the largest. The cells change in place and the word gives nothing. The cells shall be `int`, a narrow integer,
+`dec(N)`, `bool` (`false` first) or `str(N)`, or of a type declared over one of them; `u64` cells are compared unsigned,
+`str(N)` cells in the byte order of `str.compare` (16.1). A collection parameter (9.9) is sorted the same way. A list or
+array of records is refused: an index, a field, a global or a named row may keep its rows. Its rows are put in order
+through a list of their numbers, by (4).]
+#ex("spec", "15-sort.pnx")
+#ex("spec", "15-sort-records.pnx")
+
+#para("4")[`o t sort_by r.f` takes `o`, an array or list of `int`, each cell the number of a row of `t`; `t`, an array
+or list of records; and the field `r.f` of the record `t` holds, written after the word as `to` and `set` take their
+name. It puts the cells of `o` in order of that field of the rows they number, from the smallest; `sort_by_desc` from
+the largest. The field shall be of a type the cells of (3) may have. The rows do not move, so indexes and kept rows stay
+right. A cell that is not a row number of `t` is the fault `range`, found before any cell moves: `o` is left as it was.
+At most one of `o` and `t` may be a parameter.]
+#ex("spec", "15-sort-by.pnx")
+#ex("spec", "15-sort-by-range.pnx")
+
+#para("5")[Both sorts are stable: cells of equal keys keep their order. A sort by several keys is several sorts, the
+least important key first.]
+
+#para("6")[A sort does not fail. A load that sorts gives the program a work area of 8 bytes for each cell of the largest
+collection it sorts, or, when it sorts a collection parameter, of the largest array or list; the work area counts as a
+global of the state, and the block must have room for it. A sort of $n$ cells is charged to the budget as
+$n dot.c ceil(log_2 n)$ instructions (19.5).]
 
 == Other words <core-other>
 
@@ -129,4 +157,11 @@ plain words on an unsigned type and do not take a signed one. The bit words work
   ([A value that is not `int` given to an integer word], "this word takes two int values"),
   ([Two values of different types compared], "the two values compared must have the same type"),
   ([The values of `select` differ in type], "select takes a bool and two values of one type: flag a b select"),
+  ([`sort` of an array or list of records], "rows do not move: sort a list of their numbers by a field: order table sort_by record.field"),
+  ([`sort` of cells of another type], "sort orders cells of int, a narrow integer, dec(N), bool or str(N)"),
+  ([`sort_by` without a list of `int` and a table], "sort_by takes a list of row numbers and a table of records: order table sort_by record.field"),
+  ([`sort_by` without the field after it], "sort_by is followed by the field: order table sort_by record.field"),
+  ([A field of another record than the table's], "the field is one of the record the table holds"),
+  ([A field of another type], "sort_by orders by a field of int, a narrow integer, dec(N), bool or str(N)"),
+  ([Both the list and the table parameters], "sort_by takes the list or the table from a parameter, not both"),
 )

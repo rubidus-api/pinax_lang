@@ -1,0 +1,8 @@
+rem refused
+record city
+  name str(16)
+  people int
+end
+list cities city 8
+index by_name cities city.name
+word order_them () cities sort end

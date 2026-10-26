@@ -566,6 +566,53 @@ static bool repeats(const uint32_t *code, uint32_t i) {
     return target >= 0 && target <= (int64_t)i;
 }
 
+// SORT and SORTBY at code[i]: flags it knows; for SORT an array or list of integers, or with
+// PNX_SORT_STR of str(N) cells (rows of at most 256 bytes); for SORTBY an array or list of 8-byte
+// cells and a field inside the records of a table. At most one of the two globals is chosen by a
+// GSEL. A sort of a global named here needs a work area of a cell for each of its cells.
+static const char *sort_check(const pinax_state *st, const uint32_t *code, uint32_t i, const uint8_t *heads) {
+    const uint32_t w = code[i], op = w & 0xffu, flags = (w >> 8) & 0xffu, bx = w >> 16;
+    const uint32_t x = op == PNX_SORTBY ? code[i + 1] : 0, n_globals = st->head->n_globals;
+    if (flags & ~(uint32_t)PNX_SORT_FLAGS)
+        return "code: unknown flags of a sort";
+    const bool sbx = bx == PNX_GSELECTED, sx = op == PNX_SORTBY && (x & 0xfffu) == PNX_FSELECTED;
+    if (sbx && sx)
+        return "code: a sort by a field with both globals chosen";
+    if ((sbx || sx) && heads[i] != 2)
+        return "code: a selected global without its GSEL";
+    const uint32_t gsel_kind = sbx || sx ? (code[i - 2] >> 16) & 0xffu : 0, gsel_elem = sbx || sx ? code[i - 1] : 0;
+    if ((!sbx && bx >= n_globals) || (op == PNX_SORTBY && !sx && (x & 0xfffu) >= n_globals))
+        return "code: global outside its table";
+    const uint32_t kind = sbx ? gsel_kind : st->globals[bx].kind, elem = sbx ? gsel_elem & 0xffffu : st->globals[bx].elem_bytes;
+    const bool str_cells = op == PNX_SORT && (flags & PNX_SORT_STR);
+    if (str_cells ? (kind != PNX_G_ROWS && kind != PNX_G_TABLE) || elem == 0 || elem > 256
+                  : (kind != PNX_G_ARRAY && kind != PNX_G_LIST) || (op == PNX_SORTBY && elem != 8))
+        return "code: a sort of a global of the wrong kind";
+    if (!sbx && st->globals[bx].shared)
+        return "code: a shared global is written";
+    if (op == PNX_SORTBY) {
+        const uint32_t table = x & 0xfffu, offset = (x >> 12) & 0xfffu, extra = x >> 24;
+        const uint32_t tkind = sx ? gsel_kind : st->globals[table].kind, telem = sx ? gsel_elem : st->globals[table].elem_bytes;
+        const bool is_text = (flags & PNX_SORT_STR) != 0;
+        if (tkind != PNX_G_TABLE && tkind != PNX_G_ROWS)
+            return "code: a sort by a field of a global that holds no rows";
+        if (!is_text && extra >= PNX_W_COUNT)
+            return "code: unknown field width";
+        if (offset + (is_text ? 1u + extra : width_bytes[extra]) > telem)
+            return "code: field outside its record";
+    }
+    if (!sbx) { // so that the sort cannot fail
+        uint32_t most = 0;
+        for (uint32_t k = 0; k < n_globals; ++k) {
+            if (st->globals[k].work && st->globals[k].capacity > most)
+                most = st->globals[k].capacity;
+        }
+        if (most < st->globals[bx].capacity)
+            return "code: a sort without a work area of a cell for each cell it sorts";
+    }
+    return NULL;
+}
+
 // Checks the shape of one word's code: every register inside the window, every index inside
 // its table, every jump onto an instruction of the same word, a failure word after every
 // operation that can fail. Types are not checked here (P1).
@@ -702,9 +749,10 @@ static const char *check_word(const pinax_state *st, uint32_t index, span range,
             }
             global = x;
         }
+        const bool sorts = op == PNX_SORT || op == PNX_SORTBY; // checked on their own, below
         // a global a reference chose: the GSEL right before says its kind and element size
-        const bool selected = global == PNX_GSELECTED ||
-                              (info.second == PNX_X_FIELD && (x & 0xfffu) == PNX_FSELECTED);
+        const bool selected = !sorts && (global == PNX_GSELECTED ||
+                                         (info.second == PNX_X_FIELD && (x & 0xfffu) == PNX_FSELECTED));
         uint32_t sel_kind = PNX_G_COUNT, sel_elem = 0;
         if (selected) {
             if (heads[i] != 2 || want == PNX_G_COUNT)
@@ -733,7 +781,12 @@ static const char *check_word(const pinax_state *st, uint32_t index, span range,
                 ((op == PNX_IXGETS || op == PNX_IXGETSW) && !st->globals[global].key_is_str))
                 return "code: key of the wrong kind for this index";
         }
-        if (info.second == PNX_X_FIELD) {
+        if (sorts) { // RFC-0030: what is sorted, by what, and room for it in the work area
+            const char *bad = sort_check(st, code, i, heads);
+            if (bad)
+                return bad;
+        }
+        if (info.second == PNX_X_FIELD && !sorts) {
             const uint32_t offset = (x >> 12) & 0xfffu, extra = x >> 24;
             const bool is_text = op == PNX_FGETS || op == PNX_FSETS;
             if (!is_text && extra >= PNX_W_COUNT)
@@ -1888,8 +1941,9 @@ pinax_err pnx_load_container(pinax_state *st, pinax_str bytecode) {
         case PNX_G_LIST:
         case PNX_G_QUEUE: { // cells of a width (RFC-0025): the bytes and the code must agree
             const uint32_t width = PNX_GREC_WIDTH(rec);
+            const bool work = rec->kind == PNX_G_ARRAY && (rec->reserved & 0xffu) == PNX_GLOBAL_WORK && rec->elem_bytes == 8;
             if (width > PNX_W_COUNT || rec->elem_bytes != (width ? width_bytes[width - 1] : 8u) ||
-                (rec->reserved & 0xffu) > 4 || rec->reserved >> 16)
+                ((rec->reserved & 0xffu) > 4 && !work) || rec->reserved >> 16)
                 goto rollback;
             break;
         }
@@ -1942,6 +1996,7 @@ pinax_err pnx_load_container(pinax_state *st, pinax_str bytecode) {
                             ? rec->elem_bytes
                             : 8;
         g->width = (uint8_t)(PNX_GREC_WIDTH(rec) ? PNX_GREC_WIDTH(rec) - 1 : PNX_W_64);
+        g->work = rec->kind == PNX_G_ARRAY && (rec->reserved & 0xffu) == PNX_GLOBAL_WORK;
         g->capacity = rec->kind == PNX_G_INT ? 1 : rec->capacity;
         g->length = rec->kind == PNX_G_LIST || rec->kind == PNX_G_ROWS || rec->kind == PNX_G_QUEUE ? 0 : g->capacity;
         st->qturn += rec->kind == PNX_G_QUEUE; // a new queue: a task waiting for a queue looks again

@@ -1,0 +1,2 @@
+rem refused
+word swap (a int, b int gives b int, a int) b a end

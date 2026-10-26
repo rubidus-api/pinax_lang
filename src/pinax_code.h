@@ -116,6 +116,12 @@ enum {
 // cancelled (TCANCEL); outside a task it does nothing. TDONE says whether a task has ended.
 // TRUNALL G resumes the tasks of set G in turn until all have ended. TTAG A sets the running task's tag
 // to R[A] (RFC-0029 P-L6: what the host is told when the task faults); outside a task it does nothing.
+// Sorting (RFC-0030). SORT A, G sorts the cells of array or list G in place: integers, or with
+// PNX_SORT_STR the str(N) cells of a list or array of rows. SORTBY A, G and a field sorts the cells
+// of int list or array G, row numbers of the field's table, by that field of their rows; a cell
+// that is no row number of the table is the fault RANGE, before anything moves. A holds the
+// PNX_SORT_ flags. Both are stable, never fail, and take their scratch from the work area of
+// the program: the array global marked PNX_GLOBAL_WORK, of one 8-byte cell per cell sorted.
 // X(name, number, A, B, C, shape, second word, fails, roles)
 // The numbers are those of format 1 (RFC-0012): one range for each kind of instruction, with
 // room left in every range. "roles" says what the instruction does with the registers named
@@ -348,7 +354,9 @@ enum {
     X(GSEL, 0xef, PNX_K_I, PNX_K_IMM, PNX_K_NONE, PNX_F_ABC, PNX_X_IMM, 0, "r--") \
     X(GCAP, 0xf0, PNX_K_I, PNX_K_NONE, PNX_K_NONE, PNX_F_GLOBAL, PNX_X_NONE, 0, "w--") \
     X(RCATD, 0xf1, PNX_K_S, PNX_K_I, PNX_K_IMM, PNX_F_ABC, PNX_X_NONE, 0, "mr-") \
-    X(STODEC, 0xf2, PNX_K_I, PNX_K_S, PNX_K_IMM, PNX_F_ABC, PNX_X_NONE, 1, "wr-")
+    X(STODEC, 0xf2, PNX_K_I, PNX_K_S, PNX_K_IMM, PNX_F_ABC, PNX_X_NONE, 1, "wr-") \
+    X(SORT, 0xf5, PNX_K_IMM, PNX_K_NONE, PNX_K_NONE, PNX_F_GLOBAL, PNX_X_NONE, 0, "---") \
+    X(SORTBY, 0xf6, PNX_K_IMM, PNX_K_NONE, PNX_K_NONE, PNX_F_GLOBAL, PNX_X_FIELD, 0, "---")
 
 enum {
 #define PNX_ENUM(name, number, a, b, c, shape, second, fails, roles) PNX_##name = number,
@@ -381,6 +389,10 @@ enum { PNX_NC_ADD, PNX_NC_SUB, PNX_NC_MUL, PNX_NC_DIV, PNX_NC_COUNT };
 // keeps the low bits; NOT, POPC, CLZ, CTZ, BSWAP work at the width.
 enum { PNX_NU_FIT, PNX_NU_FITU, PNX_NU_LOW, PNX_NU_NOT, PNX_NU_POPC, PNX_NU_CLZ, PNX_NU_CTZ, PNX_NU_BSWAP, PNX_NU_COUNT };
 #define PNX_NX(fn, width) ((uint32_t)(fn) | (uint32_t)(width) << 8)
+
+// The flags of SORT and SORTBY (their A): from the largest down, compared as u64, compared as
+// str(N) (the cells of SORT, the field of SORTBY), in the byte order of SCMP.
+enum { PNX_SORT_DESC = 1, PNX_SORT_U64 = 2, PNX_SORT_STR = 4, PNX_SORT_FLAGS = 7 };
 
 // What SHASH computes (its C) and what BENC writes (its B).
 enum { PNX_HASH_CRC32, PNX_HASH_FNV1A, PNX_HASH_SIP, PNX_HASH_COUNT };
@@ -480,12 +492,14 @@ typedef struct pnx_wordrec {
 
 // For an array, a list or a queue of values, elem_bytes is the bytes of one cell (1, 2, 4 or 8:
 // the narrow types of RFC-0025 are stored at their width) and bits 8 to 15 of `reserved` hold
-// the width code (PNX_W_*) plus one; the low byte of `reserved` says bound (2) or shared (4).
+// the width code (PNX_W_*) plus one; the low byte of `reserved` says bound (2) or shared (4), or
+// for an array of 8-byte cells PNX_GLOBAL_WORK: the work area of SORT and SORTBY, which no source names.
 typedef struct pnx_globalrec {
     char     name[32];
     char     type[32]; // the type as declared, for pinax_global_find(); may be empty
     uint32_t kind, elem_bytes, capacity, reserved;
 } pnx_globalrec;
+#define PNX_GLOBAL_WORK 8u
 #define PNX_TASKS_APART (1u << 31) // in `reserved` of a set of tasks declared `apart` (RFC-0029 P-L1)
 // in `reserved` of a set of tasks with a turn limit (RFC-0029 P-L3): the limit is a uint64_t at byte 16 of
 // `type`, after the text "tasks" and its zero (a reader without turn limits takes the bit for a region

@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html lang="ko"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>7 레코드, 풀, 찾아보기 - Pinax 매뉴얼</title><link rel="stylesheet" href="style.css"></head><body><nav class="top"><a href="index.html">처음</a> · <a href="07.html">앞</a> · <a href="09.html">다음</a> · <a href="../html-en/08.html">English</a></nav><main><h2>7 레코드, 풀, 찾아보기</h2><div class="box opening"><p><strong>먼저 알아야 할 것</strong>: 6장(모음), 5장(저장된 글).</p><p><strong>이 장이 답하는 물음</strong></p><ul><li>필드가 여럿인 자료는 어떻게 담는가?</li><li>포인터 없이 나무나 목록 같은 연결된 자료는 어떻게 만드는가?</li><li>이름으로 줄을 찾으려면?</li></ul></div><h3>7.1 레코드와 줄</h3><p><code>record … end</code> 는 필드의 나열이다. 필드마다 타입을 적는다(<code>u8</code> <code>u16</code> <code>i32</code> <code>int</code> <code>bool</code> <code>str(N)</code> …): <code>u8</code> 필드는 읽으면 <code>u8</code> 이고 <code>u8</code> 만 받는다(<code>2016 u16 b to book.year</code>). 레코드는 값으로 돌아다니지 않는다. 레코드를 원소로 하는 목록(또는 배열, 풀)을 선언하고, 그 한 칸인 <strong>줄</strong>을 다룬다. 줄의 타입은 표의 이름이다.</p><div class="example run"><p class="ex-file"><code>07-records.pnx</code></p><pre><code data-lang="pinax"><span style="color: #d73948">use</span> io
+<html lang="ko"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>7 레코드, 풀, 찾아보기 - Pinax 매뉴얼</title><link rel="stylesheet" href="style.css"></head><body><nav class="top"><a href="index.html">처음</a> · <a href="07.html">앞</a> · <a href="09.html">다음</a> · <a href="../html-en/08.html">English</a></nav><main><h2>7 레코드, 풀, 찾아보기</h2><div class="box opening"><p><strong>먼저 알아야 할 것</strong>: 6장(모음), 5장(저장된 글).</p><p><strong>이 장이 답하는 물음</strong></p><ul><li>필드가 여럿인 자료는 어떻게 담는가?</li><li>포인터 없이 나무나 목록 같은 연결된 자료는 어떻게 만드는가?</li><li>이름으로 줄을 찾으려면?</li><li>필드의 차례로 줄을 읽으려면?</li></ul></div><h3>7.1 레코드와 줄</h3><p><code>record … end</code> 는 필드의 나열이다. 필드마다 타입을 적는다(<code>u8</code> <code>u16</code> <code>i32</code> <code>int</code> <code>bool</code> <code>str(N)</code> …): <code>u8</code> 필드는 읽으면 <code>u8</code> 이고 <code>u8</code> 만 받는다(<code>2016 u16 b to book.year</code>). 레코드는 값으로 돌아다니지 않는다. 레코드를 원소로 하는 목록(또는 배열, 풀)을 선언하고, 그 한 칸인 <strong>줄</strong>을 다룬다. 줄의 타입은 표의 이름이다.</p><div class="example run"><p class="ex-file"><code>07-records.pnx</code></p><pre><code data-lang="pinax"><span style="color: #d73948">use</span> io
 <span style="color: #d73948">record</span> book
   title <span style="color: #d73948">str</span>(<span style="color: #b60157">32</span>)
   year <span style="color: #d73948">u16</span>
@@ -167,4 +167,42 @@ kim again: failed
 lee: 25
 park: 41
 choi: -1
-</code></pre></div><div class="box mistake"><p class="box-title">흔한 오해: <code>add_row</code> 한 줄은 찾아보기에도 들어간다</p>들어가지 않는다. 돌면서 더한 줄은 <code>insert</code> 해야 <code>lookup</code> 이 찾는다. 위 예의 <code>register</code> 가 그렇게 한다. 같은 키가 이미 있으면 <code>insert</code> 는 실패하고, <code>add_row</code> 로 더한 줄은 목록에 남는다 — 키를 먼저 <code>lookup</code> 해 보고 더하는 것이 깔끔하다.</div><div class="box qa"><p class="box-title">문답</p><p><strong>물음. 한 표의 줄을 다른 표에 넣을 수 있는가?</strong></p><p>답. 아니다. 줄의 타입은 표의 이름이다. <code>cart</code> 의 줄은 <code>cart</code> 에만 쓰이고, 다른 표의 필드나 목록에 주면 타입이 달라 거절된다. 같은 레코드를 담은 표 둘 사이에 줄을 옮기려면 필드를 하나씩 읽어 새 줄에 넣거나, <code>filter_into</code> 로 복사한다(6장).</p></div><div class="box summary"><p class="box-title">정리</p><ul><li>레코드는 표의 줄로 다룬다. 필드는 <code>레코드.필드</code> 로 읽고 넣는다(표준 8.8).</li><li>줄은 번호이고, 쓸 때마다 검사된다. 없음 줄의 필드는 결함이다(8.8).</li><li>풀의 줄은 한 번 넘겨야 하고, 돌려준 줄은 결함이다(8.9, 12.4).</li><li>찾아보기는 <code>row</code> 의 줄을 담고, 돌면서 더한 줄은 <code>insert</code> 한다(8.10).</li></ul></div></main><nav class="bottom"><a href="index.html">처음</a> · <a href="07.html">앞</a> · <a href="09.html">다음</a> · <a href="../html-en/08.html">English</a></nav></body></html>
+</code></pre></div><div class="box mistake"><p class="box-title">흔한 오해: <code>add_row</code> 한 줄은 찾아보기에도 들어간다</p>들어가지 않는다. 돌면서 더한 줄은 <code>insert</code> 해야 <code>lookup</code> 이 찾는다. 위 예의 <code>register</code> 가 그렇게 한다. 같은 키가 이미 있으면 <code>insert</code> 는 실패하고, <code>add_row</code> 로 더한 줄은 목록에 남는다 — 키를 먼저 <code>lookup</code> 해 보고 더하는 것이 깔끔하다.</div><div class="box qa"><p class="box-title">문답</p><p><strong>물음. 한 표의 줄을 다른 표에 넣을 수 있는가?</strong></p><p>답. 아니다. 줄의 타입은 표의 이름이다. <code>cart</code> 의 줄은 <code>cart</code> 에만 쓰이고, 다른 표의 필드나 목록에 주면 타입이 달라 거절된다. 같은 레코드를 담은 표 둘 사이에 줄을 옮기려면 필드를 하나씩 읽어 새 줄에 넣거나, <code>filter_into</code> 로 복사한다(6장).</p></div><h3>7.5 차례대로 놓인 줄</h3><p><code>sort</code> 는 배열이나 목록의 칸을 가장 작은 것부터 차례로 놓는다. <code>sort_desc</code> 는 가장 큰 것부터 놓는다. 줄은 그렇게 정렬하지 않는다. 찾아보기, 필드, 전역이 줄을 번호로 붙들고 있을 수 있어서, 줄을 옮기면 그것들이 틀린다. 대신 줄 번호의 목록을 줄의 필드로 정렬한다. <code>order cities sort_by city.name</code> 이다. 줄은 제자리에 있고, <code>order</code> 가 어떤 차례로 읽을지를 말한다.</p><div class="example run"><p class="ex-file"><code>07-sort.pnx</code></p><pre><code data-lang="pinax"><span style="color: #d73948">use</span> io
+<span style="color: #d73948">record</span> city
+  name <span style="color: #d73948">str</span>(<span style="color: #b60157">16</span>)
+  people <span style="color: #d73948">int</span>
+<span style="color: #d73948">end</span>
+<span style="color: #d73948">list</span> cities city <span style="color: #b60157">8</span>
+<span style="color: #d73948">list</span> order <span style="color: #d73948">int</span> <span style="color: #b60157">8</span>
+<span style="color: #d73948">list</span> sizes <span style="color: #d73948">int</span> <span style="color: #b60157">8</span>
+<span style="color: #d73948">word</span> city_of (n <span style="color: #d73948">str</span>, p <span style="color: #d73948">int</span> <span style="color: #d73948">or</span> <span style="color: #d73948">fail</span>)
+  cities add_row <span style="color: #d73948">or_fail</span> <span style="color: #d73948">to</span> r
+  n r <span style="color: #d73948">to</span> city.name
+  p r <span style="color: #d73948">to</span> city.people
+  p sizes push <span style="color: #d73948">or_fail</span>
+<span style="color: #d73948">end</span>
+<span style="color: #d73948">word</span> main (<span style="color: #d73948">or</span> <span style="color: #d73948">fail</span>)
+  <span style="color: #198810">"Lyon"</span> <span style="color: #b60157">522</span> city_of <span style="color: #d73948">or_fail</span>  <span style="color: #198810">"Nice"</span> <span style="color: #b60157">342</span> city_of <span style="color: #d73948">or_fail</span>  <span style="color: #198810">"Paris"</span> <span style="color: #b60157">2103</span> city_of <span style="color: #d73948">or_fail</span>  <span style="color: #198810">"Lille"</span> <span style="color: #b60157">236</span> city_of <span style="color: #d73948">or_fail</span>
+  sizes sort_desc
+  <span style="color: #d73948">cat</span> (<span style="color: #198810">"largest: "</span>, <span style="color: #b60157">0</span> sizes idx) io.println
+  <span style="color: #b60157">0</span> cities len range <span style="color: #d73948">do</span> (i <span style="color: #d73948">int</span>) i order push <span style="color: #d73948">or_fail</span> <span style="color: #d73948">end</span> each
+  order cities sort_by city.name
+  <span style="color: #b60157">0</span> order len range <span style="color: #d73948">do</span> (i <span style="color: #d73948">int</span>) i order idx cities idx city.name io.println <span style="color: #d73948">end</span> each
+<span style="color: #d73948">end</span>
+main <span style="color: #d73948">or_else</span> (e) e err_text io.println <span style="color: #d73948">end</span>
+</code></pre><p class="ex-label">출력</p><pre><code data-lang="text">$ pnx 07-sort.pnx
+largest: 2103
+Lille
+Lyon
+Nice
+Paris
+</code></pre></div><div class="example refused"><p class="ex-file"><code>07-sort-rows.pnx</code></p><pre><code data-lang="pinax"><span style="color: #d73948">record</span> city
+  name <span style="color: #d73948">str</span>(<span style="color: #b60157">16</span>)
+  people <span style="color: #d73948">int</span>
+<span style="color: #d73948">end</span>
+<span style="color: #d73948">list</span> cities city <span style="color: #b60157">8</span>
+<span style="color: #d73948">index</span> by_name cities city.name
+<span style="color: #d73948">word</span> order_them () cities sort <span style="color: #d73948">end</span>
+</code></pre><p class="ex-label">거절</p><pre><code data-lang="text">$ pnx 07-sort-rows.pnx
+07-sort-rows.pnx:7:27: rows do not move: sort a list of their numbers by a field: order table sort_by record.field
+</code></pre></div><div class="box qa"><p class="box-title">문답</p><p><strong>물음. 두 필드로 정렬하려면?</strong></p><p>답. 두 번 정렬한다. 덜 중요한 필드를 먼저 한다. <code>order t sort_by r.name</code> 한 뒤 <code>order t sort_by_desc r.count</code> 하면 개수가 큰 것부터 놓이고, 개수가 같으면 이름 차례다. 정렬은 키가 같은 것의 차례를 지키므로, 두 번째 정렬은 같다고 보는 줄 사이에 첫 번째 정렬의 차례를 남긴다.</p></div><div class="box mistake"><p class="box-title">흔한 오해: <code>sort_desc</code> 는 <code>sort</code> 를 거꾸로 읽은 것이다</p>칸에서만 그렇다. 같은 두 칸은 서로 구별되지 않기 때문이다. 줄 번호에서는 그렇지 않다. <code>sort_by_desc</code> 도 <code>sort_by</code> 처럼 키가 같은 것의 차례를 지킨다. <code>sort_by</code> 를 거꾸로 읽으면 그 차례가 뒤집힌다.</div><div class="box summary"><p class="box-title">정리</p><ul><li>칸은 <code>sort</code> 와 <code>sort_desc</code> 로 정렬한다. 줄은 줄 번호의 목록을 거쳐 <code>sort_by</code> 와 <code>sort_by_desc</code> 로 정렬하고, 키가 같은 것의 차례를 지킨다(표준 15.3).</li><li>레코드는 표의 줄로 다룬다. 필드는 <code>레코드.필드</code> 로 읽고 넣는다(표준 8.8).</li><li>줄은 번호이고, 쓸 때마다 검사된다. 없음 줄의 필드는 결함이다(8.8).</li><li>풀의 줄은 한 번 넘겨야 하고, 돌려준 줄은 결함이다(8.9, 12.4).</li><li>찾아보기는 <code>row</code> 의 줄을 담고, 돌면서 더한 줄은 <code>insert</code> 한다(8.10).</li></ul></div></main><nav class="bottom"><a href="index.html">처음</a> · <a href="07.html">앞</a> · <a href="09.html">다음</a> · <a href="../html-en/08.html">English</a></nav></body></html>

@@ -1,0 +1,6 @@
+rem refused
+record entry
+  count int
+end
+list terms entry 8
+word order_them () terms sort end

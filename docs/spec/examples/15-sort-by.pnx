@@ -1,0 +1,24 @@
+rem run
+use io
+record entry
+  term str(8)
+  count int
+end
+list terms entry 8
+list order int 8
+word count_in (t str, n int or fail)
+  terms add_row or_fail to r
+  t r to entry.term
+  n r to entry.count
+end
+word main (or fail)
+  "to" 4 count_in or_fail  "be" 2 count_in or_fail  "or" 2 count_in or_fail  "not" 1 count_in or_fail  "a" 4 count_in or_fail
+  0 terms len range do (i int) i order push or_fail end each
+  order terms sort_by entry.term
+  order terms sort_by_desc entry.count       rem by count; the same count stays in byte order
+  0 order len range do (i int)
+    i order idx terms idx to r
+    cat (r entry.count, " ", r entry.term) io.println
+  end each
+end
+main or_else (e) e err_text io.println end

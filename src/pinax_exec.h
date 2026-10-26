@@ -407,8 +407,9 @@ again:
         CASE(GSEL) { // the global a reference names, for the instruction after this one
             const uint64_t gi = (uint64_t)R[OP_A(w)];
             const uint32_t elem = *pc++, next = *pc; // the loader keeps the instruction after a GSEL in the word
-            // a shared global is chosen only to be read: LCOPYR writes the one in its BX
-            const bool writes = pnx_writes_global(next & 0xffu) && ((next & 0xffu) != PNX_LCOPYR || OP_BX(next) == PNX_GSELECTED);
+            // a shared global is chosen only to be read: LCOPYR and SORTBY write the one in their BX
+            const bool writes = pnx_writes_global(next & 0xffu) &&
+                                (((next & 0xffu) != PNX_LCOPYR && (next & 0xffu) != PNX_SORTBY) || OP_BX(next) == PNX_GSELECTED);
             if (gi >= st->head->n_globals || st->globals[gi].kind != OP_B(w) ||
                 (elem && st->globals[gi].elem_bytes != (elem & 0xffffu)) ||
                 ((elem >> 16) && st->globals[gi].width != (elem >> 16) - 1) || (writes && st->globals[gi].shared))

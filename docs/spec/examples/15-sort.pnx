@@ -1,0 +1,21 @@
+rem run
+use io
+list marks int 6
+list names str(8) 4
+rem the cells on one line, a blank between two
+word show (cells list int)
+  0 cells len range do (i int) i 0 gt if " " io.print end  cat (i cells idx) io.print end each
+  "" io.println
+end
+word main (or fail)
+  7 marks push or_fail  -2 marks push or_fail  12 marks push or_fail  0 marks push or_fail
+  marks sort
+  marks show
+  marks sort_desc
+  marks show
+  "pear" names push or_fail  "Fig" names push or_fail  "apple" names push or_fail
+  names sort
+  0 names len range do (i int) i 0 gt if " " io.print end  i names idx io.print end each
+  "" io.println
+end
+main or_else (e) e err_text io.println end

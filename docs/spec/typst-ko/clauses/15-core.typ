@@ -105,9 +105,35 @@
   [`n c truncate`], [버퍼, 목록], [길이를 `n` 으로(목록은 8.5 의 (2b))],
   [`c none` / `r is_none` / `r row_index`], [레코드의 표], [없음 줄 / 없음인가 / 줄의 번호],
   [`k x lookup` / `r x insert` / `r x remove`], [찾아보기], [찾기(`or fail`) / 넣기(`or fail`) / 빼기],
+  [`c sort` / `c sort_desc`], [배열, 목록], [칸을 차례로 놓는다. 가장 작은 것 / 가장 큰 것부터((3))],
+  [`o t sort_by r.f` / `o t sort_by_desc r.f`], [`int` 의 배열이나 목록, 레코드의 표], [줄 번호를 그 줄의 필드 `f` 의 차례로 놓는다((4))],
 )]
 
 #para("2")[보기는 8절에 있다.]
+
+#para("3")[`c sort` 는 배열의 칸을, 목록이면 길이까지의 칸을 가장 작은 것부터 차례로 놓는다. `c sort_desc` 는 가장 큰
+것부터 놓는다. 칸은 제자리에서 바뀌고 낱말은 아무것도 주지 않는다. 칸은 `int`, 좁은 정수, `dec(N)`, `bool`(`false` 가
+먼저), `str(N)` 이거나, 그중 하나 위에 선언한 타입이어야 한다. `u64` 칸은 부호 없이 견주고, `str(N)` 칸은 `str.compare`
+의 바이트 순서로 견준다(16.1). 모음 매개변수(9.9)도 똑같이 정렬한다. 레코드의 목록이나 배열은 거절된다. 찾아보기, 필드,
+전역, 이름 붙은 줄이 그 줄을 붙들고 있을 수 있기 때문이다. 그 줄은 (4)로, 줄 번호의 목록을 거쳐 차례로 놓는다.]
+#ex("spec", "15-sort.pnx")
+#ex("spec", "15-sort-records.pnx")
+
+#para("4")[`o t sort_by r.f` 는 `o`, `t`, 필드 `r.f` 를 받는다. `o` 는 `int` 의 배열이나 목록이고 칸마다 `t` 의 줄
+번호다. `t` 는 레코드의 배열이나 목록이다. `r.f` 는 `t` 가 담는 레코드의 필드이고, `to` 와 `set` 이 이름을 받듯 낱말
+뒤에 쓴다. 이 낱말은 `o` 의 칸을 그 칸이 가리키는 줄의 그 필드의 차례로, 가장 작은 것부터 놓는다. `sort_by_desc` 는
+가장 큰 것부터 놓는다. 필드는 (3)의 칸이 될 수 있는 타입이어야 한다. 줄은 움직이지 않으므로 찾아보기와 붙들린 줄은
+그대로 맞다. `t` 의 줄 번호가 아닌 칸은 결함 `range` 이고, 어느 칸도 움직이기 전에 찾는다. 그러면 `o` 는 그대로 남는다.
+`o` 와 `t` 가운데 하나만 매개변수일 수 있다.]
+#ex("spec", "15-sort-by.pnx")
+#ex("spec", "15-sort-by-range.pnx")
+
+#para("5")[두 정렬은 모두 안정하다. 키가 같은 칸은 차례를 지킨다. 여러 키로 정렬하려면 여러 번 정렬한다. 덜 중요한
+키부터 한다.]
+
+#para("6")[정렬은 실패하지 않는다. 정렬하는 적재는 프로그램에 작업 영역을 준다. 크기는 정렬하는 가장 큰 모음의 칸마다
+8바이트이고, 모음 매개변수를 정렬하면 가장 큰 배열이나 목록의 칸마다 8바이트다. 작업 영역은 상태의 전역 하나로 세고,
+블록에 그만한 자리가 있어야 한다. $n$ 칸의 정렬은 예산에 명령 $n dot.c ceil(log_2 n)$ 개로 친다(19.5).]
 
 == 그 밖 <core-other>
 
@@ -129,4 +155,11 @@
   ([정수 낱말에 `int` 가 아닌 값], "this word takes two int values"),
   ([비교하는 두 값의 타입이 다름], "the two values compared must have the same type"),
   ([`select` 의 값의 타입이 다름], "select takes a bool and two values of one type: flag a b select"),
+  ([레코드의 배열이나 목록의 `sort`], "rows do not move: sort a list of their numbers by a field: order table sort_by record.field"),
+  ([다른 타입의 칸의 `sort`], "sort orders cells of int, a narrow integer, dec(N), bool or str(N)"),
+  ([`int` 의 목록과 표가 없는 `sort_by`], "sort_by takes a list of row numbers and a table of records: order table sort_by record.field"),
+  ([뒤에 필드가 없는 `sort_by`], "sort_by is followed by the field: order table sort_by record.field"),
+  ([표의 레코드가 아닌 레코드의 필드], "the field is one of the record the table holds"),
+  ([다른 타입의 필드], "sort_by orders by a field of int, a narrow integer, dec(N), bool or str(N)"),
+  ([목록과 표가 모두 매개변수], "sort_by takes the list or the table from a parameter, not both"),
 )

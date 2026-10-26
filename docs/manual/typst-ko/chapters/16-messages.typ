@@ -82,7 +82,12 @@
   [`this path names neither a module in use nor a record`],
   [`모듈.낱말` 의 모듈을 열지 않았다. 파일 위에 `use 모듈` 을 쓴다.], [1, 10],
   [`this name is already visible here; a new name may not hide it`],
-  [이미 보이는 이름(핵 낱말 `sum`, `count`, `first` 따위도)을 새 이름으로 썼다. 다른 이름을 고른다.], [3],
+  [프로그램의 이미 보이는 이름(낱말, 전역, 상수, 바깥의 지역 변수)을 새 이름으로 썼다. 다른 이름을 고른다.], [3],
+  [`NAME is a word of the language; choose another name`],
+  [언어의 낱말 --- 예약어, `sum`, `count`, `first` 같은 핵 낱말, `sort` 같은 낱말, 타입 --- 을 새 이름으로 썼다. 어디서
+   이름을 만들었든 같다. 다른 이름을 고른다.], [3],
+  [`rows do not move: sort a list of their numbers by a field: order table sort_by record.field`],
+  [`sort` 에 레코드의 표를 주었다. 줄 번호로 목록을 채우고 `sort_by` 로 정렬한다.], [7],
   [`outside a definition `+"`to`"+` makes no new local; a global is written with set`],
   [정의 밖에서 `to` 를 썼다. 정의 밖에는 지역 변수가 없다. 일을 낱말로 묶거나 전역에 `set` 으로 넣는다.], [4],
   [`this name is a global; a global is written with set: value set name`],

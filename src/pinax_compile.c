@@ -249,6 +249,8 @@ typedef struct globalsym {
     bool     forward;  // announced by `forward`, not declared yet
     bool     bound;    // `bound`: the host gives the storage with pinax_bind()
     bool     shared;   // `shared`: another state's storage, given by pinax_share(); nothing writes it
+    bool     work;     // the work area of the sorts (RFC-0030): an array no source names
+    bool     sorts_refs; // of a work area: the program sorts a collection a parameter names
     uint32_t capacity; // cells of an array or list
     uint32_t record;   // NONE, or the record a table holds
     uint32_t rows;     // rows written by `row` items so far
@@ -401,6 +403,8 @@ typedef struct comp {
     vec          srcmods;   // name: the modules loaded so far, this one last
     bool         exporting; // `export` stands before the item being compiled
     uint32_t     path_global; // to module.name : the global the path names, for store_local
+    uint32_t     sort_need;   // the most cells a sort of this load orders, of a collection it names
+    bool         sort_refs;   // a sort of this load orders a collection a parameter names
     vec          truncs;    // trunc_site: lists cut back by truncate, checked when the source is read
     vec          tedges;    // trunc_edge
     vec          lends;     // trunc_site: shared collections given to collection parameters, which must only read them
@@ -444,6 +448,9 @@ static bool syntax(comp *c, const char *message) {
 static bool type_error(comp *c, const char *message) {
     return error(c, PINAX_ERR_TYPE, message);
 }
+static bool name_due(comp *c, const char *message);
+static bool language_name(name n);
+static bool language_taken(comp *c, pinax_err err, name n);
 
 static void *arena_alloc(comp *c, size_t bytes) {
     bytes = (bytes + 7u) & ~(size_t)7u;
@@ -995,7 +1002,7 @@ static bool parse_sig(comp *c, sig *s) {
                 if (!parse_ref(c, &t))
                     return false;
             } else {
-                return syntax(c, "a parameter is a type, or a name and a type");
+                return name_due(c, "a parameter is a type, or a name and a type");
             }
         }
         if (type.length && name_is(type, "dec") && !c->in_host) {
@@ -1197,7 +1204,7 @@ static uint32_t emit(comp *c, uint32_t word) {
     if (f->second_due) {
         f->second_due = false;
         const uint32_t first = f->code.n - 1, op = f->code.n ? ((uint32_t *)f->code.ptr)[first] & 0xffu : 0;
-        if (pnx_writes_global(op) && op != PNX_LCOPYR &&
+        if (pnx_writes_global(op) && op != PNX_LCOPYR && op != PNX_SORTBY &&
             !read_only(c, pnx_ops_info[op].second == PNX_X_FIELD ? word & 0xfffu
                           : pnx_ops_info[op].second == PNX_X_GLOBAL ? word : NONE))
             return NONE;
@@ -1772,7 +1779,8 @@ enum {
     BW_REPLACE_INTO, BW_APPEND_HEX, BW_CRC32, BW_FNV1A, BW_HASH64, BW_BASE64_ENCODE, BW_BASE64_DECODE,
     BW_HEX_ENCODE, BW_HEX_DECODE, BW_URL_ENCODE, BW_URL_DECODE, BW_TRUNCATE, BW_PTN_IS_MATCH, BW_PTN_MATCH,
     BW_PTN_CAPTURE, BW_PTN_MATCHES, BW_PTN_REPLACE, BW_RX, BW_RX_COMPILE, BW_RX_IS_MATCH, BW_RX_MATCH, BW_RX_CUT,
-    BW_RX_MATCHES, BW_RX_SPLIT, BW_RX_REPLACE, BW_RX_REPLACE_INTO, BW_WAIT_TAKE, BW_WAIT_PUT, BW_RESCALE, BW_TO_DEC
+    BW_RX_MATCHES, BW_RX_SPLIT, BW_RX_REPLACE, BW_RX_REPLACE_INTO, BW_WAIT_TAKE, BW_WAIT_PUT, BW_RESCALE, BW_TO_DEC,
+    BW_SORT, BW_SORT_DESC, BW_SORT_BY, BW_SORT_BY_DESC
 };
 static const struct builtin {
     const char *name;
@@ -1820,6 +1828,8 @@ static const struct builtin {
     {"hex_encode", BW_HEX_ENCODE, 4}, {"hex_decode", BW_HEX_DECODE, 4},
     {"url_encode", BW_URL_ENCODE, 4}, {"url_decode", BW_URL_DECODE, 4},
     {"truncate", BW_TRUNCATE, 0},
+    {"sort", BW_SORT, 0},           {"sort_desc", BW_SORT_DESC, 0},
+    {"sort_by", BW_SORT_BY, 0},     {"sort_by_desc", BW_SORT_BY_DESC, 0},
     {"is_match", BW_PTN_IS_MATCH, 6}, {"match", BW_PTN_MATCH, 6},   {"capture", BW_PTN_CAPTURE, 6},
     {"matches", BW_PTN_MATCHES, 6}, {"replace", BW_PTN_REPLACE, 6},
     {"rx", BW_RX, 7},               {"compile", BW_RX_COMPILE, 7}, {"is_match", BW_RX_IS_MATCH, 7},
@@ -1856,6 +1866,8 @@ static bool name_is_global(comp *c, name n) {
 
 // No shadowing (RFC-0008 section 3.3): a new local or loop name must not be a visible name.
 static bool name_is_free(comp *c, name n) {
+    if (language_name(n))
+        return language_taken(c, PINAX_ERR_TYPE, n);
     if (find_local(c->f, n) || name_is_global(c, n))
         return type_error(c, "this name is already visible here; a new name may not hide it");
     for (uint32_t k = 0; k < c->f->n_blocks; ++k) {
@@ -1863,6 +1875,32 @@ static bool name_is_free(comp *c, name n) {
             return type_error(c, "this name is already visible here; a new name may not hide it");
     }
     return true;
+}
+
+// A word of the language: a core word, a word the compiler expands, a type of the language.
+static bool language_name(name n) {
+    return find_core(n) || find_builtin(n, 0) || basic_type(n) != TY_NONE || name_is(n, "float") || name_is(n, "raw") ||
+           name_is(n, "dec") || low_name(n, &(uint32_t){0});
+}
+
+// A new name that the language has taken (RFC-0030 Q4): one message wherever the name is made.
+static bool language_taken(comp *c, pinax_err err, name n) {
+    static const char said[] = " is a word of the language; choose another name";
+    uint32_t at = 0;
+    for (uint32_t i = 0; i < n.length && at + sizeof said < sizeof c->note; ++i)
+        c->note[at++] = (char)n.text[i];
+    __builtin_memcpy(c->note + at, said, sizeof said);
+    return error(c, err, c->note);
+}
+
+// A new name that is visible already: the language's, or one of the program's.
+static bool defined_twice(comp *c, name n) {
+    return language_name(n) ? language_taken(c, PINAX_ERR_TYPE, n) : type_error(c, "this name is already defined");
+}
+
+// Where a new name is due and the token is none: a reserved word gets the message of a taken name.
+static bool name_due(comp *c, const char *message) {
+    return c->tok.kind == PNX_T_RESERVED ? language_taken(c, PINAX_ERR_SYNTAX, tok_name(c)) : syntax(c, message);
 }
 
 // ---- words of the core --------------------------------------------------------------------
@@ -2606,7 +2644,7 @@ static bool guard(comp *c, const sig *s, const uint32_t base[2], const uint32_t 
         if (!advance(c))
             return false;
         if (c->tok.kind != PNX_T_NAME)
-            return syntax(c, "a name for the error number is expected: or_else (e)");
+            return name_due(c, "a name for the error number is expected: or_else (e)");
         const name n = tok_name(c);
         if (!name_is_free(c, n))
             return false;
@@ -2903,7 +2941,8 @@ static bool store(comp *c) {
             return false;
         for (;;) {
             if (c->tok.kind != PNX_T_NAME || count == MAX_PARAMS)
-                return syntax(c, "a list of names is expected: to (a, b)");
+                return count < MAX_PARAMS ? name_due(c, "a list of names is expected: to (a, b)")
+                                          : syntax(c, "a list of names is expected: to (a, b)");
             names[count++] = tok_name(c);
             if (!advance(c))
                 return false;
@@ -2931,7 +2970,7 @@ static bool store(comp *c) {
             return type_error(c, "a global of a module is written with set: value set module.name");
         return field_access(c, true) && advance(c);
     }
-    return syntax(c, "to is followed by a name or a list of names");
+    return name_due(c, "to is followed by a name or a list of names");
 }
 
 // set NAME | set module.NAME : stores into a declared global (D0042); `to` stores into locals
@@ -3215,7 +3254,7 @@ static bool do_loop(comp *c) {
         if (!advance(c))
             return false;
         if (c->tok.kind != PNX_T_NAME)
-            return syntax(c, "a loop name is expected: loop (name)");
+            return name_due(c, "a loop name is expected: loop (name)");
         n = tok_name(c);
         if (!name_is_free(c, n) || !advance(c))
             return false;
@@ -3247,7 +3286,7 @@ static bool leave_target(comp *c, block **out) {
         if (!advance(c))
             return false;
         if (c->tok.kind != PNX_T_NAME)
-            return syntax(c, "a loop name is expected in the parentheses");
+            return name_due(c, "a loop name is expected in the parentheses");
         n = tok_name(c);
         if (!advance(c))
             return false;
@@ -5362,6 +5401,50 @@ static bool guard_op(comp *c, tid out) {
 
 // The words the compiler expands itself. The current token is the word; like a call, this
 // ends with the token after the word (and after its guard) current.
+// A sort of collection `gi`: the work area must have a cell for each of its cells.
+static void sort_seen(comp *c, const globalsym *g, uint32_t gi) {
+    if (gi >= REF_GLOBAL)
+        c->sort_refs = true;
+    else if (g->capacity > c->sort_need)
+        c->sort_need = g->capacity;
+}
+
+// The work area of the sorts (RFC-0030), at the end of a load: an array of a cell for each cell of
+// the largest collection the program sorts. When it sorts one a parameter names, that is any
+// array or list. A larger one is added when the program outgrows the one it has.
+static bool sort_work(comp *c) {
+    uint32_t have = 0, most = 0;
+    bool     refs = c->sort_refs;
+    for (uint32_t k = 0; k < c->globals.n; ++k) {
+        const globalsym *g = (const globalsym *)c->globals.ptr + k;
+        if (g->work) {
+            have = g->capacity > have ? g->capacity : have;
+            refs = refs || g->sorts_refs;
+        } else if ((g->kind == GK_ARRAY || g->kind == GK_LIST) && g->capacity > most) {
+            most = g->capacity;
+        }
+    }
+    uint32_t need = refs && most > c->sort_need ? most : c->sort_need;
+    if (need == 0 && !refs)
+        return true;
+    need = need ? need : 1; // a parameter sorted, no collection yet: what is declared later counts
+    bool refs_kept = false; // a work area says so already
+    for (uint32_t k = 0; refs && k < c->globals.n; ++k) {
+        const globalsym *g = (const globalsym *)c->globals.ptr + k;
+        refs_kept = refs_kept || (g->work && g->sorts_refs);
+    }
+    if (need <= have && (!refs || refs_kept))
+        return true;
+    if (c->globals.n >= REF_GLOBAL)
+        return type_error(c, "too many globals");
+    globalsym *g = vec_push(c, &c->globals, sizeof(globalsym));
+    if (!g)
+        return false;
+    *g = (globalsym){.type = TY_INT, .kind = GK_ARRAY, .work = true, .sorts_refs = refs, .capacity = need > have ? need : have,
+                     .record = NONE, .table = NONE, .key = NONE, .module = (uint16_t)c->module};
+    return true;
+}
+
 static bool builtin(comp *c, const struct builtin *w) {
     fn *f = c->f;
     const globalsym *g;
@@ -5481,6 +5564,62 @@ static bool builtin(comp *c, const struct builtin *w) {
         if (!push_slot(c, TY_STR))
             return false;
         return emit_def(c, PNX_ABC(PNX_PCAP, slot_of(c, f->depth - 1), ra, 0), BANK_S) != NONE && advance(c);
+    }
+    case BW_SORT:
+    case BW_SORT_DESC: { // xs sort : the cells in order, in place (RFC-0030)
+        if (!need_coll(c, &g, &gi))
+            return false;
+        if (g->kind != GK_ARRAY && g->kind != GK_LIST)
+            return type_error(c, "sort orders the cells of an array or a list");
+        if (g->record != NONE)
+            return type_error(c, "rows do not move: sort a list of their numbers by a field: order table sort_by record.field");
+        uint32_t flags = w->id == BW_SORT_DESC ? PNX_SORT_DESC : 0;
+        const tid cell = num_base(c, g->type);
+        if (g->strcap)
+            flags |= PNX_SORT_STR;
+        else if (cell != TY_INT && cell != TY_BOOL && !is_narrow(cell))
+            return type_error(c, "sort orders cells of int, a narrow integer, dec(N), bool or str(N)");
+        else if (cell == (tid)(TY_NARROW + PNX_W_64))
+            flags |= PNX_SORT_U64;
+        sort_seen(c, g, gi);
+        return settle_all(c) && emit(c, PNX_ABX(PNX_SORT, flags, gi)) != NONE && advance(c);
+    }
+    case BW_SORT_BY:
+    case BW_SORT_BY_DESC: { // order table sort_by record.field : the row numbers in order of the field
+        const globalsym *t;
+        uint32_t         ti;
+        if (!need_coll(c, &t, &ti) || !need_coll(c, &g, &gi))
+            return false;
+        if (t->record == NONE || (t->kind != GK_ARRAY && t->kind != GK_LIST) || (g->kind != GK_ARRAY && g->kind != GK_LIST) ||
+            g->record != NONE || g->strcap || base_of(c, g->type) != TY_INT)
+            return type_error(c, "sort_by takes a list of row numbers and a table of records: order table sort_by record.field");
+        if (gi >= REF_GLOBAL && ti >= REF_GLOBAL)
+            return type_error(c, "sort_by takes the list or the table from a parameter, not both");
+        if (!advance(c))
+            return false;
+        if (c->tok.kind != PNX_T_PATH)
+            return syntax(c, "sort_by is followed by the field: order table sort_by record.field");
+        const name path = tok_name(c);
+        uint32_t dot = 0;
+        while (path.text[dot] != '.')
+            ++dot;
+        const uint32_t r = find_record_any(c, (name){path.text, dot});
+        const field *fd = r == NONE ? NULL : find_field(c, r, (name){path.text + dot + 1, path.length - dot - 1});
+        if (!fd)
+            return error(c, PINAX_ERR_NOT_FOUND, "the record has no field of this name");
+        if (r != t->record)
+            return type_error(c, "the field is one of the record the table holds");
+        uint32_t flags = w->id == BW_SORT_BY_DESC ? PNX_SORT_DESC : 0;
+        const tid key = num_base(c, fd->type);
+        if (fd->is_str)
+            flags |= PNX_SORT_STR;
+        else if (key != TY_INT && key != TY_BOOL && !is_narrow(key))
+            return type_error(c, "sort_by orders by a field of int, a narrow integer, dec(N), bool or str(N)");
+        else if (key == (tid)(TY_NARROW + PNX_W_64))
+            flags |= PNX_SORT_U64;
+        sort_seen(c, g, gi);
+        return settle_all(c) && emit(c, PNX_ABX(PNX_SORTBY, flags, gi)) != NONE &&
+               emit(c, PNX_FIELD(ti, fd->offset, fd->extra)) != NONE && advance(c);
     }
     case BW_TRUNCATE: { // n c truncate : a buffer or a list cut back to n; more than it holds is a fault
         const pnx_token at = c->tok;
@@ -7030,7 +7169,7 @@ static bool definition(comp *c, bool is_test) {
     if (!advance(c))
         return false;
     if (c->tok.kind != PNX_T_NAME)
-        return syntax(c, is_test ? "test is followed by the name of the test" : "word is followed by the name of the new word");
+        return name_due(c, is_test ? "test is followed by the name of the test" : "word is followed by the name of the new word");
     name n = tok_name(c);
     if (is_test) {
         if (n.length > 26)
@@ -7054,8 +7193,8 @@ static bool definition(comp *c, bool is_test) {
         c->redefine_old = old;
         n = cname("(replaced)");
     } else if (name_is_global(c, n) && !(find_fwd(c, n, NULL) && find_fwd(c, n, NULL)->index == NONE)) {
-        return type_error(c, c->eval && find_word(c, n, NULL) ? "this name is already defined; redefine word replaces it"
-                                                              : "this name is already defined");
+        return c->eval && find_word(c, n, NULL) ? type_error(c, "this name is already defined; redefine word replaces it")
+                                                : defined_twice(c, n);
     }
     if (n.length > 31)
         return syntax(c, "a word name is at most 31 bytes long");
@@ -7225,10 +7364,10 @@ static bool declare_tasks(comp *c) {
     if (!advance(c))
         return false;
     if (c->tok.kind != PNX_T_NAME)
-        return syntax(c, "the declaration is: tasks name count");
+        return name_due(c, "the declaration is: tasks name count");
     globalsym g = {.name = tok_name(c), .kind = GK_TASKS, .record = NONE, .table = 16, .key = 1024};
     if (name_is_global(c, g.name))
-        return type_error(c, "this name is already defined");
+        return defined_twice(c, g.name);
     if (g.name.length > 31)
         return syntax(c, "a global name is at most 31 bytes long");
     if (!advance(c) || !declared_capacity(c, g.name, &g.capacity))
@@ -7276,10 +7415,10 @@ static bool declare_const(comp *c) {
     if (!advance(c))
         return false;
     if (c->tok.kind != PNX_T_NAME)
-        return syntax(c, "const is followed by a name and a literal");
+        return name_due(c, "const is followed by a name and a literal");
     constant k = {.name = tok_name(c)};
     if (name_is_global(c, k.name))
-        return type_error(c, "this name is already defined");
+        return defined_twice(c, k.name);
     if (!advance(c))
         return false;
     const name value = tok_name(c);
@@ -7352,10 +7491,10 @@ static bool declare_global(comp *c) {
     if (!advance(c))
         return false;
     if (c->tok.kind != PNX_T_NAME)
-        return syntax(c, "global is followed by a name and a type");
+        return name_due(c, "global is followed by a name and a type");
     globalsym g = {.name = tok_name(c), .kind = GK_SCALAR, .capacity = 1, .record = NONE};
     if (name_is_global(c, g.name))
-        return type_error(c, "this name is already defined");
+        return defined_twice(c, g.name);
     if (g.name.length > 31)
         return syntax(c, "a global name is at most 31 bytes long");
     if (!advance(c))
@@ -7432,7 +7571,7 @@ static bool declare_collection(comp *c, uint8_t kind) {
     if (!advance(c))
         return false;
     if (c->tok.kind != PNX_T_NAME)
-        return syntax(c, "the declaration is: array name type size");
+        return name_due(c, "the declaration is: array name type size");
     globalsym g = {.name = tok_name(c), .kind = kind, .record = NONE};
     const uint32_t announced = find_global(c, g.name);
     globalsym     *slot = NULL;
@@ -7441,7 +7580,7 @@ static bool declare_collection(comp *c, uint8_t kind) {
         if (slot->kind != kind)
             return type_error(c, "this name was announced by forward as another kind of table");
     } else if (name_is_global(c, g.name)) {
-        return type_error(c, "this name is already defined");
+        return defined_twice(c, g.name);
     }
     if (g.name.length > 31)
         return syntax(c, "a global name is at most 31 bytes long");
@@ -7491,10 +7630,10 @@ static bool declare_forward(comp *c) {
         if (!advance(c))
             return false;
         if (c->tok.kind != PNX_T_NAME)
-            return syntax(c, "forward word names the word: forward word name (effect)");
+            return name_due(c, "forward word names the word: forward word name (effect)");
         fwd ahead = {.name = tok_name(c), .index = NONE, .exported = c->exporting};
         if (name_is_global(c, ahead.name))
-            return type_error(c, "this name is already defined");
+            return defined_twice(c, ahead.name);
         if (!advance(c) || !parse_sig(c, &ahead.sig))
             return false;
         if (c->fwds.n >= 0xffffu)
@@ -7512,10 +7651,10 @@ static bool declare_forward(comp *c) {
     if (!advance(c))
         return false;
     if (c->tok.kind != PNX_T_NAME)
-        return syntax(c, "forward names the table: forward list name");
+        return name_due(c, "forward names the table: forward list name");
     g.name = tok_name(c);
     if (name_is_global(c, g.name))
-        return type_error(c, "this name is already defined");
+        return defined_twice(c, g.name);
     if (g.name.length > 31)
         return syntax(c, "a global name is at most 31 bytes long");
     if (c->globals.n >= REF_GLOBAL)
@@ -7538,10 +7677,10 @@ static bool declare_record(comp *c) {
     if (!advance(c))
         return false;
     if (c->tok.kind != PNX_T_NAME)
-        return syntax(c, "record is followed by the name of the record");
+        return name_due(c, "record is followed by the name of the record");
     record r = {.name = tok_name(c), .first = c->fields.n};
     if (name_is_global(c, r.name))
-        return type_error(c, "this name is already defined");
+        return defined_twice(c, r.name);
     if (!advance(c))
         return false;
     while (!is_word(c, PNX_KW_end)) {
@@ -7554,7 +7693,7 @@ static bool declare_record(comp *c) {
             continue;
         }
         if (c->tok.kind != PNX_T_NAME)
-            return syntax(c, "a record is a list of fields: name type, closed by end");
+            return name_due(c, "a record is a list of fields: name type, closed by end");
         field fd = {.name = tok_name(c), .offset = (uint16_t)r.size};
         for (uint32_t k = r.first; k < c->fields.n; ++k) {
             if (name_eq(((const field *)c->fields.ptr + k)->name, fd.name))
@@ -7638,10 +7777,10 @@ static bool declare_type(comp *c) {
     if (!advance(c))
         return false;
     if (c->tok.kind != PNX_T_NAME)
-        return syntax(c, "the declaration is: type name base");
+        return name_due(c, "the declaration is: type name base");
     dtype d = {.name = tok_name(c)};
     if (name_is_global(c, d.name))
-        return type_error(c, "this name is already defined");
+        return defined_twice(c, d.name);
     if (!advance(c))
         return false;
     if (c->tok.kind != PNX_T_NAME)
@@ -7666,10 +7805,10 @@ static bool declare_buffer(comp *c) {
     if (!advance(c))
         return false;
     if (c->tok.kind != PNX_T_NAME)
-        return syntax(c, "the declaration is: buffer name size");
+        return name_due(c, "the declaration is: buffer name size");
     globalsym g = {.name = tok_name(c), .kind = GK_BUFFER, .record = NONE};
     if (name_is_global(c, g.name))
-        return type_error(c, "this name is already defined");
+        return defined_twice(c, g.name);
     if (g.name.length > 31)
         return syntax(c, "a global name is at most 31 bytes long");
     if (!advance(c) || !declared_capacity(c, g.name, &g.capacity))
@@ -7688,10 +7827,10 @@ static bool declare_index(comp *c) {
     if (!advance(c))
         return false;
     if (c->tok.kind != PNX_T_NAME)
-        return syntax(c, "the declaration is: index name table record.field");
+        return name_due(c, "the declaration is: index name table record.field");
     globalsym g = {.name = tok_name(c), .kind = GK_INDEX, .record = NONE};
     if (name_is_global(c, g.name))
-        return type_error(c, "this name is already defined");
+        return defined_twice(c, g.name);
     if (g.name.length > 31)
         return syntax(c, "a global name is at most 31 bytes long");
     if (!advance(c))
@@ -7829,7 +7968,7 @@ static bool row_item(comp *c) {
         if (g->record == NONE)
             return type_error(c, "only a row of a record has a name");
         if (name_is_global(c, row_name))
-            return type_error(c, "this name is already defined");
+            return defined_twice(c, row_name);
         if (!advance(c))
             return false;
     }
@@ -8061,7 +8200,8 @@ static bool store_pending(comp *c, image *im) {
 
 static void put_text(char *out, size_t cap, name n) {
     const size_t len = n.length < cap - 1 ? n.length : cap - 1;
-    __builtin_memcpy(out, n.text, len);
+    if (len) // an empty name may have no text (the work area of the sorts)
+        __builtin_memcpy(out, n.text, len);
     out[len] = '\0';
 }
 
@@ -8282,6 +8422,8 @@ static bool compile(comp *c, image *im, bool *has_top) {
         if (((const fwd *)c->fwds.ptr + k)->index == NONE)
             return type_error(c, "a word announced by forward is never defined");
     }
+    if (!sort_work(c))
+        return false;
     *has_top = top->code.n != 0 || top->depth != 0;
     if (*has_top) {
         if (top->depth && !top->dead && !c->eval)
@@ -8448,6 +8590,8 @@ static bool serialize(comp *c, const image *im, uint8_t **out, size_t *out_len) 
             rec.reserved |= 2; // meant to be bound by the host
         if (g->shared)
             rec.reserved |= 4; // given by pinax_share(); beside an index's key kind
+        if (g->work)
+            rec.reserved = PNX_GLOBAL_WORK; // the work area of the sorts: 8-byte cells, no width
         __builtin_memcpy(p, &rec, sizeof rec);
         p += sizeof rec;
     }

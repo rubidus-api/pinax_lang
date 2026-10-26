@@ -377,6 +377,96 @@ pinax_err pnx_step_host(pinax_state *st) {
 #endif
 }
 
+// ---- sorting (RFC-0030): the merge itself, called by SORT and SORTBY -----------------------
+
+PNX_INLINE const uint8_t *pnx_sort_key(const pnx_sortkey *k, const uint8_t *item, uint32_t size) {
+    if (!k->rows)
+        return item;
+    uint64_t index;
+    if (size == 8)
+        __builtin_memcpy(&index, item, 8);
+    else {
+        uint32_t i;
+        __builtin_memcpy(&i, item, 4);
+        index = i;
+    }
+    return k->rows + index * k->stride + k->offset;
+}
+
+// Whether the key of item a is smaller than that of b: as SCMP orders strings, else as numbers.
+PNX_INLINE bool pnx_sort_less(const pnx_sortkey *k, const uint8_t *a, const uint8_t *b, uint32_t size) {
+    const uint8_t *x = pnx_sort_key(k, a, size), *y = pnx_sort_key(k, b, size);
+    if (k->flags & PNX_SORT_STR) { // never more than N: as FGETS reads a field
+        const uint32_t lx = x[0] <= k->width ? x[0] : k->width, ly = y[0] <= k->width ? y[0] : k->width;
+        const uint32_t n = lx < ly ? lx : ly;
+        const int c = n ? __builtin_memcmp(x + 1, y + 1, n) : 0;
+        return c < 0 || (c == 0 && lx < ly);
+    }
+    const int64_t vx = pnx_load_width(x, k->width), vy = pnx_load_width(y, k->width);
+    return k->flags & PNX_SORT_U64 ? (uint64_t)vx < (uint64_t)vy : vx < vy;
+}
+
+// Whether item a goes before item b, which stood before it: so equal keys keep their order.
+PNX_INLINE bool pnx_sort_first(const pnx_sortkey *k, const uint8_t *a, const uint8_t *b, uint32_t size) {
+    return k->flags & PNX_SORT_DESC ? pnx_sort_less(k, b, a, size) : pnx_sort_less(k, a, b, size);
+}
+
+// `size` is a constant where this is expanded, so that the moves are plain loads and stores.
+PNX_INLINE void pnx_merge_sort(const pnx_sortkey *k, uint8_t *items, uint8_t *spare, uint32_t n, uint32_t size) {
+    for (uint32_t lo = 0; lo < n; lo += 8) {
+        const uint32_t hi = n - lo > 8 ? lo + 8 : n;
+        for (uint32_t i = lo + 1; i < hi; ++i) {
+            uint8_t item[8];
+            __builtin_memcpy(item, items + (size_t)i * size, size);
+            uint32_t j = i;
+            for (; j > lo && pnx_sort_first(k, item, items + (size_t)(j - 1) * size, size); --j)
+                __builtin_memcpy(items + (size_t)j * size, items + (size_t)(j - 1) * size, size);
+            __builtin_memcpy(items + (size_t)j * size, item, size);
+        }
+    }
+    uint8_t *from = items, *to = spare;
+    for (uint64_t run = 8; run < n; run *= 2) {
+        for (uint64_t lo = 0; lo < n; lo += 2 * run) {
+            const uint32_t mid = (uint32_t)(lo + run < n ? lo + run : n), hi = (uint32_t)(lo + 2 * run < n ? lo + 2 * run : n);
+            uint32_t i = (uint32_t)lo, j = mid, o = (uint32_t)lo;
+            while (i < mid && j < hi) {
+                const bool right = pnx_sort_first(k, from + (size_t)j * size, from + (size_t)i * size, size);
+                __builtin_memcpy(to + (size_t)o++ * size, from + (size_t)(right ? j++ : i++) * size, size);
+            }
+            if (i < mid)
+                __builtin_memcpy(to + (size_t)o * size, from + (size_t)i * size, (size_t)(mid - i) * size);
+            else if (j < hi)
+                __builtin_memcpy(to + (size_t)o * size, from + (size_t)j * size, (size_t)(hi - j) * size);
+        }
+        uint8_t *const t = from;
+        from = to;
+        to = t;
+    }
+    if (from != items)
+        __builtin_memcpy(items, from, (size_t)n * size);
+}
+
+int pnx_sort_items(const pnx_sortkey *k, uint8_t *items, uint8_t *spare, uint32_t n, uint32_t size) {
+    if (!k->rows && size == 8 && k->width == PNX_W_64 && !(k->flags & (PNX_SORT_STR | PNX_SORT_U64))) {
+        // int cells, the commonest: the key known here, so that a comparison is one instruction
+        static const pnx_sortkey up = {NULL, 0, 0, PNX_W_64, 0}, down = {NULL, 0, 0, PNX_W_64, PNX_SORT_DESC};
+        if (k->flags & PNX_SORT_DESC)
+            pnx_merge_sort(&down, items, spare, n, 8);
+        else
+            pnx_merge_sort(&up, items, spare, n, 8);
+        return PNX_R_OK;
+    }
+    switch (size) {
+    case 1: pnx_merge_sort(k, items, spare, n, 1); break;
+    case 2: pnx_merge_sort(k, items, spare, n, 2); break;
+    case 4: pnx_merge_sort(k, items, spare, n, 4); break;
+    case 8: pnx_merge_sort(k, items, spare, n, 8); break;
+    default: return PINAX_ERR_STATE;
+    }
+    return PNX_R_OK;
+}
+
+
 // The budget ran out at `at` (the CHECK, which runs again when the run goes on).
 pinax_err pnx_exec_suspend(pinax_state *st, uint32_t at, uint32_t ibase, uint32_t sbase, uint32_t depth,
                            uint64_t count) {

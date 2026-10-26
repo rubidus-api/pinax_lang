@@ -1,0 +1,12 @@
+rem fault
+record entry
+  count int
+end
+list terms entry 8
+list order int 8
+word main (or fail)
+  terms add_row or_fail to r
+  5 order push or_fail
+  order terms sort_by entry.count
+end
+main or_else (e) end

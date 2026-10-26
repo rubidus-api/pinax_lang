@@ -129,10 +129,11 @@ typedef struct pnx_global {
     bool     key_is_str;
     bool     shared; // declared `shared`: another state's storage, or none until pinax_share() gives it
     uint8_t  width;  // an array, list or queue of values: the width code of a cell (PNX_W_64: 8 bytes)
+    bool     work;   // the work area of SORT and SORTBY (PNX_GLOBAL_WORK)
 } pnx_global;
 
 // The instructions that change the global they name (in BX, C, a wide form's second word or a
-// field's). None may name a shared global (RFC-0020 section 4); LCOPYR writes its BX only.
+// field's). None may name a shared global (RFC-0020 section 4); LCOPYR and SORTBY write their BX only.
 static inline bool pnx_writes_global(uint32_t op) {
     switch (op) {
     case PNX_SETG: case PNX_ASET: case PNX_ASETW: case PNX_GCLEAR: case PNX_LPUSH: case PNX_LPUSHS: case PNX_LPOP:
@@ -140,7 +141,7 @@ static inline bool pnx_writes_global(uint32_t op) {
     case PNX_BPUT: case PNX_BPUTS: case PNX_BPUTW: case PNX_BPUTSW: case PNX_BCAT: case PNX_BCATI: case PNX_BENC:
     case PNX_BENCW: case PNX_BTRUNC: case PNX_JPUTI: case PNX_JPUTIW: case PNX_JPUTS: case PNX_JPUTSW: case PNX_CPUTS:
     case PNX_CPUTSW: case PNX_CPUTI: case PNX_CPUTIW: case PNX_LCOPYR: case PNX_QPUT: case PNX_QTAKE: case PNX_QWTAKE:
-    case PNX_QWPUT: case PNX_PALLOC: case PNX_PFREE: return true;
+    case PNX_QWPUT: case PNX_PALLOC: case PNX_PFREE: case PNX_SORT: case PNX_SORTBY: return true;
     default: return false;
     }
 }
@@ -325,6 +326,7 @@ struct pinax_state {
     pnx_wait    main_wait;  // the main run waits for a host operation
     uint64_t    qturn;      // counts the changes of every queue: a task blocked since the last one cannot go
     uint32_t    gsel;       // the global GSEL chose for the instruction after it (RFC-0018)
+    uint32_t    sort_work;  // the global SORT last took its work area from (checked at each use)
     pinax_err   main_fault; // that operation failed and the word that called it cannot fail
     uint64_t    token_serial;
     bool        waiting;    // the suspended run ended with PINAX_WAITING

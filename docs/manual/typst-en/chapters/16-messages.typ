@@ -91,7 +91,13 @@ are exactly what the processor prints; the chapters in the right column have exa
   [`this path names neither a module in use nor a record`],
   [The module of `module.word` was not opened. Write `use module` at the top of the file.], [1, 10],
   [`this name is already visible here; a new name may not hide it`],
-  [A visible name (including core words such as `sum`, `count`, `first`) was used for a new name. Choose another.], [3],
+  [A visible name of the program (a word, a global, a constant, a local outside) was used for a new name. Choose
+   another.], [3],
+  [`NAME is a word of the language; choose another name`],
+  [A word of the language --- a reserved word, a core word such as `sum`, `count` or `first`, a word such as `sort`, a
+   type --- was used for a new name, wherever the name was made. Choose another.], [3],
+  [`rows do not move: sort a list of their numbers by a field: order table sort_by record.field`],
+  [`sort` was given a table of records. Fill a list with the row numbers and sort it with `sort_by`.], [7],
   [`outside a definition `+"`to`"+` makes no new local; a global is written with set`],
   [`to` was used outside a definition, where there are no locals. Put the work into a word, or store into a global with
    `set`.], [4],
