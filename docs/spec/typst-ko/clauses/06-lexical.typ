@@ -86,6 +86,14 @@ TAG          = NAME ;
 
 #para("3")[선언 바로 앞의 주석을 도구가 그 선언의 설명으로 읽을 수 있다. 따로 문서 주석의 표시는 없다.]
 
+#para("4")[새 이름이 올 자리에서는 덩이 `rem`, `note`, `text` 가 주석도 텍스트도 열지 않는다. 그 자리에서 이들은
+언어의 낱말이고, 이름으로는 거부된다(9.5). 새 이름이 오는 자리는 이름을 선언하는 낱말(`word`, `test`, `global`,
+`const`, `array`, `list`, `pool`, `queue`, `buffer`, `tasks`, `record`, `type`, `index`)의 뒤, `to`·`set`·`as` 의 뒤,
+그리고 서명이나 `to`·`loop`·`while`·`until`·`break`·`or_else` 의 이름 괄호에서 여는 괄호나 쉼표 바로 뒤다. 레코드의
+몸에서는 `text` 가 언제나 거부된다. `rem` 과 `note` 는 거기서도 다른 곳처럼 주석이다.]
+
+#ex("spec", "06-remark-name.pnx")
+
 == 수 <lex-numbers>
 
 #part("구문")

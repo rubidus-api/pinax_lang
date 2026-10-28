@@ -7,7 +7,7 @@
 #para("1")[This annex collects the syntax rules of the clauses in one place. The notation is that of ISO/IEC 14977:
 `a b` is sequence, `a | b` choice, `[ a ]` optional, `{ a }` zero or more times, `(* … *)` a remark, `? … ?` a rule
 stated in words. Names in capitals are the tokens of clause 6. Any number of spaces and remarks may stand between
-tokens.]
+tokens, except right before a new name (6.3 (4)).]
 
 #para("2")[The grammar is read with one token of lookahead. The exception is a parameter of a signature, where the token
 after it tells whether it is a name or a type. What a name refers to (a local, a global, a word) and the types on the

@@ -1041,7 +1041,7 @@ static bool parse_sig(comp *c, sig *s) {
                 return false;
             if (c->tok.kind != PNX_T_NAME && !is_word(c, PNX_KW_owned) && !is_word(c, PNX_KW_word) &&
                 !(!c->in_host && ref_word(c)))
-                return syntax(c, "a parameter is expected after the comma");
+                return name_due(c, "a parameter is expected after the comma");
         } else if (c->tok.kind != PNX_T_RPAREN && !is_word(c, PNX_KW_gives) && !is_word(c, PNX_KW_or)) {
             return syntax(c, "parameters are separated by commas");
         }

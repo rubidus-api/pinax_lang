@@ -28,7 +28,7 @@ typedef enum pnx_word_id {
 
 typedef enum pnx_token_kind {
     PNX_T_END,      // end of the source
-    PNX_T_RESERVED, // a reserved word; `word` says which. rem, note and text never reach the caller
+    PNX_T_RESERVED, // a reserved word; `word` says which. rem, note and text only where a new name is due
     PNX_T_NAME,
     PNX_T_PATH,     // name.name[.name ...]
     PNX_T_INT,      // `integer`
@@ -59,6 +59,12 @@ typedef struct pnx_lexer {
     const uint8_t *source;
     uint32_t       length, at;
     uint32_t       line, line_start;
+    // What came before, to know where a new name is due (pnx_lex_next).
+    pnx_token_kind prev_kind, prev2_kind;
+    pnx_word_id    prev_word, prev2_word;
+    uint64_t       names;       // bit k: the parenthesis opened at depth k holds names
+    uint8_t        depth;
+    bool           in_record, name_next;
     // Set when pnx_lex_next() returns false.
     const char *error;
     uint32_t    error_line, error_column;

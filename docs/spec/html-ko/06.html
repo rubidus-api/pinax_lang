@@ -37,7 +37,10 @@ TAG          = NAME ;</code></pre><p class="para"><span class="pn">(1)</span> �
 </code></pre><p class="ex-label">출력</p><pre><code data-lang="text">$ pnx 06-remarks.pnx
 one
 two
-</code></pre></div><p class="para"><span class="pn">(3)</span> 선언 바로 앞의 주석을 도구가 그 선언의 설명으로 읽을 수 있다. 따로 문서 주석의 표시는 없다.</p><h3>6.4 수</h3><h5>구문</h5><pre><code data-lang="ebnf">sign        = "+" | "-" ;                    (* attached: no space before the digits *)
+</code></pre></div><p class="para"><span class="pn">(3)</span> 선언 바로 앞의 주석을 도구가 그 선언의 설명으로 읽을 수 있다. 따로 문서 주석의 표시는 없다.</p><p class="para"><span class="pn">(4)</span> 새 이름이 올 자리에서는 덩이 <code>rem</code>, <code>note</code>, <code>text</code> 가 주석도 텍스트도 열지 않는다. 그 자리에서 이들은 언어의 낱말이고, 이름으로는 거부된다(9.5). 새 이름이 오는 자리는 이름을 선언하는 낱말(<code>word</code>, <code>test</code>, <code>global</code>, <code>const</code>, <code>array</code>, <code>list</code>, <code>pool</code>, <code>queue</code>, <code>buffer</code>, <code>tasks</code>, <code>record</code>, <code>type</code>, <code>index</code>)의 뒤, <code>to</code>·<code>set</code>·<code>as</code> 의 뒤, 그리고 서명이나 <code>to</code>·<code>loop</code>·<code>while</code>·<code>until</code>·<code>break</code>·<code>or_else</code> 의 이름 괄호에서 여는 괄호나 쉼표 바로 뒤다. 레코드의 몸에서는 <code>text</code> 가 언제나 거부된다. <code>rem</code> 과 <code>note</code> 는 거기서도 다른 곳처럼 주석이다.</p><div class="example refused"><p class="ex-file"><code>06-remark-name.pnx</code></p><pre><code data-lang="pinax"><span style="color: #d73948">global</span> note <span style="color: #d73948">int</span>
+</code></pre><p class="ex-label">거절</p><pre><code data-lang="text">$ pnx 06-remark-name.pnx
+06-remark-name.pnx:1:8: note is a word of the language; choose another name
+</code></pre></div><h3>6.4 수</h3><h5>구문</h5><pre><code data-lang="ebnf">sign        = "+" | "-" ;                    (* attached: no space before the digits *)
 digits      = digit { [ "_" ] digit } ;
 INT         = [ sign ] ( digits | "0x" hex-digits | "0b" bit-digits ) ;
 DEC         = [ sign ] digits "." digits ;   (* a decimal, 7.5; no exponent *)

@@ -89,6 +89,15 @@ tag (`DOCUMENT`), does not close it.]
 #para("3")[A tool may read the remark right before a declaration as its description. There is no separate mark for
 documentation remarks.]
 
+#para("4")[Where a new name is due, the runs `rem`, `note` and `text` open neither a remark nor a text: they are words
+of the language there, and refused as names (9.5). A new name is due after a word that declares one (`word`, `test`,
+`global`, `const`, `array`, `list`, `pool`, `queue`, `buffer`, `tasks`, `record`, `type`, `index`), after `to`, `set`
+and `as`, and right after the opening parenthesis or a comma of a signature or of the names of `to`, `loop`, `while`,
+`until`, `break` and `or_else`. In the body of a record `text` is always refused; `rem` and `note` are remarks there,
+as everywhere else.]
+
+#ex("spec", "06-remark-name.pnx")
+
 == Numbers <lex-numbers>
 
 #part("Syntax")

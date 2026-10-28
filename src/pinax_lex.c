@@ -478,7 +478,7 @@ static bool tagged_block(pnx_lexer *lx, pnx_token *t, bool is_text) {
 
 // ---- the tokenizer ----------------------------------------------------------------------
 
-bool pnx_lex_next(pnx_lexer *lx, pnx_token *t) {
+static bool lex_token(pnx_lexer *lx, pnx_token *t) {
     for (;;) {
         // white space
         while (lx->at < lx->length) {
@@ -558,6 +558,13 @@ bool pnx_lex_next(pnx_lexer *lx, pnx_token *t) {
             if (peek(lx, i) == '.')
                 return fail_at(lx, i, "a reserved word is not part of a path");
             lx->at = i;
+            if ((word == PNX_KW_rem || word == PNX_KW_note || word == PNX_KW_text) &&
+                (lx->name_next || (lx->in_record && word == PNX_KW_text))) {
+                t->kind = PNX_T_RESERVED; // a new name is due: the word is refused there, not read
+                t->word = word;
+                t->length = run;
+                return true;
+            }
             if (word == PNX_KW_rem) {
                 skip_line(lx);
                 continue;
@@ -597,4 +604,62 @@ bool pnx_lex_next(pnx_lexer *lx, pnx_token *t) {
         lx->at = i;
         return true;
     }
+}
+
+// Whether a declaring word puts a new name right after it.
+static bool names_next(pnx_word_id word) {
+    switch (word) {
+    case PNX_KW_word: case PNX_KW_test: case PNX_KW_global: case PNX_KW_const: case PNX_KW_array:
+    case PNX_KW_list: case PNX_KW_pool: case PNX_KW_queue: case PNX_KW_buffer: case PNX_KW_tasks:
+    case PNX_KW_record: case PNX_KW_type: case PNX_KW_index: case PNX_KW_to: case PNX_KW_set: case PNX_KW_as:
+        return true;
+    default:
+        return false;
+    }
+}
+
+// Whether an opening parenthesis after `prev` (and `prev2` before it) holds names: a signature,
+// the names of `to`, the name of a loop or of an error number.
+static bool names_paren(const pnx_lexer *lx) {
+    if (lx->prev_kind == PNX_T_RESERVED) {
+        switch (lx->prev_word) {
+        case PNX_KW_to: case PNX_KW_do: case PNX_KW_loop: case PNX_KW_or_else: case PNX_KW_while:
+        case PNX_KW_until: case PNX_KW_break: case PNX_KW_word:
+            return true;
+        default:
+            return false;
+        }
+    }
+    return (lx->prev_kind == PNX_T_NAME || lx->prev_kind == PNX_T_STRING) && lx->prev2_kind == PNX_T_RESERVED &&
+           (lx->prev2_word == PNX_KW_word || lx->prev2_word == PNX_KW_extern);
+}
+
+// Where a new name is due, `rem`, `note` and `text` are words of the language, refused there,
+// not a remark or a text (D0070); in a record body `text` always is. The lexer keeps what it
+// needs to know that, so every copy of it reads the source alike.
+bool pnx_lex_next(pnx_lexer *lx, pnx_token *t) {
+    const bool in_names = lx->depth > 0 && lx->depth <= 64 && (lx->names >> (lx->depth - 1) & 1);
+    lx->name_next = (lx->prev_kind == PNX_T_RESERVED && names_next(lx->prev_word)) ||
+                    (in_names && (lx->prev_kind == PNX_T_LPAREN || lx->prev_kind == PNX_T_COMMA));
+    if (!lex_token(lx, t))
+        return false;
+    if (t->kind == PNX_T_LPAREN) {
+        if (lx->depth < 64) {
+            const uint64_t bit = (uint64_t)1 << lx->depth;
+            lx->names = names_paren(lx) ? lx->names | bit : lx->names & ~bit;
+        }
+        if (lx->depth < UINT8_MAX)
+            ++lx->depth;
+    } else if (t->kind == PNX_T_RPAREN && lx->depth) {
+        --lx->depth;
+    } else if (t->kind == PNX_T_NAME && lx->prev_kind == PNX_T_RESERVED && lx->prev_word == PNX_KW_record) {
+        lx->in_record = true;
+    } else if (t->kind == PNX_T_RESERVED && t->word == PNX_KW_end) {
+        lx->in_record = false;
+    }
+    lx->prev2_kind = lx->prev_kind;
+    lx->prev2_word = lx->prev_word;
+    lx->prev_kind = t->kind;
+    lx->prev_word = t->kind == PNX_T_RESERVED ? t->word : PNX_KW_NONE;
+    return true;
 }
