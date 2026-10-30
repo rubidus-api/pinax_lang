@@ -85,7 +85,7 @@ assign-item = "assign" NAME "(" value { "," value } ")" ;
 
 #para("1")[`array 이름 타입 용량` 은 칸이 용량만큼 있는 #term("배열", en: "array")을 만든다. 배열은 늘
 가득 차 있다: `len` 은 용량과 같다. 원소 타입은 `int` `bool` `err` `dec(N)` `str(N)`, 좁은 정수(7.6), 선언한 타입,
-레코드의 이름이다. 좁은 정수의 칸은 그 폭만큼의 바이트이고, 다른 값의 칸은 8 바이트다. 목록과 큐의 칸도 같다.]
+레코드의 이름, 또는 표의 이름이다. 표의 이름이면 칸은 그 표의 줄을 담는다(8.8 (5a)). 좁은 정수의 칸은 그 폭만큼의 바이트이고, 다른 값의 칸은 8 바이트다. 목록과 큐의 칸도 같다.]
 
 #para("2")[`i 배열 idx` 는 칸 `i` 의 값을 읽는다. `v i set 배열` 은 칸 `i` 에 넣는다. 모음 매개변수(9.9)의 칸도 같은 꼴로 넣는다. 번호는 0 부터 센다.
 레코드의 배열에서 `idx` 는 값이 아니라 줄(8.8)을 낸다.]
@@ -126,7 +126,7 @@ assign-item = "assign" NAME "(" value { "," value } ")" ;
 
 #part("제약")
 
-#para("2b")[줄이 다른 곳에 남는 레코드의 목록은 `truncate` 하지 못한다. 그 목록의 줄을 담는 필드나 전역, 그 목록에
+#para("2b")[줄이 다른 곳에 남는 레코드의 목록은 `truncate` 하지 못한다. 그 목록의 줄을 담는 필드나 전역이나 모음, 그 목록에
 `row` 로 이름 붙인 줄, 그 목록의 찾아보기(8.10)가 같은 소스 안에 하나라도 있으면 거절된다. 잘라 낸 자리에 새 줄이
 들어서면 그것들이 엉뚱한 줄을 가리키기 때문이다. 지역에 든 줄은 쓸 때 검사한다(결함 `range`).]
 
@@ -140,7 +140,7 @@ assign-item = "assign" NAME "(" value { "," value } ")" ;
 
 #part("진단")
 #diag(
-  ([줄이 남는 목록을 `truncate`], "this list's rows are kept by a field, a global, a named row or an index; it cannot be truncated"),
+  ([줄이 남는 목록을 `truncate`], "this list's rows are kept by a field, a global, a collection, a named row or an index; it cannot be truncated"),
 )
 
 == 큐 <decl-queue>
@@ -198,6 +198,14 @@ value    = literal | NAME ;                         (* NAME: a const, a row name
 
 #para("5")[줄을 담는 필드와 전역의 처음 값은 "없음" 이다. `줄 is_none` 은 없음인지 묻고, `표 none` 은 그 표의
 없음 줄을 낸다. `줄 row_index` 는 줄의 번호를 준다.]
+
+#para("5a")[원소 타입이 표의 이름인 배열이나 목록은 그 표의 줄을 8 바이트 칸에 담는다. 칸에는 줄의 번호에 1 을 더한 값이
+들고, 풀의 줄이면 그 세대가 위쪽 32 비트에 든다. 0 은 없음이고, 칸은 모두 없음으로 시작한다. 칸은 다른 칸처럼 읽고, 넣고,
+`push`·`pop` 하고, 돌며, 들어가는 값은 그 표의 줄이어야 한다. 칸에서 읽은 줄은 다른 줄처럼 쓰는 자리에서 검사한다. 큐는
+줄을 담지 않는다. `alloc` 이 막 준 줄(8.9)은 `set` 으로 칸에 넣는다. `set` 은 필드처럼 그 줄을 넘겨받는다. `push` 는 그
+줄을 거부한다. 실패한 `push` 는 그 줄을 잃기 때문이다.]
+
+#ex("spec", "08-row-cells.pnx")
 
 #para("6")[`big_endian` 은 16.5 의 `bytes.pack` 과 `bytes.unpack` 이 쓰는 바이트 순서만 정한다. 메모리 안의
 모양은 바꾸지 않는다.]
@@ -319,6 +327,7 @@ forward = "forward" ( "array" | "list" | "pool" ) NAME
   ([정의 밖의 `to` 가 전역이 아닌 이름에], "outside a definition `to` makes no new local; a global is written with set"),
   ([`assign` 의 값이 칸보다 많음], "assign has more values than the array has cells"),
   ([큐의 원소 타입이 `int` `bool` `err` `dec(N)` 밖], "a queue holds int, bool, err or dec(N) values"),
+  ([`alloc` 이 막 준 줄의 `push`(8.8 (5a))], "push can fail and lose an owned row; store it with set, into a field or into a global"),
   ([`row` 의 값이 필드와 다름], "a value has another type than its field"),
   ([`owned` 줄을 넘기지 않는 경로], "an owned value in a local is not given on every path (close, free or store it)"),
   ([미리 알린 표가 없음], "a table announced by forward is never declared"),

@@ -309,7 +309,7 @@ typedef struct dtype {
 typedef struct rtype {
     uint8_t  kind;   // GK_ARRAY, GK_LIST, GK_QUEUE, GK_BUFFER
     uint8_t  strcap; // cells of str(N): N
-    tid      cell;   // TY_INT, TY_BOOL, TY_ERR or TY_STR; TY_NONE for records and buffers
+    tid      cell;   // TY_INT, TY_BOOL, TY_ERR, TY_STR or a row type; TY_NONE for records and buffers
     uint32_t record; // NONE, or the record a row holds
 } rtype;
 
@@ -901,9 +901,16 @@ static bool parse_ref(comp *c, tid *out) {
         r.record = find_record_any(c, tok_name(c));
         r.cell = r.record == NONE ? basic_type(tok_name(c)) : TY_NONE;
         const bool dec = r.record == NONE && name_is(tok_name(c), "dec");
-        if (r.record == NONE && r.cell != TY_INT && r.cell != TY_BOOL && r.cell != TY_ERR && r.cell != TY_STR && !dec)
-            return type_error(c, "the cells are int, bool, err, dec(N), str(N) or a record");
-        if (r.kind == GK_QUEUE && (r.record != NONE || r.cell == TY_STR))
+        if (r.record == NONE && r.cell == TY_NONE && !dec) { // the rows of a table (RFC-0031)
+            const uint32_t table = find_global(c, tok_name(c));
+            const globalsym *t = table != NONE ? (const globalsym *)c->globals.ptr + table : NULL;
+            if (t && t->kind != GK_SCALAR && t->kind != GK_TASKS && (t->forward || t->record != NONE))
+                r.cell = row_type(table);
+        }
+        if (r.record == NONE && r.cell != TY_INT && r.cell != TY_BOOL && r.cell != TY_ERR && r.cell != TY_STR && !dec &&
+            !is_row(r.cell))
+            return type_error(c, "the cells are int, bool, err, dec(N), str(N), a record or the rows of a table");
+        if (r.kind == GK_QUEUE && (r.record != NONE || r.cell == TY_STR || is_row(r.cell)))
             return type_error(c, "a queue holds int, bool, err or dec(N) values");
         if (!advance(c) || (r.cell == TY_STR && !str_capacity(c, &r.strcap)) || (dec && !dec_scale(c, &r.cell)))
             return false;
@@ -2811,6 +2818,7 @@ static bool store_local(comp *c, name n) {
             return type_error(c, "a cell is stored as: value index set name, with the value of the cell's type");
         if (!reg_of(c, top - 1, &rv) || !reg_of(c, top, &ri))
             return false;
+        (void)give(c, top - 1); // storing into a cell hands an owned row over, as into a field
         if (sym->strcap) { // the bytes are copied into the cell
             const uint32_t row = top_slot(c, BANK_I, 1);
             if (emit_g(c, PNX_ROW, row, ri, g) == NONE || emit(c, PNX_ABC(PNX_FSETS, rv, row, 0)) == NONE ||
@@ -5591,8 +5599,10 @@ static bool builtin(comp *c, const struct builtin *w) {
         if (!need_coll(c, &t, &ti) || !need_coll(c, &g, &gi))
             return false;
         if (t->record == NONE || (t->kind != GK_ARRAY && t->kind != GK_LIST) || (g->kind != GK_ARRAY && g->kind != GK_LIST) ||
-            g->record != NONE || g->strcap || base_of(c, g->type) != TY_INT)
-            return type_error(c, "sort_by takes a list of row numbers and a table of records: order table sort_by record.field");
+            g->record != NONE || g->strcap || (base_of(c, g->type) != TY_INT && !is_row(g->type)))
+            return type_error(c, "sort_by takes a list of rows or row numbers and a table of records: order table sort_by record.field");
+        if (is_row(g->type) && row_global(g->type) != ti) // a list of rows (RFC-0031): of that table
+            return type_error(c, "the cells are rows of another table than the one sort_by names");
         if (gi >= REF_GLOBAL && ti >= REF_GLOBAL)
             return type_error(c, "sort_by takes the list or the table from a parameter, not both");
         if (!advance(c))
@@ -5617,6 +5627,8 @@ static bool builtin(comp *c, const struct builtin *w) {
             return type_error(c, "sort_by orders by a field of int, a narrow integer, dec(N), bool or str(N)");
         else if (key == (tid)(TY_NARROW + PNX_W_64))
             flags |= PNX_SORT_U64;
+        if (is_row(g->type))
+            flags |= PNX_SORT_ROWS;
         sort_seen(c, g, gi);
         return settle_all(c) && emit(c, PNX_ABX(PNX_SORTBY, flags, gi)) != NONE &&
                emit(c, PNX_FIELD(ti, fd->offset, fd->extra)) != NONE && advance(c);
@@ -6267,6 +6279,9 @@ static bool builtin(comp *c, const struct builtin *w) {
                                                    : "push adds to a list; an array is always full");
         if (f->stack[f->depth - 1].type != g->type)
             return type_error(c, "the value pushed has another type than the cells of the list");
+        const entry *pushed = &f->stack[f->depth - 1];
+        if (pushed->owned || (pushed->src && f->locals[pushed->src - 1].state == L_OWNS)) // RFC-0031
+            return type_error(c, "push can fail and lose an owned row; store it with set, into a field or into a global");
         if (!settle(c, f->depth - 1))
             return false;
         ra = slot_of(c, f->depth - 1);
@@ -7593,12 +7608,19 @@ static bool declare_collection(comp *c, uint8_t kind) {
     const bool dec = g.record == NONE && name_is(tok_name(c), "dec");
     if (dec)
         g.type = TY_DEC; // the scale follows
+    if (g.record == NONE && g.type == TY_NONE && !dec && kind != GK_POOL) {
+        // the name of a table: the cells are its rows, its number plus one each, 0 for none (RFC-0031)
+        const uint32_t table = find_global(c, tok_name(c));
+        const globalsym *t = table != NONE ? gsym(c, table) : NULL;
+        if (t && t->kind != GK_SCALAR && t->kind != GK_TASKS && (t->forward || t->record != NONE))
+            g.type = row_type(table);
+    }
     if (g.record == NONE && g.type != TY_INT && g.type != TY_BOOL && g.type != TY_ERR && g.type != TY_STR && !dec &&
-        !is_narrow(g.type))
-        return type_error(c, "the cells are int, bool, err, dec(N), str(N), a narrow integer type or a record; other types are not supported yet");
+        !is_narrow(g.type) && !is_row(g.type))
+        return type_error(c, "the cells are int, bool, err, dec(N), str(N), a narrow integer type, a record or the rows of a table; other types are not supported yet");
     if (slot && g.record == NONE)
         return type_error(c, "a table announced by forward holds a record");
-    if (kind == GK_QUEUE && (g.record != NONE || g.type == TY_STR))
+    if (kind == GK_QUEUE && (g.record != NONE || g.type == TY_STR || is_row(g.type)))
         return type_error(c, "a queue holds int, bool, err or dec(N) values");
     if (kind == GK_POOL && g.record == NONE)
         return type_error(c, "a pool holds records: pool name record size");
@@ -9090,8 +9112,8 @@ static bool truncs_ok(comp *c) {
             kept = ((const constant *)c->consts.ptr)[i].type == row;
         if (kept)
             return error_at(c, PINAX_ERR_TYPE, t.line, t.column,
-                            t.word == NONE ? "this list's rows are kept by a field, a global, a named row or an index; it cannot be truncated"
-                                           : "this list's rows are kept by a field, a global, a named row or an index; the word it "
+                            t.word == NONE ? "this list's rows are kept by a field, a global, a collection, a named row or an index; it cannot be truncated"
+                                           : "this list's rows are kept by a field, a global, a collection, a named row or an index; the word it "
                                              "is given to truncates it");
     }
     return true;

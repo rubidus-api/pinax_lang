@@ -106,7 +106,7 @@
   [`c none` / `r is_none` / `r row_index`], [레코드의 표], [없음 줄 / 없음인가 / 줄의 번호],
   [`k x lookup` / `r x insert` / `r x remove`], [찾아보기], [찾기(`or fail`) / 넣기(`or fail`) / 빼기],
   [`c sort` / `c sort_desc`], [배열, 목록], [칸을 차례로 놓는다. 가장 작은 것 / 가장 큰 것부터((3))],
-  [`o t sort_by r.f` / `o t sort_by_desc r.f`], [`int` 의 배열이나 목록, 레코드의 표], [줄 번호를 그 줄의 필드 `f` 의 차례로 놓는다((4))],
+  [`o t sort_by r.f` / `o t sort_by_desc r.f`], [`int` 나 `t` 의 줄의 배열이나 목록, 레코드의 표], [줄 번호나 줄을 그 줄의 필드 `f` 의 차례로 놓는다((4))],
 )]
 
 #para("2")[보기는 8절에 있다.]
@@ -120,10 +120,10 @@
 #ex("spec", "15-sort-records.pnx")
 
 #para("4")[`o t sort_by r.f` 는 `o`, `t`, 필드 `r.f` 를 받는다. `o` 는 `int` 의 배열이나 목록이고 칸마다 `t` 의 줄
-번호다. `t` 는 레코드의 배열이나 목록이다. `r.f` 는 `t` 가 담는 레코드의 필드이고, `to` 와 `set` 이 이름을 받듯 낱말
+번호다. 또는 `t` 의 줄을 담는 배열이나 목록이다(8.8 (5a)). `t` 는 레코드의 배열이나 목록이다. `r.f` 는 `t` 가 담는 레코드의 필드이고, `to` 와 `set` 이 이름을 받듯 낱말
 뒤에 쓴다. 이 낱말은 `o` 의 칸을 그 칸이 가리키는 줄의 그 필드의 차례로, 가장 작은 것부터 놓는다. `sort_by_desc` 는
 가장 큰 것부터 놓는다. 필드는 (3)의 칸이 될 수 있는 타입이어야 한다. 줄은 움직이지 않으므로 찾아보기와 붙들린 줄은
-그대로 맞다. `t` 의 줄 번호가 아닌 칸은 결함 `range` 이고, 어느 칸도 움직이기 전에 찾는다. 그러면 `o` 는 그대로 남는다.
+그대로 맞다. `t` 의 줄 번호가 아닌 칸과 없음 줄은 결함 `range` 이고, 어느 칸도 움직이기 전에 찾는다. 그러면 `o` 는 그대로 남는다.
 `o` 와 `t` 가운데 하나만 매개변수일 수 있다.]
 #ex("spec", "15-sort-by.pnx")
 #ex("spec", "15-sort-by-range.pnx")
@@ -157,7 +157,8 @@
   ([`select` 의 값의 타입이 다름], "select takes a bool and two values of one type: flag a b select"),
   ([레코드의 배열이나 목록의 `sort`], "rows do not move: sort a list of their numbers by a field: order table sort_by record.field"),
   ([다른 타입의 칸의 `sort`], "sort orders cells of int, a narrow integer, dec(N), bool or str(N)"),
-  ([`int` 의 목록과 표가 없는 `sort_by`], "sort_by takes a list of row numbers and a table of records: order table sort_by record.field"),
+  ([`int` 나 줄의 목록과 표가 없는 `sort_by`], "sort_by takes a list of rows or row numbers and a table of records: order table sort_by record.field"),
+  ([다른 표의 줄을 담는 목록], "the cells are rows of another table than the one sort_by names"),
   ([뒤에 필드가 없는 `sort_by`], "sort_by is followed by the field: order table sort_by record.field"),
   ([표의 레코드가 아닌 레코드의 필드], "the field is one of the record the table holds"),
   ([다른 타입의 필드], "sort_by orders by a field of int, a narrow integer, dec(N), bool or str(N)"),

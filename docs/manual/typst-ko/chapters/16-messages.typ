@@ -87,7 +87,7 @@
   [언어의 낱말 --- 예약어, `sum`, `count`, `first` 같은 핵 낱말, `sort` 같은 낱말, 타입 --- 을 새 이름으로 썼다. 어디서
    이름을 만들었든 같다. 다른 이름을 고른다.], [3],
   [`rows do not move: sort a list of their numbers by a field: order table sort_by record.field`],
-  [`sort` 에 레코드의 표를 주었다. 줄 번호로 목록을 채우고 `sort_by` 로 정렬한다.], [7],
+  [`sort` 에 레코드의 표를 주었다. 줄(`list order cities 8`)이나 줄 번호로 목록을 채우고 `sort_by` 로 정렬한다.], [7],
   [`outside a definition `+"`to`"+` makes no new local; a global is written with set`],
   [정의 밖에서 `to` 를 썼다. 정의 밖에는 지역 변수가 없다. 일을 낱말로 묶거나 전역에 `set` 으로 넣는다.], [4],
   [`this name is a global; a global is written with set: value set name`],
@@ -108,7 +108,7 @@
   [`release` 로 되돌린 뒤에 그 사이 만든 글을 읽었다. 남겨야 할 글은 되돌리기 전에 `str(N)` 이나 버퍼에 넣는다.], [5, 9],
   [``or_fail passes the failure on, so this word needs `or fail` in its signature``],
   [`or_fail` 을 쓴 낱말의 서명에 `or fail` 이 없다. 서명에 적거나, `or_else` 로 그 자리에서 다룬다.], [8],
-  [`this list's rows are kept by a field, a global, a named row or an index; it cannot be truncated`],
+  [`this list's rows are kept by a field, a global, a collection, a named row or an index; it cannot be truncated`],
   [줄을 누가 들고 있는 목록은 `truncate` 하지 못한다. 더하기 전에 확인하는 쪽으로 바꾼다.], [11],
   [`a word that can fail is followed by or_fail, or_return or or_else`],
   [실패할 수 있는 낱말(`push`, `str.to_int`, 서명에 `or fail` 이 있는 낱말) 뒤에 지킴 낱말이 없다. 무시하려 해도

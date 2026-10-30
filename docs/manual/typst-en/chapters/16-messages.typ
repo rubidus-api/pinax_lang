@@ -97,7 +97,7 @@ are exactly what the processor prints; the chapters in the right column have exa
   [A word of the language --- a reserved word, a core word such as `sum`, `count` or `first`, a word such as `sort`, a
    type --- was used for a new name, wherever the name was made. Choose another.], [3],
   [`rows do not move: sort a list of their numbers by a field: order table sort_by record.field`],
-  [`sort` was given a table of records. Fill a list with the row numbers and sort it with `sort_by`.], [7],
+  [`sort` was given a table of records. Fill a list with the rows (`list order cities 8`) or their numbers and sort it with `sort_by`.], [7],
   [`outside a definition `+"`to`"+` makes no new local; a global is written with set`],
   [`to` was used outside a definition, where there are no locals. Put the work into a word, or store into a global with
    `set`.], [4],
@@ -123,7 +123,7 @@ are exactly what the processor prints; the chapters in the right column have exa
    before the release.], [5, 9],
   [``or_fail passes the failure on, so this word needs `or fail` in its signature``],
   [The word using `or_fail` has no `or fail` in its signature. Add it, or handle the failure there with `or_else`.], [8],
-  [`this list's rows are kept by a field, a global, a named row or an index; it cannot be truncated`],
+  [`this list's rows are kept by a field, a global, a collection, a named row or an index; it cannot be truncated`],
   [A list whose rows are held by something cannot be truncated. Check before adding instead.], [11],
   [`a word that can fail is followed by or_fail, or_return or or_else`],
   [A word that can fail (`push`, `str.to_int`, a word with `or fail` in its signature) has no guard after it. Even

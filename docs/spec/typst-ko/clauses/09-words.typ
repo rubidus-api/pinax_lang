@@ -181,7 +181,7 @@ phrase = body { body } ;                   (* code that leaves one value *)
 #part("구문")
 ```ebnf
 collection-type = ( "array" | "list" | "queue" ) cell | "buffer" ;
-cell            = NAME [ "(" size ")" ] ;   (* int, bool, err, dec(N), str(N), 또는 레코드 *)
+cell            = NAME [ "(" size ")" ] ;   (* int, bool, err, dec(N), str(N), 레코드, 또는 표: 그 줄 *)
 ```
 
 #para("1")[타입이 `array T`, `list T`, `queue T` 나 `buffer` 인 입력은 모음을 받는다. 부르는 쪽은 그 자리에 모음의
@@ -240,6 +240,6 @@ cell            = NAME [ "(" size ")" ] ;   (* int, bool, err, dec(N), str(N), �
   ([모음 자리에 값], "this parameter takes an array, list, queue or buffer: give its name"),
   ([결과로 모음], "a word gives no collection; it takes one as a parameter"),
   ([모음 매개변수에 `to`], "this is a collection parameter; a cell of it is stored as: value index set name"),
-  ([남이 쥔 목록을 자르는 낱말에 줌], "this list's rows are kept by a field, a global, a named row or an index; the word it is given to truncates it"),
+  ([남이 쥔 목록을 자르는 낱말에 줌], "this list's rows are kept by a field, a global, a collection, a named row or an index; the word it is given to truncates it"),
   ([두 표가 모두 매개변수인 줄 베끼기], "filter_into does not copy rows between two tables parameters name; walk one and add_row"),
 )

@@ -390,6 +390,8 @@ PNX_INLINE const uint8_t *pnx_sort_key(const pnx_sortkey *k, const uint8_t *item
         __builtin_memcpy(&i, item, 4);
         index = i;
     }
+    if (k->flags & PNX_SORT_ROWS) // a row: its number plus one (RFC-0031)
+        --index;
     return k->rows + index * k->stride + k->offset;
 }
 

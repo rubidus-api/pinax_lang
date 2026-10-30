@@ -1,0 +1,14 @@
+rem run
+use io
+record city
+  name str(12)
+  people int
+end
+list cities city 4
+list big cities 4                          rem rows of cities
+row cities ("Oslo", 709)
+row cities ("Bergen", 291)
+row cities ("Tromso", 78)
+cities do (c cities gives bool) c city.people 100 gt end big filter_into or_else (e) end
+big cities sort_by city.name
+big do (c cities) c city.name io.println end each

@@ -119,7 +119,8 @@ enum {
 // Sorting (RFC-0030). SORT A, G sorts the cells of array or list G in place: integers, or with
 // PNX_SORT_STR the str(N) cells of a list or array of rows. SORTBY A, G and a field sorts the cells
 // of int list or array G, row numbers of the field's table, by that field of their rows; a cell
-// that is no row number of the table is the fault RANGE, before anything moves. A holds the
+// that is no row number of the table is the fault RANGE, before anything moves. With PNX_SORT_ROWS
+// (SORTBY only, RFC-0031) the cells are rows, each its number plus one: a none cell is RANGE too. A holds the
 // PNX_SORT_ flags. Both are stable, never fail, and take their scratch from the work area of
 // the program: the array global marked PNX_GLOBAL_WORK, of one 8-byte cell per cell sorted.
 // X(name, number, A, B, C, shape, second word, fails, roles)
@@ -392,7 +393,7 @@ enum { PNX_NU_FIT, PNX_NU_FITU, PNX_NU_LOW, PNX_NU_NOT, PNX_NU_POPC, PNX_NU_CLZ,
 
 // The flags of SORT and SORTBY (their A): from the largest down, compared as u64, compared as
 // str(N) (the cells of SORT, the field of SORTBY), in the byte order of SCMP.
-enum { PNX_SORT_DESC = 1, PNX_SORT_U64 = 2, PNX_SORT_STR = 4, PNX_SORT_FLAGS = 7 };
+enum { PNX_SORT_DESC = 1, PNX_SORT_U64 = 2, PNX_SORT_STR = 4, PNX_SORT_ROWS = 8, PNX_SORT_FLAGS = 15 };
 
 // What SHASH computes (its C) and what BENC writes (its B).
 enum { PNX_HASH_CRC32, PNX_HASH_FNV1A, PNX_HASH_SIP, PNX_HASH_COUNT };

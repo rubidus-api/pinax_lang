@@ -573,7 +573,7 @@ static bool repeats(const uint32_t *code, uint32_t i) {
 static const char *sort_check(const pinax_state *st, const uint32_t *code, uint32_t i, const uint8_t *heads) {
     const uint32_t w = code[i], op = w & 0xffu, flags = (w >> 8) & 0xffu, bx = w >> 16;
     const uint32_t x = op == PNX_SORTBY ? code[i + 1] : 0, n_globals = st->head->n_globals;
-    if (flags & ~(uint32_t)PNX_SORT_FLAGS)
+    if ((flags & ~(uint32_t)PNX_SORT_FLAGS) || (op == PNX_SORT && (flags & PNX_SORT_ROWS)))
         return "code: unknown flags of a sort";
     const bool sbx = bx == PNX_GSELECTED, sx = op == PNX_SORTBY && (x & 0xfffu) == PNX_FSELECTED;
     if (sbx && sx)

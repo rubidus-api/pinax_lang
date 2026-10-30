@@ -44,7 +44,8 @@ every use. So holding the wrong row cannot damage memory; at worst it stops with
 
 A field whose type is the name of a table holds a row of that table. It starts as "none", asked with `is_none`. That is
 how a tree is built without pointers. Since the record refers to the table that holds it, the table is announced first
-with `forward`.
+with `forward`. The cells of an array or a list
+hold rows in the same way: `list order cities 8` (section 7.5).
 
 #ex("manual", "07-tree.pnx")
 
@@ -86,8 +87,9 @@ between two tables of the same record, read the fields one by one into a new row
 
 `sort` puts the cells of an array or a list in order, from the smallest; `sort_desc` from the largest. Rows are not
 sorted that way: an index, a field or a global may keep a row by its number, and moving the rows would make those wrong.
-A list of row numbers is sorted instead, by a field of the rows: `order cities sort_by city.name`. The rows stay where
-they are and `order` says in which order to read them.
+A list of the rows is sorted instead, by a field of the rows: `order cities sort_by city.name`, where `order` is declared
+as `list order cities 8`, a list whose cells are rows of `cities`. The rows stay where they are and `order` says in
+which order to read them. A list of row numbers (`int`) is sorted the same way.
 
 #ex("manual", "07-sort.pnx")
 
@@ -97,12 +99,12 @@ they are and `order` says in which order to read them.
 `order t sort_by_desc r.count` gives the largest counts first, and the same count by name. A sort keeps the order of
 equal keys, so the second sort leaves the first one's order among the rows it finds equal.]
 
-#mistake[`sort_desc` is `sort` read backwards][Only for cells, where two equal cells cannot be told apart. For row
-numbers it is not: `sort_by_desc` keeps equal keys in the order they had, as `sort_by` does, and reading a `sort_by`
+#mistake[`sort_desc` is `sort` read backwards][Only for cells, where two equal cells cannot be told apart. For rows
+it is not: `sort_by_desc` keeps equal keys in the order they had, as `sort_by` does, and reading a `sort_by`
 backwards would reverse them.]
 
 #summary[
-- Cells are sorted with `sort` and `sort_desc`; rows through a list of their numbers with `sort_by` and `sort_by_desc`,
+- Cells are sorted with `sort` and `sort_desc`; rows through a list of the rows (or of their numbers) with `sort_by` and `sort_by_desc`,
   which keep the order of equal keys (standard 15.3).
 - Records are handled as rows of tables; fields are read and stored as `RECORD.FIELD` (standard 8.8).
 - A row is a number checked on every use; a field of the none row is a fault (8.8).

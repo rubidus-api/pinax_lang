@@ -106,7 +106,7 @@ plain words on an unsigned type and do not take a signed one. The bit words work
   [`c none` / `r is_none` / `r row_index`], [table of records], [the none row / is it none / the row's number],
   [`k x lookup` / `r x insert` / `r x remove`], [index], [find (`or fail`) / put in (`or fail`) / take out],
   [`c sort` / `c sort_desc`], [array, list], [puts the cells in order, the smallest / the largest first ((3))],
-  [`o t sort_by r.f` / `o t sort_by_desc r.f`], [array or list of `int`; table of records], [puts the row numbers in order of field `f` of their rows ((4))],
+  [`o t sort_by r.f` / `o t sort_by_desc r.f`], [array or list of `int` or of rows of `t`; table of records], [puts the row numbers or rows in order of field `f` of their rows ((4))],
 )]
 
 #para("2")[Examples are in clause 8.]
@@ -120,11 +120,12 @@ through a list of their numbers, by (4).]
 #ex("spec", "15-sort.pnx")
 #ex("spec", "15-sort-records.pnx")
 
-#para("4")[`o t sort_by r.f` takes `o`, an array or list of `int`, each cell the number of a row of `t`; `t`, an array
+#para("4")[`o t sort_by r.f` takes `o`, an array or list of `int`, each cell the number of a row of `t`, or of rows of `t`
+(8.8 (5a)); `t`, an array
 or list of records; and the field `r.f` of the record `t` holds, written after the word as `to` and `set` take their
 name. It puts the cells of `o` in order of that field of the rows they number, from the smallest; `sort_by_desc` from
 the largest. The field shall be of a type the cells of (3) may have. The rows do not move, so indexes and kept rows stay
-right. A cell that is not a row number of `t` is the fault `range`, found before any cell moves: `o` is left as it was.
+right. A cell that is not a row number of `t`, or a none row, is the fault `range`, found before any cell moves: `o` is left as it was.
 At most one of `o` and `t` may be a parameter.]
 #ex("spec", "15-sort-by.pnx")
 #ex("spec", "15-sort-by-range.pnx")
@@ -159,7 +160,8 @@ $n dot.c ceil(log_2 n)$ instructions (19.5).]
   ([The values of `select` differ in type], "select takes a bool and two values of one type: flag a b select"),
   ([`sort` of an array or list of records], "rows do not move: sort a list of their numbers by a field: order table sort_by record.field"),
   ([`sort` of cells of another type], "sort orders cells of int, a narrow integer, dec(N), bool or str(N)"),
-  ([`sort_by` without a list of `int` and a table], "sort_by takes a list of row numbers and a table of records: order table sort_by record.field"),
+  ([`sort_by` without a list of `int` or rows and a table], "sort_by takes a list of rows or row numbers and a table of records: order table sort_by record.field"),
+  ([A list of rows of another table], "the cells are rows of another table than the one sort_by names"),
   ([`sort_by` without the field after it], "sort_by is followed by the field: order table sort_by record.field"),
   ([A field of another record than the table's], "the field is one of the record the table holds"),
   ([A field of another type], "sort_by orders by a field of int, a narrow integer, dec(N), bool or str(N)"),

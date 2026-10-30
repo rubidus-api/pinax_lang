@@ -2491,10 +2491,11 @@ PNX_OP(SORTBY) {
     pnx_global *g = &st->globals[PNX_GX(st, OP_BX(w))];
     const pnx_global *t = &st->globals[PNX_GF(st, x)];
     const uint32_t n = g->length;
+    const uint64_t bias = OP_A(w) & PNX_SORT_ROWS ? 1 : 0; // rows hold their number plus one, none 0
     for (uint32_t i = 0; i < n; ++i) { // every cell a row of the table, before anything moves
         uint64_t row;
         __builtin_memcpy(&row, g->ptr + (size_t)i * 8, 8);
-        if (row >= t->length)
+        if (row - bias >= t->length)
             return PINAX_ERR_RANGE;
     }
     if (n < 2)

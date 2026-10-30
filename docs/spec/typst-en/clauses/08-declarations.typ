@@ -87,8 +87,8 @@ assign-item = "assign" NAME "(" value { "," value } ")" ;
 ```
 
 #para("1")[`array NAME type capacity` makes an #term("array") with that many cells. An array is always full: `len` is
-its capacity. The element type is `int`, `bool`, `err`, `dec(N)`, `str(N)`, a narrow integer (7.6), a declared type or
-the name of a record. A cell of a narrow integer takes the bytes of its width, a cell of any other value 8 bytes; the
+its capacity. The element type is `int`, `bool`, `err`, `dec(N)`, `str(N)`, a narrow integer (7.6), a declared type,
+the name of a record, or the name of a table, whose rows the cells then hold (8.8 (5a)). A cell of a narrow integer takes the bytes of its width, a cell of any other value 8 bytes; the
 cells of lists and queues are the same.]
 
 #para("2")[`i ARRAY idx` reads cell `i`; `v i set ARRAY` stores into cell `i`; a cell of a collection parameter (9.9) is stored the same way. Numbers count from 0. For an array of
@@ -131,7 +131,7 @@ a row added with `add_row` whose values turn out to be wrong.]
 #part("Constraints")
 
 #para("2b")[A list of records whose rows are kept elsewhere cannot be truncated. It is refused when the same source has
-a field or a global that holds its rows, a row of it named with `row`, or an index of it (8.10): once a new row takes
+a field, a global or a collection that holds its rows, a row of it named with `row`, or an index of it (8.10): once a new row takes
 the place cut off, they would point at the wrong row. A row held in a local is checked when it is used (fault
 `range`).]
 
@@ -145,7 +145,7 @@ the place cut off, they would point at the wrong row. A row held in a local is c
 
 #part("Diagnostics")
 #diag(
-  ([`truncate` on a list whose rows are kept], "this list's rows are kept by a field, a global, a named row or an index; it cannot be truncated"),
+  ([`truncate` on a list whose rows are kept], "this list's rows are kept by a field, a global, a collection, a named row or an index; it cannot be truncated"),
 )
 
 == Queues <decl-queue>
@@ -204,6 +204,15 @@ values and in code.]
 
 #para("5")[A field or global that holds a row starts as "none". `row is_none` asks whether it is none, `TABLE none`
 gives the none row of that table, and `row row_index` gives the row's number.]
+
+#para("5a")[An array or a list whose element type is the name of a table holds rows of that table, in cells of 8 bytes:
+the row's number plus one, with a pool row's generation in the upper 32 bits; 0 is none, and every cell starts as none.
+Its cells are read, stored, pushed, popped and walked as any cells are, and a value going in shall be a row of that
+table. A row read from a cell is checked where it is used, as any row is. A queue holds no rows. A row that `alloc` has
+just given (8.9) is stored into a cell with `set`, which takes it over as a field does; `push` refuses it, since a
+`push` that fails would lose it.]
+
+#ex("spec", "08-row-cells.pnx")
 
 #para("6")[`big_endian` sets only the byte order that `bytes.pack` and `bytes.unpack` of 16.5 use. It does not change
 the layout in memory.]
@@ -328,6 +337,7 @@ given (19.7).]
   ([`to` outside a definition into a name that is not a global], "outside a definition `to` makes no new local; a global is written with set"),
   ([More `assign` values than cells], "assign has more values than the array has cells"),
   ([A queue of another element type than `int`, `bool`, `err`, `dec(N)`], "a queue holds int, bool, err or dec(N) values"),
+  ([`push` of a row `alloc` has just given (8.8 (5a))], "push can fail and lose an owned row; store it with set, into a field or into a global"),
   ([A `row` value unlike its field], "a value has another type than its field"),
   ([A path that does not hand over an `owned` row], "an owned value in a local is not given on every path (close, free or store it)"),
   ([An announced table that is never declared], "a table announced by forward is never declared"),

@@ -5,7 +5,7 @@ record city
   people int
 end
 list cities city 8
-list order int 8
+list order cities 8                           rem rows of cities
 list sizes int 8
 word city_of (n str, p int or fail)
   cities add_row or_fail to r
@@ -17,8 +17,8 @@ word main (or fail)
   "Lyon" 522 city_of or_fail  "Nice" 342 city_of or_fail  "Paris" 2103 city_of or_fail  "Lille" 236 city_of or_fail
   sizes sort_desc
   cat ("largest: ", 0 sizes idx) io.println
-  0 cities len range do (i int) i order push or_fail end each
+  cities do (c cities gives cities) c end order map_into or_fail
   order cities sort_by city.name
-  0 order len range do (i int) i order idx cities idx city.name io.println end each
+  order do (c cities) c city.name io.println end each
 end
 main or_else (e) e err_text io.println end
