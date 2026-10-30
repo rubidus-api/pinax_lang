@@ -89,16 +89,21 @@ static pinax_err io_eprint(pinax_call *call, void *user, const pinax_args *args)
 
 // Where lines are read from: a file and the bytes read ahead of the script, ahead[at..end).
 // Standard input is read one byte at a time (size 1), so that a host that reads it too finds
-// the bytes after the line still there; a file of the module reads ahead (T083).
+// the bytes after the line still there; a file of the module reads ahead (T083). `show`: the
+// output kept back is written before each read of the system, so that a prompt shows before
+// the wait, and a line answered at once costs no write of its own (T090).
 typedef struct {
     proven_file_t  file;
     unsigned char *ahead;
     size_t         at, end, size;
+    bool           show;
 } reader;
 
 // The next byte; false at the end of the input, and with *err set when the system refused.
 static bool next_byte(reader *r, unsigned char *byte, proven_err_t *err) {
     if (r->at == r->end) {
+        if (r->show)
+            pnx_streams_flush();
         const proven_result_size_t got = proven_fs_read(r->file, (proven_mem_mut_t){r->ahead, r->size});
         if (got.err != PROVEN_OK && got.err != PROVEN_ERR_EOF) {
             *err = got.err;
@@ -145,17 +150,16 @@ static pinax_err line_from(pinax_call *call, reader *in, pinax_str *out) {
     return PINAX_OK;
 }
 // Standard input: one byte at a time, or for pnx through its read-ahead. Output kept back is written
-// first, so that a prompt shows before the line is read.
+// before the system is asked for more (`show`), so that a prompt shows before the line is read.
 static reader stdin_ahead;
 
 static reader *stdin_reader(reader *one_byte, unsigned char *one) {
-    pnx_streams_flush();
     if (!streams.in_ahead) {
-        *one_byte = (reader){proven_sysio_stdin(), one, 0, 0, 1};
+        *one_byte = (reader){proven_sysio_stdin(), one, 0, 0, 1, true};
         return one_byte;
     }
     if (!stdin_ahead.ahead)
-        stdin_ahead = (reader){proven_sysio_stdin(), streams.in, 0, 0, sizeof streams.in};
+        stdin_ahead = (reader){proven_sysio_stdin(), streams.in, 0, 0, sizeof streams.in, true};
     return &stdin_ahead;
 }
 
@@ -237,7 +241,7 @@ static pinax_err file_open(pinax_call *call, void *user, const pinax_args *args,
         return PINAX_ERR_FULL;
     }
     host_file *file = (host_file *)(void *)room.value.ptr;
-    file->in = (reader){opened.value, file->bytes, 0, 0, sizeof file->bytes};
+    file->in = (reader){opened.value, file->bytes, 0, 0, sizeof file->bytes, false};
     pinax_handle handle;
     const pinax_err err = pinax_handle_new(pinax_call_state(call), file_type(user), file, &handle);
     if (err != PINAX_OK) {

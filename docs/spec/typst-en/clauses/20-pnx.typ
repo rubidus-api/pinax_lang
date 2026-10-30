@@ -39,9 +39,11 @@ it uses. `N` is 1 to 2#super[31] − 1, and at most 16 are given. Without it, a 
 load, with the name of the capacity.]
 
 #para("3b")[What the script writes with `io.print` and `io.println` is kept in a buffer and written when the
-buffer is full, before `io.eprint`, `io.read_line` and `clock.sleep`, and when the run ends or faults. So standard
-output and standard error come out in the order the script wrote them. Except in `pnx repl`, `io.read_line` reads
-standard input ahead. A host that embeds the library writes and reads both without a buffer.]
+buffer is full, before `io.eprint` and `clock.sleep`, before `io.read_line` asks the system for more of standard
+input, and when the run ends or faults. So standard output and standard error come out in the order the script wrote
+them, and a prompt shows before the program waits for a line. Except in `pnx repl`, `io.read_line` reads standard
+input ahead; a line already read ahead is given without writing. A host that embeds the library writes and reads
+both without a buffer.]
 
 == Tests <pnx-test>
 
