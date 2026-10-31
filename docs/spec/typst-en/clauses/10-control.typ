@@ -123,6 +123,14 @@ the block fixes its effect, the signature may be left out.]
 #ex("spec", "10-inline-locals.pnx")
 #ex("spec", "10-value-block.pnx")
 
+#para("2a")[A block value with no signature whose body is one word defined with `word`, of this source or exported by a
+module in use (`do by_len end`, `do geo.area end`), is that word itself: its type is `word` with the word's
+signature, and `call` calls the word. Any other word is given in a block with the block's signature; inputs given as
+types only stay on the stack (9.2 (2)), so the block's body is the word alone:
+`do (str, str gives bool) str.starts_with end`.]
+
+#ex("spec", "10-word-value.pnx")
+
 #part("Constraints")
 
 #para("3")[A block value that uses a local from outside is refused (the name is not declared inside the block).]
@@ -130,6 +138,13 @@ the block fixes its effect, the signature may be left out.]
 
 #para("4")[A block expanded into a loop (`each`, `times` and so on) shall leave the stack as it found it.]
 #ex("spec", "10-block-net.pnx")
+
+#para("4a")[A block value with no signature takes nothing, so a word in it that needs values is refused, and the message
+shows both forms of (2a).]
+#ex("spec", "10-word-value-bare.pnx")
+
+#para("4b")[A word declared with `forward` is given as a value only after its definition.]
+#ex("spec", "10-word-value-forward.pnx")
 
 == Stems and combining words <control-stems>
 
@@ -222,4 +237,6 @@ the value can still be lent.]
   ([A word that leaves, in deferred code], "a defer holds no return, fail, break, while, until, to, set, loop, do, case or defer"),
   ([`or_fail` `or_return` in deferred code], "a defer does not leave the word; a failure in it is taken with or_else"),
   ([Giving a value a defer took over], "a defer gives this owned value when the block is left; here it can only be lent"),
+  ([Too few values in a block value with no signature], "a block without a signature takes nothing; a word of the program is given as do NAME end, any other word with the block's signature: do (str, str gives bool) str.starts_with end"),
+  ([A forward word as a value before its definition], "a word declared with forward is given as a value only after its definition"),
 )

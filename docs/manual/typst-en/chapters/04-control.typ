@@ -6,6 +6,7 @@
 - When is a local made, and how far is it visible?
 - How are `if`, `loop` and `case` written, and what must they keep about the stack?
 - What is the short way to write a loop over an array?
+- How is a word given as a value?
 ]
 
 == Locals
@@ -112,6 +113,24 @@ is expanded in place, so it can use the locals around it.
 `lo hi range` is a stem too (`hi` is not included). `fold` takes a first value before the stem, and its block takes
 (the value so far, an element) and gives the new value.
 
+== Words as values
+
+A block that is not given to a combining word is a #strong[value]: it can be kept in a local, returned, or given to a
+parameter of type `word (signature)`, and `call` calls it. Such a block sees no locals around it. To give a word of
+the program as a value, write `do NAME end` with no signature: the value is that word, with its signature.
+
+#ex("manual", "04-word-values.pnx")
+
+#qa[How is a word of the language, such as `str.starts_with`, given as a value?][With the block's signature written
+as types only: `do (str, str gives bool) str.starts_with end`. Inputs written as types stay on the stack, so the word
+takes them as it is. Without a signature the block takes nothing, and the message shows both forms.]
+
+#mistake[A `case` branch can hold the word itself: `"prefix" of str.starts_with end`][A branch runs its words; it
+does not make a value of them. There `str.starts_with` is called, and finds too few values on the stack. Make the
+value with a block: `"prefix" of do (str, str gives bool) str.starts_with end end`, or `do NAME end` for a word of the
+program.
+#ex("manual", "04-word-values-branch.pnx")]
+
 #qa[What if the two branches of `if` should leave values of different types?][They cannot. The code after `if` does not
 know which branch ran, so both leave the same number of values of the same types. When one branch has a value and the
 other has not, that is a failure (chapter 8) or a row asked with `is_none` (chapter 7).]
@@ -124,4 +143,5 @@ other has not, that is a failure (chapter 8) or a row asked with `is_none` (chap
   (10).
 - A named loop is left at once with `until (NAME)` (10.2).
 - Arrays and lists are walked with stems: `each` `each_index` `count` `fold` `sum` … (10.6).
+- `do NAME end` is the word `NAME` as a value; any other word is given as `do (signature) word end` (10.5).
 ]

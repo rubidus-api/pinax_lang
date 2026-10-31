@@ -1,0 +1,5 @@
+rem refused
+use str
+word demo ()
+  do str.starts_with end drop
+end

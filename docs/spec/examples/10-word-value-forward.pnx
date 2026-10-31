@@ -1,0 +1,6 @@
+rem refused
+forward word later (n int)
+word demo ()
+  do later end drop
+end
+word later (n int) end

@@ -1,0 +1,12 @@
+rem run
+use io
+use str
+word by_len (a str, b str gives bool) a str.len b str.len lt end
+word shorter (f word (str, str gives bool), a str, b str gives str) a b f call if a else b end end
+word demo ()
+  do by_len end to order                          rem the word by_len itself: word (str, str gives bool)
+  cat ("shorter: ", order "pear" "fig" shorter) io.println
+  do (str, str gives bool) str.starts_with end to starts    rem a word of the language, with its signature
+  "banana" "ban" starts call if "starts with ban" io.println end
+end
+demo

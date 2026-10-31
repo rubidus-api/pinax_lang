@@ -118,6 +118,13 @@ block   = "do" [ "(" effect ")" ] { body } "end" ;
 #ex("spec", "10-inline-locals.pnx")
 #ex("spec", "10-value-block.pnx")
 
+#para("2a")[서명이 없는 값이 되는 블록의 몸이 `word` 로 정의한 낱말(이 소스의 것이든 쓰는 모듈이 내보낸 것이든) 하나
+뿐이면(`do by_len end`, `do geo.area end`), 그 값은 그 낱말 자체다. 타입은 그 낱말의 서명을 가진 `word` 이고,
+`call` 은 그 낱말을 부른다. 다른 낱말은 블록의 서명을 쓴 블록으로 준다. 타입만 쓴 입력은 스택에 남으므로(9.2 (2))
+블록의 몸은 그 낱말 하나다: `do (str, str gives bool) str.starts_with end`.]
+
+#ex("spec", "10-word-value.pnx")
+
 #part("제약")
 
 #para("3")[값이 되는 블록이 바깥의 지역 변수를 쓰면 거절된다(그 이름은 블록 안에 선언돼 있지 않다).]
@@ -125,6 +132,13 @@ block   = "do" [ "(" effect ")" ] { body } "end" ;
 
 #para("4")[루프로 펼쳐지는 블록(`each` `times` 등)은 스택을 들어올 때와 같게 둬야 한다.]
 #ex("spec", "10-block-net.pnx")
+
+#para("4a")[서명이 없는 값이 되는 블록은 아무것도 받지 않는다. 그 안에서 값이 필요한 낱말은 거절되고, 메시지가
+(2a)의 두 꼴을 보인다.]
+#ex("spec", "10-word-value-bare.pnx")
+
+#para("4b")[`forward` 로 선언한 낱말은 정의된 뒤에만 값으로 준다.]
+#ex("spec", "10-word-value-forward.pnx")
 
 == 줄기와 조합 낱말 <control-stems>
 
@@ -214,4 +228,6 @@ defer = "defer" { body } "end" ;
   ([미룬 코드 안의 떠나는 낱말], "a defer holds no return, fail, break, while, until, to, set, loop, do, case or defer"),
   ([미룬 코드 안의 `or_fail` `or_return`], "a defer does not leave the word; a failure in it is taken with or_else"),
   ([미룬 코드가 맡은 값을 소비], "a defer gives this owned value when the block is left; here it can only be lent"),
+  ([서명이 없는 값이 되는 블록에서 값이 모자람], "a block without a signature takes nothing; a word of the program is given as do NAME end, any other word with the block's signature: do (str, str gives bool) str.starts_with end"),
+  ([정의 전의 forward 낱말을 값으로], "a word declared with forward is given as a value only after its definition"),
 )

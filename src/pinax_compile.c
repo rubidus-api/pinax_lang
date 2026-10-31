@@ -230,6 +230,7 @@ typedef struct fn {
     uint32_t def_at; // instruction that just wrote def_reg, for retargeting a store
     uint8_t  def_reg, def_bank;
     bool     is_top;
+    bool     bare; // a block value with no signature (RFC-0033): a short stack says how to give a word
     const sig *sig;
 } fn;
 
@@ -404,6 +405,7 @@ typedef struct comp {
     bool         exporting; // `export` stands before the item being compiled
     uint32_t     path_global; // to module.name : the global the path names, for store_local
     bool         took_guard;  // the store just compiled took the guard after it (RFC-0032)
+    bool         bare_block;  // the block value about to be compiled has no signature (RFC-0033)
     uint32_t     sort_need;   // the most cells a sort of this load orders, of a collection it names
     bool         sort_refs;   // a sort of this load orders a collection a parameter names
     vec          truncs;    // trunc_site: lists cut back by truncate, checked when the source is read
@@ -1470,7 +1472,11 @@ static bool need(comp *c, uint32_t count) {
     const bool sink = c->sink;
     c->sink = false;
     if (c->f->depth - c->f->floor < count)
-        return type_error(c, "the stack does not hold enough values for this word");
+        return type_error(c, c->f->bare && c->f->n_blocks == 0
+                                 ? "a block without a signature takes nothing; a word of the program is given as do NAME "
+                                   "end, any other word with the block's signature: do (str, str gives bool) "
+                                   "str.starts_with end"
+                                 : "the stack does not hold enough values for this word");
     for (uint32_t k = 0; k < count; ++k) {
         const tid type = c->f->stack[c->f->depth - 1 - k].type;
         if (c->f->stack[c->f->depth - 1 - k].owned && !sink)
@@ -4182,6 +4188,48 @@ static bool end_rex_block(comp *c, block *b) {
 }
 
 // stem do [ ( params ) ] body end each | fold      count do body end times
+// RFC-0033: do NAME end with no signature, NAME a word defined with `word` (here or exported by a module
+// in use), is that word itself. The current token is the one after `do`; *done says it was taken.
+static bool word_value(comp *c, bool *done) {
+    *done = false;
+    if (c->tok.kind != PNX_T_NAME && c->tok.kind != PNX_T_PATH)
+        return true;
+    pnx_lexer lx = *c->lx;
+    pnx_token t;
+    if (!pnx_lex_next(&lx, &t) || t.kind != PNX_T_RESERVED || t.word != PNX_KW_end)
+        return true;
+    const name n = tok_name(c);
+    uint32_t   index = NONE;
+    if (c->tok.kind == PNX_T_NAME) {
+        if (find_local(c->f, n) || find_const(c, n) || find_global(c, n) != NONE)
+            return true;
+        if (!find_word(c, n, &index)) {
+            if (find_fwd(c, n, NULL))
+                return type_error(c, "a word declared with forward is given as a value only after its definition");
+            return true;
+        }
+    } else {
+        uint32_t dot = 0;
+        while (n.text[dot] != '.')
+            ++dot;
+        name real;
+        const uint32_t m = module_of(c, (name){n.text, dot}, &real) ? source_module(c, real) : NONE;
+        if (m == NONE)
+            return true;
+        index = name_first(c, &c->ix_words, &c->words, sizeof(wordsym), (name){n.text + dot + 1, n.length - dot - 1}, 0,
+                           c->base.words, wordsym_from, m);
+        if (index == NONE)
+            return true;
+    }
+    if (c->data_only)
+        return syntax(c, "a data source holds no blocks");
+    tid type;
+    if (!block_type(c, &((const wordsym *)c->words.ptr + index)->sig, &type))
+        return false;
+    *done = true;
+    return push(c, (entry){.type = type, .kind = E_CONST, .value = index}) && advance(c) && advance(c); // past the end
+}
+
 static bool do_block(comp *c) {
     fn *f = c->f;
     name user, dst_name;
@@ -4191,7 +4239,8 @@ static bool do_block(comp *c) {
     sig bs = {0};
     if (!advance(c))
         return false;
-    if (c->tok.kind == PNX_T_LPAREN && !parse_sig(c, &bs))
+    const bool bare = c->tok.kind != PNX_T_LPAREN;
+    if (!bare && !parse_sig(c, &bs))
         return false;
     if (user.length && (ends_with_word(user, "with_match") || ends_with_word(user, "replace_by")))
         return rex_block(c, user, &bs, at.line, at.column);
@@ -4200,8 +4249,17 @@ static bool do_block(comp *c) {
     bool expanded = false;
     for (size_t k = 0; k < sizeof users / sizeof users[0]; ++k)
         expanded = expanded || name_is(user, users[k]);
-    if (!expanded)
+    if (!expanded) {
+        if (bare) {
+            bool done = false;
+            if (!word_value(c, &done))
+                return false;
+            if (done)
+                return true;
+        }
+        c->bare_block = bare;
         return value_block(c, &bs, at.line, at.column);
+    }
     if (bs.fails)
         return error_at(c, PINAX_ERR_SYNTAX, at.line, at.column, "a block that can fail is not supported yet");
     const bool has_stem = f->depth > f->floor && bank_of(f->stack[f->depth - 1].type) == BANK_NONE;
@@ -7216,6 +7274,8 @@ static bool value_block(comp *c, const sig *bs, uint32_t line, uint32_t column) 
     if (!block_type(c, bs, &type))
         return false;
     fn_reset(f, false);
+    f->bare = c->bare_block;
+    c->bare_block = false;
     f->own_sig = *bs;
     f->sig = &f->own_sig;
     c->f = f;

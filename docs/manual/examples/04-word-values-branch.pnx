@@ -1,0 +1,8 @@
+rem refused
+use str
+word test_named (how str gives word (str, str gives bool) or fail)
+  how case
+    "prefix" of str.starts_with end
+    otherwise err.not_found fail end
+  end
+end
