@@ -1,0 +1,9 @@
+rem run
+use io
+global name str(8)
+word remember (v str)
+  v set name or_else (e) cat ("too long, kept ", name) io.println return end
+  cat ("stored: ", name) io.println
+end
+"Pinax" remember
+"an embeddable language" remember

@@ -117,7 +117,8 @@ rest stay as they are. Assigning the same array again starts from cell 0 again. 
 read and stored like an array's, but only indexes below the length may be used.]
 
 #para("2")[`v LIST push` adds one value at the end; `LIST pop` takes the last one off and gives it. Both can fail
-(`or fail`): a `push` into a full list fails with `err.full`, a `pop` from an empty list with `err.range`. A list of
+(`or fail`): a `push` into a full list fails with `err.full`, a `pop` from an empty list with `err.range`; a `push` of
+text too long for a list of `str(N)` fails with `err.range` (7.3 (4a)). A list of
 records gets an empty row at the end with `LIST add_row`, which gives that row. `LIST clear` sets the length to 0.]
 
 #ex("spec", "08-list.pnx")

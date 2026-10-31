@@ -403,6 +403,7 @@ typedef struct comp {
     vec          srcmods;   // name: the modules loaded so far, this one last
     bool         exporting; // `export` stands before the item being compiled
     uint32_t     path_global; // to module.name : the global the path names, for store_local
+    bool         took_guard;  // the store just compiled took the guard after it (RFC-0032)
     uint32_t     sort_need;   // the most cells a sort of this load orders, of a collection it names
     bool         sort_refs;   // a sort of this load orders a collection a parameter names
     vec          truncs;    // trunc_site: lists cut back by truncate, checked when the source is read
@@ -2792,6 +2793,48 @@ static bool write_reg(comp *c, uint32_t reg) {
     return ok;
 }
 
+// RFC-0032: a store into a str(N) place followed by a guard fails with err.range when the text is
+// longer than N, and leaves the place as it was. The current token is the name of the place.
+static bool guard_follows(comp *c) {
+    pnx_lexer lx = *c->lx;
+    pnx_token t;
+    return pnx_lex_next(&lx, &t) && t.kind == PNX_T_RESERVED &&
+           (t.word == PNX_KW_or_fail || t.word == PNX_KW_or_return || t.word == PNX_KW_or_else);
+}
+
+// Before the store: everything is in its register, then the length of S[text] is compared with
+// `cap`; a text too long jumps to *too_long. `scratch` is an integer register above the stack.
+static bool text_check(comp *c, uint32_t text, uint32_t cap, uint32_t scratch, uint32_t *too_long) {
+    if (!settle_all(c) || emit(c, PNX_ABC(PNX_SLEN, scratch, text, 0)) == NONE ||
+        emit(c, PNX_ABX(PNX_LOADI, scratch + 1, cap)) == NONE ||
+        emit(c, PNX_ABC(PNX_JLE, scratch, scratch + 1, 1)) == NONE)
+        return false;
+    return jump_later(c, too_long);
+}
+
+// After the store, which has taken its values off the stack: the store skips the failure word;
+// a text too long sets err.range and comes to it. The current token is still the place's name.
+static bool text_guard(comp *c, uint32_t *too_long) {
+    fn *f = c->f;
+    if (emit(c, PNX_AX(PNX_JMP, 2)) == NONE) // over SETFAIL and the guard's failure word
+        return false;
+    land(c, too_long);
+    if (emit(c, PNX_ABX(PNX_SETFAIL, 0, PINAX_ERR_RANGE)) == NONE)
+        return false;
+    f->def_at = NONE;
+    c->took_guard = true;
+    return guard_op(c, TY_NONE);
+}
+
+// The token after a store: the guard took it already, or it is the next word.
+static bool past_store(comp *c) {
+    if (c->took_guard) {
+        c->took_guard = false;
+        return true;
+    }
+    return advance(c);
+}
+
 static bool store_local(comp *c, name n) {
     fn *f = c->f;
     c->sink = true;
@@ -2820,13 +2863,18 @@ static bool store_local(comp *c, name n) {
             return false;
         (void)give(c, top - 1); // storing into a cell hands an owned row over, as into a field
         if (sym->strcap) { // the bytes are copied into the cell
-            const uint32_t row = top_slot(c, BANK_I, 1);
-            if (emit_g(c, PNX_ROW, row, ri, g) == NONE || emit(c, PNX_ABC(PNX_FSETS, rv, row, 0)) == NONE ||
+            const uint32_t row = top_slot(c, BANK_I, 2);
+            uint32_t too_long = NONE;
+            const bool guarded = guard_follows(c);
+            if ((guarded && !text_check(c, rv, sym->strcap, row, &too_long)) ||
+                emit_g(c, PNX_ROW, row, ri, g) == NONE || emit(c, PNX_ABC(PNX_FSETS, rv, row, 0)) == NONE ||
                 emit(c, PNX_FIELD(g, 0, sym->strcap)) == NONE)
                 return false;
-        } else if (emit_g(c, PNX_ASET, rv, ri, g) == NONE) {
-            return false;
+            f->depth -= 2;
+            return !guarded || text_guard(c, &too_long);
         }
+        if (emit_g(c, PNX_ASET, rv, ri, g) == NONE)
+            return false;
         f->depth -= 2;
         return true;
     }
@@ -2839,11 +2887,17 @@ static bool store_local(comp *c, name n) {
             return false;
         (void)give(c, top); // storing into a global hands an owned value over
         if (sym->strcap) {
-            const uint32_t one = top_slot(c, BANK_I, 1);
-            if (emit(c, PNX_ABX(PNX_LOADI, one, 1)) == NONE || emit(c, PNX_ABC(PNX_FSETS, reg, one, 0)) == NONE ||
+            const uint32_t one = top_slot(c, BANK_I, 2);
+            uint32_t too_long = NONE;
+            const bool guarded = guard_follows(c);
+            if ((guarded && !text_check(c, reg, sym->strcap, one, &too_long)) ||
+                emit(c, PNX_ABX(PNX_LOADI, one, 1)) == NONE || emit(c, PNX_ABC(PNX_FSETS, reg, one, 0)) == NONE ||
                 emit(c, PNX_FIELD(g, 0, sym->strcap)) == NONE)
                 return false;
-        } else if (emit(c, PNX_ABX(PNX_SETG, reg, g)) == NONE) {
+            --f->depth;
+            return !guarded || text_guard(c, &too_long);
+        }
+        if (emit(c, PNX_ABX(PNX_SETG, reg, g)) == NONE) {
             return false;
         }
         --f->depth;
@@ -2917,12 +2971,15 @@ static bool field_access(comp *c, bool write) {
     if (write) {
         if (f->stack[top - 1].type != fd->type)
             return type_error(c, "the value has another type than the field");
+        uint32_t too_long = NONE;
+        const bool guarded = fd->is_str && guard_follows(c);
         if (!reg_of(c, top - 1, &rv) || !reg_of(c, top, &rr) ||
+            (guarded && !text_check(c, rv, fd->extra, top_slot(c, BANK_I, 2), &too_long)) ||
             emit(c, PNX_ABC(fd->is_str ? PNX_FSETS : PNX_FSET, rv, rr, 0)) == NONE || emit(c, where) == NONE)
             return false;
         (void)give(c, top - 1); // storing into a field hands an owned value over
         f->depth -= 2;
-        return true;
+        return !guarded || text_guard(c, &too_long);
     }
     if (!reg_of(c, top, &rr))
         return false;
@@ -2940,7 +2997,7 @@ static bool store(comp *c) {
         return false;
     if (c->tok.kind == PNX_T_NAME) {
         const name n = tok_name(c);
-        return store_local(c, n) && advance(c);
+        return store_local(c, n) && past_store(c);
     }
     if (c->tok.kind == PNX_T_LPAREN) {
         name     names[MAX_PARAMS];
@@ -2976,7 +3033,7 @@ static bool store(comp *c) {
         const uint32_t m = module_of(c, (name){path.text, dot}, &real) ? source_module(c, real) : NONE;
         if (m != NONE)
             return type_error(c, "a global of a module is written with set: value set module.name");
-        return field_access(c, true) && advance(c);
+        return field_access(c, true) && past_store(c);
     }
     return name_due(c, "to is followed by a name or a list of names");
 }
@@ -2998,7 +3055,7 @@ static bool set_global(comp *c) {
         c->path_global = g;
         const bool ok = store_local(c, n);
         c->path_global = NONE;
-        return ok && advance(c);
+        return ok && past_store(c);
     }
     if (c->tok.kind == PNX_T_PATH) {
         const name path = tok_name(c);
@@ -3016,7 +3073,7 @@ static bool set_global(comp *c) {
             c->path_global = k;
             const bool ok = store_local(c, n);
             c->path_global = NONE;
-            return ok && advance(c);
+            return ok && past_store(c);
         }
         return error(c, PINAX_ERR_NOT_FOUND, "the module exports no global of this name");
     }
@@ -6286,8 +6343,21 @@ static bool builtin(comp *c, const struct builtin *w) {
             return false;
         ra = slot_of(c, f->depth - 1);
         --f->depth;
-        return settle_all(c) && emit(c, PNX_ABX(g->strcap ? PNX_LPUSHS : PNX_LPUSH, ra, gi)) != NONE &&
-               guard_op(c, TY_NONE);
+        if (!settle_all(c))
+            return false;
+        uint32_t too_long = NONE;
+        if (g->strcap) { // RFC-0032: a text too long fails with err.range under push's guard
+            const uint32_t t = top_slot(c, BANK_I, 2);
+            if (emit(c, PNX_ABC(PNX_SLEN, t, ra, 0)) == NONE || emit(c, PNX_ABX(PNX_LOADI, t + 1, g->strcap)) == NONE ||
+                emit(c, PNX_ABC(PNX_JLE, t, t + 1, 2)) == NONE ||
+                emit(c, PNX_ABX(PNX_SETFAIL, 0, PINAX_ERR_RANGE)) == NONE || !jump_later(c, &too_long))
+                return false;
+        }
+        if (emit(c, PNX_ABX(g->strcap ? PNX_LPUSHS : PNX_LPUSH, ra, gi)) == NONE)
+            return false;
+        if (too_long != NONE) // over LPUSHS, to the guard's failure word
+            land(c, &too_long);
+        return guard_op(c, TY_NONE);
     }
     // ---- tasks (RFC-0005): a task is a value of the type its set names ----
     case BW_SPAWN: { // block workers spawn : a task that will run the block; fails when the set is full

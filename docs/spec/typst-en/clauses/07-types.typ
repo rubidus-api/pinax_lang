@@ -80,8 +80,15 @@ before that place does.]
 
 #part("Faults")
 
-#para("4")[Putting text longer than N bytes into a `str(N)` place stops with the fault `range`. It is not cut.]
+#para("4")[Putting text longer than N bytes into a `str(N)` place with no guard after the store stops with the fault
+`range`. It is not cut.]
 #ex("spec", "07-str-too-long.pnx")
+
+#para("4a")[A store into a `str(N)` place (a field with `to`, a global or a cell with `set`) may be followed by a guard
+(11.2). Then a text longer than N bytes is the failure `range`, and the place keeps what it held; a shorter text is
+stored and the guard does nothing. Under the guard of `push` onto a list of `str(N)` (8.5), a text too long is the
+failure `range` too, whether or not the list is full.]
+#ex("spec", "07-str-guard.pnx")
 
 #para("5")[A view of bytes made in the region cannot be used once the region is rewound past them; 12.3 states this
 rule.]

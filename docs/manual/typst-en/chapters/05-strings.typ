@@ -48,7 +48,7 @@ Which one to use depends on #strong[how long the text lives].
   table.header([], [*`str` (view)*], [*`str(N)` (stored text)*]),
   [Where], [locals, arguments, results], [globals, cells of arrays and lists, fields of records],
   [Bytes], [none of its own: it points at bytes elsewhere], [room for N bytes of its own],
-  [Storing], [copies nothing], [copies; longer than N is a fault],
+  [Storing], [copies nothing], [copies; longer than N is a fault, or with a guard the failure `range`],
   [Lives], [as long as the bytes it points at (one run, or until `release`)], [as long as its place],
 )
 
@@ -59,6 +59,13 @@ A view in a field is refused at load, and the message says to write `str(N)`.
 #mistake[Text longer than `str(N)` is cut to fit][It is not. Putting text longer than the room stops with a fault. To
 store part of it, cut it first with `str.take`.
 #ex("manual", "05-too-long.pnx")]
+
+#qa[The text comes from outside and may be too long. Must I compare its length first?][No. Put a guard after the
+store, as after any word that can fail. A text too long is then the failure `range`, and the place keeps what it
+held. Without the guard it stays a fault.
+#ex("manual", "05-too-long-guard.pnx")
+The guard comes after the store, so what the word did before it stays done. To refuse a text before anything else
+happens (a row taken, a count raised), store it first, into a global of the same width.]
 
 == Making new text, and buffers
 
@@ -118,7 +125,8 @@ yourself.]
 #summary[
 - `str` is a view; cutting and splitting copy nothing (standard 7.3, 16.1).
 - A view cannot be kept in a long-lived place (global, cell, field) (7.3).
-- Long-lived places use `str(N)`; putting text there copies it, and text too long is a fault (7.3).
+- Long-lived places use `str(N)`; putting text there copies it, and text too long is a fault, or with a guard after
+  the store the failure `range` (7.3).
 - New bytes go into the region; `mark`/`release` gives them back, and views made in between are refused after
   (12.2, 12.3).
 - A buffer is where text is built; it fails when full (8.7).

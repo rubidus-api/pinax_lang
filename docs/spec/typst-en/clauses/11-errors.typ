@@ -48,6 +48,9 @@ guard = "or_fail" | "or_return" | "or_else" [ "(" NAME ")" ] { body } "end" ;
 )
 When the call succeeds the guard does nothing and the results stay on the stack.]
 
+#para("2a")[A store into a `str(N)` place may be followed by a guard as well; it then fails with `range` when the text is
+too long (7.3 (4a)). After any other store a guard is refused.]
+
 #para("3")[`code fail` makes this word fail with that code. Its signature shall have `or fail`.]
 
 #ex("spec", "11-failure.pnx")
@@ -83,7 +86,7 @@ task's group is declared `apart` (14.4). The state remains and takes the next ru
 #para("2")[Faults come from:
 - arithmetic overflow (`overflow`) and division by zero (`div_zero`) --- 7.1, 15.1;
 - an index out of range of an array or list, a `case` with no matching branch, the none row, text longer than its
-  `str(N)` (`range`) --- 8, 10.3;
+  `str(N)` stored with no guard (`range`) --- 7.3, 8, 10.3;
 - a value that does not fit a narrow field (`overflow`) --- 8.8;
 - a region or task space too small (`full`) --- 12.2;
 - the call depth (`depth`) --- 9.6;

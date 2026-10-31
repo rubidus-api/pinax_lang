@@ -51,12 +51,37 @@ name show
 </code></pre></div><h5>Constraints</h5><p class="para"><span class="pn">(3)</span> <code>str</code> for a global, an array or a field of a record is refused: the bytes a view points at may disappear before that place does.</p><div class="example refused"><p class="ex-file"><code>07-str-global.pnx</code></p><pre><code data-lang="pinax"><span style="color: #d73948">global</span> name <span style="color: #d73948">str</span>
 </code></pre><p class="ex-label">Refused</p><pre><code data-lang="text">$ pnx 07-str-global.pnx
 07-str-global.pnx:2:1: stored text is str(N); a str view lives only in locals, arguments and results
-</code></pre></div><h5>Faults</h5><p class="para"><span class="pn">(4)</span> Putting text longer than N bytes into a <code>str(N)</code> place stops with the fault <code>range</code>. It is not cut.</p><div class="example fault"><p class="ex-file"><code>07-str-too-long.pnx</code></p><pre><code data-lang="pinax"><span style="color: #d73948">use</span> io
+</code></pre></div><h5>Faults</h5><p class="para"><span class="pn">(4)</span> Putting text longer than N bytes into a <code>str(N)</code> place with no guard after the store stops with the fault <code>range</code>. It is not cut.</p><div class="example fault"><p class="ex-file"><code>07-str-too-long.pnx</code></p><pre><code data-lang="pinax"><span style="color: #d73948">use</span> io
 <span style="color: #d73948">global</span> name <span style="color: #d73948">str</span>(<span style="color: #b60157">4</span>)
 <span style="color: #198810">"four"</span> set name
 <span style="color: #198810">"more than four"</span> set name
 </code></pre><p class="ex-label">Fault</p><pre><code data-lang="text">$ pnx 07-str-too-long.pnx
 07-str-too-long.pnx:4: index out of range
+</code></pre></div><p class="para"><span class="pn">(4a)</span> A store into a <code>str(N)</code> place (a field with <code>to</code>, a global or a cell with <code>set</code>) may be followed by a guard (11.2). Then a text longer than N bytes is the failure <code>range</code>, and the place keeps what it held; a shorter text is stored and the guard does nothing. Under the guard of <code>push</code> onto a list of <code>str(N)</code> (8.5), a text too long is the failure <code>range</code> too, whether or not the list is full.</p><div class="example run"><p class="ex-file"><code>07-str-guard.pnx</code></p><pre><code data-lang="pinax"><span style="color: #d73948">use</span> io
+<span style="color: #d73948">record</span> entry
+  name <span style="color: #d73948">str</span>(<span style="color: #b60157">4</span>)
+<span style="color: #d73948">end</span>
+<span style="color: #d73948">list</span> rows entry <span style="color: #b60157">2</span>
+<span style="color: #d73948">list</span> names <span style="color: #d73948">str</span>(<span style="color: #b60157">4</span>) <span style="color: #b60157">2</span>
+
+<span style="color: #d73948">word</span> keep (v <span style="color: #d73948">str</span>, r rows)
+  v r <span style="color: #d73948">to</span> entry.name <span style="color: #d73948">or_else</span> (e) <span style="color: #d73948">cat</span> (<span style="color: #198810">"refused: "</span>, v, <span style="color: #198810">" ("</span>, e err_text, <span style="color: #198810">")"</span>) io.println <span style="color: #d73948">return</span> <span style="color: #d73948">end</span>
+  <span style="color: #d73948">cat</span> (<span style="color: #198810">"stored: "</span>, r entry.name) io.println
+<span style="color: #d73948">end</span>
+
+<span style="color: #d73948">word</span> main (<span style="color: #d73948">or</span> <span style="color: #d73948">fail</span>)
+  rows add_row <span style="color: #d73948">or_fail</span> <span style="color: #d73948">to</span> r
+  <span style="color: #198810">"four"</span> r keep
+  <span style="color: #198810">"fourteen"</span> r keep
+  <span style="color: #d73948">cat</span> (<span style="color: #198810">"still: "</span>, r entry.name) io.println
+  <span style="color: #198810">"fourteen"</span> names push <span style="color: #d73948">or_else</span> (e) <span style="color: #d73948">cat</span> (<span style="color: #198810">"push: "</span>, e err_text) io.println <span style="color: #d73948">end</span>
+<span style="color: #d73948">end</span>
+main <span style="color: #d73948">or_else</span> (e) e err_text io.println <span style="color: #d73948">end</span>
+</code></pre><p class="ex-label">Output</p><pre><code data-lang="text">$ pnx 07-str-guard.pnx
+stored: four
+refused: fourteen (range)
+still: four
+push: range
 </code></pre></div><p class="para"><span class="pn">(5)</span> A view of bytes made in the region cannot be used once the region is rewound past them; 12.3 states this rule.</p><h3>7.4 Declared types</h3><h5>Syntax</h5><pre><code data-lang="ebnf">type-decl = "type" NAME base ;
 base      = "int" | "bool" | "str" | "dec" "(" INT ")" ;</code></pre><p class="para"><span class="pn">(1)</span> <code>type meters int</code> makes the <strong>declared type</strong> <code>meters</code>. Its values are represented like <code>int</code> and cost nothing more to run, but at load it is a different type. It keeps numbers of different units from being mixed.</p><p class="para"><span class="pn">(2)</span> The name of the type written after a value of the base type makes a value of that type (<code>1500 meters</code>). The word <code>raw</code> turns a value of a declared type back into its base type.</p><p class="para"><span class="pn">(3)</span> Two values of the same declared type can be added and subtracted with <code>add</code> and <code>sub</code>; the result has that type. Comparison words and <code>min</code> <code>max</code> also take two values of the same type. Other arithmetic is done after <code>raw</code>.</p><div class="example run"><p class="ex-file"><code>07-type.pnx</code></p><pre><code data-lang="pinax"><span style="color: #d73948">use</span> io
 <span style="color: #d73948">use</span> <span style="color: #d73948">str</span>

@@ -1,6 +1,6 @@
 # The Pinax Standard
 
-The definition of the embeddable scripting language Pinax — Edition 0.13.1, October 2026
+The definition of the embeddable scripting language Pinax — Edition 0.14.0, October 2026
 
 ## Contents
 

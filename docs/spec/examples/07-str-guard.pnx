@@ -1,0 +1,21 @@
+rem run
+use io
+record entry
+  name str(4)
+end
+list rows entry 2
+list names str(4) 2
+
+word keep (v str, r rows)
+  v r to entry.name or_else (e) cat ("refused: ", v, " (", e err_text, ")") io.println return end
+  cat ("stored: ", r entry.name) io.println
+end
+
+word main (or fail)
+  rows add_row or_fail to r
+  "four" r keep
+  "fourteen" r keep
+  cat ("still: ", r entry.name) io.println
+  "fourteen" names push or_else (e) cat ("push: ", e err_text) io.println end
+end
+main or_else (e) e err_text io.println end

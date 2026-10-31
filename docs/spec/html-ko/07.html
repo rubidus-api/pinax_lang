@@ -51,12 +51,37 @@ name show
 </code></pre></div><h5>제약</h5><p class="para"><span class="pn">(3)</span> 전역, 배열, 레코드의 필드에 <code>str</code> 를 쓰면 거절된다. 뷰가 가리키는 바이트가 그 자리보다 먼저 사라질 수 있기 때문이다.</p><div class="example refused"><p class="ex-file"><code>07-str-global.pnx</code></p><pre><code data-lang="pinax"><span style="color: #d73948">global</span> name <span style="color: #d73948">str</span>
 </code></pre><p class="ex-label">거절</p><pre><code data-lang="text">$ pnx 07-str-global.pnx
 07-str-global.pnx:2:1: stored text is str(N); a str view lives only in locals, arguments and results
-</code></pre></div><h5>결함</h5><p class="para"><span class="pn">(4)</span> <code>str(N)</code> 자리에 N 바이트보다 긴 글을 넣으면 결함 <code>range</code> 로 멈춘다. 자르지 않는다.</p><div class="example fault"><p class="ex-file"><code>07-str-too-long.pnx</code></p><pre><code data-lang="pinax"><span style="color: #d73948">use</span> io
+</code></pre></div><h5>결함</h5><p class="para"><span class="pn">(4)</span> <code>str(N)</code> 자리에 N 바이트보다 긴 글을 넣고 그 뒤에 지킴 낱말이 없으면 결함 <code>range</code> 로 멈춘다. 자르지 않는다.</p><div class="example fault"><p class="ex-file"><code>07-str-too-long.pnx</code></p><pre><code data-lang="pinax"><span style="color: #d73948">use</span> io
 <span style="color: #d73948">global</span> name <span style="color: #d73948">str</span>(<span style="color: #b60157">4</span>)
 <span style="color: #198810">"four"</span> set name
 <span style="color: #198810">"more than four"</span> set name
 </code></pre><p class="ex-label">결함으로 멈춤</p><pre><code data-lang="text">$ pnx 07-str-too-long.pnx
 07-str-too-long.pnx:4: index out of range
+</code></pre></div><p class="para"><span class="pn">(4a)</span> <code>str(N)</code> 자리에 넣는 일(<code>to</code> 로 필드에, <code>set</code> 으로 전역이나 칸에) 뒤에는 지킴 낱말이 올 수 있다(11.2). 그러면 N 바이트보다 긴 글은 실패 <code>range</code> 이고, 자리는 가졌던 것을 그대로 가진다. 짧은 글은 들어가고 지킴 낱말은 아무 일도 하지 않는다. <code>str(N)</code> 목록에 <code>push</code> 하는 일의 지킴 낱말 아래에서도(8.5) 너무 긴 글은 실패 <code>range</code> 다. 목록이 찼든 아니든 그렇다.</p><div class="example run"><p class="ex-file"><code>07-str-guard.pnx</code></p><pre><code data-lang="pinax"><span style="color: #d73948">use</span> io
+<span style="color: #d73948">record</span> entry
+  name <span style="color: #d73948">str</span>(<span style="color: #b60157">4</span>)
+<span style="color: #d73948">end</span>
+<span style="color: #d73948">list</span> rows entry <span style="color: #b60157">2</span>
+<span style="color: #d73948">list</span> names <span style="color: #d73948">str</span>(<span style="color: #b60157">4</span>) <span style="color: #b60157">2</span>
+
+<span style="color: #d73948">word</span> keep (v <span style="color: #d73948">str</span>, r rows)
+  v r <span style="color: #d73948">to</span> entry.name <span style="color: #d73948">or_else</span> (e) <span style="color: #d73948">cat</span> (<span style="color: #198810">"refused: "</span>, v, <span style="color: #198810">" ("</span>, e err_text, <span style="color: #198810">")"</span>) io.println <span style="color: #d73948">return</span> <span style="color: #d73948">end</span>
+  <span style="color: #d73948">cat</span> (<span style="color: #198810">"stored: "</span>, r entry.name) io.println
+<span style="color: #d73948">end</span>
+
+<span style="color: #d73948">word</span> main (<span style="color: #d73948">or</span> <span style="color: #d73948">fail</span>)
+  rows add_row <span style="color: #d73948">or_fail</span> <span style="color: #d73948">to</span> r
+  <span style="color: #198810">"four"</span> r keep
+  <span style="color: #198810">"fourteen"</span> r keep
+  <span style="color: #d73948">cat</span> (<span style="color: #198810">"still: "</span>, r entry.name) io.println
+  <span style="color: #198810">"fourteen"</span> names push <span style="color: #d73948">or_else</span> (e) <span style="color: #d73948">cat</span> (<span style="color: #198810">"push: "</span>, e err_text) io.println <span style="color: #d73948">end</span>
+<span style="color: #d73948">end</span>
+main <span style="color: #d73948">or_else</span> (e) e err_text io.println <span style="color: #d73948">end</span>
+</code></pre><p class="ex-label">출력</p><pre><code data-lang="text">$ pnx 07-str-guard.pnx
+stored: four
+refused: fourteen (range)
+still: four
+push: range
 </code></pre></div><p class="para"><span class="pn">(5)</span> 구역에 만든 뷰는 그 구역이 되감기면 쓸 수 없다. 이 규칙은 12.3 이 정한다.</p><h3>7.4 선언한 타입</h3><h5>구문</h5><pre><code data-lang="ebnf">type-decl = "type" NAME base ;
 base      = "int" | "bool" | "str" | "dec" "(" INT ")" ;</code></pre><p class="para"><span class="pn">(1)</span> <code>type meters int</code> 는 <strong>선언한 타입</strong>(declared type) <code>meters</code> 를 만든다. 값의 표현은 <code>int</code> 와 같고 실행에 드는 비용도 없지만, 적재 때는 다른 타입이다. 단위가 다른 두 수를 섞는 실수를 막으려고 쓴다.</p><p class="para"><span class="pn">(2)</span> 바탕 타입의 값 뒤에 타입의 이름을 쓰면 그 타입의 값이 된다(<code>1500 meters</code>). 낱말 <code>raw</code> 는 선언한 타입의 값을 바탕 타입의 값으로 돌린다.</p><p class="para"><span class="pn">(3)</span> 같은 선언한 타입의 두 값은 <code>add</code> 와 <code>sub</code> 로 더하고 뺄 수 있고, 결과도 그 타입이다. 비교 낱말과 <code>min</code> <code>max</code> 도 같은 타입끼리 쓴다. 다른 산술은 <code>raw</code> 로 바꾼 뒤에 한다.</p><div class="example run"><p class="ex-file"><code>07-type.pnx</code></p><pre><code data-lang="pinax"><span style="color: #d73948">use</span> io
 <span style="color: #d73948">use</span> <span style="color: #d73948">str</span>
