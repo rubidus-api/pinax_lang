@@ -91,6 +91,11 @@ After the release, views made in between cannot be used. The processor checks th
 #qa[How do I keep text that must outlive the release?][Put it into a `str(N)` global or cell. It is copied there, so it
 survives rewinding the region. `05-stored.pnx` above does that.]
 
+#qa[A word inside `each` fails, under `defer m release`. Can I pass the failure on with `or_fail`?][Yes. On the way out
+of a failing word the release does not look at the text left on the stack: the word ends there and nothing reads it
+again. The stem stops at the first failure.
+#ex("manual", "05-release-failing.pnx")]
+
 == Bytes and characters
 
 Lengths and positions count bytes. A Hangul character is 3 bytes in UTF-8. When characters matter, use `str.char_count`

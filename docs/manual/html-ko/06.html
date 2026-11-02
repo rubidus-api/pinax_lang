@@ -126,7 +126,25 @@ bytes still taken after 10000 lines: 0
 <span style="color: #d73948">end</span>
 </code></pre><p class="ex-label">거절</p><pre><code data-lang="text">$ pnx 05-release-view.pnx
 05-release-view.pnx:6:3: this str was made after a mark that was released since; the region may hold other bytes there now
-</code></pre></div><div class="box qa"><p class="box-title">문답</p><p><strong>물음. 되돌린 뒤에도 남겨야 할 글은 어떻게 하는가?</strong></p><p>답. <code>str(N)</code> 전역이나 칸에 넣는다. 넣을 때 복사되므로 구역을 되돌려도 남는다. 위의 <code>05-stored.pnx</code> 가 그렇게 한다.</p></div><h3>5.5 바이트와 글자</h3><p>길이와 자리는 모두 바이트로 센다. 한글 한 글자는 UTF-8 로 3 바이트다. 글자 단위가 필요하면 <code>str.char_count</code> 와 <code>str.chars</code> 를 쓴다. <code>str.chars</code> 는 글자마다 그 글자의 뷰를 낸다(코드포인트 수가 아니다).</p><div class="example run"><p class="ex-file"><code>05-chars.pnx</code></p><pre><code data-lang="pinax"><span style="color: #d73948">use</span> io
+</code></pre></div><div class="box qa"><p class="box-title">문답</p><p><strong>물음. 되돌린 뒤에도 남겨야 할 글은 어떻게 하는가?</strong></p><p>답. <code>str(N)</code> 전역이나 칸에 넣는다. 넣을 때 복사되므로 구역을 되돌려도 남는다. 위의 <code>05-stored.pnx</code> 가 그렇게 한다.</p></div><div class="box qa"><p class="box-title">문답</p><p><strong>물음. <code>defer m release</code> 아래에서 <code>each</code> 안의 낱말이 실패한다. <code>or_fail</code> 로 실패를 넘길 수 있는가?</strong></p><p>답. 그렇다. 실패하는 낱말이 나가는 길에서 release 는 스택에 남은 글을 보지 않는다. 낱말은 거기서 끝나고 아무도 그것을 다시 읽지 않는다. stem 은 첫 실패에서 멈춘다.</p><div class="example run"><p class="ex-file"><code>05-release-failing.pnx</code></p><pre><code data-lang="pinax"><span style="color: #d73948">use</span> io
+<span style="color: #d73948">use</span> <span style="color: #d73948">str</span>
+<span style="color: #d73948">word</span> short (w <span style="color: #d73948">str</span> <span style="color: #d73948">or</span> <span style="color: #d73948">fail</span>)
+  w <span style="color: #d73948">str</span>.len <span style="color: #b60157">5</span> gt <span style="color: #d73948">if</span> <span style="color: #d73948">err</span>.range <span style="color: #d73948">fail</span> <span style="color: #d73948">end</span>
+<span style="color: #d73948">end</span>
+<span style="color: #d73948">word</span> read_words (line <span style="color: #d73948">str</span> <span style="color: #d73948">or</span> <span style="color: #d73948">fail</span>)
+  <span style="color: #d73948">mark</span> <span style="color: #d73948">to</span> m
+  defer m release <span style="color: #d73948">end</span>
+  line <span style="color: #d73948">str</span>.upper <span style="color: #d73948">str</span>.words <span style="color: #d73948">do</span> (w <span style="color: #d73948">str</span>) w short <span style="color: #d73948">or_fail</span>  w io.println <span style="color: #d73948">end</span> each
+<span style="color: #d73948">end</span>
+<span style="color: #198810">"one two three"</span> read_words <span style="color: #d73948">or_else</span> (e) <span style="color: #d73948">cat</span> (<span style="color: #198810">"stopped: "</span>, e err_text) io.println <span style="color: #d73948">end</span>
+<span style="color: #198810">"one embeddable two"</span> read_words <span style="color: #d73948">or_else</span> (e) <span style="color: #d73948">cat</span> (<span style="color: #198810">"stopped: "</span>, e err_text) io.println <span style="color: #d73948">end</span>
+</code></pre><p class="ex-label">출력</p><pre><code data-lang="text">$ pnx 05-release-failing.pnx
+ONE
+TWO
+THREE
+ONE
+stopped: range
+</code></pre></div></div><h3>5.5 바이트와 글자</h3><p>길이와 자리는 모두 바이트로 센다. 한글 한 글자는 UTF-8 로 3 바이트다. 글자 단위가 필요하면 <code>str.char_count</code> 와 <code>str.chars</code> 를 쓴다. <code>str.chars</code> 는 글자마다 그 글자의 뷰를 낸다(코드포인트 수가 아니다).</p><div class="example run"><p class="ex-file"><code>05-chars.pnx</code></p><pre><code data-lang="pinax"><span style="color: #d73948">use</span> io
 <span style="color: #d73948">use</span> <span style="color: #d73948">str</span>
 <span style="color: #d73948">word</span> show ()
   <span style="color: #198810">"한글 ok"</span> <span style="color: #d73948">to</span> s

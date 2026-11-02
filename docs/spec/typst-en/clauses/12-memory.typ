@@ -51,6 +51,12 @@ it. `mark release` takes back the values made after that mark.]
 #para("2")[A `release` while a value it takes back is still on the stack is refused.]
 #ex("spec", "12-release-stack.pnx")
 
+#para("2a")[A `release` in deferred code that runs because the word fails (`or_fail`, `fail`; 10.7 (1)) does not count
+the values the word leaves on the stack: the word ends there, its stack is not read again, and deferred code takes
+nothing from it (10.7 (4)). The values of the deferred code itself count as in (2), and a local holding a value taken
+back is as in (3). A failure carries only its code (11.2), so no `str` leaves the word that way.]
+#ex("spec", "12-release-failing.pnx")
+
 #para("3")[A local holding a value taken back cannot be read until something is stored into it again.]
 #ex("spec", "12-release-view.pnx")
 

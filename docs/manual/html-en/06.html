@@ -126,7 +126,25 @@ bytes still taken after 10000 lines: 0
 <span style="color: #d73948">end</span>
 </code></pre><p class="ex-label">Refused</p><pre><code data-lang="text">$ pnx 05-release-view.pnx
 05-release-view.pnx:6:3: this str was made after a mark that was released since; the region may hold other bytes there now
-</code></pre></div><div class="box qa"><p class="box-title">Q&amp;A</p><p><strong>Q. How do I keep text that must outlive the release?</strong></p><p>A. Put it into a <code>str(N)</code> global or cell. It is copied there, so it survives rewinding the region. <code>05-stored.pnx</code> above does that.</p></div><h3>5.5 Bytes and characters</h3><p>Lengths and positions count bytes. A Hangul character is 3 bytes in UTF-8. When characters matter, use <code>str.char_count</code> and <code>str.chars</code>. <code>str.chars</code> yields a view of each character (not a code point number).</p><div class="example run"><p class="ex-file"><code>05-chars.pnx</code></p><pre><code data-lang="pinax"><span style="color: #d73948">use</span> io
+</code></pre></div><div class="box qa"><p class="box-title">Q&amp;A</p><p><strong>Q. How do I keep text that must outlive the release?</strong></p><p>A. Put it into a <code>str(N)</code> global or cell. It is copied there, so it survives rewinding the region. <code>05-stored.pnx</code> above does that.</p></div><div class="box qa"><p class="box-title">Q&amp;A</p><p><strong>Q. A word inside <code>each</code> fails, under <code>defer m release</code>. Can I pass the failure on with <code>or_fail</code>?</strong></p><p>A. Yes. On the way out of a failing word the release does not look at the text left on the stack: the word ends there and nothing reads it again. The stem stops at the first failure.</p><div class="example run"><p class="ex-file"><code>05-release-failing.pnx</code></p><pre><code data-lang="pinax"><span style="color: #d73948">use</span> io
+<span style="color: #d73948">use</span> <span style="color: #d73948">str</span>
+<span style="color: #d73948">word</span> short (w <span style="color: #d73948">str</span> <span style="color: #d73948">or</span> <span style="color: #d73948">fail</span>)
+  w <span style="color: #d73948">str</span>.len <span style="color: #b60157">5</span> gt <span style="color: #d73948">if</span> <span style="color: #d73948">err</span>.range <span style="color: #d73948">fail</span> <span style="color: #d73948">end</span>
+<span style="color: #d73948">end</span>
+<span style="color: #d73948">word</span> read_words (line <span style="color: #d73948">str</span> <span style="color: #d73948">or</span> <span style="color: #d73948">fail</span>)
+  <span style="color: #d73948">mark</span> <span style="color: #d73948">to</span> m
+  defer m release <span style="color: #d73948">end</span>
+  line <span style="color: #d73948">str</span>.upper <span style="color: #d73948">str</span>.words <span style="color: #d73948">do</span> (w <span style="color: #d73948">str</span>) w short <span style="color: #d73948">or_fail</span>  w io.println <span style="color: #d73948">end</span> each
+<span style="color: #d73948">end</span>
+<span style="color: #198810">"one two three"</span> read_words <span style="color: #d73948">or_else</span> (e) <span style="color: #d73948">cat</span> (<span style="color: #198810">"stopped: "</span>, e err_text) io.println <span style="color: #d73948">end</span>
+<span style="color: #198810">"one embeddable two"</span> read_words <span style="color: #d73948">or_else</span> (e) <span style="color: #d73948">cat</span> (<span style="color: #198810">"stopped: "</span>, e err_text) io.println <span style="color: #d73948">end</span>
+</code></pre><p class="ex-label">Output</p><pre><code data-lang="text">$ pnx 05-release-failing.pnx
+ONE
+TWO
+THREE
+ONE
+stopped: range
+</code></pre></div></div><h3>5.5 Bytes and characters</h3><p>Lengths and positions count bytes. A Hangul character is 3 bytes in UTF-8. When characters matter, use <code>str.char_count</code> and <code>str.chars</code>. <code>str.chars</code> yields a view of each character (not a code point number).</p><div class="example run"><p class="ex-file"><code>05-chars.pnx</code></p><pre><code data-lang="pinax"><span style="color: #d73948">use</span> io
 <span style="color: #d73948">use</span> <span style="color: #d73948">str</span>
 <span style="color: #d73948">word</span> show ()
   <span style="color: #198810">"한글 ok"</span> <span style="color: #d73948">to</span> s

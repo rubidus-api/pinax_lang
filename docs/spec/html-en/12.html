@@ -33,6 +33,23 @@ fill
 <span style="color: #d73948">end</span>
 </code></pre><p class="ex-label">Refused</p><pre><code data-lang="text">$ pnx 12-release-stack.pnx
 12-release-stack.pnx:4:5: a str made after this mark is still on the stack; the release gives its bytes back
+</code></pre></div><p class="para"><span class="pn">(2a)</span> A <code>release</code> in deferred code that runs because the word fails (<code>or_fail</code>, <code>fail</code>; 10.7 (1)) does not count the values the word leaves on the stack: the word ends there, its stack is not read again, and deferred code takes nothing from it (10.7 (4)). The values of the deferred code itself count as in (2), and a local holding a value taken back is as in (3). A failure carries only its code (11.2), so no <code>str</code> leaves the word that way.</p><div class="example run"><p class="ex-file"><code>12-release-failing.pnx</code></p><pre><code data-lang="pinax"><span style="color: #d73948">use</span> io
+<span style="color: #d73948">use</span> <span style="color: #d73948">str</span>
+<span style="color: #d73948">word</span> check (w <span style="color: #d73948">str</span> <span style="color: #d73948">or</span> <span style="color: #d73948">fail</span>)
+  w <span style="color: #d73948">str</span>.len <span style="color: #b60157">5</span> gt <span style="color: #d73948">if</span> <span style="color: #d73948">err</span>.range <span style="color: #d73948">fail</span> <span style="color: #d73948">end</span>
+<span style="color: #d73948">end</span>
+<span style="color: #d73948">word</span> words_of (line <span style="color: #d73948">str</span> <span style="color: #d73948">or</span> <span style="color: #d73948">fail</span>)
+  <span style="color: #d73948">loop</span>
+    <span style="color: #d73948">mark</span> <span style="color: #d73948">to</span> m
+    defer m release <span style="color: #d73948">end</span>
+    line <span style="color: #d73948">str</span>.lower <span style="color: #d73948">str</span>.words <span style="color: #d73948">do</span> (w <span style="color: #d73948">str</span>) w check <span style="color: #d73948">or_fail</span>  w io.println <span style="color: #d73948">end</span> each
+    <span style="color: #d73948">break</span>
+  <span style="color: #d73948">end</span>
+<span style="color: #d73948">end</span>
+<span style="color: #198810">"Pinax interprets"</span> words_of <span style="color: #d73948">or_else</span> (e) <span style="color: #d73948">cat</span> (<span style="color: #198810">"failed: "</span>, e err_text) io.println <span style="color: #d73948">end</span>
+</code></pre><p class="ex-label">Output</p><pre><code data-lang="text">$ pnx 12-release-failing.pnx
+pinax
+failed: range
 </code></pre></div><p class="para"><span class="pn">(3)</span> A local holding a value taken back cannot be read until something is stored into it again.</p><div class="example refused"><p class="ex-file"><code>12-release-view.pnx</code></p><pre><code data-lang="pinax"><span style="color: #d73948">use</span> io
 <span style="color: #d73948">word</span> f ()
   <span style="color: #d73948">mark</span> <span style="color: #d73948">to</span> m

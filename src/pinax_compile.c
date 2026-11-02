@@ -417,6 +417,7 @@ typedef struct comp {
     bool         data_only; // PINAX_LOAD_DATA: declarations, literals, stores and rows only
     bool         sink;      // the word being compiled may take an owned value off the stack
     bool         in_defer;  // the body of a defer is being read
+    bool         leaving;   // the defers run because the word fails: the stack below them is dropped (RFC-0035)
     name         modules[MAX_MODULES]; // the names the source writes: `use rex as rx` opens rx
     name         module_real[MAX_MODULES]; // and the modules they stand for
     uint32_t     n_modules;
@@ -2604,7 +2605,10 @@ static bool guard(comp *c, const sig *s, const uint32_t base[2], const uint32_t 
         if (!push_slot(c, TY_ERR))
             return false;
         const uint32_t keep = slot_of(c, f->depth - 1);
-        if (emit(c, PNX_ABX(PNX_GETFAIL, keep, 0)) == NONE || !emit_defers(c, 0))
+        c->leaving = true;
+        const bool ran = emit(c, PNX_ABX(PNX_GETFAIL, keep, 0)) != NONE && emit_defers(c, 0);
+        c->leaving = false;
+        if (!ran)
             return false;
         --f->depth;
         if (!nothing_owned(c) || emit(c, PNX_ABC(PNX_FAILR, keep, 0, 0)) == NONE)
@@ -3241,11 +3245,13 @@ static bool same_turn(comp *c, const block *b) {
 }
 
 // A release, or a mark given to a word that may release it: the str values made after mark
-// number `serial` are gone. One still on the stack is refused; a local holding one is stale.
+// number `serial` are gone. One still on the stack is refused; a local holding one is stale. In a
+// defer run because the word fails, the stack below the defer is dropped unread: only the
+// defer's own values count (RFC-0035).
 static bool released(comp *c, uint8_t serial) {
     fn *f = c->f;
     ++f->releases;
-    for (uint32_t k = 0; k < f->depth; ++k) {
+    for (uint32_t k = c->leaving && c->in_defer ? f->floor : 0; k < f->depth; ++k) {
         if (bank_of(f->stack[k].type) == BANK_S && f->stack[k].born >= serial)
             return type_error(c, "a str made after this mark is still on the stack; the release gives its bytes back");
     }
@@ -7131,7 +7137,10 @@ static bool body_token(comp *c) {
         if (e->type != TY_ERR)
             return type_error(c, "fail takes an error number (err.not_found, or the e of or_else)");
         if (f->n_defers) { // the error is kept in its register while the defers run above it
-            if (!settle(c, f->depth - 1) || !emit_defers(c, 0))
+            c->leaving = true;
+            const bool ran = settle(c, f->depth - 1) && emit_defers(c, 0);
+            c->leaving = false;
+            if (!ran)
                 return false;
             e = &f->stack[f->depth - 1];
         }
