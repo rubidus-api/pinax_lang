@@ -161,7 +161,25 @@ day 4: 18
 day 5: 7
 day 6: 14
 distance from 10, added up: 34
-</code></pre></div><p><code>lo hi range</code> 도 줄기다(<code>hi</code> 는 들지 않는다). <code>fold</code> 는 첫 값을 줄기 앞에 두고, 블록이 (지금까지의 값, 원소)를 받아 새 값을 준다.</p><h3>4.6 값인 낱말</h3><p>조합 낱말에 주지 않은 블록은 <strong>값</strong>이다. 지역 변수에 넣거나, 돌려주거나, <code>word (서명)</code> 타입의 매개변수에 줄 수 있고, <code>call</code> 로 부른다. 이런 블록은 바깥의 지역 변수를 보지 못한다. 프로그램의 낱말을 값으로 주려면 서명 없이 <code>do 이름 end</code> 라고 쓴다. 그 값은 그 낱말이고, 서명도 그 낱말의 것이다.</p><div class="example run"><p class="ex-file"><code>04-word-values.pnx</code></p><pre><code data-lang="pinax"><span style="color: #d73948">use</span> io
+</code></pre></div><p><code>lo hi range</code> 도 줄기다(<code>hi</code> 는 들지 않는다). <code>fold</code> 는 첫 값을 줄기 앞에 두고, 블록이 (지금까지의 값, 원소)를 받아 새 값을 준다.</p><p><code>each</code>, <code>each_index</code>, <code>times</code> 의 블록은 루프처럼 <code>break</code>, <code>while</code>, <code>until</code> 로 일찍 떠난다. 줄기는 멈추고 그 낱말 뒤의 코드가 돈다. 처음 맞는 것에서 멈추는 찾기는 이렇게 쓴다.</p><div class="example run"><p class="ex-file"><code>04-leave-each.pnx</code></p><pre><code data-lang="pinax"><span style="color: #d73948">use</span> io
+<span style="color: #d73948">array</span> prices <span style="color: #d73948">int</span> <span style="color: #b60157">6</span>
+<span style="color: #d73948">word</span> load_prices ()
+  <span style="color: #b60157">0</span> <span style="color: #b60157">6</span> range <span style="color: #d73948">do</span> (i <span style="color: #d73948">int</span>) i <span style="color: #b60157">7</span> mul <span style="color: #b60157">3</span> add i set prices <span style="color: #d73948">end</span> each
+<span style="color: #d73948">end</span>
+<span style="color: #d73948">word</span> first_over (limit <span style="color: #d73948">int</span> <span style="color: #d73948">gives</span> r <span style="color: #d73948">int</span>)
+  <span style="color: #b60157">-1</span> <span style="color: #d73948">to</span> found
+  prices <span style="color: #d73948">do</span> (p <span style="color: #d73948">int</span>, i <span style="color: #d73948">int</span>)
+    p limit gt <span style="color: #d73948">if</span> i <span style="color: #d73948">to</span> found <span style="color: #d73948">break</span> <span style="color: #d73948">end</span>
+  <span style="color: #d73948">end</span> each_index
+  found
+<span style="color: #d73948">end</span>
+load_prices
+<span style="color: #d73948">cat</span> (<span style="color: #198810">"first over 20 at "</span>, <span style="color: #b60157">20</span> first_over) io.println
+<span style="color: #d73948">cat</span> (<span style="color: #198810">"first over 99 at "</span>, <span style="color: #b60157">99</span> first_over) io.println
+</code></pre><p class="ex-label">출력</p><pre><code data-lang="text">$ pnx 04-leave-each.pnx
+first over 20 at 3
+first over 99 at -1
+</code></pre></div><h3>4.6 값인 낱말</h3><p>조합 낱말에 주지 않은 블록은 <strong>값</strong>이다. 지역 변수에 넣거나, 돌려주거나, <code>word (서명)</code> 타입의 매개변수에 줄 수 있고, <code>call</code> 로 부른다. 이런 블록은 바깥의 지역 변수를 보지 못한다. 프로그램의 낱말을 값으로 주려면 서명 없이 <code>do 이름 end</code> 라고 쓴다. 그 값은 그 낱말이고, 서명도 그 낱말의 것이다.</p><div class="example run"><p class="ex-file"><code>04-word-values.pnx</code></p><pre><code data-lang="pinax"><span style="color: #d73948">use</span> io
 <span style="color: #d73948">use</span> <span style="color: #d73948">str</span>
 <span style="color: #d73948">word</span> up (a <span style="color: #d73948">int</span>, b <span style="color: #d73948">int</span> <span style="color: #d73948">gives</span> <span style="color: #d73948">bool</span>) a b lt <span style="color: #d73948">end</span>
 <span style="color: #d73948">word</span> down (a <span style="color: #d73948">int</span>, b <span style="color: #d73948">int</span> <span style="color: #d73948">gives</span> <span style="color: #d73948">bool</span>) a b gt <span style="color: #d73948">end</span>
@@ -190,4 +208,4 @@ smallest 3, largest 7
 <span style="color: #d73948">end</span>
 </code></pre><p class="ex-label">거절</p><pre><code data-lang="text">$ pnx 04-word-values-branch.pnx
 04-word-values-branch.pnx:4:17: the stack does not hold enough values for this word
-</code></pre></div></div><div class="box qa"><p class="box-title">문답</p><p><strong>물음. <code>if</code> 의 두 가지가 다른 타입을 남기고 싶으면?</strong></p><p>답. 못 한다. <code>if</code> 뒤의 코드는 어느 가지로 왔는지 모르므로, 두 가지는 같은 개수·같은 타입을 남겨야 한다. 다른 것을 남기고 싶다면 그것은 “값이 있거나 없거나” 이고, 그때는 실패(8장)나 <code>is_none</code> 으로 묻는 줄(7장)을 쓴다.</p></div><div class="box summary"><p class="box-title">정리</p><ul><li><code>to 이름</code> 은 지역 변수에, <code>set 이름</code> 은 전역에 넣는다(표준 9.4).</li><li>가지 안에서 만든 이름은 가지 밖에서 보이지 않는다(9.4).</li><li><code>to</code> 는 맨 위 값을 내려 이름에 담고, 이름을 쓰면 값이 다시 올라간다(9.4).</li><li><code>if</code> 의 두 갈래와 <code>case</code> 의 가지는 같은 스택을, 루프의 한 바퀴는 들어올 때의 스택을 남긴다(10).</li><li>이름 붙은 루프는 <code>until (이름)</code> 으로 한 번에 떠난다(10.2).</li><li>배열과 목록은 줄기로 훑는다: <code>each</code> <code>each_index</code> <code>count</code> <code>fold</code> <code>sum</code> …(10.6).</li><li><code>do 이름 end</code> 는 낱말 <code>이름</code> 을 값으로 준다. 다른 낱말은 <code>do (서명) 낱말 end</code> 로 준다(10.5).</li></ul></div></main><nav class="bottom"><a href="index.html">처음</a> · <a href="04.html">앞</a> · <a href="06.html">다음</a> · <a href="../html-en/05.html">English</a></nav></body></html>
+</code></pre></div></div><div class="box qa"><p class="box-title">문답</p><p><strong>물음. <code>if</code> 의 두 가지가 다른 타입을 남기고 싶으면?</strong></p><p>답. 못 한다. <code>if</code> 뒤의 코드는 어느 가지로 왔는지 모르므로, 두 가지는 같은 개수·같은 타입을 남겨야 한다. 다른 것을 남기고 싶다면 그것은 “값이 있거나 없거나” 이고, 그때는 실패(8장)나 <code>is_none</code> 으로 묻는 줄(7장)을 쓴다.</p></div><div class="box summary"><p class="box-title">정리</p><ul><li><code>to 이름</code> 은 지역 변수에, <code>set 이름</code> 은 전역에 넣는다(표준 9.4).</li><li>가지 안에서 만든 이름은 가지 밖에서 보이지 않는다(9.4).</li><li><code>to</code> 는 맨 위 값을 내려 이름에 담고, 이름을 쓰면 값이 다시 올라간다(9.4).</li><li><code>if</code> 의 두 갈래와 <code>case</code> 의 가지는 같은 스택을, 루프의 한 바퀴는 들어올 때의 스택을 남긴다(10).</li><li>이름 붙은 루프는 <code>until (이름)</code> 으로 한 번에 떠난다(10.2).</li><li>배열과 목록은 줄기로 훑는다: <code>each</code> <code>each_index</code> <code>count</code> <code>fold</code> <code>sum</code> …(10.6). <code>each</code>, <code>each_index</code>, <code>times</code> 의 블록은 <code>break</code> 로 떠난다(10.6 (4)).</li><li><code>do 이름 end</code> 는 낱말 <code>이름</code> 을 값으로 준다. 다른 낱말은 <code>do (서명) 낱말 end</code> 로 준다(10.5).</li></ul></div></main><nav class="bottom"><a href="index.html">처음</a> · <a href="04.html">앞</a> · <a href="06.html">다음</a> · <a href="../html-en/05.html">English</a></nav></body></html>

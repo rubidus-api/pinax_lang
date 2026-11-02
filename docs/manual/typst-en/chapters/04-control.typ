@@ -113,6 +113,11 @@ is expanded in place, so it can use the locals around it.
 `lo hi range` is a stem too (`hi` is not included). `fold` takes a first value before the stem, and its block takes
 (the value so far, an element) and gives the new value.
 
+The block of `each`, `each_index` or `times` is left early with `break`, `while` or `until`, as a loop is: the stem
+stops and the code after the word runs. A search that stops at the first hit is written so.
+
+#ex("manual", "04-leave-each.pnx")
+
 == Words as values
 
 A block that is not given to a combining word is a #strong[value]: it can be kept in a local, returned, or given to a
@@ -142,6 +147,7 @@ other has not, that is a failure (chapter 8) or a row asked with `is_none` (chap
 - The two branches of `if` and the branches of `case` leave the same stack; one turn of a loop leaves the stack it found
   (10).
 - A named loop is left at once with `until (NAME)` (10.2).
-- Arrays and lists are walked with stems: `each` `each_index` `count` `fold` `sum` … (10.6).
+- Arrays and lists are walked with stems: `each` `each_index` `count` `fold` `sum` … (10.6); the block of `each`,
+  `each_index` or `times` is left with `break` (10.6 (4)).
 - `do NAME end` is the word `NAME` as a value; any other word is given as `do (signature) word end` (10.5).
 ]

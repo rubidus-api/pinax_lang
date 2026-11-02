@@ -3433,9 +3433,18 @@ static bool leave_target(comp *c, block **out) {
     }
     for (uint32_t k = f->n_blocks; k-- > 0;) {
         block *b = f->blocks[k];
-        if (b->kind == B_DO)
+        if (b->kind == B_DO) {
+            // the block of a combining word that gives nothing is one loop with its stem (RFC-0036)
+            const bool leaves = b->use == USE_EACH || b->use == USE_EACH_INDEX || b->use == USE_TIMES;
+            if (leaves && !n.length) {
+                *out = b;
+                return true;
+            }
             return error_at(c, PINAX_ERR_SYNTAX, at.line, at.column,
-                            "a loop is not left from inside a do block; the block is its own loop");
+                            leaves ? "a named loop outside this block is not left from inside it; break leaves the block"
+                                   : "only the block of each, each_index or times is left early; this word gives a "
+                                     "result made from every element");
+        }
         if (b->kind == B_LOOP && (!n.length || (b->name.length && name_eq(b->name, n)))) {
             *out = b;
             return true;

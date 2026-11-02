@@ -65,7 +65,8 @@ block   = "do" [ "(" effect ")" ] { body } "end" ;
 #para("5")[한 바퀴가 스택을 바꾸면 거절된다.]
 #ex("spec", "10-loop-net.pnx")
 
-#para("6")[`while` `until` `break` 를 루프 밖에 쓰면 거절된다. `do` 블록 안에서 바깥 루프를 떠나지도 못한다.]
+#para("6")[`while` `until` `break` 를 루프 밖에 쓰면 거절된다. `do` 블록 안에서 바깥 루프를 떠나지도 못한다.
+`each`, `each_index`, `times` 의 블록 안에서는 그 블록을 떠난다(10.6 (4)).]
 #ex("spec", "10-while-outside.pnx")
 
 #para("7")[떠나는 낱말(`return` `fail` `break`)이나 끝나지 않는 루프 바로 뒤에 같은 갈래의 코드가 더 있으면
@@ -179,6 +180,13 @@ fail`). 목적지가 차면 `err.full` 로 실패하고, 그때까지 쓴 것은
 
 #ex("spec", "10-map-into.pnx")
 
+#para("4")[줄기와 조합 낱말은 루프 하나를 이루고, `each`, `each_index`, `times` 의 블록 안에서 `break` 는 그 루프를
+떠난다. 줄기는 멈추고 조합 낱말 뒤의 코드가 돈다. `while` 과 `until` 은 루프를 떠나듯 떠난다(10.2 (1)). 루프를 떠나는
+규칙이 그대로다: 스택은 블록이 시작할 때와 같고(10.2 (2)), 블록의 미룬 코드가 돈다(10.7). 블록 안의 `loop` 에 쓴
+`break` 는 그 루프를 떠난다. 모든 원소로 결과를 만드는 다른 조합 낱말의 블록은 일찍 떠나지 못하고, 블록 밖의 이름 붙은
+루프는 블록 안에서 떠나지 못한다.]
+#ex("spec", "10-leave-each.pnx")
+
 == 미룬 코드 <control-defer>
 
 #part("구문")
@@ -216,6 +224,8 @@ defer = "defer" { body } "end" ;
   ([두 갈래의 스택이 다름], "the two branches of this if leave different stacks"),
   ([한 바퀴가 스택을 바꿈], "one turn of a loop must leave the stack as it found it"),
   ([루프 밖의 `while` `until` `break`], "while, until and break belong inside a loop"),
+  ([결과를 주는 낱말의 블록 안의 `while` `until` `break`], "only the block of each, each_index or times is left early; this word gives a result made from every element"),
+  ([`do` 블록 밖 루프로의 `break (NAME)`], "a named loop outside this block is not left from inside it; break leaves the block"),
   ([닿지 않는 코드], "this code cannot be reached: the code before it always leaves"),
   ([`case` 의 같은 값], "this value is already in an earlier branch of the case"),
   ([펼쳐지는 블록이 스택을 바꿈], "this block must leave the stack as it found it"),

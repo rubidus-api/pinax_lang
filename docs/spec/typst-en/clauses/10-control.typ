@@ -68,7 +68,7 @@ outer one, but an `until (outer name)` written in the inner loop does.]
 #ex("spec", "10-loop-net.pnx")
 
 #para("6")[`while`, `until` or `break` outside a loop is refused. They cannot leave an outer loop from inside a `do`
-block either.]
+block either; in the block of `each`, `each_index` or `times` they leave that block (10.6 (4)).]
 #ex("spec", "10-while-outside.pnx")
 
 #para("7")[Code right after a leaving word (`return` `fail` `break`) or a loop that never ends, in the same branch, can
@@ -186,6 +186,14 @@ destination may be a collection parameter (9.9).]
 
 #ex("spec", "10-map-into.pnx")
 
+#para("4")[A stem and its combining word make one loop, and in the block of `each`, `each_index` or `times`, `break`
+leaves it: the stem stops and the code after the combining word runs. `while` and `until` leave it as they leave a
+loop (10.2 (1)). The rules of leaving a loop hold: the stack is as it was when the block began (10.2 (2)), and the
+block's deferred code runs (10.7). A `break` in a `loop` inside the block leaves that loop. The blocks of the other
+combining words, which give a result made from every element, are not left early, and a named loop outside the block
+is not left from inside it.]
+#ex("spec", "10-leave-each.pnx")
+
 == Deferred code <control-defer>
 
 #part("Syntax")
@@ -225,6 +233,8 @@ the value can still be lent.]
   ([Two branches leave different stacks], "the two branches of this if leave different stacks"),
   ([A turn changes the stack], "one turn of a loop must leave the stack as it found it"),
   ([`while` `until` `break` outside a loop], "while, until and break belong inside a loop"),
+  ([`while` `until` `break` in the block of a word that gives a result], "only the block of each, each_index or times is left early; this word gives a result made from every element"),
+  ([`break (NAME)` to a loop outside a `do` block], "a named loop outside this block is not left from inside it; break leaves the block"),
   ([Unreachable code], "this code cannot be reached: the code before it always leaves"),
   ([The same value twice in a `case`], "this value is already in an earlier branch of the case"),
   ([An expanded block changes the stack], "this block must leave the stack as it found it"),

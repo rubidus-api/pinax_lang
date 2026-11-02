@@ -1,0 +1,11 @@
+rem run
+use io
+use str
+word until_blank (s str)
+  s str.lines do (line str)
+    line str.len 0 eq if break end
+    cat ("> ", line) io.println
+  end each
+  "done" io.println
+end
+"first\nsecond\n\nnot read" until_blank
