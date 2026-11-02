@@ -169,20 +169,34 @@ static bool number(pnx_lexer *lx, pnx_token *t) {
             ++i;
             if (!exponent(lx, &i, &e))
                 return false;
-            double v = 0.0;
-            for (uint32_t k = 0; k < nd; ++k)
-                v = v * 16.0 + lex_hex_value((uint8_t)digits[k]);
-            double scale = 1.0 / 16.0;
-            for (uint32_t k = 0; k < nf; ++k, scale /= 16.0)
-                v += lex_hex_value((uint8_t)fraction[k]) * scale;
-            // at most 79 digits each side: past 1500 the value is already infinite or 0, and a
-            // longer loop would make a few bytes of source cost a million steps
+            // at most 79 digits each side, 316 bits: past 1500 the value is already infinite or 0
             e = e > 1500 ? 1500 : e < -1500 ? -1500 : e;
-            for (; e > 0; --e)
-                v *= 2.0;
-            for (; e < 0; ++e)
-                v /= 2.0;
-            t->real = negative ? -v : v;
+            char text[180];
+            uint32_t len = 0;
+            text[len++] = '0';
+            text[len++] = 'x';
+            __builtin_memcpy(text + len, digits, nd);
+            len += nd;
+            if (nf) {
+                text[len++] = '.';
+                __builtin_memcpy(text + len, fraction, nf);
+                len += nf;
+            }
+            text[len++] = 'p';
+            if (e < 0)
+                text[len++] = '-';
+            char rev[8];
+            uint32_t nr = 0;
+            for (uint32_t u = (uint32_t)(e < 0 ? -e : e); nr == 0 || u; u /= 10)
+                rev[nr++] = (char)('0' + u % 10);
+            while (nr)
+                text[len++] = rev[--nr];
+            // rounded once from every digit; a value too large is the infinity (PROVEN_ERR_OVERFLOW)
+            const proven_parse_double_result_t r =
+                proven_parse_double_ascii((proven_u8str_view_t){(const proven_byte_t *)text, len});
+            if ((r.err != PROVEN_OK && r.err != PROVEN_ERR_OVERFLOW) || r.consumed != len)
+                return fail_at(lx, start, "the real number cannot be read");
+            t->real = negative ? -r.val : r.val;
             real = true;
         } else {
             if (dot)

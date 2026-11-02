@@ -166,6 +166,14 @@ static const char *own_flags(const target_t *t) {
     return buf;
 }
 
+// The command pnx: in the sanitize build its allocator is proven's checked one, and a run that
+// does not give back every block it took ends with status 2 (the pnx cases see it).
+static const char *pnx_flags(const target_t *t) {
+    static char buf[600];
+    snprintf(buf, sizeof buf, "%s%s", own_flags(t), t->sanitize ? " -DPROVEN_ALLOC_CHECK" : "");
+    return buf;
+}
+
 static const char *proven_flags(const target_t *t) {
     static char buf[512];
     snprintf(buf, sizeof buf, "-std=c23 -Wall -Wextra -Werror %s -Ivendor/proven/include -Ivendor/proven/platform",
@@ -223,7 +231,7 @@ static int build_lib(const target_t *t, char *lib, size_t lib_cap, char *hosted_
     char host_lib[512], pnx[512];
     host_objs[0] = pnx_objs[0] = '\0';
     if (compile_set(t, own_flags(t), "", host_sources, COUNT(host_sources), objdir, host_objs, sizeof host_objs) ||
-        compile_set(t, own_flags(t), "", pnx_sources, COUNT(pnx_sources), objdir, pnx_objs, sizeof pnx_objs))
+        compile_set(t, pnx_flags(t), "", pnx_sources, COUNT(pnx_sources), objdir, pnx_objs, sizeof pnx_objs))
         return 1;
     if (compile_set(t, proven_flags(t), "vendor/proven/", proven_threads, COUNT(proven_threads), objdir, host_objs,
                     sizeof host_objs))

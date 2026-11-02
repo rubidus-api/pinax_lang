@@ -32,6 +32,11 @@
 #include "pnx_fmt.h"
 #include "pnx_streams.h"
 
+#include "proven/alloc_check.h"
+#include "proven/fs.h"
+#include "proven/heap.h"
+#include "proven/u8str.h"
+
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -61,29 +66,72 @@ static const char *err_name(pinax_err err) {
     }
 }
 
-static char *read_file(const char *path, size_t *length) {
-    FILE *f = fopen(path, "rb");
-    if (!f)
+// Every piece of memory pnx takes is proven's heap, through one allocator. Built with
+// PROVEN_ALLOC_CHECK, the allocator is checked, and pnx says so when a run has not given back all
+// it took.
+#if defined(PROVEN_ALLOC_CHECK)
+enum { MOST_LIVE = 4096 };
+static proven_alloc_check_entry_t heap_entries[MOST_LIVE];
+#define HEAP_ENTRIES heap_entries, MOST_LIVE
+#else
+#define HEAP_ENTRIES NULL, 0
+#endif
+static proven_alloc_check_t heap_check;
+static proven_allocator_t   heap;
+enum { HEAP_ALIGN = _Alignof(max_align_t) }; // one alignment for every block, as realloc wants it again
+
+static void *take(size_t bytes) {
+    const proven_result_mem_mut_t room = heap.alloc_fn(heap.ctx, bytes ? bytes : 1, HEAP_ALIGN);
+    return room.err == PROVEN_OK ? room.value.ptr : NULL;
+}
+
+// The block at `ptr` of `old` bytes made `bytes` long; NULL, and the block as it was, when there is no room.
+static void *grow(void *ptr, size_t old, size_t bytes) {
+    if (!ptr)
+        return take(bytes);
+    const proven_result_mem_mut_t room = heap.realloc_fn(heap.ctx, ptr, old, bytes, HEAP_ALIGN);
+    return room.err == PROVEN_OK ? room.value.ptr : NULL;
+}
+
+static void give(void *ptr) {
+    if (ptr)
+        heap.free_fn(heap.ctx, ptr);
+}
+
+static proven_u8str_view_t view_of_c(const char *text) {
+    return (proven_u8str_view_t){(const proven_byte_t *)text, strlen(text)};
+}
+
+// The whole file, in a block of the heap; NULL when it cannot be read.
+static char *read_file(proven_u8str_view_t path, size_t *length) {
+    const proven_result_file_t opened = proven_fs_open(heap, path, PROVEN_FS_READ);
+    if (opened.err != PROVEN_OK)
         return NULL;
-    char  *text = NULL;
-    size_t n = 0, cap = 0;
-    for (;;) {
-        if (n == cap) {
-            cap = cap ? cap * 2 : 65536;
-            char *grown = realloc(text, cap);
+    const proven_result_size_t size = proven_fs_size(opened.value);
+    size_t cap = size.err == PROVEN_OK && size.value ? size.value + 1 : 65536, n = 0;
+    char  *text = take(cap);
+    while (text) {
+        if (n == cap) { // a file that grew, or one whose size the system does not know
+            char *grown = grow(text, cap, cap * 2);
             if (!grown) {
-                free(text);
-                fclose(f);
-                return NULL;
+                give(text);
+                text = NULL;
+                break;
             }
             text = grown;
+            cap *= 2;
         }
-        const size_t got = fread(text + n, 1, cap - n, f);
-        if (got == 0)
+        const proven_result_size_t got = proven_fs_read(opened.value, (proven_mem_mut_t){(proven_byte_t *)text + n, cap - n});
+        if (got.err == PROVEN_ERR_EOF || (got.err == PROVEN_OK && got.value == 0)) { // the end is a code of its own
             break;
-        n += got;
+        } else if (got.err != PROVEN_OK) {
+            give(text);
+            text = NULL;
+        } else {
+            n += got.value;
+        }
     }
-    fclose(f);
+    (void)proven_fs_close(opened.value);
     *length = n;
     return text;
 }
@@ -137,8 +185,8 @@ static pinax_err give_capacities(pinax_state *state, const char *module) {
 
 enum { MAX_LIBS = 16 };
 static struct {
-    const char *name; // as the script writes it after `from`
-    void       *handle;
+    proven_u8str_view_t name; // as the script writes it after `from`: the part of the option before =
+    void               *handle;
 } libs[MAX_LIBS];
 static int n_libs;
 
@@ -162,12 +210,7 @@ static bool open_lib(const char *option) {
         fprintf(stderr, "pnx: cannot open the library %s\n", eq + 1);
         return false;
     }
-    char *name = malloc((size_t)(eq - option) + 1);
-    if (!name)
-        return false;
-    memcpy(name, option, (size_t)(eq - option));
-    name[eq - option] = 0;
-    libs[n_libs].name = name;
+    libs[n_libs].name = proven_u8str_view_slice(view_of_c(option), 0, (size_t)(eq - option)); // argv outlives it
     libs[n_libs++].handle = handle;
     return true;
 }
@@ -180,7 +223,7 @@ static pinax_extern_fn resolve(void *user, pinax_str library, pinax_str symbol) 
     memcpy(wanted, symbol.ptr, symbol.len);
     wanted[symbol.len] = 0;
     for (int k = 0; k < n_libs; ++k) {
-        if (strlen(libs[k].name) != library.len || memcmp(libs[k].name, library.ptr, library.len) != 0)
+        if (!proven_u8str_view_eq(libs[k].name, (proven_u8str_view_t){library.ptr, library.len}))
             continue;
 #if defined(_WIN32)
         return (pinax_extern_fn)GetProcAddress((HMODULE)libs[k].handle, wanted);
@@ -211,7 +254,6 @@ static void close_libs(void) {
 #else
         dlclose(libs[k].handle);
 #endif
-        free((void *)libs[k].name);
     }
     n_libs = 0;
 }
@@ -236,7 +278,9 @@ static bool is_name_byte(char c) {
 enum { MOST_SOURCES = 64 };
 static struct {
     char  name[32];
-    char *path, *text;
+    char *path;  // ends with a 0 byte: a command line argument, or `owned`
+    char *owned; // the path pnx made for a module beside the file, given back at the end
+    char *text;
 } sources[MOST_SOURCES];
 static int n_sources;
 
@@ -335,7 +379,7 @@ static void diag(void *user, pinax_str file, uint32_t line, uint32_t column, pin
     if (file.len == 6 && memcmp(file.ptr, "(eval)", 6) == 0)
         file = (pinax_str){(const unsigned char *)eval_path, strlen(eval_path)};
     for (int k = 0; k < n_sources; ++k) {
-        if (strlen(sources[k].name) == file.len && memcmp(sources[k].name, file.ptr, file.len) == 0) {
+        if (proven_u8str_view_eq(view_of_c(sources[k].name), (proven_u8str_view_t){file.ptr, file.len})) {
             file = (pinax_str){(const unsigned char *)sources[k].path, strlen(sources[k].path)};
             break;
         }
@@ -355,29 +399,31 @@ static pinax_err finish(pinax_state *state, pinax_err err) {
 // NAME.pnx beside this one, when there is such a file and it is not loaded yet. (A module the
 // host registered has no such file; a `use` line inside a text literal names one by mistake
 // at worst.) Returns the outcome of the load; *said tells that the error was printed.
-static pinax_err load_file(pinax_state *state, const char *path, const char *name, bool *said, bool see) {
+static pinax_err load_file(pinax_state *state, char *path, char *owned, const char *name, bool *said, bool see) {
     if (n_sources == MOST_SOURCES) {
         fprintf(stderr, "pnx: more than %d source files\n", MOST_SOURCES);
+        give(owned);
         *said = true;
         return PINAX_ERR_NO_ROOM;
     }
     size_t length = 0;
-    char  *text = read_file(path, &length);
+    char  *text = read_file(view_of_c(path), &length);
     if (!text) {
         fprintf(stderr, "pnx: cannot read %s\n", path);
+        give(owned);
         *said = true;
         return PINAX_ERR_NOT_FOUND;
     }
     const int self = n_sources++;
     snprintf(sources[self].name, sizeof sources[self].name, "%s", name);
-    sources[self].path = malloc(strlen(path) + 1);
+    sources[self].path = path;
+    sources[self].owned = owned;
     sources[self].text = text;
-    if (!sources[self].path)
-        return PINAX_ERR_NO_ROOM;
-    strcpy(sources[self].path, path);
 
+    // the modules it uses: each line `use NAME`, its name a slice of the text
+    const proven_u8str_view_t source = {(const proven_byte_t *)text, length};
     const char *slash = last_sep(path);
-    const size_t dir = slash ? (size_t)(slash - path) + 1 : 0;
+    const proven_u8str_view_t dir = proven_u8str_view_slice(view_of_c(path), 0, slash ? (size_t)(slash - path) + 1 : 0);
     for (size_t i = 0; i + 4 < length; ++i) {
         if ((i != 0 && text[i - 1] != '\n') || memcmp(text + i, "use", 3) != 0 || (text[i + 3] != ' ' && text[i + 3] != '\t'))
             continue;
@@ -389,28 +435,31 @@ static pinax_err load_file(pinax_state *state, const char *path, const char *nam
             ++end;
         if (end == at || end - at > 31)
             continue;
-        char used[32];
-        memcpy(used, text + at, end - at);
-        used[end - at] = '\0';
+        const proven_u8str_view_t used = proven_u8str_view_slice(source, at, end - at);
         bool loaded = false;
         for (int k = 0; k < n_sources; ++k)
-            loaded = loaded || strcmp(sources[k].name, used) == 0;
+            loaded = loaded || proven_u8str_view_eq(view_of_c(sources[k].name), used);
         if (loaded)
             continue;
-        char *beside = malloc(dir + strlen(used) + 5);
+        char *beside = take(dir.size + used.size + 5); // DIR/NAME.pnx
         if (!beside)
             return PINAX_ERR_NO_ROOM;
-        memcpy(beside, path, dir);
-        sprintf(beside + dir, "%s.pnx", used);
-        FILE *there = fopen(beside, "rb");
+        if (dir.size)
+            memcpy(beside, dir.ptr, dir.size);
+        memcpy(beside + dir.size, used.ptr, used.size);
+        memcpy(beside + dir.size + used.size, ".pnx", 5);
+        char used_name[32]; // pinax_load takes the name as C text
+        memcpy(used_name, used.ptr, used.size);
+        used_name[used.size] = '\0';
+        const proven_result_file_t there = proven_fs_open(heap, view_of_c(beside), PROVEN_FS_READ);
         pinax_err err = PINAX_OK;
-        if (there) {
-            fclose(there);
+        if (there.err == PROVEN_OK) {
+            (void)proven_fs_close(there.value);
             const int mark = n_sources;
-            err = load_file(state, beside, used, said, false);
+            err = load_file(state, beside, beside, used_name, said, false); // the source keeps the path now
             if (err == PINAX_ERR_STATE && !*said) { // the name is a module of the host: that one is meant
                 for (int k = mark; k < n_sources; ++k) {
-                    if (strcmp(sources[k].name, used) == 0)
+                    if (strcmp(sources[k].name, used_name) == 0)
                         sources[k].name[0] = '\0';
                 }
                 err = PINAX_OK;
@@ -419,13 +468,14 @@ static pinax_err load_file(pinax_state *state, const char *path, const char *nam
                 fprintf(stderr, "%s: %s\n", beside, err_name(err));
                 *said = true;
             }
+        } else {
+            give(beside);
         }
-        free(beside);
         if (err != PINAX_OK)
             return err;
     }
     if (see) { // the same text as a session's, with the tool word `see` before it on its first line
-        char *listed = malloc(length + 4);
+        char *listed = take(length + 4);
         if (!listed)
             return PINAX_ERR_NO_ROOM;
         memcpy(listed, "see ", 4);
@@ -436,7 +486,7 @@ static pinax_err load_file(pinax_state *state, const char *path, const char *nam
         const pinax_err err = finish(state, pinax_eval(state, (pinax_str){(const unsigned char *)listed, length + 4}));
         if (err == PINAX_OK)
             show_values(state);
-        free(listed);
+        give(listed);
         return err;
     }
     return finish(state, pinax_load(state, name, (pinax_str){(const unsigned char *)text, length}, PINAX_LOAD_CODE));
@@ -525,10 +575,10 @@ static bool report_fault(pinax_state *state, pinax_err err, const char *unnamed)
     const unsigned char *colon = memchr(text.ptr, ':', text.len);
     if (!colon || colon + 1 >= text.ptr + text.len || colon[1] < '0' || colon[1] > '9')
         return false;
-    const size_t name = (size_t)(colon - text.ptr);
-    const char  *path = NULL;
+    const proven_u8str_view_t name = {text.ptr, (size_t)(colon - text.ptr)}; // "NAME:12: div_zero"
+    const char               *path = NULL;
     for (int k = 0; k < n_sources && !path; ++k) {
-        if (strlen(sources[k].name) == name && memcmp(sources[k].name, text.ptr, name) == 0)
+        if (proven_u8str_view_eq(view_of_c(sources[k].name), name))
             path = sources[k].path;
     }
     const unsigned char *rest = colon + 1; // "12: div_zero"
@@ -571,6 +621,7 @@ int main(int argc, char **argv) {
     _setmode(_fileno(stdout), _O_BINARY);
     _setmode(_fileno(stderr), _O_BINARY);
 #endif
+    heap = proven_alloc_checked(&heap_check, proven_heap_allocator(), HEAP_ENTRIES);
     // options before the command; what follows is read as if they were not there
     int options = 0;
     while (options + 2 < argc && (strcmp(argv[1 + options], "--lib") == 0 || strcmp(argv[1 + options], "--capacity") == 0)) {
@@ -585,9 +636,25 @@ int main(int argc, char **argv) {
         argv += options;
         argc -= options;
     }
-    const int status = run(argc, argv);
+    int status = run(argc, argv);
     close_libs();
+#if defined(PROVEN_ALLOC_CHECK)
+    if (proven_alloc_check_live(&heap_check) != 0 || heap_check.faults != 0) {
+        fprintf(stderr, "pnx: %zu blocks of memory not given back, %zu refused\n", (size_t)proven_alloc_check_live(&heap_check),
+                (size_t)heap_check.faults);
+        status = 2;
+    }
+#endif
     return status;
+}
+
+// What `use` loaded, given back.
+static void give_sources(void) {
+    for (int k = 0; k < n_sources; ++k) {
+        give(sources[k].owned);
+        give(sources[k].text);
+    }
+    n_sources = 0;
 }
 
 static int run(int argc, char **argv) {
@@ -606,19 +673,19 @@ static int run(int argc, char **argv) {
     }
     if (formatting) {
         size_t length = 0;
-        char  *text = read_file(argv[at], &length);
+        char  *text = read_file(view_of_c(argv[at]), &length);
         if (!text) {
             fprintf(stderr, "pnx: cannot read %s\n", argv[at]);
             return 2;
         }
-        const int status = pnx_format(text, length, stdout, argv[at]);
-        free(text);
+        const int status = pnx_format(heap, text, length, stdout, argv[at]);
+        give(text);
         return status;
     }
-    const char *file_name = argv[at];
+    char *const file_name = argv[at];
     const char *kb = getenv("PNX_BLOCK_KB");
     const size_t block_bytes = (size_t)(kb && atol(kb) > 0 ? atol(kb) : 16384) * 1024;
-    void *block = malloc(block_bytes);
+    void *block = take(block_bytes);
     if (!block) {
         fprintf(stderr, "pnx: no memory for a block of %zu bytes\n", block_bytes);
         return 2;
@@ -634,6 +701,9 @@ static int run(int argc, char **argv) {
         pinax_set_resolver(state, resolve, NULL);
     if (err != PINAX_OK) {
         fprintf(stderr, "pnx: cannot start (%s)\n", err_name(err));
+        if (state)
+            pinax_close(state);
+        give(block);
         return 2;
     }
     pinax_host_set_args(argc - at, (const char *const *)(argv + at));
@@ -647,41 +717,37 @@ static int run(int argc, char **argv) {
     if (talking) {
         if (give_capacities(state, "") != PINAX_OK) {
             pinax_close(state);
-            free(block);
+            give(block);
             return 2;
         }
         const int status = repl(state, block_bytes);
         pinax_close(state);
-        free(block);
-        for (int k = 0; k < n_sources; ++k) { // what `use` loaded
-            free(sources[k].path);
-            free(sources[k].text);
-        }
+        give(block);
+        give_sources();
         return status;
     }
 
     // The file is loaded under its own name without ".pnx" when that is written like a word,
     // so that its tests and its diagnostics can be told from those of the modules it uses.
-    char        module[32] = "";
-    const char *base = last_sep(file_name) ? last_sep(file_name) + 1 : file_name;
-    size_t      stem = strlen(base);
-    if (stem > 4 && strcmp(base + stem - 4, ".pnx") == 0)
-        stem -= 4;
-    bool plain = stem > 0 && stem < sizeof module && !(base[0] >= '0' && base[0] <= '9');
-    for (size_t k = 0; plain && k < stem; ++k)
-        plain = is_name_byte(base[k]);
+    char                module[32] = "";
+    proven_u8str_view_t stem = view_of_c(last_sep(file_name) ? last_sep(file_name) + 1 : file_name); // the file's own name
+    if (stem.size > 4 && proven_u8str_view_ends_with(stem, PROVEN_LIT(".pnx")))
+        stem.size -= 4;
+    bool plain = stem.size > 0 && stem.size < sizeof module && !(stem.ptr[0] >= '0' && stem.ptr[0] <= '9');
+    for (size_t k = 0; plain && k < stem.size; ++k)
+        plain = is_name_byte((char)stem.ptr[k]);
     if (plain)
-        memcpy(module, base, stem);
+        memcpy(module, stem.ptr, stem.size);
     if (give_capacities(state, plain ? module : "") != PINAX_OK) {
         pinax_close(state);
-        free(block);
+        give(block);
         return 2;
     }
     bool said = false;
-    err = load_file(state, file_name, plain ? module : file_name, &said, seeing);
+    err = load_file(state, file_name, NULL, plain ? module : file_name, &said, seeing);
     if (err == PINAX_ERR_STATE && plain && !said && !seeing) { // the file is named like a module of the host
         plain = false;
-        err = load_file(state, file_name, file_name, &said, false);
+        err = load_file(state, file_name, NULL, file_name, &said, false);
     }
     int status = 0;
     if (err != PINAX_OK) {
@@ -699,11 +765,12 @@ static int run(int argc, char **argv) {
         const char *name = argc > at + 1 ? argv[at + 1] : "pnx_native";
         size_t      cap = 1u << 20, len = 0;
         char       *text = NULL;
-        for (;;) { // the text's length is known once written: grow until it fits
-            char *bigger = realloc(text, cap);
+        for (size_t had = 0;;) { // the text's length is known once written: grow until it fits
+            char *bigger = grow(text, had, cap);
             if (!bigger)
                 break;
             text = bigger;
+            had = cap;
             if ((len = pnx_export_c(state, name, text, cap)) != 0)
                 break;
             cap *= 4;
@@ -712,7 +779,7 @@ static int run(int argc, char **argv) {
             fwrite(text, 1, len, stdout);
         else
             status = 2;
-        free(text);
+        give(text);
     }
 #if defined(PNX_WITH_NATIVE)
     if (getenv("PNX_NATIVE_SAY"))
@@ -721,10 +788,7 @@ static int run(int argc, char **argv) {
     pnx_streams_flush();
     fflush(stdout);
     pinax_close(state);
-    free(block);
-    for (int k = 0; k < n_sources; ++k) {
-        free(sources[k].path);
-        free(sources[k].text);
-    }
+    give(block);
+    give_sources();
     return status;
 }

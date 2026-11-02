@@ -25,6 +25,10 @@
 #define PROVEN_CRYPTO_AEAD_NONCE   12
 #define PROVEN_CRYPTO_AEAD_TAG     16
 
+/* Tests: true makes P-256 use the general field code instead of its own (the results are the
+ * same values); false gives it its own back. */
+void proven_crypto_ec_force_general_(bool on);
+
 /* ---- ChaCha20 and Poly1305 (RFC 8439) ---- */
 
 /* XOR `len` bytes of keystream into `out` from `in` (they may be the same), starting at block
@@ -32,6 +36,23 @@
 void proven_crypto_chacha20(const proven_byte_t key[32], proven_u32 counter, const proven_byte_t nonce[12],
                             const proven_byte_t *in, proven_byte_t *out, proven_size_t len);
 
+/* Tests: 0 forces the portable ChaCha20, 4 or 8 at most that many blocks a call on the vector
+ * path (never more than the processor has), -1 the processor's widest again. The width in use. */
+int proven_crypto_chacha_force_width(int width);
+
+/* Poly1305's state: three limbs of 44, 44 and 42 bits where the compiler has 128-bit products,
+ * five of 26 bits elsewhere - and in the build with 32-bit limbs (PROVEN_CRYPTO_MP_LIMB_BITS=32),
+ * so that its gates run the 26-bit code on a 64-bit machine too. */
+#if defined(__SIZEOF_INT128__) && !(defined(PROVEN_CRYPTO_MP_LIMB_BITS) && PROVEN_CRYPTO_MP_LIMB_BITS == 32)
+#define PROVEN_CRYPTO_POLY1305_64 1
+typedef struct {
+    proven_u64 r[3];
+    proven_u64 h[3];
+    proven_u64 pad[2];
+    proven_byte_t buf[16];
+    proven_size_t buf_len;
+} proven_crypto_poly1305_t;
+#else
 typedef struct {
     proven_u32 r[5];
     proven_u32 h[5];
@@ -39,6 +60,7 @@ typedef struct {
     proven_byte_t buf[16];
     proven_size_t buf_len;
 } proven_crypto_poly1305_t;
+#endif
 
 void proven_crypto_poly1305_init(proven_crypto_poly1305_t *st, const proven_byte_t key[32]);
 void proven_crypto_poly1305_update(proven_crypto_poly1305_t *st, const proven_byte_t *m, proven_size_t len);
@@ -55,17 +77,43 @@ void proven_crypto_chacha20poly1305_seal(const proven_byte_t key[32], const prov
 
 /* ---- Multi-precision modular arithmetic (Montgomery form), constant-time ---- */
 
-/* Numbers are arrays of 32-bit limbs, least significant first, `limbs` long for a modulus of
- * that many limbs. Every operation takes the same time for the same modulus size whatever the
- * values are, except where a parameter is marked PUBLIC. */
-#define PROVEN_CRYPTO_MP_MAX 256                 /* limbs: moduli up to 8192 bits */
+/* Numbers are arrays of limbs, least significant first, `limbs` long for a modulus of that
+ * many limbs. A limb is 64 bits where the target is a 64-bit one and the compiler has a
+ * 128-bit integer for the product of two (GCC and Clang there), and 32 bits everywhere else,
+ * where the product is a 64-bit word. PROVEN_CRYPTO_MP_LIMB_BITS, defined as 32 by the
+ * build, takes the narrower one on any target. Sizes are counted in bytes and limbs derived
+ * from them, so that a key or a group holds the same numbers with either limb.
+ * Every operation takes the same time for the same modulus size whatever the values are,
+ * except where a parameter is marked PUBLIC. */
+#if !defined(PROVEN_CRYPTO_MP_LIMB_BITS)
+#  if defined(__SIZEOF_INT128__) && defined(__SIZEOF_POINTER__) && __SIZEOF_POINTER__ >= 8
+#    define PROVEN_CRYPTO_MP_LIMB_BITS 64
+#  else
+#    define PROVEN_CRYPTO_MP_LIMB_BITS 32
+#  endif
+#endif
+#if PROVEN_CRYPTO_MP_LIMB_BITS == 64
+#  if !defined(__SIZEOF_INT128__)
+#    error "PROVEN_CRYPTO_MP_LIMB_BITS 64 needs a compiler with a 128-bit integer"
+#  endif
+typedef proven_u64 proven_crypto_limb_t;
+#elif PROVEN_CRYPTO_MP_LIMB_BITS == 32
+typedef proven_u32 proven_crypto_limb_t;
+#else
+#  error "PROVEN_CRYPTO_MP_LIMB_BITS is 32 or 64"
+#endif
+#define PROVEN_CRYPTO_MP_LIMB_BYTES (PROVEN_CRYPTO_MP_LIMB_BITS / 8)
+/* The limbs that hold a number of `bytes` bytes. */
+#define PROVEN_CRYPTO_MP_LIMBS(bytes) (((bytes) + PROVEN_CRYPTO_MP_LIMB_BYTES - 1) / PROVEN_CRYPTO_MP_LIMB_BYTES)
+#define PROVEN_CRYPTO_MP_MAX_BYTES 1024          /* moduli up to 8192 bits */
+#define PROVEN_CRYPTO_MP_MAX PROVEN_CRYPTO_MP_LIMBS(PROVEN_CRYPTO_MP_MAX_BYTES)
 
 typedef struct {
     proven_size_t limbs;
     proven_size_t bits;                          /* bit length of the modulus */
-    proven_u32 n0inv;                            /* -n^-1 mod 2^32 */
-    proven_u32 n[PROVEN_CRYPTO_MP_MAX];
-    proven_u32 rr[PROVEN_CRYPTO_MP_MAX];         /* R^2 mod n, R = 2^(32 * limbs) */
+    proven_crypto_limb_t n0inv;                  /* -n^-1 mod 2^(limb bits) */
+    proven_crypto_limb_t n[PROVEN_CRYPTO_MP_MAX];
+    proven_crypto_limb_t rr[PROVEN_CRYPTO_MP_MAX]; /* R^2 mod n, R = 2^(limb bits * limbs) */
 } proven_crypto_mp_mod_t;
 
 /* The modulus from big-endian bytes. False when it is even, below 3, or too large. */
@@ -74,47 +122,60 @@ typedef struct {
  * is examined, and `bits` is len * 8 whatever its leading bits are. */
 [[nodiscard]] bool proven_crypto_mp_mod_init_secret(proven_crypto_mp_mod_t *mod, const proven_byte_t *be, proven_size_t len);
 /* Load big-endian bytes into `limbs` limbs. False when the value does not fit. */
-[[nodiscard]] bool proven_crypto_mp_load_be(proven_u32 *out, proven_size_t limbs, const proven_byte_t *be, proven_size_t len);
-void proven_crypto_mp_store_be(proven_byte_t *out, proven_size_t len, const proven_u32 *a, proven_size_t limbs);
+[[nodiscard]] bool proven_crypto_mp_load_be(proven_crypto_limb_t *out, proven_size_t limbs, const proven_byte_t *be, proven_size_t len);
+void proven_crypto_mp_store_be(proven_byte_t *out, proven_size_t len, const proven_crypto_limb_t *a, proven_size_t limbs);
+/* out = a + b and out = a - b over `limbs` limbs, plain: the carry or the borrow (0 or 1) is returned. */
+proven_crypto_limb_t proven_crypto_mp_add_raw(proven_crypto_limb_t *out, const proven_crypto_limb_t *a, const proven_crypto_limb_t *b, proven_size_t limbs);
+proven_crypto_limb_t proven_crypto_mp_sub_raw(proven_crypto_limb_t *out, const proven_crypto_limb_t *a, const proven_crypto_limb_t *b, proven_size_t limbs);
 /* All-ones when a < b, zero otherwise. */
-proven_u32 proven_crypto_mp_lt(const proven_u32 *a, const proven_u32 *b, proven_size_t limbs);
+proven_crypto_limb_t proven_crypto_mp_lt(const proven_crypto_limb_t *a, const proven_crypto_limb_t *b, proven_size_t limbs);
 /* All-ones when a is zero. */
-proven_u32 proven_crypto_mp_is_zero(const proven_u32 *a, proven_size_t limbs);
+proven_crypto_limb_t proven_crypto_mp_is_zero(const proven_crypto_limb_t *a, proven_size_t limbs);
 /* All-ones when a equals b. */
-proven_u32 proven_crypto_mp_eq(const proven_u32 *a, const proven_u32 *b, proven_size_t limbs);
+proven_crypto_limb_t proven_crypto_mp_eq(const proven_crypto_limb_t *a, const proven_crypto_limb_t *b, proven_size_t limbs);
 /* out = mask ? a : b, for a mask of all ones or zero. */
-void proven_crypto_mp_select(proven_u32 *out, const proven_u32 *a, const proven_u32 *b, proven_u32 mask, proven_size_t limbs);
+void proven_crypto_mp_select(proven_crypto_limb_t *out, const proven_crypto_limb_t *a, const proven_crypto_limb_t *b, proven_crypto_limb_t mask, proven_size_t limbs);
 /* out = a * b / R mod n. Inputs below n; `out` may be either input. */
-void proven_crypto_mp_montmul(const proven_crypto_mp_mod_t *mod, proven_u32 *out, const proven_u32 *a, const proven_u32 *b);
-void proven_crypto_mp_to_mont(const proven_crypto_mp_mod_t *mod, proven_u32 *out, const proven_u32 *a);
-void proven_crypto_mp_from_mont(const proven_crypto_mp_mod_t *mod, proven_u32 *out, const proven_u32 *a);
-void proven_crypto_mp_add(const proven_crypto_mp_mod_t *mod, proven_u32 *out, const proven_u32 *a, const proven_u32 *b);
-void proven_crypto_mp_sub(const proven_crypto_mp_mod_t *mod, proven_u32 *out, const proven_u32 *a, const proven_u32 *b);
-/* out = (big-endian value of any length) mod n, bit by bit. */
-void proven_crypto_mp_reduce_be(const proven_crypto_mp_mod_t *mod, proven_u32 *out, const proven_byte_t *be, proven_size_t len);
+void proven_crypto_mp_montmul(const proven_crypto_mp_mod_t *mod, proven_crypto_limb_t *out, const proven_crypto_limb_t *a, const proven_crypto_limb_t *b);
+/* out = a * a / R mod n, as montmul(a, a) with about three quarters of its multiplications. */
+void proven_crypto_mp_montsqr(const proven_crypto_mp_mod_t *mod, proven_crypto_limb_t *out, const proven_crypto_limb_t *a);
+void proven_crypto_mp_to_mont(const proven_crypto_mp_mod_t *mod, proven_crypto_limb_t *out, const proven_crypto_limb_t *a);
+void proven_crypto_mp_from_mont(const proven_crypto_mp_mod_t *mod, proven_crypto_limb_t *out, const proven_crypto_limb_t *a);
+void proven_crypto_mp_add(const proven_crypto_mp_mod_t *mod, proven_crypto_limb_t *out, const proven_crypto_limb_t *a, const proven_crypto_limb_t *b);
+void proven_crypto_mp_sub(const proven_crypto_mp_mod_t *mod, proven_crypto_limb_t *out, const proven_crypto_limb_t *a, const proven_crypto_limb_t *b);
+/* out = (big-endian value of any length) mod n, a modulus-sized chunk at a time (constant time
+ * for a given length). */
+void proven_crypto_mp_reduce_be(const proven_crypto_mp_mod_t *mod, proven_crypto_limb_t *out, const proven_byte_t *be, proven_size_t len);
 /* out = base^exp mod n, base and out in Montgomery form. The exponent is PUBLIC: its bits
- * decide which multiplications happen. */
-void proven_crypto_mp_pow(const proven_crypto_mp_mod_t *mod, proven_u32 *out, const proven_u32 *base,
-                          const proven_u32 *exp, proven_size_t exp_limbs);
-/* The largest modulus, in limbs, that proven_crypto_mp_pow_ct accepts: a prime factor of a
- * 4096-bit RSA key, with room for factors of unequal size. Its table is sized by this. */
-#define PROVEN_CRYPTO_MP_CT_MAX 66
+ * decide which multiplications happen, and its leading zeros cost nothing. */
+void proven_crypto_mp_pow(const proven_crypto_mp_mod_t *mod, proven_crypto_limb_t *out, const proven_crypto_limb_t *base,
+                          const proven_crypto_limb_t *exp, proven_size_t exp_limbs);
+/* The largest modulus that proven_crypto_mp_pow_ct accepts: a prime factor of a 4096-bit RSA
+ * key, with room for factors of unequal size. Its table is sized by this. */
+#define PROVEN_CRYPTO_MP_CT_MAX_BYTES 264
+#define PROVEN_CRYPTO_MP_CT_MAX PROVEN_CRYPTO_MP_LIMBS(PROVEN_CRYPTO_MP_CT_MAX_BYTES)
 /* out = base^exp mod n, base and out in Montgomery form, for a SECRET exponent - and the
  * modulus may be secret too. `exp` has exactly as many limbs as the modulus, zero-padded: the
  * number of steps depends on the modulus's size alone, never on the exponent's own length or
  * bits (fixed four-bit windows, every table lookup a masked pass over the whole table).
  * False when the modulus has more than PROVEN_CRYPTO_MP_CT_MAX limbs. */
-[[nodiscard]] bool proven_crypto_mp_pow_ct(const proven_crypto_mp_mod_t *mod, proven_u32 *out, const proven_u32 *base, const proven_u32 *exp);
-/* out = a * b, a plain product of alen + blen limbs. `out` may not overlap an input. */
+[[nodiscard]] bool proven_crypto_mp_pow_ct(const proven_crypto_mp_mod_t *mod, proven_crypto_limb_t *out, const proven_crypto_limb_t *base, const proven_crypto_limb_t *exp);
 /* base^exp for a SECRET exponent of `exp_limbs` limbs (a PUBLIC count) and a public modulus of
  * up to PROVEN_CRYPTO_MP_DH_MAX limbs: finite-field Diffie-Hellman. Base and result in
  * Montgomery form. Its table is 4 KiB of stack. */
-#define PROVEN_CRYPTO_MP_DH_MAX 128
-[[nodiscard]] bool proven_crypto_mp_pow_ct_short(const proven_crypto_mp_mod_t *mod, proven_u32 *out, const proven_u32 *base, const proven_u32 *exp, proven_size_t exp_limbs);
-void proven_crypto_mp_mul(proven_u32 *out, const proven_u32 *a, proven_size_t alen, const proven_u32 *b, proven_size_t blen);
+#define PROVEN_CRYPTO_MP_DH_MAX_BYTES 512
+#define PROVEN_CRYPTO_MP_DH_MAX PROVEN_CRYPTO_MP_LIMBS(PROVEN_CRYPTO_MP_DH_MAX_BYTES)
+[[nodiscard]] bool proven_crypto_mp_pow_ct_short(const proven_crypto_mp_mod_t *mod, proven_crypto_limb_t *out, const proven_crypto_limb_t *base, const proven_crypto_limb_t *exp, proven_size_t exp_limbs);
+/* out = a * b, a plain product of alen + blen limbs. `out` may not overlap an input. */
+void proven_crypto_mp_mul(proven_crypto_limb_t *out, const proven_crypto_limb_t *a, proven_size_t alen, const proven_crypto_limb_t *b, proven_size_t blen);
+/* The remainder of a by a small PUBLIC divisor d (not zero). Not constant-time in d. */
+proven_u32 proven_crypto_mp_mod_small(const proven_crypto_limb_t *a, proven_size_t limbs, proven_u32 d);
+/* out = (1 + k * a) / e for small k and e, where the division is exact. `out` has
+ * limbs + 1 limbs. Neither k nor e is secret. */
+void proven_crypto_mp_inverse_from(proven_crypto_limb_t *out, const proven_crypto_limb_t *a, proven_size_t limbs, proven_u32 k, proven_u32 e);
 /* out = a^-1 mod n for a prime n (Fermat), in Montgomery form. Zero stays zero. The modulus
  * is PUBLIC here: it is used as the exponent of the public exponentiation. */
-void proven_crypto_mp_inv_prime(const proven_crypto_mp_mod_t *mod, proven_u32 *out, const proven_u32 *a);
+void proven_crypto_mp_inv_prime(const proven_crypto_mp_mod_t *mod, proven_crypto_limb_t *out, const proven_crypto_limb_t *a);
 
 /* ---- The NIST prime curves P-256 and P-384 ---- */
 
@@ -163,6 +224,12 @@ void proven_crypto_ed25519_sign(proven_byte_t sig[64], const proven_byte_t seed[
 /* Refuses S not below the group order, a public key or R that is not a canonical encoding of a
  * point, and of course a signature that does not verify. */
 [[nodiscard]] bool proven_crypto_ed25519_verify(const proven_byte_t pub[32], proven_mem_view_t msg, const proven_byte_t sig[64]);
+/* For the suite: the base point's table against the general multiplication, entry by entry;
+ * k B by the table and by the general walk; and verification's variable-time s B + k Q against
+ * the constant-time code. Scalars below L, 32 bytes little-endian; Q encoded. */
+[[nodiscard]] bool proven_crypto_ed25519_test_table(void);
+[[nodiscard]] bool proven_crypto_ed25519_test_base_mul(const proven_byte_t k_le[32]);
+[[nodiscard]] bool proven_crypto_ed25519_test_mul2(const proven_byte_t s_le[32], const proven_byte_t k_le[32], const proven_byte_t q_enc[32]);
 
 /* ---- Hash block functions, exposed for the constant-time record MAC of tls_legacy.c ---- */
 void proven_sha1_compress_(proven_u32 state[5], const proven_byte_t block[64]);
@@ -180,9 +247,22 @@ void proven_sha512_compress_(proven_u64 state[8], const proven_byte_t block[128]
 typedef struct {
     int rounds;                                  /* 10 or 14 */
     bool hw;
+    bool one_pass;                               /* the hardware path seals and opens in one pass (RFC-0023) */
     proven_byte_t rk[240];                       /* round keys as bytes */
     proven_byte_t h[16];                         /* the GHASH key */
+    proven_byte_t hpow[112];                     /* H^2..H^8 in the one-pass code's form, when one_pass; zeros otherwise */
 } proven_crypto_aes_gcm_t;
+
+/* The block cipher alone, with no GHASH key: QUIC's header protection. */
+typedef struct {
+    int rounds;
+    bool hw;
+    proven_byte_t rk[240];
+} proven_crypto_aes_t;
+
+/* key_len is 16 or 32. False otherwise. SECRET: key. */
+[[nodiscard]] bool proven_crypto_aes_init(proven_crypto_aes_t *ctx, const proven_byte_t *key, proven_size_t key_len);
+void proven_crypto_aes_block(const proven_crypto_aes_t *ctx, const proven_byte_t in[16], proven_byte_t out[16]);
 
 /* key_len is 16 or 32. False otherwise. SECRET: key. */
 [[nodiscard]] bool proven_crypto_aes_gcm_init(proven_crypto_aes_gcm_t *ctx, const proven_byte_t *key, proven_size_t key_len);
@@ -221,11 +301,26 @@ bool proven_crypto_aes_hw_available(void);
 [[nodiscard]] bool proven_crypto_rsa_verify_pss(proven_mem_view_t n, proven_mem_view_t e, int hash, proven_size_t salt_len,
                                                 proven_mem_view_t digest, proven_mem_view_t sig);
 
+/* For the suite. The generator's table of the curve against the general scalar multiplication,
+ * entry by entry; and k * G by the table and by the general walk, for a k below the order
+ * (big-endian, the curve's size; zero allowed). */
+[[nodiscard]] bool proven_crypto_ec_test_generator_table(proven_crypto_ec_curve_t curve);
+[[nodiscard]] bool proven_crypto_ec_test_base_mul(proven_crypto_ec_curve_t curve, const proven_byte_t *k_be);
+/* Verification's variable-time walk: k1 G + k2 Q against the constant-time code (k1, k2 below
+ * the order, Q encoded); and its additions' special cases - P + P, P + (-P), the point at
+ * infinity on either side - against the complete formulas, for P = k G with k in [1, n-1]. */
+[[nodiscard]] bool proven_crypto_ec_test_mul2(proven_crypto_ec_curve_t curve, const proven_byte_t *k1_be, const proven_byte_t *k2_be, proven_mem_view_t pub);
+[[nodiscard]] bool proven_crypto_ec_test_vartime_add(proven_crypto_ec_curve_t curve, const proven_byte_t *k_be);
+/* P-256's own reduction of t[0..8) (least significant word first; t / 2^256 mod p for a t whose
+ * upper four words are below p) against the general code: 1 the same, 0 not, -1 where the build
+ * has no field of P-256's own or t is not such a value. */
+[[nodiscard]] int proven_crypto_ec_test_p256_reduce(const proven_u64 t[8]);
+
 /* ---- RSA signing (RFC 8017). Everything in a key but n and e is SECRET. ---- */
 
 #define PROVEN_CRYPTO_RSA_SIGN_MAX_BITS 4096
 #define PROVEN_CRYPTO_RSA_SIGN_MAX_BYTES (PROVEN_CRYPTO_RSA_SIGN_MAX_BITS / 8)
-#define PROVEN_CRYPTO_RSA_PRIME_MAX_BYTES (PROVEN_CRYPTO_MP_CT_MAX * 4)
+#define PROVEN_CRYPTO_RSA_PRIME_MAX_BYTES PROVEN_CRYPTO_MP_CT_MAX_BYTES
 
 /* A private key in the form signing uses: the two primes and the CRT values, big-endian.
  * `dp` and `qinv` are p_len bytes, `dq` is q_len bytes, zero-padded on the left. */
@@ -236,6 +331,12 @@ typedef struct {
     proven_byte_t p[PROVEN_CRYPTO_RSA_PRIME_MAX_BYTES], q[PROVEN_CRYPTO_RSA_PRIME_MAX_BYTES];
     proven_byte_t dp[PROVEN_CRYPTO_RSA_PRIME_MAX_BYTES], dq[PROVEN_CRYPTO_RSA_PRIME_MAX_BYTES];
     proven_byte_t qinv[PROVEN_CRYPTO_RSA_PRIME_MAX_BYTES];
+    /* The three moduli as the arithmetic wants them, made once when the key is read or
+     * generated (`prepared`): making them is a ninth to a sixth of a signature, and they do
+     * not change. SECRET like p and q, of which two of them are another form. A key filled
+     * in by hand has `prepared` false, and each operation then makes its own. */
+    bool prepared;
+    proven_crypto_mp_mod_t mod_n, mod_p, mod_q;
 } proven_crypto_rsa_key_t;
 
 /* A blinding pair for one key: r^e mod n and r^-1 mod n, n_len bytes each. SECRET. A
@@ -279,14 +380,6 @@ typedef void (*proven_crypto_random_fn)(void *ctx, proven_byte_t *out, proven_si
  * is as many unpredictable bytes as the modulus has. `out` receives the modulus's length. */
 [[nodiscard]] bool proven_crypto_rsa_encrypt_pkcs1(proven_mem_view_t n, proven_mem_view_t e, proven_mem_view_t msg, const proven_byte_t *random,
                                                    proven_byte_t *out, proven_size_t *out_len);
-/* The server's half: decrypt a ClientKeyExchange and give back the 48-byte premaster - or, if
- * anything at all is wrong with what came out, `fallback` instead (48 random bytes drawn
- * BEFORE this call). There is no return value on purpose: nothing may be done differently for
- * a bad ciphertext than for a good one, or the key can be used by anyone who can ask
- * (Bleichenbacher 1998; ROBOT, 2017). The selection is by mask; `version` is the one the
- * ClientHello carried. SECRET: the key, the blinding pair, `fallback`, `out`. */
-void proven_crypto_rsa_decrypt_premaster(const proven_crypto_rsa_key_t *key, const proven_crypto_rsa_blind_t *blind, proven_mem_view_t cipher,
-                                         proven_u16 version, const proven_byte_t fallback[48], proven_byte_t out[48]);
 [[nodiscard]] bool proven_crypto_rsa_generate(proven_size_t bits, proven_crypto_random_fn random, void *ctx,
                                               proven_crypto_rsa_key_t *out, proven_byte_t *d);
 

@@ -99,6 +99,18 @@ proven_err_t proven_hpack_decode(proven_hpack_decoder_t *decoder, proven_mem_vie
                                  proven_http_header_t *headers, proven_size_t header_cap,
                                  proven_mem_mut_t scratch, proven_size_t max_list_bytes, proven_size_t *count);
 
+/**
+ * @brief proven_hpack_decode, and which fields came in the form that must never be indexed
+ *        (RFC 7541, section 6.2.3). Something that passes fields on - a proxy - must send
+ *        those the same way: give `never_indexed` to proven_hpack_encode as its `sensitive`.
+ * @param never_indexed `header_cap` flags, filled for the fields given out. Null: as
+ *        proven_hpack_decode.
+ */
+[[nodiscard]]
+proven_err_t proven_hpack_decode_marked(proven_hpack_decoder_t *decoder, proven_mem_view_t block,
+                                        proven_http_header_t *headers, bool *never_indexed, proven_size_t header_cap,
+                                        proven_mem_mut_t scratch, proven_size_t max_list_bytes, proven_size_t *count);
+
 /** @brief How many entries the decoder's dynamic table holds, and their size as the RFC
  *         counts it (names, values and 32 an entry). For tests, and for the curious. */
 [[nodiscard]]
@@ -154,7 +166,9 @@ proven_size_t proven_hpack_encode_bound(const proven_http_header_t *headers, pro
  * a secret placed in one can be guessed from the size of later blocks. So the values of
  * `authorization` and `proxy-authorization` are sent in the form that tells every hop never
  * to index them, `cookie` and `set-cookie` are not remembered, and any field you mark in
- * `sensitive` is treated like the first two.
+ * `sensitive` is treated like the first two. Not remembered either, because their values are
+ * seldom the same twice and would push out of the table what is: `content-length`,
+ * `content-range`, `etag`, `age`, `if-none-match`, `if-modified-since`.
  *
  * @param sensitive optional: `count` flags, true for a field whose value must not be
  *        remembered by anyone. Null: none beyond the ones named above.

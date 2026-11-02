@@ -10,10 +10,12 @@
 #include "proven/net.h"
 #include "proven/http.h"
 #include "proven/http_cookie.h"
+#include "proven/tls.h"
 
 /**
  * @file http_client.h
- * @brief An HTTP/1.1 client: one request, one response, over connections it manages.
+ * @brief An HTTP/1.1 client - and HTTP/3 for the requests that ask - one request, one response,
+ *        over connections it manages.
  *
  * The client does what stands between "I have a URL" and "I have the bytes": it resolves the
  * name, connects (directly or through a proxy), writes the request, reads and checks the
@@ -33,6 +35,14 @@
  * encrypted one. `proven_tls_http_wrap` (tls.h) is this library's; another TLS can be attached
  * the same way. Over `http://`, everything this client sends, passwords and cookies included,
  * crosses the network in the clear.
+ *
+ * **HTTP/3 is asked for** (since v0.97.0, RFC-0034): a client made with `http3` and a `tls`
+ * configuration that offers `h3` sends a request that sets `http3`, to an `https` URL, over QUIC.
+ * Underneath is the event-driven client (http_event_client.h) on a loop of this client's own,
+ * which the calling thread runs while it waits in proven_http_client_send and
+ * proven_http_client_read - no thread is made, and between calls nothing runs it. Redirects,
+ * challenges, cookies and decoding are decided here as for HTTP/1.1. The QUIC connection to an
+ * origin is kept between calls; one the server has let go of meanwhile is made again.
  *
  * A client is not safe to use from several threads at once; give each thread its own.
  *
@@ -63,7 +73,8 @@ typedef struct {
     proven_size_t max_head_bytes;           /**< largest response head accepted; 0: 16 KiB */
     proven_u32 max_redirects;               /**< redirects followed per request; 0: none are followed */
     proven_size_t max_idle_connections;     /**< connections kept for reuse; 0: every connection is closed */
-    proven_u8str_view_t proxy;              /**< `http://[user:pw@]host:port` or `socks5://[user:pw@]host:port`; empty: none */
+    proven_u8str_view_t proxy;              /**< `http://[user:pw@]host:port` or `socks5://[user:pw@]host:port`; empty: none. The user and password are percent-decoded (`p%40ss` is `p@ss`; since v0.105.0, before which they were used as written). An HTTP proxy is sent them as Basic; one that answers 407 with a Digest challenge is answered with Digest, once, for a plain request through it and for its `CONNECT` (since v0.105.0) */
+    proven_u8str_view_t no_proxy;           /**< hosts that are reached directly although `proxy` is set, separated by commas: a name matches itself and every name under it (`example.org` and `.example.org` both match `example.org` and `www.example.org`), an address matches itself as written, `*` matches everything. Letters compare without case; ports are not looked at. Empty: every request goes through the proxy */
     proven_u8str_view_t username;           /**< credentials offered when a server answers 401; empty: none */
     proven_u8str_view_t password;
     proven_u8str_view_t user_agent;         /**< the `User-Agent` to send; empty: none is sent */
@@ -71,6 +82,12 @@ typedef struct {
     proven_http_tls_wrap_fn tls_wrap;       /**< NULL: an `https` URL is PROVEN_ERR_UNSUPPORTED */
     void *tls_ctx;
     bool decompress;                        /**< ask for compressed responses and decode them; false: bodies arrive as the server sent them. See proven_http_client_read. */
+    proven_u32 expect_timeout_ms;           /**< for a request sent with `expect_continue`: how long to wait for the server's word before sending the body anyway. 0: 1 s */
+    bool decompress_zstd;                   /**< with `decompress`: ask for Zstandard too (`Accept-Encoding: zstd, gzip`) and decode a body sent with `Content-Encoding: zstd`, whose window may be up to 8 MiB (RFC 9659) - so a response being read can cost that much and 384 KiB more. Without `decompress`, PROVEN_ERR_INVALID_ARG. false: `zstd` is not asked for, and a body sent in it anyway arrives as sent */
+    bool decompress_brotli;                 /**< with `decompress`: ask for Brotli too (`br` in `Accept-Encoding`) and decode a body sent with `Content-Encoding: br`, whose window may be up to 16 MiB - so a response being read can cost that much and its codes (tens of KiB as encoders write them, 1.3 MiB at most), allocated as its output grows. Without `decompress`, PROVEN_ERR_INVALID_ARG; in a build with PROVEN_NO_BROTLI, PROVEN_ERR_UNSUPPORTED. false: `br` is not asked for, and a body sent in it anyway arrives as sent */
+    bool http3;                             /**< true: a request that sets `http3` goes over HTTP/3 (RFC-0034; see the file's notes). Needs `tls`. In a build with PROVEN_NO_HTTP3, PROVEN_ERR_UNSUPPORTED */
+    const proven_tls_config_t *tls;         /**< with `http3`: the TLS configuration of the QUIC connections, which must offer `h3` (and may offer `h2`, unused here). Must outlive the client. `tls_wrap` stays what HTTP/1.1 uses */
+    bool http3_fallback;                    /**< with `http3`: a request whose QUIC connection does not come up goes over TCP instead, as http_event_client.h's `http3_fallback` says - there in HTTP/1.1 or HTTP/2 through the TLS configuration above. false: no fallback */
 } proven_http_client_config_t;
 
 /** @brief A client. Opaque; made by proven_http_client_create. */
@@ -79,8 +96,9 @@ typedef struct proven_http_client proven_http_client_t;
 /**
  * @brief Make a client.
  * @return PROVEN_ERR_INVALID_ARG for an invalid allocator, a proxy URL that is not `http` or
- *         `socks5` with a host, or a user name or password with a control character;
- *         PROVEN_ERR_NOMEM.
+ *         `socks5` with a host, a user name or password with a control character, or `http3`
+ *         without a `tls` that offers `h3`; PROVEN_ERR_UNSUPPORTED for `http3` in a build
+ *         without it; PROVEN_ERR_NOMEM.
  */
 [[nodiscard]]
 proven_err_t proven_http_client_create(const proven_http_client_config_t *config, proven_http_client_t **out);
@@ -96,7 +114,11 @@ typedef struct {
     proven_size_t header_count;
     proven_mem_view_t body;                 /**< a body held in memory: sent with `Content-Length` */
     proven_reader_t body_stream;            /**< or, when valid, a body read from here and sent chunked */
+    const proven_http_header_t *trailers;   /**< with `body_stream`: trailer fields sent after the last chunk (since v0.106.0); each must pass proven_http_trailer_allowed. Not over HTTP/3 (PROVEN_ERR_UNSUPPORTED), not with a body in memory (PROVEN_ERR_INVALID_ARG) */
+    proven_size_t trailer_count;
     proven_u8str_view_t upgrade;            /**< a protocol to change to (`websocket`): sends `Connection: Upgrade` and `Upgrade`; empty: none */
+    bool expect_continue;                   /**< for a request with a body: send `Expect: 100-continue` and the head first, and the body only when the server says to go on (or says nothing for `expect_timeout_ms`). A server that answers at once instead - 401, 413, 417 - is not sent the body at all, and that answer is the response; the connection is then not kept. Do not set an `Expect` header of your own with it. Over HTTP/3 the body goes at once */
+    bool http3;                             /**< send this request over HTTP/3: an `https` URL, on a client with `http3` (otherwise PROVEN_ERR_INVALID_ARG). Not through a proxy and not with `upgrade` (PROVEN_ERR_UNSUPPORTED). A redirect keeps HTTP/3 within the same origin; to another it is an ordinary request (HTTP/1.1, through `tls_wrap` - without it, the redirect is returned, not followed) */
 } proven_http_client_request_t;
 
 /**
@@ -179,7 +201,11 @@ proven_err_t proven_http_client_get(proven_http_client_t *client, proven_u8str_v
  * left as the server sent them, so `Content-Length` then counts the encoded bytes, not the ones
  * read. A `206 Partial Content` is never decoded (a range of an encoded body is not a body),
  * nor is a coding other than these two: such a body arrives as it was sent. `deflate` is read
- * as a zlib stream, or as raw DEFLATE when its first two bytes are no zlib header.
+ * as a zlib stream, or as raw DEFLATE when its first two bytes are no zlib header. With
+ * `decompress_zstd` as well, `Accept-Encoding: zstd, gzip` is sent and a `zstd` body is
+ * decoded in the same way, holding up to its window (8 MiB at most) and 384 KiB more; with
+ * `decompress_brotli`, `br` is asked for and decoded too, holding up to its window (16 MiB at
+ * most) and its codes.
  *
  * @return also PROVEN_ERR_TIMEOUT (no data within `io_timeout_ms`; the read may be repeated)
  *         and PROVEN_ERR_INVALID_FORMAT (malformed chunk framing; with `decompress`, a
@@ -187,6 +213,16 @@ proven_err_t proven_http_client_get(proven_http_client_t *client, proven_u8str_v
  */
 [[nodiscard]]
 proven_result_size_t proven_http_client_read(proven_http_client_response_t *response, proven_mem_mut_t dest);
+
+/**
+ * @brief The trailer fields that followed a chunked response body (since v0.106.0), once
+ *        proven_http_client_read has returned PROVEN_ERR_EOF: views good until
+ *        proven_http_client_finish. None for a body that was not chunked.
+ * @return PROVEN_ERR_INVALID_STATE before the body's end; PROVEN_ERR_OUT_OF_BOUNDS for more fields
+ *         than `cap`; PROVEN_ERR_UNSUPPORTED for a response over HTTP/3.
+ */
+[[nodiscard]]
+proven_err_t proven_http_client_trailers(const proven_http_client_response_t *response, proven_http_header_t *fields, proven_size_t cap, proven_size_t *count);
 
 /**
  * @brief Read the rest of the body and append it to `out`, growing it with `alloc`.

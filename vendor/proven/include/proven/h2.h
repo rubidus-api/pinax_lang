@@ -86,7 +86,8 @@ typedef enum {
     PROVEN_H2_SETTINGS_MAX_CONCURRENT_STREAMS = 0x3,
     PROVEN_H2_SETTINGS_INITIAL_WINDOW_SIZE = 0x4,
     PROVEN_H2_SETTINGS_MAX_FRAME_SIZE = 0x5,
-    PROVEN_H2_SETTINGS_MAX_HEADER_LIST_SIZE = 0x6
+    PROVEN_H2_SETTINGS_MAX_HEADER_LIST_SIZE = 0x6,
+    PROVEN_H2_SETTINGS_ENABLE_CONNECT_PROTOCOL = 0x8  /**< RFC 8441: 1 from a server that takes extended CONNECT */
 } proven_h2_setting_id_t;
 
 /** @brief One setting: an identifier and its value. */
@@ -162,7 +163,7 @@ proven_err_t proven_h2_frame_content(const proven_h2_frame_t *frame, proven_mem_
  * requires. A known one outside its range is refused.
  *
  * @return PROVEN_ERR_EOF at the end of the payload. PROVEN_ERR_INVALID_FORMAT with `*code` -
- *         ENABLE_PUSH other than 0 or 1 and MAX_FRAME_SIZE outside 2^14..2^24-1
+ *         ENABLE_PUSH or ENABLE_CONNECT_PROTOCOL other than 0 or 1 and MAX_FRAME_SIZE outside 2^14..2^24-1
  *         (PROTOCOL_ERROR), INITIAL_WINDOW_SIZE above 2^31-1 (FLOW_CONTROL_ERROR): each a
  *         connection error.
  */
@@ -222,6 +223,7 @@ typedef struct {
     proven_u8str_view_t path;          /**< `:path`: path and query; empty for CONNECT */
     const proven_http_header_t *fields;    /**< the ordinary fields, which follow the pseudo-header fields */
     proven_size_t field_count;
+    proven_u8str_view_t protocol;      /**< `:protocol` of an extended CONNECT (RFC 8441): `websocket`, say; empty otherwise */
 } proven_h2_request_head_t;
 
 /**
@@ -233,8 +235,11 @@ typedef struct {
  * with a space or tab; a pseudo-header field after an ordinary one, twice, or unknown;
  * `:status` in a request; `:method`, `:scheme` or `:path` missing, or `:path` empty for
  * `http` and `https` (a CONNECT request has `:method` and `:authority` and neither of the
- * other two); `connection`, `proxy-connection`, `keep-alive`, `transfer-encoding` or
- * `upgrade`; `te` with anything but `trailers`.
+ * other two - unless it is an extended CONNECT, RFC 8441: `:protocol` with CONNECT only,
+ * not empty, and then `:scheme`, `:path` and `:authority` all present); `connection`,
+ * `proxy-connection`, `keep-alive`, `transfer-encoding` or `upgrade`; `te` with anything but
+ * `trailers`. Whether `:protocol` is allowed at all is the connection's to say (the
+ * `enable_connect_protocol` setting): this function only checks its form.
  *
  * These are the rules a message smuggled through a translation to HTTP/1.1 would break.
  */
@@ -293,6 +298,7 @@ typedef struct {
     proven_size_t max_buffered_output;     /**< output held for a peer that is not reading before more is refused - and, counted apart, the answers the protocol owes that peer before the connection is ended. 0: 64 KiB */
     proven_u32 max_reset_debt;             /**< streams reset - by the peer, or for its fault - beyond those that finished properly, before the connection is ended. 0: 100 */
     proven_mem_mut_t header_buffer;        /**< optional: memory of yours for reading header lists, of at least proven_h2_header_buffer_size bytes and aligned as a pointer. Connections used by one thread may share one: what is read into it is what an event reports, good until the next call on any of them. Empty: each connection allocates its own while it has streams open */
+    bool enable_connect_protocol;          /**< a server: say SETTINGS_ENABLE_CONNECT_PROTOCOL (RFC 8441) and take extended CONNECT - a request with `:protocol`. Without it such a request is refused (PROTOCOL_ERROR for the stream). Ignored on a client */
 } proven_h2_config_t;
 
 typedef enum {
@@ -302,7 +308,7 @@ typedef enum {
     PROVEN_H2_EVENT_TRAILERS,              /**< trailer fields: the peer's side of the stream is over */
     PROVEN_H2_EVENT_STREAM_RESET,          /**< the stream is over before its end: the peer reset it, broke a rule on it, or said goodbye without acting on it (PROVEN_H2_REFUSED_STREAM: safe to send again elsewhere). `code` says which. PROVEN_H2_NO_ERROR from a server: the response is complete and the rest of the request is not wanted */
     PROVEN_H2_EVENT_STREAM_WRITABLE,       /**< a send that was cut short can go on */
-    PROVEN_H2_EVENT_GOAWAY,                /**< the peer will take no new stream; those above `last_stream_id` were not acted on */
+    PROVEN_H2_EVENT_GOAWAY,                /**< the peer will take no new stream; those above `last_stream_id` were not acted on. `data` is the text it sent with that, if any */
     PROVEN_H2_EVENT_PONG,                  /**< the answer to proven_h2_conn_ping; `data` is the eight bytes */
     PROVEN_H2_EVENT_CLOSED                 /**< the connection is over, and with it every stream still open - they get no event of their own. `code` says why: PROVEN_H2_NO_ERROR after a goodbye from either side once the last stream has ended. Send what is pending and close */
 } proven_h2_event_kind_t;
@@ -313,13 +319,14 @@ typedef struct {
     proven_h2_event_kind_t kind;
     proven_u32 stream_id;
     void *user;                            /**< what proven_h2_conn_stream_set_user attached to the stream, for every event that names one */
-    bool end_stream;                       /**< HEADERS, DATA: the peer will send nothing more on this stream */
+    bool end_stream;                       /**< HEADERS, DATA: the peer will send nothing more on this stream. STREAM_RESET on a client: the response is complete - the reset is PROVEN_H2_NO_ERROR and came after the response's END_STREAM, or after every byte its content-length declared (never for a response with no content-length) */
     proven_h2_request_head_t request;      /**< HEADERS on a server: the request's parts; `request.fields` are its ordinary fields */
     proven_u16 status;                     /**< HEADERS on a client */
     const proven_http_header_t *fields;    /**< HEADERS on a client, TRAILERS: the ordinary fields */
     proven_size_t field_count;
-    proven_mem_view_t data;                /**< DATA: the piece, inside the buffer you fed. PONG: the eight bytes */
+    proven_mem_view_t data;                /**< DATA: the piece, inside the buffer you fed. PONG: the eight bytes. GOAWAY: the frame's debug text - its first 256 bytes, empty when there was none or no memory for it; bytes from the peer, for a log and not for a decision */
     proven_u32 code;                       /**< STREAM_RESET, GOAWAY, CLOSED: a proven_h2_error_t, or a code this library does not know */
+    bool too_large;                        /**< STREAM_RESET: this side reset the stream because a header list from the peer was larger than `max_header_list_bytes` (`code` is PROVEN_H2_PROTOCOL_ERROR) */
     proven_u32 last_stream_id;             /**< GOAWAY */
 } proven_h2_event_t;
 
@@ -428,6 +435,18 @@ proven_result_size_t proven_h2_conn_send_data(proven_h2_conn_t *conn, proven_u32
 [[nodiscard]]
 proven_err_t proven_h2_conn_send_trailers(proven_h2_conn_t *conn, proven_u32 stream_id, const proven_http_header_t *headers, proven_size_t count);
 
+/**
+ * @brief Mark fields of the **next** header list this connection is given - by
+ *        proven_h2_conn_submit_request, proven_h2_conn_submit_response or
+ *        proven_h2_conn_send_trailers - as ones whose values no one may remember: they are
+ *        sent in the form that tells every hop never to index them (see proven_hpack_encode),
+ *        as `authorization` and `proxy-authorization` always are.
+ * @param sensitive one flag for each field of that list, pseudo-header fields included, in
+ *        its order. It is read by that call and must be good until then; the marks are
+ *        dropped by that call whether it succeeds or not. Null takes them back.
+ */
+void proven_h2_conn_next_sensitive(proven_h2_conn_t *conn, const bool *sensitive);
+
 /** @brief Give up on a stream: the peer is told with `code` (PROVEN_H2_CANCEL is the usual
  *         one), nothing more is reported for it, and what the peer had already sent on it
  *         is dropped as it arrives.
@@ -460,6 +479,48 @@ proven_err_t proven_h2_conn_ping(proven_h2_conn_t *conn, const proven_byte_t opa
  *         PROVEN_H2_EVENT_CLOSED follows when the last has ended. Any other code ends the
  *         connection at once. */
 void proven_h2_conn_shutdown(proven_h2_conn_t *conn, proven_h2_error_t code);
+
+/**
+ * @brief Change how many streams the peer may have open at once (SETTINGS_MAX_CONCURRENT_STREAMS),
+ *        after the opening: a SETTINGS frame is queued, and the number holds once the peer
+ *        acknowledges it.
+ *
+ * `n` is 0 to the configuration's `max_concurrent_streams`: what a connection may come to hold
+ * is fixed when it is made, so a change lowers the number or raises it back, never above.
+ * Streams already open are not touched, however many there are. Until the peer acknowledges,
+ * it may still open streams under the number before, and those are taken; after, a stream
+ * over the number is refused with PROVEN_H2_REFUSED_STREAM, which the peer may send again.
+ *
+ * On a client the number is also the most this side opens, and that holds at once.
+ *
+ * One change is in flight at a time. A call made while one is waiting for its
+ * acknowledgement is kept, and the latest values of both calls go out together when it comes.
+ *
+ * @return PROVEN_ERR_INVALID_ARG for a null connection or `n` above that ceiling;
+ *         PROVEN_ERR_INVALID_STATE after a goodbye of this side or the end; PROVEN_ERR_NOMEM.
+ */
+[[nodiscard]]
+proven_err_t proven_h2_conn_set_max_streams(proven_h2_conn_t *conn, proven_u32 n);
+
+/**
+ * @brief Change the body bytes the peer may send on each stream before this side gives room
+ *        back (SETTINGS_INITIAL_WINDOW_SIZE), after the opening.
+ *
+ * `n` is 0 to the configuration's `initial_window` (the ceiling, as for streams). Every open
+ * stream's window moves by the difference, as RFC 9113 section 6.9.2 says, and a stream begun
+ * later starts at `n`. A raise holds at once; a lowering once the peer acknowledges it, so
+ * what it sent before it read the change is taken. A lowering can leave a stream that has
+ * already been given its room with less than nothing: it then waits until enough is consumed.
+ * The connection's own window is not a setting and does not change. On a connection whose
+ * windows grow while they are read (the event-driven drivers), a stream that has grown keeps
+ * its growth above the new start.
+ *
+ * Changes are in flight one at a time, with proven_h2_conn_set_max_streams's.
+ *
+ * @return as proven_h2_conn_set_max_streams.
+ */
+[[nodiscard]]
+proven_err_t proven_h2_conn_set_initial_window(proven_h2_conn_t *conn, proven_u32 n);
 
 /** @brief Whether the connection is over: PROVEN_H2_EVENT_CLOSED was or is about to be
  *         reported. Pending output should still be sent. */

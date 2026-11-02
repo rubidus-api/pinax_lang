@@ -17,6 +17,8 @@
 #define WC_SEND_SIZE 4096u
 #define WC_DEFAULT_MAX_MESSAGE (1024u * 1024u)
 #define WC_LINGER_MS 1000u             /* how long a refused peer's remaining bytes are read away */
+#define WC_DEFAULT_PING_MS 30000u      /* as ws_event's */
+#define WC_DEFAULT_PONG_MS 10000u
 
 struct proven_ws_conn {
     proven_ws_conn_config_t cfg;
@@ -29,6 +31,10 @@ struct proven_ws_conn {
     proven_size_t read_pos;
     proven_size_t read_len;
     proven_u64 pongs;
+    /* Pings on silence: when the peer was last heard from, and when this side's ping went (while
+     * `pinged`). There is no timer: a receive or a close reads no longer than to the next of these. */
+    proven_net_deadline_t heard, pinged_at;
+    bool pinged;
     proven_err_t failed;
     proven_u16 close_code;
     proven_u8 close_reason_len;
@@ -42,9 +48,15 @@ struct proven_ws_conn {
     bool message_compressed;            /* the message being received is compressed */
     bool inflating;                     /* `inflate` holds a decompressor */
     bool zip_begun;                     /* the first frame of the compressed message being sent has left */
+    bool plain;                         /* proven_ws_conn_set_compress(false): messages that begin now go as they are */
+    bool zipping;                       /* the message being sent goes through `zip` */
+    bool send_takeover;                 /* this side keeps `zip` between messages */
+    bool recv_takeover;                 /* the peer may keep its window: `kept` reads every message */
+    bool zip_off;                       /* nothing is compressed from now on: the peer allows no window this side has, or a compressed message failed half-sent under takeover */
     proven_u8 zip_tail_len;
     proven_byte_t zip_tail[4];
-    proven_deflate_t *zip;              /* the message being sent goes through this */
+    proven_deflate_t *zip;              /* the message being sent goes through this, and under takeover every message */
+    proven_inflate_t *kept;             /* under the peer's takeover: the decompressor of every message */
     proven_ws_inflate_t_ inflate;
     proven_byte_t close_reason[PROVEN_WS_MAX_CONTROL];
     proven_byte_t protocol[64];
@@ -112,14 +124,18 @@ proven_err_t proven_ws_conn_send_part(proven_ws_conn_t *conn, bool text, proven_
     proven_u8 opcode = (proven_u8)(conn->sending ? PROVEN_WS_CONTINUATION : (text ? PROVEN_WS_TEXT : PROVEN_WS_BINARY));
     if (conn->deflate && !conn->sending) {
         /* A message begins: is it compressed? Not when it is whole and too short to gain, and
-         * not when there is no memory for a compressor - then it goes as it is. */
-        bool worth = !(last && data.size < PROVEN_WS_DEFLATE_MIN);
-        if (worth && proven_ws_deflate_begin_(conn->cfg.alloc, conn->cfg.compress_level, conn->cfg.compress_window_bits,
-                                              last ? data.size : 0, &conn->zip) != PROVEN_OK) conn->zip = (void *)0;
+         * not when there is no memory for a compressor - then it goes as it is (and, under
+         * takeover, the next message tries again: nothing went into a window). */
+        bool worth = !conn->plain && !conn->zip_off &&
+                     !(last && data.size < (conn->send_takeover ? PROVEN_WS_DEFLATE_MIN_TAKEOVER : PROVEN_WS_DEFLATE_MIN));
+        if (worth && !conn->zip &&
+            proven_ws_deflate_begin_(conn->cfg.alloc, conn->cfg.compress_level, conn->cfg.compress_window_bits,
+                                     last && !conn->send_takeover ? data.size : 0, &conn->zip) != PROVEN_OK) conn->zip = (void *)0;
+        conn->zipping = worth && conn->zip;
         conn->zip_tail_len = 0;
         conn->zip_begun = false;
     }
-    if (!conn->zip) {
+    if (!conn->zipping) {
         e = wc_send_frame(conn, last, opcode, false, data);
         if (e == PROVEN_OK) conn->sending = !last;
         return e;
@@ -147,8 +163,14 @@ proven_err_t proven_ws_conn_send_part(proven_ws_conn_t *conn, bool text, proven_
         if (done) break;
     }
     if (e != PROVEN_OK || last) {
-        proven_deflate_destroy(conn->zip);
-        conn->zip = (void *)0;
+        /* Under takeover the compressor is the window both sides share; one that failed in
+         * the middle of a message no longer matches the peer's, so nothing more is compressed. */
+        if (e != PROVEN_OK && conn->send_takeover) conn->zip_off = true;
+        if (e != PROVEN_OK || !conn->send_takeover) {
+            proven_deflate_destroy(conn->zip);
+            conn->zip = (void *)0;
+        }
+        conn->zipping = false;
     }
     if (e == PROVEN_OK) conn->sending = !last;
     return e;
@@ -284,7 +306,24 @@ static proven_err_t wc_pump(proven_ws_conn_t *c, proven_net_deadline_t until, pr
         if (c->read_pos == c->read_len) {
             c->read_pos = 0;
             c->read_len = 0;
-            proven_result_size_t r = proven_transport_read(c->t, (proven_mem_mut_t){ .ptr = c->read_buf, .size = sizeof c->read_buf }, until);
+            /* Read no longer than to this side's next ping, or to the end of the wait for its pong. */
+            const proven_net_deadline_t due = c->pinged ? c->pinged_at + (proven_time_t)c->cfg.pong_timeout_ms * 1000000
+                                                        : c->heard + (proven_time_t)c->cfg.ping_interval_ms * 1000000;
+            const bool watch = !discard && until != PROVEN_NET_DONT_WAIT && due < until;
+            proven_result_size_t r = proven_transport_read(c->t, (proven_mem_mut_t){ .ptr = c->read_buf, .size = sizeof c->read_buf }, watch ? due : until);
+            if (r.err == PROVEN_ERR_TIMEOUT && watch && proven_net_deadline_in(0) >= due) {
+                if (c->pinged) {
+                    /* No byte at all for a ping's interval and the pong's: the peer is gone without a word. */
+                    c->close_code = PROVEN_WS_CLOSE_ABNORMAL;
+                    c->failed = PROVEN_ERR_RESET;
+                    return c->failed;
+                }
+                proven_err_t e = wc_send_frame(c, true, PROVEN_WS_PING, false, (proven_mem_view_t){0});
+                if (e != PROVEN_OK) return e;
+                c->pinged = true;
+                c->pinged_at = proven_net_deadline_in(0);
+                continue;
+            }
             if (r.err == PROVEN_ERR_TIMEOUT) return PROVEN_ERR_TIMEOUT;
             if (r.err != PROVEN_OK) {
                 /* The connection ended with no close frame: an abnormal closure. */
@@ -293,6 +332,9 @@ static proven_err_t wc_pump(proven_ws_conn_t *c, proven_net_deadline_t until, pr
                 return c->failed;
             }
             c->read_len = r.value;
+            /* Any byte from the peer answers a ping (as ws_event). */
+            c->heard = proven_net_deadline_in(0);
+            c->pinged = false;
         }
         proven_size_t used = 0;
         proven_ws_event_t ev;
@@ -310,7 +352,7 @@ static proven_err_t wc_pump(proven_ws_conn_t *c, proven_net_deadline_t until, pr
                     c->message_compressed = ev.compressed;
                     wc_inflate_end(c);
                     if (ev.compressed) {
-                        e = proven_ws_inflate_begin_(&c->inflate, c->cfg.alloc, ev.text);
+                        e = proven_ws_inflate_begin_(&c->inflate, c->cfg.alloc, ev.text, c->recv_takeover ? &c->kept : (void *)0);
                         if (e != PROVEN_OK) return wc_fail(c, e);
                         c->inflating = true;
                     }
@@ -390,10 +432,9 @@ static bool wc_config_ok(const proven_ws_conn_config_t *config) {
            (config->compress_window_bits == 0 || (config->compress_window_bits >= 9 && config->compress_window_bits <= 15));
 }
 
-/* `deflate`: the extension was agreed. `window_bits`: the largest window this side may
- * compress with, when the other side set one. */
+/* `terms`: what was agreed for the extension, or null when it was not. */
 static proven_err_t wc_open(proven_transport_t transport, bool is_server, proven_mem_view_t early,
-                            const proven_ws_conn_config_t *config, bool deflate, int window_bits, proven_ws_conn_t **out) {
+                            const proven_ws_conn_config_t *config, const proven_ws_deflate_terms_t *terms, proven_ws_conn_t **out) {
     if (out) *out = (void *)0;
     if (!out || !wc_config_ok(config) || !proven_transport_is_valid(transport) ||
         (early.size > 0 && !early.ptr)) return PROVEN_ERR_INVALID_ARG;
@@ -406,6 +447,11 @@ static proven_err_t wc_open(proven_transport_t transport, bool is_server, proven
     if (c->cfg.max_message_bytes == 0) c->cfg.max_message_bytes = WC_DEFAULT_MAX_MESSAGE;
     if (c->cfg.io_timeout_ms == 0) c->cfg.io_timeout_ms = 30000;
     if (c->cfg.close_timeout_ms == 0) c->cfg.close_timeout_ms = 5000;
+    if (c->cfg.ping_interval_ms == 0) c->cfg.ping_interval_ms = WC_DEFAULT_PING_MS;
+    if (c->cfg.pong_timeout_ms == 0) c->cfg.pong_timeout_ms = WC_DEFAULT_PONG_MS;
+    c->heard = proven_net_deadline_in(0);
+    c->pinged_at = 0;
+    c->pinged = false;
     c->t = transport;
     c->message = (void *)0;
     c->message_len = 0;
@@ -422,13 +468,28 @@ static proven_err_t wc_open(proven_transport_t transport, bool is_server, proven
     c->sending = false;
     c->close_sent = false;
     c->close_received = false;
+    bool deflate = terms != (void *)0;
     c->deflate = deflate;
     c->message_compressed = false;
     c->inflating = false;
     c->zip_tail_len = 0;
     c->zip_begun = false;
+    c->plain = false;
+    c->zipping = false;
+    c->send_takeover = deflate && (is_server ? terms->server_takeover : terms->client_takeover);
+    c->recv_takeover = deflate && (is_server ? terms->client_takeover : terms->server_takeover);
+    c->zip_off = false;
     c->zip = (void *)0;
-    if (deflate && window_bits != 0 && (c->cfg.compress_window_bits == 0 || c->cfg.compress_window_bits > window_bits)) c->cfg.compress_window_bits = window_bits;
+    c->kept = (void *)0;
+    if (deflate) {
+        /* The window: the configured one (0 is 11 under takeover, 15 without), no larger than
+         * the peer allows. Smaller than this compressor's smallest: nothing is compressed. */
+        int limit = is_server ? terms->server_window_bits : terms->client_window_bits;
+        int bits = c->cfg.compress_window_bits != 0 ? c->cfg.compress_window_bits : c->send_takeover ? PROVEN_WS_DEFLATE_TAKEOVER_BITS : 15;
+        if (limit < bits) bits = limit;
+        if (bits < 9) c->zip_off = true;
+        else c->cfg.compress_window_bits = bits;
+    }
     for (proven_size_t i = 0; i < early.size; ++i) c->read_buf[i] = early.ptr[i];
     proven_ws_decoder_init(&c->decoder, is_server, c->cfg.max_message_bytes);
     if (deflate) proven_ws_decoder_allow_compressed(&c->decoder);
@@ -448,10 +509,21 @@ static proven_err_t wc_open(proven_transport_t transport, bool is_server, proven
 
 proven_err_t proven_ws_conn_open(proven_transport_t transport, bool is_server, proven_mem_view_t early,
                                  const proven_ws_conn_config_t *config, proven_ws_conn_t **out) {
-    return wc_open(transport, is_server, early, config, config && config->compress, 0, out);
+    /* Nothing was negotiated here, so there is no "the peer" to have agreed to keep nothing. */
+    if (config && config->compress && !config->compress_no_takeover && config->compress_peer_no_takeover) {
+        if (out) *out = (void *)0;
+        return PROVEN_ERR_INVALID_ARG;
+    }
+    bool takeover = config && !config->compress_no_takeover;
+    proven_ws_deflate_terms_t terms = { .server_takeover = takeover, .client_takeover = takeover, .server_window_bits = 15, .client_window_bits = 15 };
+    return wc_open(transport, is_server, early, config, config && config->compress ? &terms : (void *)0, out);
 }
 
 bool proven_ws_conn_compressed(const proven_ws_conn_t *conn) { return conn && conn->deflate; }
+
+void proven_ws_conn_set_compress(proven_ws_conn_t *conn, bool on) {
+    if (conn) conn->plain = !on;
+}
 
 void proven_ws_conn_destroy(proven_ws_conn_t *conn) {
     if (!conn) return;
@@ -459,6 +531,7 @@ void proven_ws_conn_destroy(proven_ws_conn_t *conn) {
     (void)proven_transport_close(conn->t);
     wc_inflate_end(conn);
     if (conn->zip) proven_deflate_destroy(conn->zip);
+    if (conn->kept) proven_inflate_destroy(conn->kept);
     if (conn->message) a.free_fn(a.ctx, conn->message);
     a.free_fn(a.ctx, conn);
 }
@@ -466,6 +539,14 @@ void proven_ws_conn_destroy(proven_ws_conn_t *conn) {
 static void wc_set_protocol(proven_ws_conn_t *c, proven_u8str_view_t p) {
     c->protocol_len = (proven_u8)(p.size < sizeof c->protocol ? p.size : sizeof c->protocol);
     for (proven_size_t i = 0; i < c->protocol_len; ++i) c->protocol[i] = p.ptr[i];
+}
+
+/* proven_ws_deflate_accept, with what it agreed as terms: no takeover either way. */
+static proven_err_t wc_accept_plain(const proven_http_request_t *req, proven_mem_mut_t out, proven_size_t *len, proven_ws_deflate_terms_t *terms) {
+    int bits = 0;
+    proven_err_t e = proven_ws_deflate_accept(req, out, len, &bits);
+    *terms = (proven_ws_deflate_terms_t){ .server_window_bits = bits, .client_window_bits = 15 };
+    return e;
 }
 
 proven_err_t proven_ws_conn_accept(proven_http_exchange_t *exchange, proven_u8str_view_t protocol,
@@ -496,15 +577,24 @@ proven_err_t proven_ws_conn_accept(proven_http_exchange_t *exchange, proven_u8st
     /* Compression, when this side wants it and the client offered a form of it that can be met. */
     proven_byte_t extension[PROVEN_WS_DEFLATE_ANSWER_MAX];
     proven_size_t extension_len = 0;
-    int window_bits = 0;
+    proven_ws_deflate_terms_t terms;
+    proven_mem_mut_t room = { .ptr = extension, .size = sizeof extension };
     bool deflate = config->compress &&
-                   proven_ws_deflate_accept(req, (proven_mem_mut_t){ .ptr = extension, .size = sizeof extension }, &extension_len, &window_bits) == PROVEN_OK;
+                   (config->compress_no_takeover ? wc_accept_plain(req, room, &extension_len, &terms)
+                    : config->compress_peer_no_takeover ? proven_ws_deflate_accept_peer_no_takeover(req, room, &extension_len, &terms)
+                                                        : proven_ws_deflate_accept_takeover(req, room, &extension_len, &terms)) == PROVEN_OK;
     if (deflate) headers[header_count++] = (proven_http_header_t){ wc_lit("Sec-WebSocket-Extensions"), { .ptr = extension, .size = extension_len } };
     proven_transport_t t;
     proven_mem_view_t early;
     e = proven_http_exchange_upgrade(exchange, wc_lit("websocket"), headers, header_count, &t, &early);
+    if (e == PROVEN_ERR_BUSY) {
+        /* The server's `max_upgraded` are open: try again soon. */
+        const proven_http_header_t h = { wc_lit("Retry-After"), wc_lit("1") };
+        (void)proven_http_exchange_respond(exchange, 503, &h, 1, (proven_mem_view_t){0});
+        return e;
+    }
     if (e != PROVEN_OK) return e;
-    e = wc_open(t, true, early, config, deflate, window_bits, out);
+    e = wc_open(t, true, early, config, deflate ? &terms : (void *)0, out);
     if (e != PROVEN_OK) { (void)proven_transport_close(t); return e; }
     wc_set_protocol(*out, protocol);
     return PROVEN_OK;
@@ -539,7 +629,11 @@ proven_err_t proven_ws_conn_connect(proven_http_client_t *client, proven_u8str_v
     all[n++] = (proven_http_header_t){ wc_lit("Sec-WebSocket-Key"), { .ptr = key, .size = sizeof key } };
     all[n++] = (proven_http_header_t){ wc_lit("Sec-WebSocket-Version"), wc_lit("13") };
     if (protocols.size > 0) all[n++] = (proven_http_header_t){ wc_lit("Sec-WebSocket-Protocol"), protocols };
-    if (config->compress) all[n++] = (proven_http_header_t){ wc_lit("Sec-WebSocket-Extensions"), wc_lit(PROVEN_WS_DEFLATE_OFFER) };
+    if (config->compress) {
+        all[n++] = (proven_http_header_t){ wc_lit("Sec-WebSocket-Extensions"),
+                                           config->compress_no_takeover ? wc_lit(PROVEN_WS_DEFLATE_OFFER)
+                                           : config->compress_peer_no_takeover ? wc_lit(PROVEN_WS_DEFLATE_OFFER_PEER_NO_TAKEOVER) : wc_lit(PROVEN_WS_DEFLATE_OFFER_TAKEOVER) };
+    }
 
     proven_http_client_request_t req = {
         .method = wc_lit("GET"),
@@ -557,14 +651,19 @@ proven_err_t proven_ws_conn_connect(proven_http_client_t *client, proven_u8str_v
     proven_http_response_t head = { .status = resp.status, .version_minor = 1, .headers = (proven_http_header_t *)resp.headers, .header_count = resp.header_count };
     proven_u8str_view_t chosen;
     bool deflate = false;
-    /* Only a client that offered the extension may be answered with it. */
-    if (config->compress) e = proven_ws_check_response_deflate(&head, (proven_u8str_view_t){ .ptr = key, .size = sizeof key }, protocols, &chosen, &deflate);
-    else e = proven_ws_check_response(&head, (proven_u8str_view_t){ .ptr = key, .size = sizeof key }, protocols, &chosen);
+    /* Only a client that offered the extension may be answered with it. Without takeover, the
+     * answer says none either way and this side's window is its own. */
+    proven_u8str_view_t sent_key = { .ptr = key, .size = sizeof key };
+    proven_ws_deflate_terms_t terms = { .server_window_bits = 15, .client_window_bits = 15 };
+    if (config->compress && config->compress_no_takeover) e = proven_ws_check_response_deflate(&head, sent_key, protocols, &chosen, &deflate);
+    else if (config->compress && config->compress_peer_no_takeover) e = proven_ws_check_response_peer_no_takeover(&head, sent_key, protocols, &chosen, &deflate, &terms);
+    else if (config->compress) e = proven_ws_check_response_takeover(&head, sent_key, protocols, &chosen, &deflate, &terms);
+    else e = proven_ws_check_response(&head, sent_key, protocols, &chosen);
     proven_transport_t t = {0};
     proven_mem_view_t early = {0};
     if (e == PROVEN_OK) e = proven_http_client_upgrade(&resp, &t, &early);
     if (e == PROVEN_OK) {
-        e = wc_open(t, false, early, config, deflate, 0, out);
+        e = wc_open(t, false, early, config, deflate ? &terms : (void *)0, out);
         if (e != PROVEN_OK) (void)proven_transport_close(t);
         else wc_set_protocol(*out, chosen);
     }

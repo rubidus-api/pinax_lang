@@ -60,10 +60,25 @@ void proven_inflate_destroy(proven_inflate_t *z);
 void proven_inflate_reset(proven_inflate_t *z);
 
 /**
+ * @brief Start a new stream of the same framing after `done`, **keeping the last 32 KiB**: the
+ *        new stream's matches may reach back into what the one before produced.
+ *
+ * This is for `permessage-deflate` with context takeover (RFC 7692), where one decompressor
+ * reads every message of a connection: a sender may end a message with a final block instead
+ * of a flush (section 7.2.3.4), and its next message still refers back to the earlier ones.
+ * For a zlib or gzip stream it is a reset whose kept bytes nothing refers to.
+ */
+void proven_inflate_restart(proven_inflate_t *z);
+
+/**
  * @brief Decompress: consume some of `in`, produce some of `out`.
  *
  * Call it again with the rest of the input, or with more output space, until `*done`. Input
  * after the end of the stream is not consumed: `*consumed` says where the stream ended.
+ *
+ * Only the first `*produced` bytes of `out` are data. Up to seven bytes after them, inside
+ * the space given, may have been written to as well - a copy made eight bytes at a time - so
+ * give as `out` space that is free, not space whose later bytes are still wanted.
  *
  * A raw stream need not end. One that is cut at flush points instead - `permessage-deflate`
  * with context takeover - is fed piece by piece in the same way: `*done` simply never

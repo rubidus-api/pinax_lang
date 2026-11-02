@@ -24,8 +24,9 @@
  * frame without a mask or a server frame with one, text that is not UTF-8, a close code that
  * may not be sent.
  *
- * No extension is implemented. `permessage-deflate` in particular is not: the library has no
- * DEFLATE. A peer that uses one sets a reserved bit, and that is refused.
+ * One extension is spoken: `permessage-deflate` (RFC 7692), negotiated with the functions of
+ * the compression section below and allowed by proven_ws_decoder_allow_compressed. A peer
+ * that sets a reserved bit without it is refused.
  */
 
 // -----------------------------------------------------------------------------
@@ -58,8 +59,13 @@ proven_err_t proven_ws_accept_key(proven_u8str_view_t key, proven_byte_t out[PRO
 /**
  * @brief A server's check: is this parsed request a WebSocket upgrade, and a well-formed one?
  *
- * @param key receives the client's `Sec-WebSocket-Key`, a view into the request.
- * @return PROVEN_OK: answer 101 with proven_ws_accept_key(key).
+ * A request that came over HTTP/2 as an extended CONNECT (RFC 8441) is one too: the
+ * event-driven server presents it with `method` CONNECT and a `:protocol` field first, and it
+ * has no key - the answer there is 200, not 101 (proven_ws_event_accept gives it).
+ *
+ * @param key receives the client's `Sec-WebSocket-Key`, a view into the request; empty for an
+ *        HTTP/2 request, which has none to answer.
+ * @return PROVEN_OK: answer 101 with proven_ws_accept_key(key) - or, over HTTP/2, 200.
  *         PROVEN_ERR_NOT_FOUND: not an upgrade to WebSocket at all (no `Upgrade: websocket`) -
  *         an ordinary request; handle it as one.
  *         PROVEN_ERR_UNSUPPORTED: an upgrade for a protocol version other than 13 - answer 426
@@ -69,6 +75,31 @@ proven_err_t proven_ws_accept_key(proven_u8str_view_t key, proven_byte_t out[PRO
  */
 [[nodiscard]]
 proven_err_t proven_ws_check_request(const proven_http_request_t *request, proven_u8str_view_t *key);
+
+/**
+ * @brief A server's check of where the page that opened the connection came from: is the
+ *        request's `Origin` one of `allowed`?
+ *
+ * A browser sends `Origin` with every WebSocket handshake, and sends the user's cookies with
+ * it whatever page asked; the same-origin policy does not cover WebSocket. A server that
+ * knows its users by a cookie therefore has to refuse the origins it does not serve, or any
+ * page can talk to it as the user. A program that is not a browser sends what it likes, or
+ * nothing: this check is about browsers.
+ *
+ * An origin is written as a browser writes it - `https://app.example`, with the port only
+ * when it is not the scheme's own (`http://localhost:8080`), no path and no final slash. It is
+ * compared whole, letter case aside; `https://app.example:443` is not `https://app.example`.
+ *
+ * @param allowed the origins served, `allowed_count` of them.
+ * @return PROVEN_OK: the request has one `Origin` and it is in the list.
+ *         PROVEN_ERR_NOT_FOUND: it has none - not a browser. Whether that is let in is the
+ *         server's decision.
+ *         PROVEN_ERR_PERMISSION: an origin that is not in the list (`null` among them), or
+ *         more than one `Origin` field - answer 403.
+ *         PROVEN_ERR_INVALID_ARG: no request, or a count with no list.
+ */
+[[nodiscard]]
+proven_err_t proven_ws_check_origin(const proven_http_request_t *request, const proven_u8str_view_t *allowed, proven_size_t allowed_count);
 
 /**
  * @brief Whether the request's `Sec-WebSocket-Protocol` offers `name` (compared exactly: the
@@ -143,6 +174,99 @@ proven_err_t proven_ws_deflate_accept(const proven_http_request_t *request, prov
 [[nodiscard]]
 proven_err_t proven_ws_check_response_deflate(const proven_http_response_t *response, proven_u8str_view_t key,
                                               proven_u8str_view_t offered, proven_u8str_view_t *protocol, bool *deflate);
+
+/**
+ * @brief What a client sends in `Sec-WebSocket-Extensions` to ask for compressed messages with
+ *        **context takeover**: each side may keep its window from one message to the next.
+ *
+ * A message then refers back to the messages before it, so short, similar messages shrink to
+ * a third or a quarter where on their own they would not shrink at all - at the price of a
+ * compressor and a decompressor kept for the connection's life. `client_max_window_bits` lets
+ * the server bound the window this client compresses with. Check the answer with
+ * proven_ws_check_response_takeover.
+ */
+#define PROVEN_WS_DEFLATE_OFFER_TAKEOVER "permessage-deflate; client_max_window_bits"
+
+/** @brief What the two sides agreed for `permessage-deflate`. */
+typedef struct {
+    bool server_takeover;     /**< the server may keep its window between messages: the client keeps one decompressor for all of them */
+    bool client_takeover;     /**< the client may: the server keeps one decompressor */
+    int server_window_bits;   /**< the largest window the server may compress with, 8 to 15 (this compressor's smallest is 9) */
+    int client_window_bits;   /**< the largest the client may compress with, 8 to 15. 8: this library's compressor cannot, so such a client sends its messages uncompressed */
+} proven_ws_deflate_terms_t;
+
+/**
+ * @brief proven_ws_deflate_accept for a server that keeps its window between messages.
+ *
+ * The offers are tried and passed over as there. The answer forbids takeover only where the
+ * offer asked for it: `server_no_context_takeover` and `client_no_context_takeover` are
+ * answered when the offer had them, `server_max_window_bits` when the offer had it.
+ * `client_max_window_bits` is never answered: a decompressor here holds 32 KiB whatever the
+ * window, so there is nothing to save.
+ *
+ * @param terms receives what was agreed: takeover in each direction not forbidden, the
+ *        server's window the offer's or 15, the client's 15.
+ * @return as proven_ws_deflate_accept.
+ */
+[[nodiscard]]
+proven_err_t proven_ws_deflate_accept_takeover(const proven_http_request_t *request, proven_mem_mut_t out, proven_size_t *len,
+                                               proven_ws_deflate_terms_t *terms);
+
+/**
+ * @brief proven_ws_check_response for a client that sent PROVEN_WS_DEFLATE_OFFER_TAKEOVER.
+ *
+ * The answer may name this one extension, once, with any of its four parameters at most once
+ * each; `client_max_window_bits` must then have a value. `*deflate` is true when the server
+ * accepted it, and `*terms` says what was agreed (zeroed when it did not).
+ *
+ * A side whose peer may take over keeps one decompressor and, when it reports `done` (the
+ * sender ended a final block), goes on with proven_inflate_restart, not reset. A side that
+ * takes over keeps one compressor and ends each message with PROVEN_DEFLATE_FLUSH_SYNC.
+ *
+ * @return also PROVEN_ERR_INVALID_FORMAT when the server names another extension, names this
+ *         one twice, or gives a parameter twice, an unknown one or a value out of range.
+ */
+[[nodiscard]]
+proven_err_t proven_ws_check_response_takeover(const proven_http_response_t *response, proven_u8str_view_t key,
+                                               proven_u8str_view_t offered, proven_u8str_view_t *protocol, bool *deflate,
+                                               proven_ws_deflate_terms_t *terms);
+
+/**
+ * @brief What a client sends to keep its own window between messages and ask the server to
+ *        keep none: the server then compresses each message on its own, and this client
+ *        needs no decompressor between messages (about 35 KiB less per idle connection), at
+ *        the price of the server's short, similar messages shrinking far less. A server that
+ *        will not honour it declines the extension (RFC 7692 section 7.1.1.1). Check the answer
+ *        with proven_ws_check_response_peer_no_takeover.
+ */
+#define PROVEN_WS_DEFLATE_OFFER_PEER_NO_TAKEOVER "permessage-deflate; client_max_window_bits; server_no_context_takeover"
+
+/**
+ * @brief proven_ws_deflate_accept_takeover for a server that keeps its own window and forbids
+ *        the client's: the answer always carries `client_no_context_takeover` (RFC 7692
+ *        section 7.1.1.2 lets a server add it), so the client compresses each message on its
+ *        own and this side needs no decompressor between messages.
+ *
+ * `server_no_context_takeover` and `server_max_window_bits` are answered as there.
+ *
+ * @param terms receives what was agreed; `client_takeover` is always false.
+ * @return as proven_ws_deflate_accept.
+ */
+[[nodiscard]]
+proven_err_t proven_ws_deflate_accept_peer_no_takeover(const proven_http_request_t *request, proven_mem_mut_t out, proven_size_t *len,
+                                                       proven_ws_deflate_terms_t *terms);
+
+/**
+ * @brief proven_ws_check_response_takeover for a client that sent
+ *        PROVEN_WS_DEFLATE_OFFER_PEER_NO_TAKEOVER.
+ *
+ * @return also PROVEN_ERR_INVALID_FORMAT when the server accepts the extension without
+ *         `server_no_context_takeover`: it would keep a window this side does not keep.
+ */
+[[nodiscard]]
+proven_err_t proven_ws_check_response_peer_no_takeover(const proven_http_response_t *response, proven_u8str_view_t key,
+                                                       proven_u8str_view_t offered, proven_u8str_view_t *protocol, bool *deflate,
+                                                       proven_ws_deflate_terms_t *terms);
 
 // -----------------------------------------------------------------------------
 // Frames

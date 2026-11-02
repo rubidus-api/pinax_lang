@@ -3,6 +3,9 @@
 #if !defined(PROVEN_FREESTANDING) && !defined(PROVEN_NO_NET)
 
 #include "../../platform/proven_sys_net.h"
+#include "proven_internal_quic_net.h"
+#include "proven_internal_net.h"
+#include <stddef.h>
 
 /*
  * The portable half of the socket layer. Everything the operating system does is in
@@ -36,6 +39,7 @@ static proven_err_t internal_err_from_reason(proven_sys_net_result_t r) {
          * something else is closed. "Back off" is the right response, which is what BUSY asks. */
         case PROVEN_SYS_NET_LIMIT:        return PROVEN_ERR_BUSY;
         case PROVEN_SYS_NET_EXISTS:       return PROVEN_ERR_EXISTS;
+        case PROVEN_SYS_NET_CANCELLED:    return PROVEN_ERR_CANCELLED;
         default:                          return PROVEN_ERR_IO;
     }
 }
@@ -280,21 +284,21 @@ typedef struct {
     proven_size_t cap;
     proven_size_t len;
     bool overflow;
-} internal_text_t;
+} proven_internal_text_t;
 
-static void internal_put(internal_text_t *t, char c) {
+static void internal_put(proven_internal_text_t *t, char c) {
     if (t->len < t->cap) t->ptr[t->len++] = (proven_byte_t)c;
     else t->overflow = true;
 }
 
-static void internal_put_dec(internal_text_t *t, proven_u32 v) {
+static void internal_put_dec(proven_internal_text_t *t, proven_u32 v) {
     char tmp[10];
     int n = 0;
     do { tmp[n++] = (char)('0' + v % 10u); v /= 10u; } while (v);
     while (n > 0) internal_put(t, tmp[--n]);
 }
 
-static void internal_put_hex16(internal_text_t *t, proven_u16 v) {
+static void internal_put_hex16(proven_internal_text_t *t, proven_u16 v) {
     static const char d[] = "0123456789abcdef";
     bool started = false;
     for (int shift = 12; shift >= 0; shift -= 4) {
@@ -303,7 +307,7 @@ static void internal_put_hex16(internal_text_t *t, proven_u16 v) {
     }
 }
 
-static void internal_put_ipv4(internal_text_t *t, const proven_byte_t ip[4]) {
+static void internal_put_ipv4(proven_internal_text_t *t, const proven_byte_t ip[4]) {
     for (int i = 0; i < 4; ++i) {
         if (i) internal_put(t, '.');
         internal_put_dec(t, ip[i]);
@@ -312,7 +316,7 @@ static void internal_put_ipv4(internal_text_t *t, const proven_byte_t ip[4]) {
 
 /* RFC 5952: lowercase, no leading zeros, and the longest run of two or more zero groups
  * written as "::" - the first such run when two are equally long. */
-static void internal_put_ipv6(internal_text_t *t, const proven_byte_t ip[16]) {
+static void internal_put_ipv6(proven_internal_text_t *t, const proven_byte_t ip[16]) {
     proven_u16 g[8];
     for (int i = 0; i < 8; ++i) g[i] = (proven_u16)(((proven_u16)ip[i * 2] << 8) | ip[i * 2 + 1]);
 
@@ -348,7 +352,7 @@ static void internal_put_ipv6(internal_text_t *t, const proven_byte_t ip[16]) {
 proven_err_t proven_net_addr_format(const proven_net_addr_t *addr, proven_mem_mut_t out, proven_size_t *written) {
     if (written) *written = 0;
     if (!addr || !written || (out.size > 0 && !out.ptr)) return PROVEN_ERR_INVALID_ARG;
-    internal_text_t t = { .ptr = out.ptr, .cap = out.size, .len = 0, .overflow = false };
+    proven_internal_text_t t = { .ptr = out.ptr, .cap = out.size, .len = 0, .overflow = false };
     switch (addr->family) {
         case PROVEN_NET_FAMILY_IPV4:
             internal_put_ipv4(&t, addr->ip);
@@ -453,6 +457,16 @@ static int internal_remaining_ms(proven_net_deadline_t until, bool *expired) {
     return (int)ms;
 }
 
+#if defined(_WIN32) || defined(_WIN64) || defined(__linux__)
+proven_err_t proven_net_err_from_sys_(proven_sys_net_result_t r) { return internal_err_from_reason(r); }
+void proven_net_addr_to_sys_(const proven_net_addr_t *a, proven_sys_net_addr_t *s) { internal_addr_to_sys(a, s); }
+void proven_net_addr_from_sys_(const proven_sys_net_addr_t *s, proven_net_addr_t *a) { internal_addr_from_sys(s, a); }
+int proven_net_remaining_ms_(proven_net_deadline_t until) {
+    bool expired;
+    return internal_remaining_ms(until, &expired);
+}
+#endif
+
 /* Wait for one socket. PROVEN_OK: something happened on it - try the operation again, which
  * will say what. PROVEN_ERR_TIMEOUT: the deadline passed. */
 static proven_err_t internal_wait_one(proven_uintptr_t handle, proven_u8 want, proven_net_deadline_t until) {
@@ -475,8 +489,8 @@ static proven_err_t internal_wait_one(proven_uintptr_t handle, proven_u8 want, p
 // Stream sockets
 // -----------------------------------------------------------------------------
 
-proven_err_t proven_net_listen(proven_net_addr_t at, int backlog,
-                               proven_net_listener_t *out, proven_net_addr_t *bound) {
+static proven_err_t net_listen(proven_net_addr_t at, int backlog, bool shared,
+                              proven_net_listener_t *out, proven_net_addr_t *bound) {
     if (!out) return PROVEN_ERR_INVALID_ARG;
     *out = (proven_net_listener_t){0};
     if (at.family == PROVEN_NET_FAMILY_NONE) return PROVEN_ERR_INVALID_ARG;
@@ -484,7 +498,8 @@ proven_err_t proven_net_listen(proven_net_addr_t at, int backlog,
     proven_sys_net_addr_t sys;
     internal_addr_to_sys(&at, &sys);
     proven_sys_socket_t s = PROVEN_SYS_SOCKET_INVALID;
-    proven_sys_net_result_t r = proven_sys_net_open_listener(&sys, backlog, &s);
+    proven_sys_net_result_t r = shared ? proven_sys_net_open_shared(&sys, true, backlog, &s)
+                                       : proven_sys_net_open_listener(&sys, backlog, &s);
     if (r != PROVEN_SYS_NET_OK) return internal_err_from_reason(r);
 
     if (bound) {
@@ -500,6 +515,15 @@ proven_err_t proven_net_listen(proven_net_addr_t at, int backlog,
     out->internal.family = (proven_u8)at.family;
     out->internal.open = true;
     return PROVEN_OK;
+}
+
+proven_err_t proven_net_listen(proven_net_addr_t at, int backlog,
+                               proven_net_listener_t *out, proven_net_addr_t *bound) {
+    return net_listen(at, backlog, false, out, bound);
+}
+
+proven_err_t proven_net_listen_shared_(proven_net_addr_t at, int backlog, proven_net_listener_t *out, proven_net_addr_t *bound) {
+    return net_listen(at, backlog, true, out, bound);
 }
 
 proven_err_t proven_net_accept(proven_net_listener_t *listener, proven_net_deadline_t until,
@@ -597,6 +621,15 @@ proven_err_t proven_net_connect_finish(proven_net_conn_t *conn) {
     return internal_err_from_reason(r);
 }
 
+proven_err_t proven_net_connect_result_(const proven_net_conn_t *conn) {
+    if (!conn) return PROVEN_ERR_INVALID_ARG;
+    if (!conn->internal.open) return PROVEN_ERR_INVALID_STATE;
+    proven_sys_net_result_t r = proven_sys_net_connect_result((proven_sys_socket_t)conn->internal.handle);
+    if (r == PROVEN_SYS_NET_OK) return PROVEN_OK;
+    if (r == PROVEN_SYS_NET_IN_PROGRESS) return PROVEN_ERR_AGAIN;
+    return internal_err_from_reason(r);
+}
+
 proven_result_size_t proven_net_read(proven_net_conn_t *conn, proven_mem_mut_t dest, proven_net_deadline_t until) {
     proven_result_size_t res = { .err = PROVEN_OK, .value = 0 };
     if (!conn || (dest.size > 0 && !dest.ptr)) { res.err = PROVEN_ERR_INVALID_ARG; return res; }
@@ -612,15 +645,19 @@ proven_result_size_t proven_net_read(proven_net_conn_t *conn, proven_mem_mut_t d
     }
 }
 
+static proven_size_t g_write_cap;
+void proven_net_write_cap_for_test_(proven_size_t cap) { g_write_cap = cap; }
+
 static proven_result_size_t internal_write(proven_net_conn_t *conn, proven_mem_view_t src,
                                            proven_net_deadline_t until, bool all) {
     proven_result_size_t res = { .err = PROVEN_OK, .value = 0 };
     if (!conn || (src.size > 0 && !src.ptr)) { res.err = PROVEN_ERR_INVALID_ARG; return res; }
     if (!conn->internal.open) { res.err = PROVEN_ERR_INVALID_STATE; return res; }
     while (res.value < src.size) {
-        proven_size_t n = 0;
+        proven_size_t n = 0, offer = src.size - res.value;
+        if (g_write_cap > 0 && offer > g_write_cap) offer = g_write_cap;
         proven_sys_net_result_t r = proven_sys_net_send((proven_sys_socket_t)conn->internal.handle,
-                                                        src.ptr + res.value, src.size - res.value, &n);
+                                                        src.ptr + res.value, offer, &n);
         if (r == PROVEN_SYS_NET_OK) {
             res.value += n;
             if (!all && n > 0) return res;
@@ -640,6 +677,26 @@ proven_result_size_t proven_net_write(proven_net_conn_t *conn, proven_mem_view_t
 
 proven_result_size_t proven_net_write_all(proven_net_conn_t *conn, proven_mem_view_t src, proven_net_deadline_t until) {
     return internal_write(conn, src, until, true);
+}
+
+_Static_assert(PROVEN_NET_VEC_MAX == PROVEN_SYS_NET_VEC_MAX, "one limit for the gather write");
+
+proven_err_t proven_net_write_vec_(proven_net_conn_t *conn, const proven_mem_view_t *bufs, proven_size_t count, proven_size_t *sent) {
+    *sent = 0;
+    if (!conn || (count > 0 && !bufs)) return PROVEN_ERR_INVALID_ARG;
+    if (!conn->internal.open) return PROVEN_ERR_INVALID_STATE;
+    if (count > PROVEN_NET_VEC_MAX) count = PROVEN_NET_VEC_MAX;
+    proven_sys_net_vec_t vec[PROVEN_NET_VEC_MAX];
+    proven_size_t room = g_write_cap > 0 ? g_write_cap : (proven_size_t)-1;
+    for (proven_size_t i = 0; i < count; ++i) {
+        proven_size_t n = bufs[i].size < room ? bufs[i].size : room;
+        room -= n;
+        vec[i] = (proven_sys_net_vec_t){ .ptr = bufs[i].ptr, .len = n };
+    }
+    proven_sys_net_result_t r = proven_sys_net_send_vec((proven_sys_socket_t)conn->internal.handle, vec, count, sent);
+    if (r == PROVEN_SYS_NET_OK) return PROVEN_OK;
+    if (r == PROVEN_SYS_NET_WOULD_BLOCK) return PROVEN_ERR_TIMEOUT;
+    return internal_err_from_reason(r);
 }
 
 proven_err_t proven_net_shutdown_write(proven_net_conn_t *conn) {
@@ -705,7 +762,7 @@ proven_err_t proven_net_pair(proven_net_conn_t *a, proven_net_conn_t *b) {
 // Datagram sockets
 // -----------------------------------------------------------------------------
 
-proven_err_t proven_net_udp_open(proven_net_addr_t at, proven_net_udp_t *out, proven_net_addr_t *bound) {
+static proven_err_t net_udp_open(proven_net_addr_t at, bool shared, proven_net_udp_t *out, proven_net_addr_t *bound) {
     if (!out) return PROVEN_ERR_INVALID_ARG;
     *out = (proven_net_udp_t){0};
     if (at.family == PROVEN_NET_FAMILY_NONE) return PROVEN_ERR_INVALID_ARG;
@@ -713,7 +770,7 @@ proven_err_t proven_net_udp_open(proven_net_addr_t at, proven_net_udp_t *out, pr
     proven_sys_net_addr_t sys;
     internal_addr_to_sys(&at, &sys);
     proven_sys_socket_t s = PROVEN_SYS_SOCKET_INVALID;
-    proven_sys_net_result_t r = proven_sys_net_open_datagram(&sys, &s);
+    proven_sys_net_result_t r = shared ? proven_sys_net_open_shared(&sys, false, 0, &s) : proven_sys_net_open_datagram(&sys, &s);
     if (r != PROVEN_SYS_NET_OK) return internal_err_from_reason(r);
     if (bound) {
         proven_sys_net_addr_t actual;
@@ -728,6 +785,19 @@ proven_err_t proven_net_udp_open(proven_net_addr_t at, proven_net_udp_t *out, pr
     out->internal.family = (proven_u8)at.family;
     out->internal.open = true;
     return PROVEN_OK;
+}
+
+proven_err_t proven_net_udp_open(proven_net_addr_t at, proven_net_udp_t *out, proven_net_addr_t *bound) {
+    return net_udp_open(at, false, out, bound);
+}
+
+proven_err_t proven_net_udp_open_shared_(proven_net_addr_t at, proven_net_udp_t *out, proven_net_addr_t *bound) {
+    return net_udp_open(at, true, out, bound);
+}
+
+proven_err_t proven_net_udp_steer_(proven_net_udp_t *udp, proven_size_t n) {
+    if (!udp || !udp->internal.open || n < 1 || n > 255) return PROVEN_ERR_INVALID_ARG;
+    return internal_err_from_reason(proven_sys_net_udp_steer((proven_sys_socket_t)udp->internal.handle, (proven_u32)n));
 }
 
 proven_err_t proven_net_udp_send_to(proven_net_udp_t *udp, proven_net_addr_t to, proven_mem_view_t data,
@@ -766,6 +836,61 @@ proven_result_size_t proven_net_udp_recv_from(proven_net_udp_t *udp, proven_mem_
         if (w != PROVEN_OK) { res.err = w; return res; }
     }
 }
+
+proven_err_t proven_net_udp_send_segments_(proven_net_udp_t *udp, proven_net_addr_t to, proven_mem_view_t data, proven_size_t seg, proven_size_t *sent) {
+    return proven_net_udp_send_marked_(udp, to, data, seg, 0, sent);
+}
+
+proven_err_t proven_net_udp_send_marked_(proven_net_udp_t *udp, proven_net_addr_t to, proven_mem_view_t data, proven_size_t seg, proven_u8 ecn, proven_size_t *sent) {
+    *sent = 0;
+    if (!udp || (data.size > 0 && !data.ptr) || seg == 0) return PROVEN_ERR_INVALID_ARG;
+    if (!udp->internal.open) return PROVEN_ERR_INVALID_STATE;
+    proven_sys_net_addr_t sys;
+    internal_addr_to_sys(&to, &sys);
+    const proven_sys_net_result_t r = proven_sys_net_send_segments((proven_sys_socket_t)udp->internal.handle, data.ptr, data.size, seg, &sys, ecn, sent);
+    return r == PROVEN_SYS_NET_WOULD_BLOCK ? PROVEN_ERR_TIMEOUT : internal_err_from_reason(r);
+}
+
+proven_result_size_t proven_net_udp_recv_segments_(proven_net_udp_t *udp, proven_mem_mut_t dest, proven_size_t *seg, proven_net_addr_t *from) {
+    return proven_net_udp_recv_marked_(udp, dest, seg, NULL, from);
+}
+
+proven_result_size_t proven_net_udp_recv_marked_(proven_net_udp_t *udp, proven_mem_mut_t dest, proven_size_t *seg, proven_u8 *ecn, proven_net_addr_t *from) {
+    proven_result_size_t res = { .err = PROVEN_OK, .value = 0 };
+    *seg = 0;
+    if (ecn) *ecn = 0;
+    if (!udp || (dest.size > 0 && !dest.ptr)) { res.err = PROVEN_ERR_INVALID_ARG; return res; }
+    if (!udp->internal.open) { res.err = PROVEN_ERR_INVALID_STATE; return res; }
+    proven_size_t n = 0;
+    proven_sys_net_addr_t sys;
+    const proven_sys_net_result_t r = proven_sys_net_recv_segments((proven_sys_socket_t)udp->internal.handle, dest.ptr, dest.size, &n, seg, ecn, &sys);
+    if (r == PROVEN_SYS_NET_OK || r == PROVEN_SYS_NET_TRUNCATED) {
+        res.value = n;
+        res.err = internal_err_from_reason(r);
+        if (from) internal_addr_from_sys(&sys, from);
+        return res;
+    }
+    res.err = r == PROVEN_SYS_NET_WOULD_BLOCK ? PROVEN_ERR_TIMEOUT : internal_err_from_reason(r);
+    return res;
+}
+
+bool proven_net_udp_gro_(proven_net_udp_t *udp) {
+    return udp && udp->internal.open && proven_sys_net_udp_gro((proven_sys_socket_t)udp->internal.handle) == PROVEN_SYS_NET_OK;
+}
+
+bool proven_net_udp_ecn_(proven_net_udp_t *udp) {
+    if (!udp || !udp->internal.open) return false;
+    const proven_sys_net_family_t f = udp->internal.family == PROVEN_NET_FAMILY_IPV6 ? PROVEN_SYS_NET_FAMILY_IPV6 : PROVEN_SYS_NET_FAMILY_IPV4;
+    return proven_sys_net_udp_ecn((proven_sys_socket_t)udp->internal.handle, f) == PROVEN_SYS_NET_OK;
+}
+
+bool proven_net_udp_dontfrag_(proven_net_udp_t *udp) {
+    if (!udp || !udp->internal.open) return false;
+    const proven_sys_net_family_t f = udp->internal.family == PROVEN_NET_FAMILY_IPV6 ? PROVEN_SYS_NET_FAMILY_IPV6 : PROVEN_SYS_NET_FAMILY_IPV4;
+    return proven_sys_net_udp_dontfrag((proven_sys_socket_t)udp->internal.handle, f) == PROVEN_SYS_NET_OK;
+}
+
+void proven_net_udp_segments_off_for_test_(bool off) { proven_sys_net_segments_off_for_test_(off); }
 
 proven_err_t proven_net_udp_addr(const proven_net_udp_t *udp, proven_net_addr_t *out) {
     if (!out) return PROVEN_ERR_INVALID_ARG;
@@ -919,12 +1044,22 @@ proven_err_t proven_net_poll(proven_net_poll_item_t *items, proven_size_t count,
 // Selector
 // -----------------------------------------------------------------------------
 
-/* One socket of a poll-kind selector. */
+#if defined(_WIN32) || defined(_WIN64)
+#define SEL_IOCP 1
+#else
+#define SEL_IOCP 0
+#endif
+
+/* One socket of a poll-kind selector, or of the IOCP kind. */
 typedef struct {
     proven_uintptr_t raw;
     void *tag;
     proven_u8 want;
-} sel_item_t;
+    bool told;                         /* nothing was asked of it and it was reported all the same: not again until something is */
+#if SEL_IOCP
+    struct sel_reg *reg;               /* the IOCP kind's registration; null for a socket removed that is bound to the port still */
+#endif
+} proven_sel_item_t;
 
 struct proven_net_selector {
     proven_allocator_t alloc;
@@ -933,13 +1068,25 @@ struct proven_net_selector {
     bool native;
     /* The poll kind: the list, a hash from socket to its place in the list, and the memory
      * the wait needs. All three grow together. */
-    sel_item_t *items;
+    proven_sel_item_t *items;
     proven_u32 *slots;                  /* place + 1; 0 is empty */
     proven_byte_t *scratch;
     proven_size_t cap;                  /* items */
     proven_size_t slot_count;           /* a power of two, at least twice cap */
     proven_size_t scratch_size;
     proven_size_t next;                 /* where the last report stopped, so nobody is starved */
+#if SEL_IOCP
+    /* The IOCP kind (RFC-0025 step 7) keeps the poll kind's list and hash, without its wait
+     * memory, and: its port; the registrations to look at; those removed whose operations the
+     * port has not reported yet; the room for one look at SEL_LOOK of them. */
+    bool iocp;
+    bool retry;                         /* a notice could not be armed: the wait does not sleep long */
+    proven_uintptr_t port;
+    struct sel_reg *hot_first, *hot_last, *dead;
+    proven_size_t hot_count;
+    proven_size_t detached;             /* items of sockets removed, kept because they are bound to the port */
+    proven_byte_t *look;
+#endif
 };
 
 static void *sel_alloc(proven_allocator_t a, proven_size_t size) {
@@ -967,8 +1114,11 @@ static proven_err_t sel_grow(proven_net_selector_t *s) {
     proven_size_t cap = s->cap ? s->cap * 2 : 64;
     proven_size_t slot_count = cap * 2;
     proven_size_t wait_bytes = proven_net_poll_scratch_size(cap);
+#if SEL_IOCP
+    if (s->iocp) wait_bytes = 1;        /* it looks at SEL_LOOK at a time, in its own room */
+#endif
     if (cap > 0x7fffffffu || wait_bytes == PROVEN_SIZE_MAX) return PROVEN_ERR_OVERFLOW;
-    sel_item_t *items = sel_alloc(s->alloc, cap * sizeof *items);
+    proven_sel_item_t *items = sel_alloc(s->alloc, cap * sizeof *items);
     proven_u32 *slots = sel_alloc(s->alloc, slot_count * sizeof *slots);
     proven_byte_t *scratch = sel_alloc(s->alloc, wait_bytes);
     if (!items || !slots || !scratch) {
@@ -996,6 +1146,233 @@ static proven_err_t sel_grow(proven_net_selector_t *s) {
     return PROVEN_OK;
 }
 
+
+#if SEL_IOCP
+/*
+ * The IOCP kind. A registration is "hot" when something may hold for it: it was just added or
+ * changed, or the port has reported its notice. A wait looks at the hot ones with a WSAPoll that
+ * does not wait - the poll kind's own call, so what is reported is what the poll kind would
+ * report - and one for which nothing holds leaves the list and is armed again: a zero-byte
+ * receive for reading a connection, a notice (proven_sys_net_evt_*) for the rest. What holds
+ * already when either is armed is reported at once, so nothing is missed between the look and
+ * the arm. A wait costs what the ready sockets cost, not the registered ones.
+ */
+
+/* An OVERLAPPED of a registration, and which of its two it is. */
+typedef struct { proven_sys_net_ov_t ov; proven_u8 which; } sel_ov_t;
+
+typedef struct sel_reg {
+    sel_ov_t rd;                        /* the zero-byte receive */
+    sel_ov_t mark;                      /* what the notice posts */
+    proven_sys_net_evt_t evt;
+    struct sel_reg *prev, *next;        /* on the hot list, or the dead one */
+    proven_uintptr_t raw;
+    void *tag;
+    proven_u8 want;
+    proven_u8 evt_want;                 /* what the armed notice asks */
+    bool recv_ok;                       /* a connection bound to this selector's port */
+    bool rd_pending, evt_open, evt_armed;
+    bool hot, parked, dead;
+} sel_reg_t;
+
+enum { SEL_LOOK = 64 };
+
+static sel_reg_t *sel_reg_of(sel_ov_t *o) {
+    return (sel_reg_t *)(void *)((proven_byte_t *)o - (o->which ? offsetof(sel_reg_t, mark) : offsetof(sel_reg_t, rd)));
+}
+
+static void sel_hot(proven_net_selector_t *s, sel_reg_t *r) {
+    if (r->hot || r->dead) return;
+    r->hot = true;
+    r->next = (void *)0;
+    r->prev = s->hot_last;
+    if (s->hot_last) s->hot_last->next = r; else s->hot_first = r;
+    s->hot_last = r;
+    s->hot_count++;
+}
+
+static void sel_cool(proven_net_selector_t *s, sel_reg_t *r) {
+    if (!r->hot) return;
+    if (r->prev) r->prev->next = r->next; else s->hot_first = r->next;
+    if (r->next) r->next->prev = r->prev; else s->hot_last = r->prev;
+    r->prev = r->next = (void *)0;
+    r->hot = false;
+    s->hot_count--;
+}
+
+static void sel_free(proven_net_selector_t *s, sel_reg_t *r) {
+    if (r->evt_open) proven_sys_net_evt_close(&r->evt);
+    s->alloc.free_fn(s->alloc.ctx, r);
+}
+
+/* Ask to be told when something holds again. */
+static void sel_arm(proven_net_selector_t *s, sel_reg_t *r) {
+    if (r->parked) return;
+    const proven_sys_socket_t sock = (proven_sys_socket_t)r->raw;
+    proven_u8 ask = 0;
+    bool notice = !(r->want & PROVEN_NET_READABLE);       /* a connection lost while nothing is read */
+    if (r->want & PROVEN_NET_READABLE) {
+        bool by_recv = r->recv_ok && r->rd_pending;
+        if (r->recv_ok && !r->rd_pending) {
+            proven_u32 b = 0;
+            const proven_sys_net_result_t res = proven_sys_net_ov_recv(s->port, sock, &r->rd.ov, (void *)0, 0, false, &b);
+            if (res == PROVEN_SYS_NET_IN_PROGRESS) { r->rd_pending = true; by_recv = true; }
+            else if (res == PROVEN_SYS_NET_OK) { sel_hot(s, r); return; }
+            /* Refused at once - a socket not connected yet: a notice instead. */
+        }
+        if (!by_recv) { ask |= PROVEN_SYS_NET_READABLE; notice = true; }
+    }
+    if (r->want & PROVEN_NET_WRITABLE) { ask |= PROVEN_SYS_NET_WRITABLE; notice = true; }
+    if (!notice) return;
+    if (r->evt_armed) {
+        if (r->evt_want == ask) return;
+        /* Armed for something else: taken back, unless its notice is on its way already. */
+        if (proven_sys_net_evt_disarm(&r->evt, sock)) return;
+        r->evt_armed = false;
+    }
+    if (!r->evt_open && proven_sys_net_evt_open(&r->evt, s->port, &r->mark.ov) == PROVEN_SYS_NET_OK) r->evt_open = true;
+    if (r->evt_open && proven_sys_net_evt_arm(&r->evt, sock, ask) == PROVEN_SYS_NET_OK) {
+        r->evt_armed = true;
+        r->evt_want = ask;
+        return;
+    }
+    /* Out of handles, or a socket gone: looked at again by the next waits, which do not sleep long. */
+    sel_hot(s, r);
+    s->retry = true;
+}
+
+/* Take a registration out: what the system holds of it is cancelled, and its memory kept until
+ * the port has reported that. */
+static void sel_retire(proven_net_selector_t *s, sel_reg_t *r) {
+    sel_cool(s, r);
+    const proven_sys_socket_t sock = (proven_sys_socket_t)r->raw;
+    if (r->rd_pending) proven_sys_net_ov_cancel(s->port, sock, &r->rd.ov);
+    if (r->evt_open) r->evt_armed = proven_sys_net_evt_disarm(&r->evt, sock);
+    if (!r->rd_pending && !r->evt_armed) { sel_free(s, r); return; }
+    r->dead = true;
+    r->prev = (void *)0;
+    r->next = s->dead;
+    if (s->dead) s->dead->prev = r;
+    s->dead = r;
+}
+
+static void sel_report(proven_net_selector_t *s, const proven_sys_net_done_t *d) {
+    if (!d->ov) return;
+    sel_ov_t *o = (sel_ov_t *)(void *)d->ov;
+    sel_reg_t *r = sel_reg_of(o);
+    if (o->which) { proven_sys_net_evt_taken(&r->evt); r->evt_armed = false; }
+    else r->rd_pending = false;
+    if (!r->dead) { if (!r->parked) sel_hot(s, r); return; }     /* parked: told once, left alone until asked */
+    if (r->rd_pending || r->evt_armed) return;
+    if (r->prev) r->prev->next = r->next; else s->dead = r->next;
+    if (r->next) r->next->prev = r->prev;
+    sel_free(s, r);
+}
+
+/* Take what the port reports, waiting up to `ms` for the first. */
+static proven_err_t sel_take(proven_net_selector_t *s, int ms) {
+    proven_sys_net_done_t done[64];
+    for (int round = 0; round < 1024; ++round) {
+        proven_size_t n = 0;
+        const proven_sys_net_result_t r = proven_sys_net_port_wait(s->port, done, 64, round == 0 ? ms : 0, &n);
+        if (r != PROVEN_SYS_NET_OK) return internal_err_from_reason(r);
+        for (proven_size_t i = 0; i < n; ++i) sel_report(s, &done[i]);
+        if (n == 0) break;
+    }
+    return PROVEN_OK;
+}
+
+/* Look at the hot registrations, SEL_LOOK at a time, until `cap` are reported. Those reported
+ * go to the back, so that with more ready than `cap` the next wait reports others first. */
+static proven_err_t sel_look(proven_net_selector_t *s, proven_net_ready_t *events, proven_size_t cap, proven_size_t *count) {
+    proven_byte_t *first = internal_align_up(s->look);
+    proven_sys_net_wait_t *list = (proven_sys_net_wait_t *)(void *)first;
+    proven_byte_t *native = internal_align_up(first + SEL_LOOK * sizeof(proven_sys_net_wait_t));
+    sel_reg_t *batch[SEL_LOOK];
+    sel_reg_t *again = (void *)0, *again_last = (void *)0;
+    proven_size_t out = 0, budget = s->hot_count;
+    sel_reg_t *r = s->hot_first;
+    s->retry = false;
+    while (r && budget > 0 && out < cap) {
+        proven_size_t k = 0;
+        for (; r && k < SEL_LOOK && k < budget; r = r->next, ++k) {
+            batch[k] = r;
+            list[k] = (proven_sys_net_wait_t){ .sock = (proven_sys_socket_t)r->raw, .want = r->want, .got = 0 };
+        }
+        budget -= k;
+        proven_size_t n = 0;
+        const proven_sys_net_result_t res = proven_sys_net_wait(list, k, native, 0, &n);
+        if (res != PROVEN_SYS_NET_OK) return internal_err_from_reason(res);
+        for (proven_size_t i = 0; i < k; ++i) {
+            sel_reg_t *b = batch[i];
+            if (list[i].got == 0) { sel_cool(s, b); sel_arm(s, b); continue; }
+            if (out == cap) continue;                   /* still hot: the next wait */
+            events[out++] = (proven_net_ready_t){ .tag = b->tag, .got = list[i].got };
+            sel_cool(s, b);
+            /* Nothing asked of it and reported all the same: once, then left alone until something is. */
+            if (b->want == 0) { b->parked = true; continue; }
+            if (again_last) again_last->next = b; else again = b;
+            again_last = b;
+        }
+    }
+    while (again) { sel_reg_t *next = again->next; sel_hot(s, again); again = next; }
+    *count = out;
+    return PROVEN_OK;
+}
+
+static proven_err_t sel_wait_iocp(proven_net_selector_t *s, proven_net_ready_t *events, proven_size_t cap,
+                                  proven_net_deadline_t until, proven_size_t *count) {
+    for (;;) {
+        bool expired = false;
+        int ms = internal_remaining_ms(until, &expired);
+        if (expired) ms = 0;
+        proven_err_t e = sel_take(s, 0);
+        if (e != PROVEN_OK) return e;
+        if (s->hot_first) {
+            e = sel_look(s, events, cap, count);
+            if (e != PROVEN_OK || *count > 0) return e;
+        }
+        if (expired) return PROVEN_ERR_TIMEOUT;
+        if (s->retry && (ms < 0 || ms > 10)) ms = 10;
+        e = sel_take(s, ms);
+        if (e != PROVEN_OK) return e;
+    }
+}
+
+static proven_err_t sel_create_iocp(proven_net_selector_t *s) {
+    proven_sys_net_result_t r = proven_sys_net_port_open(&s->port);
+    if (r != PROVEN_SYS_NET_OK) return internal_err_from_reason(r);
+    s->look = sel_alloc(s->alloc, proven_net_poll_scratch_size(SEL_LOOK));
+    if (!s->look) { proven_sys_net_port_close(s->port); return PROVEN_ERR_NOMEM; }
+    s->iocp = true;
+    return PROVEN_OK;
+}
+
+/* Everything still registered is cancelled; the port is drained for up to two seconds. A
+ * registration whose receive the port never reported in that time may still be written by the
+ * system: its memory is left, not freed. */
+static void sel_destroy_iocp(proven_net_selector_t *s) {
+    for (proven_size_t i = 0; i < s->count; ++i) {
+        if (s->items[i].reg) { sel_retire(s, s->items[i].reg); s->items[i].reg = (void *)0; }
+    }
+    const proven_net_deadline_t until = proven_net_deadline_in(2000);
+    for (;;) {
+        bool expired = false;
+        const int ms = internal_remaining_ms(until, &expired);
+        if (!s->dead || expired) break;
+        if (sel_take(s, ms < 100 ? ms : 100) != PROVEN_OK) break;
+    }
+    while (s->dead) {
+        sel_reg_t *r = s->dead;
+        s->dead = r->next;
+        if (r->evt_open) { proven_sys_net_evt_close(&r->evt); r->evt_open = false; }
+        if (!r->rd_pending) s->alloc.free_fn(s->alloc.ctx, r);
+    }
+    proven_sys_net_port_close(s->port);
+    s->alloc.free_fn(s->alloc.ctx, s->look);
+}
+#endif
+
 proven_err_t proven_net_selector_create_poll(proven_allocator_t alloc, proven_net_selector_t **out) {
     if (out) *out = (void *)0;
     if (!out || !proven_alloc_is_valid(alloc)) return PROVEN_ERR_INVALID_ARG;
@@ -1014,6 +1391,12 @@ proven_err_t proven_net_selector_create(proven_allocator_t alloc, proven_net_sel
     if (!s) return PROVEN_ERR_NOMEM;
     *s = (proven_net_selector_t){0};
     s->alloc = alloc;
+#if SEL_IOCP
+    proven_err_t e = sel_create_iocp(s);
+    if (e != PROVEN_OK) { alloc.free_fn(alloc.ctx, s); return e; }
+    *out = s;
+    return PROVEN_OK;
+#endif
     proven_sys_net_result_t r = proven_sys_net_selector_open(&s->sys);
     if (r == PROVEN_SYS_NET_OK) {
         s->native = true;
@@ -1028,6 +1411,9 @@ proven_err_t proven_net_selector_create(proven_allocator_t alloc, proven_net_sel
 void proven_net_selector_destroy(proven_net_selector_t *selector) {
     if (!selector) return;
     proven_allocator_t a = selector->alloc;
+#if SEL_IOCP
+    if (selector->iocp) sel_destroy_iocp(selector);
+#endif
     if (selector->native) proven_sys_net_selector_close(selector->sys);
     if (selector->items) a.free_fn(a.ctx, selector->items);
     if (selector->slots) a.free_fn(a.ctx, selector->slots);
@@ -1036,11 +1422,21 @@ void proven_net_selector_destroy(proven_net_selector_t *selector) {
 }
 
 proven_net_selector_kind_t proven_net_selector_kind(const proven_net_selector_t *selector) {
+#if SEL_IOCP
+    if (selector && selector->iocp) return PROVEN_NET_SELECTOR_IOCP;
+#endif
     if (!selector || !selector->native) return PROVEN_NET_SELECTOR_POLL;
-    return proven_sys_net_selector_kind() == PROVEN_SYS_NET_SELECTOR_KQUEUE ? PROVEN_NET_SELECTOR_KQUEUE : PROVEN_NET_SELECTOR_EPOLL;
+    switch (proven_sys_net_selector_kind()) {
+    case PROVEN_SYS_NET_SELECTOR_EPOLL: return PROVEN_NET_SELECTOR_EPOLL;
+    case PROVEN_SYS_NET_SELECTOR_KQUEUE: return PROVEN_NET_SELECTOR_KQUEUE;
+    default: return PROVEN_NET_SELECTOR_POLL;
+    }
 }
 
 proven_size_t proven_net_selector_count(const proven_net_selector_t *selector) {
+#if SEL_IOCP
+    if (selector) return selector->count - selector->detached;
+#endif
     return selector ? selector->count : 0;
 }
 
@@ -1060,8 +1456,41 @@ proven_err_t proven_net_selector_add(proven_net_selector_t *selector, proven_net
     }
     bool found;
     proven_size_t at = sel_find(s, handle.raw, &found);
+#if SEL_IOCP
+    if (s->iocp) {
+        proven_sel_item_t *it = found ? &s->items[s->slots[at] - 1] : (void *)0;
+        if (it && it->reg) return PROVEN_ERR_EXISTS;
+        const proven_sys_socket_t sock = (proven_sys_socket_t)handle.raw;
+        bool stream = false, listening = false;
+        proven_sys_net_result_t k = proven_sys_net_sock_kind(sock, &stream, &listening);
+        if (k != PROVEN_SYS_NET_OK) return internal_err_from_reason(k);
+        bool recv_ok = false;
+        if (stream && !listening) {
+            /* Bound already: to this port if this selector had the socket before (its item is
+             * kept), else to another, whose reports this selector would never see. */
+            k = proven_sys_net_port_attach(s->port, sock);
+            if (k == PROVEN_SYS_NET_OK) recv_ok = true;
+            else if (k == PROVEN_SYS_NET_EXISTS) recv_ok = it != (void *)0;
+            else return internal_err_from_reason(k);
+        }
+        sel_reg_t *r = sel_alloc(s->alloc, sizeof *r);
+        if (!r) return PROVEN_ERR_NOMEM;
+        *r = (sel_reg_t){ .raw = handle.raw, .tag = tag, .want = want, .recv_ok = recv_ok };
+        r->mark.which = 1;
+        if (it) {
+            *it = (proven_sel_item_t){ .raw = handle.raw, .tag = tag, .want = want, .reg = r };
+            s->detached--;
+        } else {
+            s->items[s->count] = (proven_sel_item_t){ .raw = handle.raw, .tag = tag, .want = want, .reg = r };
+            s->slots[at] = (proven_u32)(s->count + 1);
+            s->count++;
+        }
+        sel_hot(s, r);
+        return PROVEN_OK;
+    }
+#endif
     if (found) return PROVEN_ERR_EXISTS;
-    s->items[s->count] = (sel_item_t){ .raw = handle.raw, .tag = tag, .want = want };
+    s->items[s->count] = (proven_sel_item_t){ .raw = handle.raw, .tag = tag, .want = want };
     s->slots[at] = (proven_u32)(s->count + 1);
     s->count++;
     return PROVEN_OK;
@@ -1076,9 +1505,19 @@ proven_err_t proven_net_selector_modify(proven_net_selector_t *selector, proven_
     bool found;
     proven_size_t at = sel_find(s, handle.raw, &found);
     if (!found) return PROVEN_ERR_NOT_FOUND;
-    sel_item_t *it = &s->items[s->slots[at] - 1];
+    proven_sel_item_t *it = &s->items[s->slots[at] - 1];
+#if SEL_IOCP
+    if (s->iocp) {
+        if (!it->reg) return PROVEN_ERR_NOT_FOUND;
+        it->reg->want = want;
+        it->reg->tag = tag;
+        it->reg->parked = false;
+        sel_hot(s, it->reg);
+    }
+#endif
     it->want = want;
     it->tag = tag;
+    it->told = false;
     return PROVEN_OK;
 }
 
@@ -1097,6 +1536,17 @@ proven_err_t proven_net_selector_remove(proven_net_selector_t *selector, proven_
     if (!found) return PROVEN_ERR_NOT_FOUND;
     proven_size_t place = s->slots[at] - 1;
     proven_size_t mask = s->slot_count - 1;
+#if SEL_IOCP
+    if (s->iocp) {
+        sel_reg_t *r = s->items[place].reg;
+        if (!r) return PROVEN_ERR_NOT_FOUND;
+        const bool bound = r->recv_ok;
+        sel_retire(s, r);
+        s->items[place].reg = (void *)0;
+        /* A socket bound to the port stays known, so that it can be registered again. */
+        if (bound) { s->detached++; return PROVEN_OK; }
+    }
+#endif
 
     /* Take the entry out of the hash and close the gap it leaves in its probe run. */
     proven_size_t hole = at;
@@ -1124,6 +1574,9 @@ proven_err_t proven_net_selector_wait(proven_net_selector_t *selector, proven_ne
     if (count) *count = 0;
     if (!selector || !events || !count || cap == 0) return PROVEN_ERR_INVALID_ARG;
     proven_net_selector_t *s = selector;
+#if SEL_IOCP
+    if (s->iocp) return sel_wait_iocp(s, events, cap, until, count);
+#endif
     for (;;) {
         bool expired = false;
         int ms = internal_remaining_ms(until, &expired);
@@ -1145,7 +1598,11 @@ proven_err_t proven_net_selector_wait(proven_net_selector_t *selector, proven_ne
             proven_byte_t *native = s->count ? internal_align_up(first + s->count * sizeof(proven_sys_net_wait_t)) : (void *)0;
             for (proven_size_t i = 0; i < s->count; ++i) {
                 list[i].sock = (proven_sys_socket_t)s->items[i].raw;
-                list[i].want = s->items[i].want;
+                /* An error or a hang-up is reported whether asked for or not, on every wait.
+                 * Of a socket of which nothing is asked it is passed on once, and the socket
+                 * then left out of the wait until something is asked of it: its owner is not
+                 * looking, and a wait that returned at once every time would spin. */
+                list[i].want = s->items[i].want == 0 && s->items[i].told ? PROVEN_SYS_NET_IGNORE : s->items[i].want;
                 list[i].got = 0;
             }
             proven_size_t n = 0;
@@ -1159,6 +1616,7 @@ proven_err_t proven_net_selector_wait(proven_net_selector_t *selector, proven_ne
                 do {
                     if (list[i].got != 0) {
                         events[out++] = (proven_net_ready_t){ .tag = s->items[i].tag, .got = list[i].got };
+                        if (s->items[i].want == 0) s->items[i].told = true;
                     }
                     i = i + 1 == s->count ? 0 : i + 1;
                 } while (i != start && out < cap);

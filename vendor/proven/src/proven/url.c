@@ -16,15 +16,7 @@ static int url_hex(proven_byte_t c) {
     return -1;
 }
 
-static proven_byte_t url_lower(proven_byte_t c) { return (c >= 'A' && c <= 'Z') ? (proven_byte_t)(c + 32) : c; }
 
-static bool url_eq_nocase(proven_u8str_view_t a, proven_u8str_view_t b) {
-    if (a.size != b.size) return false;
-    for (proven_size_t i = 0; i < a.size; ++i) {
-        if (url_lower(a.ptr[i]) != url_lower(b.ptr[i])) return false;
-    }
-    return true;
-}
 
 static proven_u8str_view_t url_sub(proven_u8str_view_t s, proven_size_t from, proven_size_t to) {
     return (proven_u8str_view_t){ .ptr = s.ptr + from, .size = to - from };
@@ -144,9 +136,9 @@ proven_err_t proven_url_parse(proven_u8str_view_t text, proven_url_t *out) {
 }
 
 proven_u16 proven_url_default_port(proven_u8str_view_t scheme) {
-    if (url_eq_nocase(scheme, PROVEN_LIT("http")) || url_eq_nocase(scheme, PROVEN_LIT("ws"))) return 80;
-    if (url_eq_nocase(scheme, PROVEN_LIT("https")) || url_eq_nocase(scheme, PROVEN_LIT("wss"))) return 443;
-    if (url_eq_nocase(scheme, PROVEN_LIT("ftp"))) return 21;
+    if (proven_u8str_view_eq_ascii_ci(scheme, PROVEN_LIT("http")) || proven_u8str_view_eq_ascii_ci(scheme, PROVEN_LIT("ws"))) return 80;
+    if (proven_u8str_view_eq_ascii_ci(scheme, PROVEN_LIT("https")) || proven_u8str_view_eq_ascii_ci(scheme, PROVEN_LIT("wss"))) return 443;
+    if (proven_u8str_view_eq_ascii_ci(scheme, PROVEN_LIT("ftp"))) return 21;
     return 0;
 }
 
@@ -156,7 +148,7 @@ proven_u16 proven_url_effective_port(const proven_url_t *url) {
 }
 
 bool proven_url_scheme_is(const proven_url_t *url, proven_u8str_view_t scheme) {
-    return url && url_eq_nocase(url->scheme, scheme);
+    return url && proven_u8str_view_eq_ascii_ci(url->scheme, scheme);
 }
 
 proven_err_t proven_url_split_target(proven_u8str_view_t target, proven_u8str_view_t *path,
@@ -259,13 +251,13 @@ proven_size_t proven_url_encoded_size_max(proven_size_t n) {
     return n > PROVEN_SIZE_MAX / 3u ? PROVEN_SIZE_MAX : n * 3u;
 }
 
-typedef enum { URL_KEEP_COMPONENT, URL_KEEP_PATH, URL_KEEP_FORM } url_keep_t;
+typedef enum { URL_KEEP_COMPONENT, URL_KEEP_PATH, URL_KEEP_FORM } proven_url_keep_t;
 
 static bool url_unreserved(proven_byte_t c) {
     return url_is_alpha(c) || url_is_digit(c) || c == '-' || c == '.' || c == '_' || c == '~';
 }
 
-static proven_err_t url_encode(proven_mem_view_t in, proven_mem_mut_t out, proven_size_t *written, url_keep_t keep) {
+static proven_err_t url_encode(proven_mem_view_t in, proven_mem_mut_t out, proven_size_t *written, proven_url_keep_t keep) {
     static const char hex[] = "0123456789ABCDEF";
     if (written) *written = 0;
     if (!written || (in.size > 0 && !in.ptr) || (out.size > 0 && !out.ptr)) return PROVEN_ERR_INVALID_ARG;
@@ -329,15 +321,15 @@ typedef struct {
     proven_size_t cap;
     proven_size_t len;
     bool full;
-} url_out_t;
+} proven_url_out_t;
 
-static void url_out_put(url_out_t *o, proven_u8str_view_t s) {
+static void url_out_put(proven_url_out_t *o, proven_u8str_view_t s) {
     if (o->full || s.size > o->cap - o->len) { o->full = true; return; }
     for (proven_size_t i = 0; i < s.size; ++i) o->ptr[o->len + i] = s.ptr[i];
     o->len += s.size;
 }
 
-static void url_out_byte(url_out_t *o, proven_byte_t c) {
+static void url_out_byte(proven_url_out_t *o, proven_byte_t c) {
     url_out_put(o, (proven_u8str_view_t){ .ptr = &c, .size = 1 });
 }
 
@@ -345,7 +337,7 @@ static void url_out_byte(url_out_t *o, proven_byte_t c) {
  * removes the segment before it, and one that has nothing to remove is dropped - the path
  * stays at the root. This is the textual algorithm for building a URL, not the security
  * check for using a path, which is proven_url_path_resolve. */
-static void url_remove_dots(url_out_t *o, proven_size_t from) {
+static void url_remove_dots(proven_url_out_t *o, proven_size_t from) {
     proven_byte_t *p = o->ptr;
     proven_size_t n = o->len;
     if (from >= n || p[from] != '/') return;
@@ -382,7 +374,7 @@ proven_err_t proven_url_resolve(proven_u8str_view_t base, proven_u8str_view_t re
     if (proven_url_parse(base, &b) != PROVEN_OK) return PROVEN_ERR_INVALID_FORMAT;
     if (reference.size > 0 && !url_text_ok(reference)) return PROVEN_ERR_INVALID_FORMAT;
 
-    url_out_t o = { .ptr = out.ptr, .cap = out.size, .len = 0, .full = false };
+    proven_url_out_t o = { .ptr = out.ptr, .cap = out.size, .len = 0, .full = false };
     const proven_byte_t *r = reference.ptr;
     proven_size_t n = reference.size;
 

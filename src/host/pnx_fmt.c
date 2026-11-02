@@ -10,7 +10,8 @@
 
 #include "pinax_lex.h"
 
-#include <stdlib.h>
+#include "proven/u8str.h"
+
 #include <string.h>
 
 static bool opens(const pnx_token *t) {
@@ -27,26 +28,34 @@ static bool is_word(const pnx_token *t, pnx_word_id word) {
     return t->kind == PNX_T_RESERVED && t->word == word;
 }
 
-int pnx_format(const char *text, size_t length, FILE *out, const char *name) {
-    // every token, with the line it ends on
+static void put(FILE *out, proven_u8str_view_t part) {
+    if (part.size)
+        fwrite(part.ptr, 1, part.size, out);
+}
+
+int pnx_format(proven_allocator_t alloc, const char *text, size_t length, FILE *out, const char *name) {
+    // every token, with the line it ends on, in one block of `alloc` that grows
     pnx_lexer lx;
     pnx_lex_init(&lx, (const uint8_t *)text, length);
-    size_t     n = 0, cap = 1024;
-    pnx_token *tokens = malloc(cap * sizeof *tokens);
-    if (!tokens)
+    enum { ALIGN = _Alignof(pnx_token) };
+    size_t                  n = 0, cap = 1024;
+    proven_result_mem_mut_t room = alloc.alloc_fn(alloc.ctx, cap * sizeof(pnx_token), ALIGN);
+    if (room.err != PROVEN_OK)
         return 2;
+    pnx_token *tokens = (pnx_token *)(void *)room.value.ptr;
     for (;;) {
         if (n == cap) {
-            pnx_token *grown = realloc(tokens, (cap *= 2) * sizeof *tokens);
-            if (!grown) {
-                free(tokens);
+            room = alloc.realloc_fn(alloc.ctx, tokens, cap * sizeof(pnx_token), cap * 2 * sizeof(pnx_token), ALIGN);
+            if (room.err != PROVEN_OK) {
+                alloc.free_fn(alloc.ctx, tokens);
                 return 2;
             }
-            tokens = grown;
+            tokens = (pnx_token *)(void *)room.value.ptr;
+            cap *= 2;
         }
         if (!pnx_lex_next(&lx, &tokens[n])) {
             fprintf(stderr, "%s:%u:%u: %s\n", name, (unsigned)lx.error_line, (unsigned)lx.error_column, lx.error);
-            free(tokens);
+            alloc.free_fn(alloc.ctx, tokens);
             return 1;
         }
         if (tokens[n].kind == PNX_T_END)
@@ -54,6 +63,7 @@ int pnx_format(const char *text, size_t length, FILE *out, const char *name) {
         ++n;
     }
 
+    const proven_u8str_view_t source = {(const proven_byte_t *)text, length};
     size_t   at = 0, token = 0; // the byte and the token the next line starts with
     int      depth = 0, parens = 0;
     bool     blank_before = false, any = false;
@@ -104,16 +114,16 @@ int pnx_format(const char *text, size_t length, FILE *out, const char *name) {
             blank_before = false;
             any = true;
             if (continued) {
-                fwrite(text + at, 1, last - at, out); // as written, but for the white space at its end
+                put(out, proven_u8str_view_slice(source, at, last - at)); // as written, but for the white space at its end
             } else {
                 for (int k = 0; k < indent * 2; ++k)
                     fputc(' ', out);
-                fwrite(text + first, 1, last - first, out);
+                put(out, proven_u8str_view_slice(source, first, last - first));
             }
             fputc('\n', out);
         }
         at = end + 1;
     }
-    free(tokens);
+    alloc.free_fn(alloc.ctx, tokens);
     return 0;
 }

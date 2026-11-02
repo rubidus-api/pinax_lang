@@ -29,6 +29,10 @@
 #include "proven/hash_legacy.h"
 #include "proven/hmac.h"
 #include "proven/deflate.h"
+#include "proven/zstd.h"
+#ifndef PROVEN_NO_BROTLI
+#include "proven/brotli.h"
+#endif
 #include "proven/cert.h"
 #include "proven/tls.h"
 #include "proven/url.h"

@@ -43,7 +43,8 @@
  * The loop waits on a selector (net.h) and keeps its timeouts on a timer wheel, so what a
  * round costs depends on the connections that have something to do, not on how many are open:
  * thousands of idle connections are held at no cost to the busy ones where the selector is
- * epoll or kqueue. On Windows it is built on WSAPoll and every round still looks at them all.
+ * epoll or kqueue. On Windows it is built on an I/O completion port: measured on one Windows 11
+ * virtual machine, ten busy connections among 10,000 held were answered as fast as among 1,000.
  * Two limits remain everywhere: each connection holds its buffers from the moment it is
  * accepted, and each request occupies a thread while its handler runs.
  *
@@ -87,9 +88,14 @@ typedef struct {
     proven_u32 body_timeout_ms;         /**< for each read of a request body. 0: 30 s */
     proven_u32 write_timeout_ms;        /**< for each write of a response. 0: 30 s */
     proven_u32 idle_timeout_ms;         /**< an open connection with no request on it. 0: 60 s */
+    proven_u32 linger_ms;               /**< how long a connection that is being closed after an answer is still read from, so that the answer is not lost to a reset (a refusal in the middle of an upload, mostly). It counts against `max_connections` for that long: a burst of refused requests holds those places. 0: 1 s */
+    proven_size_t max_upgraded;         /**< connections taken out of the server by proven_http_exchange_upgrade (WebSocket, through proven_ws_conn_accept) that are open at once, counted until each is closed - from any thread, even after the server is gone. At the limit an upgrade is PROVEN_ERR_BUSY and proven_ws_conn_accept answers 503 with `Retry-After: 1`. 0: 1,024 */
     const proven_tls_config_t *tls;     /**< NULL: plain HTTP. Otherwise every connection is TLS under this config, which must outlive the server. The handshake shares `head_timeout_ms` with the first request's head. */
     int compress_level;                 /**< for responses a handler asks to have compressed (proven_http_exchange_compress): 1 (fastest) to 9 (smallest); -1 stores without compressing. 0: 6 */
     int compress_window_bits;           /**< and how far back the compressor looks, 9 to 15: its memory while such a response is being written runs from about 11 KiB at 9 to about 325 KiB at 15. 0: 15 */
+    bool compress_zstd;                 /**< offer Zstandard too: a response asked to be compressed goes as `zstd` when the request's `Accept-Encoding` weighs zstd at least as high as gzip (curl and browsers send both at one weight), and as gzip otherwise, as before. Faster than gzip by several times, at about gzip 1's size or less. false: gzip only */
+    int compress_zstd_level;            /**< zstd.h's level, 1 (fastest) to 9; 6 is about gzip 6's size at three times its speed, and its tables are 1 MiB for a response streamed. 0: 1 */
+    int compress_zstd_window_log;       /**< zstd.h's window, 10 to 23. A response written whole is compressed in place with tables sized to it; one streamed holds the window and 128 KiB as input buffer, 64 KiB of hash table at level 1 (768 KiB at 3), and about 500 KiB for a block, until it ends - about 0.8 MiB at the defaults. 0: 17 (128 KiB) */
 } proven_http_server_config_t;
 
 /**
@@ -129,6 +135,40 @@ proven_err_t proven_http_server_poll(proven_http_server_t *server, proven_net_de
 void proven_http_server_stop(proven_http_server_t *server);
 
 /**
+ * @brief End the server gracefully. Safe from any thread, and from a handler; returns at once,
+ *        and the loop carries it out.
+ *
+ * From the next round: the listeners are closed; a connection with nothing of a request on it
+ * is closed; one where a request has begun to arrive, or is with its handler, finishes it -
+ * the response says `Connection: close` - and closes. proven_http_server_run returns when no
+ * connection is left (PROVEN_OK), or when `grace_ms` has passed (PROVEN_ERR_TIMEOUT): then
+ * every connection the loop holds is closed. **A connection whose handler is still running is
+ * the handler's** and is not touched; it closes when the handler returns, and
+ * proven_http_server_destroy waits for that as always. 0: close what can be closed now.
+ *
+ * A connection handed over by proven_http_exchange_upgrade is not the server's: a handler that
+ * keeps one (a WebSocket) looks at proven_http_server_shutting_down and closes it - with 1001,
+ * "going away", for a WebSocket. A shutdown is final; proven_http_server_stop during it makes
+ * run return at once, as always.
+ *
+ * @return PROVEN_ERR_INVALID_ARG for no server; PROVEN_ERR_INVALID_STATE when it was already
+ *         asked.
+ */
+[[nodiscard]]
+proven_err_t proven_http_server_shutdown(proven_http_server_t *server, proven_u32 grace_ms);
+
+/** @brief Whether proven_http_server_shutdown has been called. Safe from any thread: for a
+ *         handler that keeps a connection (an upgraded one) and should let it go. */
+[[nodiscard]]
+bool proven_http_server_shutting_down(const proven_http_server_t *server);
+
+/** @brief For a program that calls proven_http_server_poll itself: whether the shutdown is
+ *         over, and (`why`, optional) how - PROVEN_OK or PROVEN_ERR_TIMEOUT, as run returns.
+ *         On the loop's thread. */
+[[nodiscard]]
+bool proven_http_server_drained(const proven_http_server_t *server, proven_err_t *why);
+
+/**
  * @brief Close every connection and listener and free the server.
  *
  * With a job system, handlers that are running are waited for: each returns when its handler
@@ -151,6 +191,18 @@ const proven_http_request_t *proven_http_exchange_request(const proven_http_exch
 /** @brief The client's address. */
 [[nodiscard]]
 proven_net_addr_t proven_http_exchange_peer(const proven_http_exchange_t *exchange);
+
+/**
+ * @brief Whether the request arrived as TLS early data (0-RTT), before the handshake was over.
+ *
+ * Only with a `tls` configuration that has `early_data`, and only for a request that is safe to
+ * repeat - GET, HEAD or OPTIONS without a body: anything else that arrives early is answered
+ * 425 Too Early by the server itself, and the client sends it again after the handshake (RFC
+ * 8470). Early data can be replayed by someone who saw it (manual chapter 14): a handler whose
+ * GET changes something answers 425 to an early one, and the client sends it again.
+ */
+[[nodiscard]]
+bool proven_http_exchange_early(const proven_http_exchange_t *exchange);
 
 /**
  * @brief Read more of the request body into `dest`.
@@ -187,8 +239,9 @@ proven_result_size_t proven_http_exchange_read(proven_http_exchange_t *exchange,
  *
  * With proven_http_exchange_begin the body leaves chunked whatever length was given (the
  * length is still what you must write), and **what you write may wait inside the compressor**
- * until more is written or the response ends: do not ask for a response that the client must
- * see piece by piece, such as an event stream.
+ * until more is written or the response ends. For a response that the client must see piece
+ * by piece, such as an event stream, call proven_http_exchange_flush after each piece - or do
+ * not compress it.
  */
 void proven_http_exchange_compress(proven_http_exchange_t *exchange);
 
@@ -236,6 +289,20 @@ proven_err_t proven_http_exchange_begin(proven_http_exchange_t *exchange, proven
 proven_err_t proven_http_exchange_write(proven_http_exchange_t *exchange, proven_mem_view_t data);
 
 /**
+ * @brief Hand over what a compressed response holds back: everything written so far is sent
+ *        in a form the client can read at once, and the response goes on.
+ *
+ * Only a response being compressed holds anything back (see proven_http_exchange_compress);
+ * for any other this does nothing, successfully. Each flush costs a few bytes and some of the
+ * compression: flush where a reader is waiting, not after every write.
+ *
+ * @return PROVEN_ERR_INVALID_STATE before begin or after end; otherwise as
+ *         proven_http_exchange_write.
+ */
+[[nodiscard]]
+proven_err_t proven_http_exchange_flush(proven_http_exchange_t *exchange);
+
+/**
  * @brief Finish a response begun with proven_http_exchange_begin.
  *
  * Optional: returning from the handler finishes it too. A response that announced a length and
@@ -245,6 +312,28 @@ proven_err_t proven_http_exchange_write(proven_http_exchange_t *exchange, proven
 proven_err_t proven_http_exchange_end(proven_http_exchange_t *exchange);
 
 /**
+ * @brief End a response written in pieces with no length (proven_http_exchange_begin with
+ *        PROVEN_HTTP_LENGTH_UNKNOWN, so chunked) with trailer fields after it (since v0.106.0): what a
+ *        sender can only know at the end - a checksum, a signature, a status (gRPC's `grpc-status`).
+ *        A client that does not read trailers passes over them.
+ * @return PROVEN_ERR_INVALID_STATE for a response with a length (or to HEAD), or one already ended;
+ *         PROVEN_ERR_INVALID_ARG for no fields, or a field proven_http_trailer_allowed refuses; as
+ *         proven_http_exchange_end otherwise.
+ */
+[[nodiscard]]
+proven_err_t proven_http_exchange_end_trailers(proven_http_exchange_t *exchange, const proven_http_header_t *fields, proven_size_t count);
+
+/**
+ * @brief The trailer fields that followed a chunked request body (since v0.106.0), once
+ *        proven_http_exchange_read has returned PROVEN_ERR_EOF: views good until the handler returns.
+ *        None for a body that was not chunked.
+ * @return PROVEN_ERR_INVALID_STATE before the body's end; PROVEN_ERR_OUT_OF_BOUNDS for more fields
+ *         than `cap`.
+ */
+[[nodiscard]]
+proven_err_t proven_http_exchange_trailers(const proven_http_exchange_t *exchange, proven_http_header_t *fields, proven_size_t cap, proven_size_t *count);
+
+/**
  * @brief Answer `101 Switching Protocols` and take the connection out of the server.
  *
  * For a request that asks to change protocol - `Upgrade: websocket`, say. The server writes the
@@ -252,7 +341,8 @@ proven_err_t proven_http_exchange_end(proven_http_exchange_t *exchange);
  * then on the connection is not its business: `*out` is a transport that owns the socket, to
  * be used for as long as you like - after the handler has returned, from any one thread - and
  * closed by you with proven_transport_close. It no longer counts against `max_connections`,
- * and none of the server's timeouts apply to it.
+ * and none of the server's timeouts apply to it; it counts against `max_upgraded` until it is
+ * closed.
  *
  * `*early` is whatever the client sent after its request head: the first bytes of the new
  * protocol, if it did not wait for the 101. It is a view into the exchange and dies with it,
@@ -269,8 +359,8 @@ proven_err_t proven_http_exchange_end(proven_http_exchange_t *exchange);
  *         that was not read to its end, or it is HTTP/1.0; PROVEN_ERR_INVALID_ARG for an empty
  *         protocol, or a header the server owns (`Upgrade` included); PROVEN_ERR_NOMEM;
  *         PROVEN_ERR_OUT_OF_BOUNDS; PROVEN_ERR_TIMEOUT or PROVEN_ERR_RESET when the 101 could
- *         not be sent. After INVALID_ARG, NOMEM or OUT_OF_BOUNDS nothing was sent and another
- *         response may be tried.
+ *         not be sent; PROVEN_ERR_BUSY when `max_upgraded` upgraded connections are open. After
+ *         INVALID_ARG, NOMEM, OUT_OF_BOUNDS or BUSY nothing was sent and another response may be tried.
  */
 [[nodiscard]]
 proven_err_t proven_http_exchange_upgrade(proven_http_exchange_t *exchange, proven_u8str_view_t protocol,

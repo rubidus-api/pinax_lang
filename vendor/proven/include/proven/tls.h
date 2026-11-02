@@ -38,9 +38,9 @@
  * **What this is not.** A new implementation with no external audit (the manual says what it
  * was tested against). Of TLS 1.2 only the ECDHE and AEAD suites, with the extended master
  * secret required and renegotiation declined; what is older exists only behind the
- * `legacy` bits of the options, each off by default. No 0-RTT. No revocation checking. A
- * program whose users depend on it against a capable adversary should terminate TLS in
- * something audited.
+ * `legacy` bits of the options, each off by default. 0-RTT only over QUIC (HTTP/3), and only
+ * with `early_data`. No revocation checking. A program whose users depend on it against a
+ * capable adversary should terminate TLS in something audited.
  */
 
 /** @brief Fill `out` with `len` unpredictable bytes. Must not fail. */
@@ -59,7 +59,7 @@ typedef proven_i64 (*proven_tls_now_fn)(void *ctx);
  *         configuration names them, because each has a known weakness (the manual says which).
  *         They exist to reach a peer that has nothing better. */
 #define PROVEN_TLS_LEGACY_CBC              ((proven_u32)1)  /**< CBC cipher suites with HMAC-SHA1, -SHA256 or -SHA384 */
-#define PROVEN_TLS_LEGACY_RSA_KEY_EXCHANGE ((proven_u32)2)  /**< key exchange by RSA encryption: no forward secrecy */
+#define PROVEN_TLS_LEGACY_RSA_KEY_EXCHANGE ((proven_u32)2)  /**< key exchange by RSA encryption: no forward secrecy. A client's only: proven_tls_server_create refuses a config with it */
 #define PROVEN_TLS_LEGACY_DHE              ((proven_u32)4)  /**< finite-field Diffie-Hellman key exchange */
 #define PROVEN_TLS_LEGACY_NO_EXTENDED_MASTER_SECRET ((proven_u32)8) /**< go on with a peer that lacks RFC 7627 */
 
@@ -103,6 +103,7 @@ typedef struct {
     proven_tls_now_fn now;                   /**< NULL: the wall clock. Required when freestanding. */
     void *now_ctx;
     bool no_resumption;                      /**< a server issues no tickets; a client offers none */
+    bool early_data;                         /**< 0-RTT (manual chapter 14, section 6): for HTTP/3, and over TCP for the HTTP servers and clients of this library (HTTP/1.1, HTTP/2). A server's tickets allow early data and it takes it - once per ticket, fresh tickets only (a register of 4,096, 96 KiB); a client sends it with a session that allows it, and keeps the newest session of eight server names for the transport wrapper. A program that drives the engine itself neither sends nor takes it over TCP. Early data can be replayed: see the manual. Not with `no_resumption` */
     bool keep_peer_certificate;              /**< keep the peer's certificate for proven_tls_peer_certificate (costs its size per connection) */
     proven_u32 ticket_lifetime_s;            /**< server: how long a ticket is honoured; 0: 7200; at most 604800 */
     proven_size_t max_handshake_bytes;       /**< the largest handshake message accepted; 0: 65536 */
@@ -135,7 +136,7 @@ proven_err_t proven_tls_config_create(const proven_tls_options_t *options, prove
 void proven_tls_config_destroy(proven_tls_config_t *config);
 
 /** @brief Bytes in a proven_tls_session_t. */
-#define PROVEN_TLS_SESSION_SIZE ((proven_size_t)1024)
+#define PROVEN_TLS_SESSION_SIZE ((proven_size_t)2048)
 
 /**
  * @brief A client's memory of one server, for resumption. Yours to keep: a plain block with no
@@ -145,10 +146,12 @@ void proven_tls_config_destroy(proven_tls_config_t *config);
  * name. The connection writes into it when the server sends a ticket, and the next connection
  * offers that ticket and, if the server accepts, skips the certificates and one signature.
  * It holds a secret: wipe it (proven_mem_wipe) when you are done with it. Not for use by two
- * connections at once.
+ * connections at once. Over QUIC it also keeps what early data needs (the protocol, the
+ * server's limits) and the server's NEW_TOKEN token. 2,048 bytes since v0.73.0 (1,024 before):
+ * a session written by an older version reads as empty.
  */
 typedef struct {
-    proven_byte_t opaque[PROVEN_TLS_SESSION_SIZE];
+    alignas(8) proven_byte_t opaque[PROVEN_TLS_SESSION_SIZE];   /* aligned for the record the engine keeps in it */
 } proven_tls_session_t;
 
 /** @brief One connection's state. Opaque. Used by one thread at a time. */
@@ -168,7 +171,9 @@ proven_err_t proven_tls_client_create(const proven_tls_config_t *config, proven_
 
 /**
  * @brief A connection in the server role. It waits for the client's first message.
- * @return PROVEN_ERR_INVALID_ARG (also for a config with no certificate), PROVEN_ERR_NOMEM.
+ * @return PROVEN_ERR_INVALID_ARG (also for a config with no certificate, and for one with
+ *         PROVEN_TLS_LEGACY_RSA_KEY_EXCHANGE: that key exchange is a client's only, from
+ *         v0.78.0), PROVEN_ERR_NOMEM.
  */
 [[nodiscard]]
 proven_err_t proven_tls_server_create(const proven_tls_config_t *config, proven_tls_conn_t **out);
@@ -270,33 +275,6 @@ int proven_tls_alert_received(const proven_tls_conn_t *conn);
 /** @brief The alert this side sent when it failed; -1 when none. */
 int proven_tls_alert_sent(const proven_tls_conn_t *conn);
 
-/**
- * @brief Make a self-signed certificate and its key, as PEM: an identity for a server you run
- *        yourself, a development machine, a test.
- *
- * The key is Ed25519, drawn from `random`. The certificate names `names` - DNS names or IP
- * literals, at least one - in its subjectAltName, is valid from `not_before` to `not_after`
- * (seconds since 1970-01-01 UTC), and allows both server and client authentication.
- *
- * Nobody vouches for a self-signed certificate. A peer can only believe it by already holding
- * it: add `certificate_pem` to the peer's anchors, or - better - give the peer the key's pin
- * and PROVEN_TLS_VERIFY_PIN_ONLY. It is not a way to reach a public client such as a browser.
- *
- * @param random NULL: the operating system's source (hosted). Required when freestanding.
- * @param certificate_pem,private_key_pem where the two PEM texts are written; 1024 and 256
- *        bytes are enough for a handful of names. Not zero-terminated: the lengths say.
- * @return PROVEN_ERR_INVALID_ARG for no names, a name that is empty or longer than 253 bytes,
- *         an end that is not after the start, or (freestanding) no random source;
- *         PROVEN_ERR_OUT_OF_BOUNDS when a buffer is too small. The private key is the caller's
- *         to protect and to wipe.
- */
-[[nodiscard]]
-proven_err_t proven_tls_self_signed(const proven_u8str_view_t *names, proven_size_t name_count,
-                                    proven_i64 not_before, proven_i64 not_after,
-                                    proven_tls_random_fn random, void *random_ctx,
-                                    proven_mem_mut_t certificate_pem, proven_size_t *certificate_len,
-                                    proven_mem_mut_t private_key_pem, proven_size_t *private_key_len);
-
 #ifndef PROVEN_FREESTANDING
 #ifndef PROVEN_NO_NET
 
@@ -305,6 +283,13 @@ proven_err_t proven_tls_self_signed(const proven_u8str_view_t *names, proven_siz
  *
  * On success `*out` owns `plain`: closing it sends close_notify and closes `plain`. On failure
  * `plain` is left open and yours.
+ *
+ * `session` NULL with a configuration that has `early_data`: the configuration's newest session
+ * for `server_name` is resumed and the one this connection ends with is kept for the next. When
+ * that session allows early data, this returns without sending anything: the ClientHello goes
+ * with the first write, which goes with it as early data - unless it may not (the HTTP client
+ * says so for what is not safe to repeat); the handshake is completed by the reads and writes
+ * that follow, and what the server refused is sent again (manual chapter 14, section 6).
  *
  * @return what proven_tls_feed returns, and the transport's own errors (PROVEN_ERR_TIMEOUT when
  *         `until` passes, PROVEN_ERR_RESET, PROVEN_ERR_EOF for a peer that hung up mid-handshake).
@@ -325,8 +310,9 @@ proven_tls_conn_t *proven_tls_transport_conn(proven_transport_t tls);
 
 /**
  * @brief A `proven_http_tls_wrap_fn` for the HTTP client: set `tls_wrap` to this and `tls_ctx`
- *        to a `proven_tls_config_t *`, and `https` URLs work. Connections made this way do
- *        not resume earlier sessions.
+ *        to a `proven_tls_config_t *`, and `https` URLs work. Connections made this way resume
+ *        earlier sessions, and send a GET, HEAD or OPTIONS without a body as early data, only
+ *        when the configuration has `early_data`.
  */
 [[nodiscard]]
 proven_err_t proven_tls_http_wrap(void *config, proven_transport_t plain, proven_u8str_view_t host,

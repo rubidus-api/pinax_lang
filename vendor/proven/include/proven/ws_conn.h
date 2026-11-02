@@ -31,7 +31,13 @@
  *   - **Closing is a handshake.** proven_ws_conn_close sends a close and waits, for a bounded
  *     time, for the peer's.
  *
- * What it does not do: reconnect, send pings on a timer, or compress. And it carries no more
+ *   - **Silence is noticed** (since v0.104.0). After `ping_interval_ms` with nothing from the peer a
+ *     ping is sent, and after `pong_timeout_ms` more the connection is ended - a peer that went
+ *     away without a word (a laptop shut, a NAT that forgot it) does not hold a thread forever.
+ *     There is no timer: the ping goes out while proven_ws_conn_receive waits.
+ *
+ * What it does not do: reconnect (compression is asked for with
+ * `compress`, see proven_ws_conn_compressed). And it carries no more
  * protection than the connection under it - a `ws://` connection is readable by anyone on the
  * path. `wss://` is the same over TLS: the HTTP client's `tls_wrap`, the HTTP server's `tls`.
  *
@@ -54,9 +60,13 @@ typedef struct {
     proven_size_t max_message_bytes;    /**< largest message accepted, fragments together; 0: 1 MiB */
     proven_u32 io_timeout_ms;           /**< the limit for each write; 0: 30 s */
     proven_u32 close_timeout_ms;        /**< how long proven_ws_conn_close waits for the peer's close; 0: 5 s */
+    proven_u32 ping_interval_ms;        /**< silence from the peer after which a ping is sent, as ws_event's: there is no timer, so it goes out while proven_ws_conn_receive waits - a receive reads no longer than to it - or at the next receive. 0: 30 s */
+    proven_u32 pong_timeout_ms;         /**< further silence after which the connection is ended: proven_ws_conn_receive returns PROVEN_ERR_RESET, close code 1006, as when the peer drops it. Any byte from the peer counts as an answer. 0: 10 s */
     bool compress;                      /**< compressed messages (`permessage-deflate`): a client offers it, a server accepts it when offered. See proven_ws_conn_compressed. With it set, do not pass a `Sec-WebSocket-Extensions` header of your own to proven_ws_conn_connect: the connection writes one. false: neither */
     int compress_level;                 /**< 1 (fastest) to 9 (smallest); -1 stores without compressing. 0: 6 */
-    int compress_window_bits;           /**< how far back the compressor looks, 9 to 15: its memory during one send runs from about 11 KiB to about 325 KiB, less for a message smaller than the window. 0: 15 */
+    int compress_window_bits;           /**< how far back the compressor looks, 9 to 15: about 11 KiB of memory at 9, 28 KiB at 11, 325 KiB at 15 (without takeover only during one send, and less for a message smaller than the window). 0: 11 with takeover, 15 without */
+    bool compress_no_takeover;          /**< with `compress`: compress each message on its own, keeping nothing between messages (no context takeover), as before v0.80.0. Short, similar messages then shrink far less, and an idle connection holds no compression state. false: each side may keep its window (see proven_ws_conn_compressed) */
+    bool compress_peer_no_takeover;     /**< with `compress` and takeover: this side keeps its own window, and the other side must compress each message on its own - so this side needs no decompressor between messages (about 35 KiB less), and the other side's short, similar messages shrink far less. proven_ws_conn_accept answers `client_no_context_takeover` unasked; proven_ws_conn_connect offers `server_no_context_takeover`, and a server that will not honour it leaves the connection uncompressed. proven_ws_conn_open refuses it (nothing is negotiated there). false: the other side may keep its window too */
 } proven_ws_conn_config_t;
 
 /** @brief A received message. `data` is memory the connection owns, good until the next
@@ -112,7 +122,8 @@ proven_err_t proven_ws_conn_connect(proven_http_client_t *client, proven_u8str_v
  *         sent, answer it as an ordinary request. PROVEN_ERR_UNSUPPORTED (a 426 was sent) for
  *         another protocol version; PROVEN_ERR_INVALID_FORMAT (a 400 was sent) for a malformed
  *         upgrade. PROVEN_ERR_INVALID_ARG for a `protocol` the request does not offer, and
- *         PROVEN_ERR_NOMEM: nothing was sent and you may still respond. Otherwise the errors of
+ *         PROVEN_ERR_NOMEM: nothing was sent and you may still respond. PROVEN_ERR_BUSY (a 503 with
+ *         `Retry-After: 1` was sent) when the server's `max_upgraded` connections are open. Otherwise the errors of
  *         proven_http_exchange_upgrade - and PROVEN_ERR_OUT_OF_BOUNDS when the client sent more
  *         than 16 KiB of frames along with its handshake: the 101 has gone by then, and the
  *         connection is closed.
@@ -131,10 +142,12 @@ proven_err_t proven_ws_conn_accept(proven_http_exchange_t *exchange, proven_u8st
  * @param early bytes of the WebSocket stream that were read together with the HTTP handshake.
  *        They are copied.
  * No handshake is made here, so nothing is negotiated: `config->compress` says that
- * `permessage-deflate` **was** agreed (with no context takeover in either direction), and both
- * ends must say the same.
+ * `permessage-deflate` **was** agreed - with context takeover in both directions, or with none
+ * under `compress_no_takeover` - and both ends must say the same. (An end before v0.80.0
+ * always means none: give the other end `compress_no_takeover`.) `compress_peer_no_takeover`
+ * is refused here: it is an agreement only a handshake can make.
  *
- * @return PROVEN_ERR_INVALID_ARG (also for a compression level or window outside its range);
+ * @return PROVEN_ERR_INVALID_ARG (also for a compression level or window outside its range, and for `compress_peer_no_takeover` with takeover);
  *         PROVEN_ERR_NOMEM; PROVEN_ERR_OUT_OF_BOUNDS when `early` is larger than the
  *         connection's read buffer (16 KiB); PROVEN_ERR_IO when a client could not draw random
  *         bytes for its masks.
@@ -233,10 +246,15 @@ proven_u8str_view_t proven_ws_conn_close_reason(const proven_ws_conn_t *conn);
  * @brief Whether messages on this connection may be compressed: `compress` was set and the
  *        other side agreed.
  *
- * When it is on, nothing changes in how the connection is used. A message of 64 bytes or more
- * is compressed as it is sent - each on its own, with nothing kept from one message to the
- * next, so a connection holds no compression state between messages and the size of one
- * message says nothing about another. A compressed message that arrives is inflated into the
+ * When it is on, nothing changes in how the connection is used. Each side may keep its
+ * window from one message to the next (**context takeover**), unless the configuration says
+ * `compress_no_takeover` or the other side forbade it: a message then refers back to the
+ * messages before it, so short, similar messages shrink to a third or less. A message of 8
+ * bytes or more is compressed; shorter ones go as they are. The price is memory for the life
+ * of the connection, from its first compressed message: a compressor (about 28 KiB at the
+ * default window of 11 bits) and a decompressor (about 35 KiB). Without takeover a message of
+ * 64 bytes or more is compressed on its own and nothing is kept between messages. A
+ * compressed message that arrives is inflated into the
  * message buffer: `max_message_bytes` bounds the **inflated** size, and a message that would
  * pass it ends the connection with 1009, as an uncompressed one does. Bytes that do not
  * inflate, like text that is not UTF-8, end it with 1007.
@@ -246,10 +264,24 @@ proven_u8str_view_t proven_ws_conn_close_reason(const proven_ws_conn_t *conn);
  *
  * **Do not turn it on for messages that carry a secret together with text the other side
  * chose** - the length of the compressed message tells an observer of the connection how
- * much the two have in common, TLS or not.
+ * much the two have in common, TLS or not. With takeover the secret and the chosen text need
+ * not be in the same message: earlier messages change a later one's length too.
  */
 [[nodiscard]]
 bool proven_ws_conn_compressed(const proven_ws_conn_t *conn);
+
+/**
+ * @brief Say whether the messages this side sends **from now on** are compressed, on a
+ *        connection that agreed to compression (on any other this does nothing). They are
+ *        until this is called with false.
+ *
+ * For the message that must not be: one that carries a secret together with text the other
+ * side chose (see above), or one that is compressed already and would only cost time. Turn
+ * it off, send, turn it on again. A message sent uncompressed is not added to the window. A
+ * message already begun in pieces goes on as it began; what arrives is not affected - the
+ * other side decides that for itself.
+ */
+void proven_ws_conn_set_compress(proven_ws_conn_t *conn, bool on);
 
 /** @brief How many pongs have arrived. Send a ping, receive for a while, and see whether this
  *         moved: that is how a program finds out a silent connection is dead. */
