@@ -3086,6 +3086,65 @@ static bool set_global(comp *c) {
     return syntax(c, "set is followed by the name of a global");
 }
 
+// text fits PLACE (RFC-0034): the text on top fits the str(N) place PLACE - a field, a global, or
+// the cells of an array or a list - and is taken; a text over N bytes fails with err.range. It is
+// the check of a guarded store (RFC-0032) without the store. The current token is `fits`.
+static bool fits(comp *c) {
+    fn *f = c->f;
+    if (!advance(c))
+        return false;
+    uint32_t cap = 0;
+    if (c->tok.kind == PNX_T_NAME) {
+        const name   n = tok_name(c);
+        const local *l = find_local(f, n);
+        const uint32_t g = l ? (is_ref(l->type) ? REF_GLOBAL + l->reg : NONE) : find_global(c, n);
+        if (g == NONE)
+            return error(c, l ? PINAX_ERR_TYPE : PINAX_ERR_NOT_FOUND,
+                         l ? "fits names a place a store keeps; a local holds a text of any length"
+                           : "fits names a declared global, array or list; there is none of this name");
+        if (gsym(c, g)->record == NONE)
+            cap = gsym(c, g)->strcap;
+    } else if (c->tok.kind == PNX_T_PATH) {
+        const name path = tok_name(c);
+        uint32_t dot = 0;
+        while (path.text[dot] != '.')
+            ++dot;
+        name real;
+        const uint32_t m = module_of(c, (name){path.text, dot}, &real) ? source_module(c, real) : NONE;
+        if (m != NONE) {
+            const uint32_t g = name_first(c, &c->ix_globals, &c->globals, sizeof(globalsym),
+                                          (name){path.text + dot + 1, path.length - dot - 1}, 0, c->base.globals,
+                                          globalsym_from, m);
+            if (g == NONE)
+                return error(c, PINAX_ERR_NOT_FOUND, "the module exports no global of this name");
+            if (gsym(c, g)->record == NONE)
+                cap = gsym(c, g)->strcap;
+        } else {
+            const uint32_t r = find_record_any(c, (name){path.text, dot});
+            if (r == NONE)
+                return error(c, PINAX_ERR_NOT_FOUND, "this path names neither a module in use nor a record");
+            const field *fd = find_field(c, r, (name){path.text + dot + 1, path.length - dot - 1});
+            if (!fd)
+                return error(c, PINAX_ERR_NOT_FOUND, "the record has no field of this name");
+            if (fd->is_str)
+                cap = fd->extra;
+        }
+    } else
+        return name_due(c, "fits is followed by a place: text fits record.field, or the name of a global");
+    if (cap == 0)
+        return type_error(c, "fits names a place of type str(N): record.field, a global, or an array or a list");
+    if (!need(c, 1))
+        return false;
+    const uint32_t top = f->depth - 1;
+    if (f->stack[top].type != TY_STR)
+        return type_error(c, "fits takes a text: text fits place");
+    uint32_t reg, too_long = NONE;
+    if (!reg_of(c, top, &reg) || !text_check(c, reg, cap, top_slot(c, BANK_I, 2), &too_long))
+        return false;
+    --f->depth;
+    return text_guard(c, &too_long) && past_store(c);
+}
+
 // ---- control ------------------------------------------------------------------------------
 
 static void snapshot(const fn *f, shot *out) {
@@ -7051,6 +7110,7 @@ static bool body_token(comp *c) {
     }
     case PNX_KW_to: return store(c);
     case PNX_KW_set: return set_global(c);
+    case PNX_KW_fits: return fits(c);
     case PNX_KW_if: return do_if(c);
     case PNX_KW_else: return do_else(c);
     case PNX_KW_loop: return do_loop(c);

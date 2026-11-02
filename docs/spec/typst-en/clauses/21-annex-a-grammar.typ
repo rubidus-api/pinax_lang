@@ -62,10 +62,11 @@ type        = [ "owned" ] ( NAME [ "(" size ")" ] | "word" "(" effect ")" ) ;
 coll-type   = ( "array" | "list" | "queue" ) NAME [ "(" size ")" ] | "buffer" ;   (* an input, 9.9 *)
 
 (* 9 to 11: the body *)
-body        = literal | NAME | PATH | store | set | block | cat | guard | control | defer
+body        = literal | NAME | PATH | store | set | fits | block | cat | guard | control | defer
             | "return" | "fail" | ( "while" | "until" | "break" ) [ "(" NAME ")" ] ;
 store       = "to" ( NAME | PATH | "(" NAME { "," NAME } ")" ) ;   (* a local, or a field *)
 set         = "set" ( NAME | PATH ) ;                         (* a global, 9.4 *)
+fits        = "fits" ( NAME | PATH ) ;                        (* a str(N) place, 7.3 *)
 block       = "do" [ "(" effect ")" ] { body } "end" ;
 cat         = "cat" "(" phrase { "," phrase } ")" ;
 phrase      = body { body } ;

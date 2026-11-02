@@ -1,0 +1,14 @@
+rem run
+use io
+record entry
+  name str(8)
+end
+list names entry 4
+word enter (v str)
+  v fits entry.name or_else (e) cat (v, ": too long, no row taken") io.println return end
+  names add_row or_else (e) "full" io.println return end to r
+  v r to entry.name
+  cat ("added ", r entry.name, ", rows ", names len) io.println
+end
+"Pinax" enter
+"an embeddable language" enter

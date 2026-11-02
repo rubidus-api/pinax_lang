@@ -69,7 +69,23 @@ stored: Pinax
 </code></pre><p class="ex-label">Output</p><pre><code data-lang="text">$ pnx 05-too-long-guard.pnx
 stored: Pinax
 too long, kept Pinax
-</code></pre></div><p>The guard comes after the store, so what the word did before it stays done. To refuse a text before anything else happens (a row taken, a count raised), store it first, into a global of the same width.</p></div><h3>5.3 Making new text, and buffers</h3><p><code>cat</code> and words that make new bytes, such as <code>str.upper</code> and <code>str.repeat</code>, write those bytes into the <strong>region</strong> and give a view of them. To build text piece by piece, declare a <strong>buffer</strong> and add to it with the <code>append</code> words. When the buffer is full, the word that adds fails.</p><div class="example run"><p class="ex-file"><code>05-build.pnx</code></p><pre><code data-lang="pinax"><span style="color: #d73948">use</span> io
+</code></pre></div><p>The guard comes after the store, so what the word did before it stays done. To refuse a text before anything else happens (a row taken, a count raised), ask the place first with <code>fits</code>: <code>v fits entry.name</code> takes the text and fails the same way, with <code>range</code>, and writes nothing. The width is the place’s own.</p><div class="example run"><p class="ex-file"><code>05-fits.pnx</code></p><pre><code data-lang="pinax"><span style="color: #d73948">use</span> io
+<span style="color: #d73948">record</span> entry
+  name <span style="color: #d73948">str</span>(<span style="color: #b60157">8</span>)
+<span style="color: #d73948">end</span>
+<span style="color: #d73948">list</span> names entry <span style="color: #b60157">4</span>
+<span style="color: #d73948">word</span> enter (v <span style="color: #d73948">str</span>)
+  v <span style="color: #d73948">fits</span> entry.name <span style="color: #d73948">or_else</span> (e) <span style="color: #d73948">cat</span> (v, <span style="color: #198810">": too long, no row taken"</span>) io.println <span style="color: #d73948">return</span> <span style="color: #d73948">end</span>
+  names add_row <span style="color: #d73948">or_else</span> (e) <span style="color: #198810">"full"</span> io.println <span style="color: #d73948">return</span> <span style="color: #d73948">end</span> <span style="color: #d73948">to</span> r
+  v r <span style="color: #d73948">to</span> entry.name
+  <span style="color: #d73948">cat</span> (<span style="color: #198810">"added "</span>, r entry.name, <span style="color: #198810">", rows "</span>, names len) io.println
+<span style="color: #d73948">end</span>
+<span style="color: #198810">"Pinax"</span> enter
+<span style="color: #198810">"an embeddable language"</span> enter
+</code></pre><p class="ex-label">Output</p><pre><code data-lang="text">$ pnx 05-fits.pnx
+added Pinax, rows 1
+an embeddable language: too long, no row taken
+</code></pre></div></div><h3>5.3 Making new text, and buffers</h3><p><code>cat</code> and words that make new bytes, such as <code>str.upper</code> and <code>str.repeat</code>, write those bytes into the <strong>region</strong> and give a view of them. To build text piece by piece, declare a <strong>buffer</strong> and add to it with the <code>append</code> words. When the buffer is full, the word that adds fails.</p><div class="example run"><p class="ex-file"><code>05-build.pnx</code></p><pre><code data-lang="pinax"><span style="color: #d73948">use</span> io
 <span style="color: #d73948">use</span> <span style="color: #d73948">str</span>
 <span style="color: #d73948">use</span> fmt
 <span style="color: #d73948">buffer</span> out <span style="color: #b60157">64</span>

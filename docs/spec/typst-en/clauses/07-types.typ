@@ -90,6 +90,13 @@ stored and the guard does nothing. Under the guard of `push` onto a list of `str
 failure `range` too, whether or not the list is full.]
 #ex("spec", "07-str-guard.pnx")
 
+#para("4b")[`fits PLACE` names a `str(N)` place as a store does: `record.field`, a global (also `MODULE.NAME`), or an
+array or a list, for its cells (also a collection parameter, 9.9). It takes the text on top of the stack and gives
+nothing; it writes nothing. A text of N bytes or fewer goes on; a longer one is the failure `range`. It is a word that
+can fail, so a guard follows it (11.2 (2)). A program asks a place with it before it does anything a text too long
+would leave half done, such as taking a row.]
+#ex("spec", "07-fits.pnx")
+
 #para("5")[A view of bytes made in the region cannot be used once the region is rewound past them; 12.3 states this
 rule.]
 
@@ -232,4 +239,9 @@ constant outside the range converted is refused.]
   ([A `dec` divided by a `dec`], "a dec is divided by an int, not by a dec; for a share, rescale first and divide by the int"),
   ([`dec(A) dec(B) mul` beyond 18 digits], "dec(A) times dec(B) is dec(A+B), and A+B is at most 18; rescale one first"),
   ([A scale outside 0 to 18], "dec(N) has 0 to 18 digits after the point"),
+  ([`fits` before a place that is not `str(N)`], "fits names a place of type str(N): record.field, a global, or an array or a list"),
+  ([`fits` before a local], "fits names a place a store keeps; a local holds a text of any length"),
+  ([`fits` before a name that is not declared], "fits names a declared global, array or list; there is none of this name"),
+  ([`fits` with a value that is not `str`], "fits takes a text: text fits place"),
+  ([`fits` with no place after it], "fits is followed by a place: text fits record.field, or the name of a global"),
 )

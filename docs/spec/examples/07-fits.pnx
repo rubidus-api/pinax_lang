@@ -1,0 +1,19 @@
+rem run
+use io
+record entry
+  name str(4)
+end
+list rows entry 2
+array tags str(2) 2
+
+word enter (v str)
+  v fits entry.name or_else (e) cat ("refused: ", v, " (", e err_text, "), rows ", rows len) io.println return end
+  rows add_row or_else (e) "full" io.println return end to r
+  v r to entry.name
+  cat ("entered: ", r entry.name, ", rows ", rows len) io.println
+end
+
+"four" enter
+"fourteen" enter
+"ab" fits tags or_else (e) "not reached" io.println end
+"abc" fits tags or_else (e) cat ("tags: ", e err_text) io.println end

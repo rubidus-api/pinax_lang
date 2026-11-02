@@ -65,7 +65,9 @@ store, as after any word that can fail. A text too long is then the failure `ran
 held. Without the guard it stays a fault.
 #ex("manual", "05-too-long-guard.pnx")
 The guard comes after the store, so what the word did before it stays done. To refuse a text before anything else
-happens (a row taken, a count raised), store it first, into a global of the same width.]
+happens (a row taken, a count raised), ask the place first with `fits`: `v fits entry.name` takes the text and fails
+the same way, with `range`, and writes nothing. The width is the place's own.
+#ex("manual", "05-fits.pnx")]
 
 == Making new text, and buffers
 
