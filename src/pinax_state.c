@@ -77,8 +77,8 @@ static void give_back(pinax_state *st, size_t mark) {
 
 static const size_t part_item[PNX_PARTS] = {
     sizeof(pnx_wordrec), sizeof(pnx_globalrec), sizeof(pnx_importrec), sizeof(int64_t), sizeof(pnx_sconst),
-    sizeof(uint32_t),    1,                     sizeof(pnx_linerec),   sizeof(pnx_localrec), sizeof(pnx_counts),
-    1,                   sizeof(pnx_host *),    sizeof(pnx_global)};
+    sizeof(uint32_t),    1,                     sizeof(pnx_linerec),   sizeof(pnx_localrec), sizeof(pnx_sconst),
+    sizeof(pnx_counts),  1,                     sizeof(pnx_host *),    sizeof(pnx_global)};
 
 static void *part_get(const pinax_state *st, unsigned part) {
     switch (part) {
@@ -91,6 +91,7 @@ static void *part_get(const pinax_state *st, unsigned part) {
     case PNX_PART_STRBYTES: return (void *)(uintptr_t)st->segment[PNX_SEG_CONST];
     case PNX_PART_LINES: return (void *)(uintptr_t)st->lines;
     case PNX_PART_LOCALS: return (void *)(uintptr_t)st->localrecs;
+    case PNX_PART_ERRS: return (void *)(uintptr_t)st->errs;
     case PNX_PART_WCOUNTS: return st->word_counts;
     case PNX_PART_PROVEN: return st->proven;
     case PNX_PART_IMPORTS: return (void *)(uintptr_t)st->imports;
@@ -109,6 +110,7 @@ static void part_set(pinax_state *st, unsigned part, void *p) {
     case PNX_PART_STRBYTES: st->segment[PNX_SEG_CONST] = p; break;
     case PNX_PART_LINES: st->lines = p; break;
     case PNX_PART_LOCALS: st->localrecs = p; break;
+    case PNX_PART_ERRS: st->errs = p; break;
     case PNX_PART_WCOUNTS: st->word_counts = p; break;
     case PNX_PART_PROVEN: st->proven = p; break;
     case PNX_PART_IMPORTS: st->imports = p; break;
@@ -130,6 +132,7 @@ static uint32_t part_count(const pinax_state *st, unsigned part) {
     case PNX_PART_CODE: case PNX_PART_PROVEN: return h->n_code;
     case PNX_PART_STRBYTES: return h->n_strbytes;
     case PNX_PART_LINES: return h->n_lines;
+    case PNX_PART_ERRS: return h->n_errs;
     default: return h->n_locals;
     }
 }
@@ -1754,7 +1757,8 @@ static uint64_t container_bytes(const pnx_head *h) {
     return sizeof *h + (uint64_t)h->n_words * sizeof(pnx_wordrec) + (uint64_t)h->n_globals * sizeof(pnx_globalrec) +
            (uint64_t)h->n_imports * sizeof(pnx_importrec) + (uint64_t)h->n_iconst * 8 +
            (uint64_t)h->n_sconst * sizeof(pnx_sconst) + (uint64_t)h->n_code * 4 + h->n_strbytes +
-           (uint64_t)h->n_lines * sizeof(pnx_linerec) + (uint64_t)h->n_locals * sizeof(pnx_localrec);
+           (uint64_t)h->n_lines * sizeof(pnx_linerec) + (uint64_t)h->n_locals * sizeof(pnx_localrec) +
+           (uint64_t)h->n_errs * sizeof(pnx_sconst);
 }
 
 // The bytes of storage a global record asks for (the loader checks the record first).
@@ -1796,18 +1800,22 @@ pinax_err pnx_load_container(pinax_state *st, pinax_str bytecode) {
     if (bytecode.len < sizeof h)
         return fail(st, PINAX_ERR_FORMAT, "bytecode: too short");
     __builtin_memcpy(&h, bytecode.ptr, sizeof h);
-    if (__builtin_memcmp(h.magic, PNX_MAGIC, 4) != 0 || h.version != PNX_CONTAINER_VERSION ||
-        h.order != PNX_ORDER_MARK || h.reserved != 0 || h.reserved2 != 0)
+    // version 4 is the same layout with no failure codes: its two words in place of n_errs and
+    // base_errs were reserved and zero
+    if (__builtin_memcmp(h.magic, PNX_MAGIC, 4) != 0 ||
+        (h.version != PNX_CONTAINER_VERSION && (h.version != 4 || h.n_errs != 0 || h.base_errs != 0)) ||
+        h.order != PNX_ORDER_MARK)
         return fail(st, PINAX_ERR_FORMAT, "bytecode: not a container of this version and byte order");
     const pnx_head base = st->head ? *st->head : (pnx_head){0};
     if (h.base_words != base.n_words || h.base_globals != base.n_globals || h.base_imports != base.n_imports ||
         h.base_iconst != base.n_iconst || h.base_sconst != base.n_sconst || h.base_code != base.n_code ||
-        h.base_strbytes != base.n_strbytes || h.base_lines != base.n_lines || h.base_locals != base.n_locals)
+        h.base_strbytes != base.n_strbytes || h.base_lines != base.n_lines || h.base_locals != base.n_locals ||
+        h.base_errs != base.n_errs)
         return fail(st, PINAX_ERR_FORMAT, "bytecode: the container continues another program than the state holds");
     const uint64_t total = container_bytes(&h);
     if (total != bytecode.len || (uint64_t)base.n_globals + h.n_globals > 0xfffu ||
         (uint64_t)base.n_code + h.n_code > st->region_len || (uint64_t)base.n_words + h.n_words > UINT32_MAX / 2 ||
-        (uint64_t)base.n_strbytes + h.n_strbytes > UINT32_MAX / 2)
+        (uint64_t)base.n_strbytes + h.n_strbytes > UINT32_MAX / 2 || (uint64_t)base.n_errs + h.n_errs > PNX_MAX_ERRS)
         return fail(st, PINAX_ERR_FORMAT, "bytecode: sizes do not add up or exceed the P0 limits");
     const bool redefines = h.redefine_old != no_word || h.redefine_new != no_word;
     if (redefines && (!st->head || h.redefine_old >= base.n_words || h.redefine_new < base.n_words ||
@@ -1818,7 +1826,8 @@ pinax_err pnx_load_container(pinax_state *st, pinax_str bytecode) {
     pinax_err err = PINAX_ERR_NO_ROOM;
     const char *why = "block too small for the code and its globals";
     const uint32_t adds[PNX_PARTS] = {h.n_words,   h.n_globals, h.n_imports, h.n_iconst, h.n_sconst, h.n_code, h.n_strbytes,
-                                      h.n_lines,   h.n_locals,  h.n_words,   h.n_code,   h.n_imports, h.n_globals};
+                                      h.n_lines,   h.n_locals,  h.n_errs,    h.n_words,  h.n_code,    h.n_imports,
+                                      h.n_globals};
     for (unsigned part = 0; part < PNX_PARTS; ++part) {
         if (!part_room(st, part, adds[part]))
             goto rollback;
@@ -1842,6 +1851,7 @@ pinax_err pnx_load_container(pinax_state *st, pinax_str bytecode) {
     APPEND(PNX_PART_STRBYTES, h.n_strbytes);
     APPEND(PNX_PART_LINES, h.n_lines);
     APPEND(PNX_PART_LOCALS, h.n_locals);
+    APPEND(PNX_PART_ERRS, h.n_errs);
 #undef APPEND
     st->counts = (pnx_head){.magic = {'P', 'N', 'X', 'B'},
                             .version = PNX_CONTAINER_VERSION,
@@ -1855,6 +1865,7 @@ pinax_err pnx_load_container(pinax_state *st, pinax_str bytecode) {
                             .n_strbytes = base.n_strbytes + h.n_strbytes,
                             .n_lines = base.n_lines + h.n_lines,
                             .n_locals = base.n_locals + h.n_locals,
+                            .n_errs = base.n_errs + h.n_errs,
                             .redefine_old = no_word,
                             .redefine_new = no_word};
     st->head = &st->counts;
@@ -2070,6 +2081,12 @@ pinax_err pnx_load_container(pinax_state *st, pinax_str bytecode) {
         made->entry = entry, made->length = length, made->int_cells = ic, made->str_cells = sc;
     }
     err = PINAX_ERR_FORMAT;
+    why = "bytecode: bad name of a failure code";
+    for (uint32_t k = base.n_errs; k < now->n_errs; ++k) {
+        const pnx_sconst rec = st->errs[k];
+        if (rec.length == 0 || rec.length > 31 || rec.offset > now->n_strbytes || rec.length > now->n_strbytes - rec.offset)
+            goto rollback;
+    }
     why = "bytecode: bad local record";
     for (uint32_t k = base.n_locals; k < now->n_locals; ++k) {
         pnx_localrec rec;
@@ -2146,7 +2163,7 @@ size_t pnx_program_bytes(const pinax_state *st, unsigned char *out, size_t cap) 
         return 0;
     pnx_head h = *st->head;
     h.base_words = h.base_globals = h.base_imports = h.base_iconst = h.base_sconst = h.base_code = h.base_strbytes =
-        h.base_lines = h.base_locals = 0;
+        h.base_lines = h.base_locals = h.base_errs = 0;
     h.redefine_old = h.redefine_new = no_word;
     const uint64_t total = container_bytes(&h);
     if (total > cap)
@@ -2154,7 +2171,7 @@ size_t pnx_program_bytes(const pinax_state *st, unsigned char *out, size_t cap) 
     unsigned char *p = out;
     __builtin_memcpy(p, &h, sizeof h);
     p += sizeof h;
-    for (unsigned part = 0; part <= PNX_PART_LOCALS; ++part) {
+    for (unsigned part = 0; part <= PNX_PART_ERRS; ++part) {
         const size_t bytes = (size_t)part_count(st, part) * part_item[part];
         if (bytes)
             __builtin_memcpy(p, part_get(st, part), bytes);
@@ -2545,6 +2562,17 @@ pinax_err pinax_word_at(const pinax_state *st, uint32_t index, pinax_word_info *
     return PINAX_ERR_NOT_FOUND;
 }
 
+// The name of an error number: a declared failure code's (RFC-0037), or one of pinax_err.
+pinax_str pnx_err_label(const pinax_state *st, int64_t err) {
+    if (err >= PNX_ERR_DECLARED && st->head && err - PNX_ERR_DECLARED < st->head->n_errs) {
+        const pnx_sconst name = st->errs[err - PNX_ERR_DECLARED];
+        return (pinax_str){st->segment[PNX_SEG_CONST] + name.offset, name.length};
+    }
+    uint32_t offset, length;
+    pnx_err_name(err, &offset, &length);
+    return (pinax_str){(const unsigned char *)pnx_static_text + offset, length};
+}
+
 // Writes where the last fault happened into st->where: "module:line: error", or "line N: error"
 // for a source without a module name, or only the error when the code carries no lines.
 static void fault_place(pinax_state *st, pinax_err err) {
@@ -2578,9 +2606,8 @@ static void fault_place(pinax_state *st, pinax_err err) {
         PUT(digits, count);
         PUT(": ", 2);
     }
-    uint32_t offset, length;
-    pnx_err_name(err, &offset, &length);
-    PUT(pnx_static_text + offset, length);
+    const pinax_str label = pnx_err_label(st, err);
+    PUT(label.ptr, label.len);
 #undef PUT
     out[n] = '\0';
 }
@@ -3844,6 +3871,7 @@ pinax_err pinax_image_open(pinax_mem block, pinax_str image, const pinax_config 
     MOVE(st->head), MOVE(st->words), MOVE(st->globalrecs), MOVE(st->importrecs), MOVE(st->iconst), MOVE(st->sconst);
     MOVE(st->code);
     MOVE(st->word_counts), MOVE(st->imports), MOVE(st->globals), MOVE(st->lines), MOVE(st->localrecs);
+    MOVE(st->errs);
     MOVE(st->proven);
     MOVE(st->task), MOVE(st->main.ibank), MOVE(st->main.sbank), MOVE(st->main.ctrl), MOVE(st->main_wait.host);
     if (st->symbols.kept && !pnx_symbols_relocate(st, image_moved, &m))
@@ -3993,10 +4021,7 @@ pinax_err pinax_fault_local(const pinax_state *st, uint32_t index, pinax_str *na
     *name = (pinax_str){st->fault_pool + l->name, l->name_len};
     *out = (pinax_value){.kind = l->kind, .i = l->i, .s = {st->fault_pool + l->text, l->text_len},
                          .type = {st->fault_pool + l->type, l->type_len}};
-    if (l->kind == PINAX_VALUE_ERR) {
-        uint32_t offset, length;
-        pnx_err_name(l->i, &offset, &length);
-        out->s = (pinax_str){(const unsigned char *)pnx_static_text + offset, length};
-    }
+    if (l->kind == PINAX_VALUE_ERR)
+        out->s = pnx_err_label(st, l->i);
     return PINAX_OK;
 }

@@ -26,7 +26,8 @@ way to catch a fault.]
   [`err.format`], [`format`], [text or bytes of the wrong form],
   [`err.not_found`], [`not_found`], [what was looked for is not there],
 )
-The values are those of `pinax_err` in the host interface (19.1). Host modules may add codes of their own.]
+The values are those of `pinax_err` in the host interface (19.1). A program declares codes of its own with `err NAME`
+(8.14); `err_text` gives their names too. Host modules may add codes of their own.]
 
 #ex("spec", "11-errors.pnx")
 

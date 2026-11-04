@@ -362,6 +362,8 @@ typedef struct comp {
     vec          sconst;   // pnx_sconst: those of this load, numbered on from base_sconst
     vec          strbytes; // uint8_t: those of this load, at offsets from base_strbytes on
     uint32_t     base_iconst, base_sconst, base_strbytes; // what the program holds already, read in place
+    vec          errs;      // pnx_sconst: the names of the failure codes this load declares (RFC-0037)
+    uint32_t     base_errs; // the codes declared before: this load's first is PNX_ERR_DECLARED + base_errs
     vec          consts;   // constant
     vec          globals;  // globalsym
     vec          records;  // record
@@ -3654,6 +3656,7 @@ static bool do_case(comp *c) {
 }
 
 static bool err_constant(name n, int64_t *value);
+static const constant *module_const(comp *c, name path);
 
 // One value of a case branch; the current token is the value.
 static bool case_value(comp *c, block *b, int64_t *value) {
@@ -3683,13 +3686,19 @@ static bool case_value(comp *c, block *b, int64_t *value) {
         *value = k->value;
         break;
     }
-    case PNX_T_PATH:
+    case PNX_T_PATH: {
         if (n.length > 4 && __builtin_memcmp(n.text, "err.", 4) == 0 &&
             err_constant((name){n.text + 4, n.length - 4}, value)) {
             type = TY_ERR;
             break;
         }
-        return type_error(c, "a case value is a literal or the name of a const");
+        const constant *k = module_const(c, n); // a const or a failure code a module exports (RFC-0037)
+        if (!k || k->type == TY_STR)
+            return type_error(c, "a case value is a literal or the name of a const");
+        type = k->type;
+        *value = k->value;
+        break;
+    }
     default: return syntax(c, "a case value is expected here");
     }
     if (!item_narrow(c, &type, *value, b->subject_type))
@@ -6728,6 +6737,22 @@ static bool read_global(comp *c, uint32_t g) {
     return emit_def(c, PNX_ABX(PNX_GETG, slot_of(c, f->depth - 1), g), BANK_I) != NONE && advance(c);
 }
 
+// The constant `module.name` names, when that module is a source in use that exports it; NULL otherwise.
+static const constant *module_const(comp *c, name path) {
+    uint32_t dot = 0;
+    while (dot < path.length && path.text[dot] != '.')
+        ++dot;
+    name real;
+    if (dot == path.length || !module_of(c, (name){path.text, dot}, &real))
+        return NULL;
+    const uint32_t source = source_module(c, real);
+    if (source == NONE)
+        return NULL;
+    const name n = {path.text + dot + 1, path.length - dot - 1};
+    const uint32_t k = name_first(c, &c->ix_consts, &c->consts, sizeof(constant), n, 0, c->base.consts, constant_from, source);
+    return k == NONE ? NULL : (const constant *)c->consts.ptr + k;
+}
+
 // A word, constant or global that module `m` exports, written m.name here.
 static bool module_symbol(comp *c, uint16_t m, name n) {
     uint32_t k = name_first(c, &c->ix_words, &c->words, sizeof(wordsym), n, 0, c->base.words, wordsym_from, m);
@@ -7692,6 +7717,39 @@ static bool declare_const(comp *c) {
     return advance(c);
 }
 
+// err NAME : a failure code of this module (RFC-0037), numbered on from those the state has; its
+// name goes into the string bytes, for err_text and the host
+static bool declare_err(comp *c) {
+    if (!advance(c))
+        return false;
+    if (c->tok.kind != PNX_T_NAME)
+        return name_due(c, "err is followed by the name of a new failure code");
+    constant k = {.name = tok_name(c), .type = TY_ERR};
+    if (name_is_global(c, k.name))
+        return defined_twice(c, k.name);
+    if (k.name.length > 31)
+        return syntax(c, "the name of a failure code is at most 31 bytes long");
+    if (c->base_errs + c->errs.n >= PNX_MAX_ERRS)
+        return type_error(c, "a state declares at most 1024 failure codes");
+    const uint32_t offset = c->strbytes.n;
+    for (uint32_t i = 0; i < k.name.length; ++i) {
+        uint8_t *byte = vec_push(c, &c->strbytes, 1);
+        if (!byte)
+            return false;
+        *byte = (uint8_t)k.name.text[i];
+    }
+    pnx_sconst *named = vec_push(c, &c->errs, sizeof(pnx_sconst));
+    if (!named)
+        return false;
+    *named = (pnx_sconst){c->base_strbytes + offset, k.name.length};
+    k.value = PNX_ERR_DECLARED + c->base_errs + c->errs.n - 1;
+    constant *slot = vec_push(c, &c->consts, sizeof(constant));
+    if (!slot)
+        return false;
+    *slot = k;
+    return advance(c);
+}
+
 static bool declared_size(comp *c, uint32_t *out);
 
 // ( N ) after `str` in a declaration.
@@ -8530,7 +8588,7 @@ static bool compile(comp *c, image *im, bool *has_top) {
                                               PNX_KW_queue, PNX_KW_pool,   PNX_KW_type,   PNX_KW_buffer,
                                               PNX_KW_index, PNX_KW_record, PNX_KW_forward, PNX_KW_bound, PNX_KW_shared,
                                               PNX_KW_row,   PNX_KW_extern, PNX_KW_tasks};
-            bool ok = false;
+            bool ok = c->tok.kind == PNX_T_NAME && name_is(tok_name(c), "err"); // a failure code (RFC-0037)
             for (uint32_t k = 0; k < sizeof may / sizeof may[0]; ++k)
                 ok = ok || is_word(c, may[k]);
             if (!ok)
@@ -8595,6 +8653,9 @@ static bool compile(comp *c, image *im, bool *has_top) {
                 return false;
         } else if (is_word(c, PNX_KW_const) && !c->top_fn->n_blocks) {
             if (!declare_const(c))
+                return false;
+        } else if (c->tok.kind == PNX_T_NAME && name_is(tok_name(c), "err") && !c->top_fn->n_blocks) {
+            if (!declare_err(c))
                 return false;
         } else if (is_word(c, PNX_KW_global) && !c->top_fn->n_blocks) {
             if (!declare_global(c))
@@ -8725,6 +8786,7 @@ static bool serialize(comp *c, const image *im, uint8_t **out, size_t *out_len) 
         .n_strbytes = c->strbytes.n,
         .n_lines = runs.n,
         .n_locals = c->localrecs.n,
+        .n_errs = c->errs.n,
         .base_words = base.n_words,
         .base_globals = base.n_globals,
         .base_imports = base.n_imports,
@@ -8736,12 +8798,14 @@ static bool serialize(comp *c, const image *im, uint8_t **out, size_t *out_len) 
         .base_locals = base.n_locals,
         .redefine_old = c->redefine_old,
         .redefine_new = c->redefine_new,
+        .base_errs = base.n_errs,
     };
     const size_t len = sizeof head + (size_t)head.n_words * sizeof(pnx_wordrec) +
                        (size_t)head.n_globals * sizeof(pnx_globalrec) +
                        (size_t)head.n_imports * sizeof(pnx_importrec) + (size_t)head.n_iconst * 8 +
                        (size_t)head.n_sconst * sizeof(pnx_sconst) + (size_t)head.n_code * 4 + head.n_strbytes +
-                       (size_t)head.n_lines * sizeof(pnx_linerec) + (size_t)head.n_locals * sizeof(pnx_localrec);
+                       (size_t)head.n_lines * sizeof(pnx_linerec) + (size_t)head.n_locals * sizeof(pnx_localrec) +
+                       (size_t)head.n_errs * sizeof(pnx_sconst);
     uint8_t *p = arena_alloc(c, len);
     if (!p)
         return false;
@@ -8859,6 +8923,8 @@ static bool serialize(comp *c, const image *im, uint8_t **out, size_t *out_len) 
             rec.word = c->redefine_old;
         __builtin_memcpy(p, &rec, sizeof rec);
     }
+    if (head.n_errs)
+        __builtin_memcpy(p, c->errs.ptr, (size_t)head.n_errs * sizeof(pnx_sconst));
     return true;
 }
 
@@ -9018,6 +9084,7 @@ static bool take_symbols(comp *c, image *im) {
     c->base_iconst = h->n_iconst;
     c->base_sconst = h->n_sconst;
     c->base_strbytes = h->n_strbytes;
+    c->base_errs = h->n_errs;
     im->base = h->n_code;
     c->base = (struct counts){c->words.n, c->consts.n, c->globals.n, c->records.n, c->dtypes.n, c->externs.n};
     return true;
@@ -9257,11 +9324,8 @@ pinax_err pinax_eval_value(const pinax_state *st, uint32_t index, pinax_value *o
                                  : base == TY_ERR ? PINAX_VALUE_ERR : PINAX_VALUE_INT,
                          .i = st->eval_int[index], .s = st->eval_str[index],
                          .type = {(const unsigned char *)n.text, n.length}};
-    if (out->kind == PINAX_VALUE_ERR) {
-        uint32_t offset, length;
-        pnx_err_name(out->i, &offset, &length);
-        out->s = (pinax_str){(const unsigned char *)pnx_static_text + offset, length};
-    }
+    if (out->kind == PINAX_VALUE_ERR)
+        out->s = pnx_err_label(st, out->i);
     return PINAX_OK;
 }
 

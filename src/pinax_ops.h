@@ -1029,8 +1029,14 @@ PNX_OP(SWORD) { // PNX_R_FAILED: no word is left
     return PNX_R_OK;
 }
 PNX_OP(ERRTEXT) {
+    const int64_t e = R[OP_B(w)];
+    if (e >= PNX_ERR_DECLARED && e - PNX_ERR_DECLARED < st->head->n_errs) { // a declared code (RFC-0037)
+        const pnx_sconst name = st->errs[e - PNX_ERR_DECLARED];
+        S[OP_A(w)] = (pnx_scell){PNX_SEG_CONST, name.length, name.offset};
+        return PNX_R_OK;
+    }
     uint32_t offset, length;
-    pnx_err_name(R[OP_B(w)], &offset, &length);
+    pnx_err_name(e, &offset, &length);
     S[OP_A(w)] = (pnx_scell){PNX_SEG_STATIC, length, offset};
     return PNX_R_OK;
 }

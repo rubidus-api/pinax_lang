@@ -17,6 +17,10 @@ later). From `0x100` come the faults and failures of scripts (the codes of 11.1)
 interface itself: `ARGUMENT`, `NO_ROOM` (the block is too small), `SYNTAX`, `TYPE` (load refusals), `NOT_FOUND`,
 `SIGNATURE`, `FORMAT`, `STATE` (a call not allowed now).]
 
+#para("1a")[From `0x400` come the failure codes a program declares (8.14), numbered in the order the state declares
+them. A word that fails with one gives that number; `pinax_error_text` gives its name. A host reads the name: the
+number of a code depends on what was loaded before it.]
+
 #para("2")[`pinax_error_text` gives the last failure as text; for a fault, in the form `module:line: name`.]
 
 #para("3")[A failure of the interface means the same in every function.

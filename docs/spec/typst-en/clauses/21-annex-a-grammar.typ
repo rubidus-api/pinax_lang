@@ -38,6 +38,7 @@ declaration = [ "export" ] ( [ "bound" ] bindable | "shared" shareable | decl ) 
 bindable    = "global" NAME type | "array" NAME type capacity | "buffer" NAME capacity ;
 shareable   = bindable | "list" NAME type capacity | "index" NAME NAME PATH ;
 decl        = "const" NAME literal
+            | "err" NAME
             | "list" NAME type capacity | "queue" NAME type capacity | "pool" NAME NAME capacity
             | "record" NAME { field | "big_endian" } "end"
             | "type" NAME ( "int" | "bool" | "str" | "dec" "(" INT ")" )

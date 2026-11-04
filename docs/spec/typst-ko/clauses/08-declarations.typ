@@ -14,6 +14,7 @@ shareable   = bindable
             | "list"   NAME type capacity
             | "index"  NAME NAME PATH ;
 decl        = "const"  NAME literal
+            | "err"    NAME
             | "list"   NAME type capacity
             | "queue"  NAME type capacity
             | "pool"   NAME NAME capacity
@@ -320,6 +321,22 @@ forward = "forward" ( "array" | "list" | "pool" ) NAME
 #para("5")[호스트가 주기 전에는 비어 있다: 목록과 배열의 길이는 0 이고, 찾아보기는 아무것도 찾지 못하며, 스칼라와
 버퍼는 0 과 빈 바이트다. 적재의 코드는 그대로 돈다. 호스트의 실행은 공유 전역을 모두 받을 때까지 거절된다(19.7).]
 
+== 실패 코드 <decl-err>
+
+#para("1")[`err 이름` 은 #term("실패 코드", en: "failure code")를 만든다. `err` 타입의 새 오류 코드다(11.1). 상수(8.2)처럼
+저장소가 없고, 그 이름은 제 모듈의 이름이다. 다른 모듈은 내보낸 것을 `모듈.이름` 으로 쓴다. 다른 코드를 쓰는 자리 어디에나
+쓴다: `fail` 과 함께, `or_else (e)` 와 `eq` 로, `case` 의 가지 값으로, `err` 전역이나 모음 안에. `err_text` 는 그 이름을
+준다.]
+
+#para("2")[상태가 선언한 실패 코드는 선언된 차례대로 `0x400` 부터 번호가 붙는다(19.1). 프로그램은 번호에 기대지 않는다.
+호스트는 이름을 읽는다(`pinax_error_text`).]
+#ex("spec", "08-err.pnx")
+
+#part("제약")
+
+#para("3")[`err` 뒤에는 31 바이트 이하의 이름이 온다. 그 이름은 8.1 (3)과 (6)을 따른다.]
+#ex("spec", "08-err-name.pnx")
+
 #part("진단")
 #diag(
   ([이미 있는 이름], "this name is already defined"),
@@ -338,4 +355,6 @@ forward = "forward" ( "array" | "list" | "pool" ) NAME
   ([`redefine` 이 읽던 매개변수를 바꿈], "redefine cannot make the word change a collection parameter the old one only read: shared collections may have been given to it"),
   ([공유 버퍼를 호스트 낱말에 넘김], "a shared buffer is read-only: it is not given to a host word, which may write it"),
   ([`shared` 뒤에 다른 선언], "shared stands before global, array, list, buffer or index"),
+  ([이름이 따르지 않는 `err`], "err is followed by the name of a new failure code"),
+  ([31 바이트를 넘는 실패 코드의 이름], "the name of a failure code is at most 31 bytes long"),
 )

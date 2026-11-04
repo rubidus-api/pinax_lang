@@ -89,12 +89,19 @@ Where a fault could happen and you want a failure instead, use the `chk_` words.
 files, the network) is a failure. What goes away only by fixing the program (a miscomputed index, a broken promise) is
 a fault.]
 
-#qa[My word has a new kind of failure to report. Can I make a new name?][There are only the twelve. Raise the one whose
-meaning is nearest with `fail`: `err.format` for a wrong input, `err.not_found` for something missing, `err.full` for no
-room. A more exact reason goes into a result value or a global.]
+#qa[My word has a new kind of failure to report. Can I make a new name?][Yes. `err NAME` declares a new failure code
+of its module. It is raised with `fail`, taken with `or_else (e)`, compared with `eq` or by `case`, and `err_text`
+reads its name, as with the twelve.]
+
+#ex("manual", "08-own-codes.pnx")
+
+When two reasons fail with one code, the caller cannot tell them apart: "too short" and "too long" would both be
+`err.range`. Declare a code for each reason. The host gets the name too (`pinax_error_text`). Codes are numbered from
+`0x400` in the order they are declared, so read the name, not the number.
 
 #summary[
 - After a word that can fail comes `or_fail`, `or_return` or `or_else` (standard 11.2).
+- `err NAME` declares a failure code of its module; `err_text` gives its name (8.14).
 - The body of `or_else` leaves, in place of the results of success, values of the same types (11.2).
 - `or_fail` and `fail` only inside an `or fail` signature; outside definitions only `or_else` (11.2).
 - A fault stops the run, and the processor closes the handles the run opened (11.3).

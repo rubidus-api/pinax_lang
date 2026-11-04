@@ -14,6 +14,7 @@ shareable   = bindable
             | "list"   NAME type capacity
             | "index"  NAME NAME PATH ;
 decl        = "const"  NAME literal
+            | "err"    NAME
             | "list"   NAME type capacity
             | "queue"  NAME type capacity
             | "pool"   NAME NAME capacity
@@ -330,6 +331,22 @@ parameter it only read.]
 and a buffer has no bytes. The code of a load runs as usual. Runs of the host are refused until every shared global is
 given (19.7).]
 
+== Failure codes <decl-err>
+
+#para("1")[`err NAME` makes a #term("failure code"): a new error code (11.1), of type `err`. Like a constant (8.2) it
+has no storage, and its name is a name of its module: another module writes `module.NAME`, when it is exported. It is
+used where any code is: with `fail`, with `or_else (e)` and `eq`, as a `case` value, in an `err` global or collection.
+`err_text` gives its name.]
+
+#para("2")[The failure codes a state declares are numbered from `0x400` in the order they are declared (19.1). A
+program does not depend on the number; a host reads the name (`pinax_error_text`).]
+#ex("spec", "08-err.pnx")
+
+#part("Constraints")
+
+#para("3")[`err` is followed by a name, of at most 31 bytes. The name follows 8.1 (3) and (6).]
+#ex("spec", "08-err-name.pnx")
+
 #part("Diagnostics")
 #diag(
   ([A name that exists already], "this name is already defined"),
@@ -348,4 +365,6 @@ given (19.7).]
   ([`redefine` makes a read parameter changed], "redefine cannot make the word change a collection parameter the old one only read: shared collections may have been given to it"),
   ([A shared buffer passed to a host word], "a shared buffer is read-only: it is not given to a host word, which may write it"),
   ([Another declaration after `shared`], "shared stands before global, array, list, buffer or index"),
+  ([`err` not followed by a name], "err is followed by the name of a new failure code"),
+  ([The name of a failure code over 31 bytes], "the name of a failure code is at most 31 bytes long"),
 )

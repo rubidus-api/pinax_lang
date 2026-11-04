@@ -1,0 +1,16 @@
+rem run
+use io
+use str
+err too_short
+err too_long
+word check_password (p str or fail)
+  p str.len 8 lt if too_short fail end
+  p str.len 32 gt if too_long fail end
+end
+word try (p str)
+  p check_password or_else (e) cat ("refused: ", e err_text) io.println return end
+  "accepted" io.println
+end
+"abc" try
+"a password of more than thirty-two bytes" try
+"abcdefg8" try

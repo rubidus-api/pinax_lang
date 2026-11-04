@@ -20,7 +20,7 @@ extern "C" {
 #endif
 
 #define PINAX_VERSION_MAJOR 0
-#define PINAX_VERSION_MINOR 17
+#define PINAX_VERSION_MINOR 18
 #define PINAX_VERSION_PATCH 0
 #define PINAX_FORMAT 2 /* source, bytecode and image format; bumped by breaking changes */
 
@@ -68,6 +68,7 @@ typedef enum pinax_err {
     PINAX_ERR_SIGNATURE, /* a word exists but its signature differs from the one asked for */
     PINAX_ERR_FORMAT,    /* bytecode or image of another format, layout or code */
     PINAX_ERR_STATE      /* call not allowed now (for example load while running) */
+    /* from 0x400: the failure codes a program declares (err NAME); pinax_error_text() names them */
 } pinax_err;
 
 /* ---- opening and closing ---------------------------------------------------------- */

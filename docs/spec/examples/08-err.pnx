@@ -1,0 +1,24 @@
+rem run
+use io
+use str
+err key_too_long
+err value_too_long
+word check (k str, v str or fail)
+  k str.len 8 gt if key_too_long fail end
+  v str.len 16 gt if value_too_long fail end
+end
+word try (k str, v str)
+  k v check or_else (e)
+    e case
+      key_too_long of "the key is too long" end
+      value_too_long of "the value is too long" end
+      otherwise e err_text end
+    end io.println
+    return
+  end
+  "stored" io.println
+end
+"name" "value" try
+"a long key name" "value" try
+"name" "a value of thirty bytes, more" try
+key_too_long err_text io.println

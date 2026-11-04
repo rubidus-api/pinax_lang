@@ -37,7 +37,8 @@ void pinax_host_set_args(int count, const char *const *args);
 
 /* A file mapped read-only and shared with every process that maps it, for pinax_share_file().
  * The bytes start at a page. Unmap it after the states that read it are closed. An empty file is
- * PINAX_ERR_FORMAT; a file that cannot be opened is PINAX_ERR_NOT_FOUND or PINAX_ERR_IO. */
+ * PINAX_ERR_FORMAT; a file that cannot be opened is PINAX_ERR_NOT_FOUND, or PINAX_ERR_FAILED for
+ * another reason. */
 typedef struct pinax_mapping pinax_mapping;
 pinax_err pinax_map_file(const char *path, pinax_str *bytes, pinax_mapping **out);
 void      pinax_unmap_file(pinax_mapping *mapping);

@@ -213,6 +213,7 @@ enum {
     PNX_PART_STRBYTES,   // uint8_t (segment[PNX_SEG_CONST])
     PNX_PART_LINES,      // pnx_linerec, unaligned
     PNX_PART_LOCALS,     // pnx_localrec, unaligned
+    PNX_PART_ERRS,       // pnx_sconst: the name of each declared failure code, in strbytes (RFC-0037)
     PNX_PART_WCOUNTS,    // pnx_counts, one per word
     PNX_PART_PROVEN,     // uint8_t, one per code word
     PNX_PART_IMPORTS,    // const pnx_host *, one per import
@@ -310,6 +311,7 @@ struct pinax_state {
     pnx_scell *fault_sbank;            // until fault_locals() has read them
     uint32_t   fault_int_slots, fault_str_slots;
     const uint8_t *localrecs;      // pnx_localrec records, head->n_locals of them (not aligned)
+    const pnx_sconst *errs;        // the names of the declared failure codes, head->n_errs of them
     // the locals of the word of the last fault, copied when it happened: names, types and the
     // bytes of str values lie in fault_pool
     struct pnx_faultlocal {
@@ -507,6 +509,8 @@ void pnx_compact(pinax_state *state);
 void pnx_load_done(pinax_state *state);
 uint64_t pnx_symbols_layout(uint64_t hash);
 void pnx_err_name(int64_t err, uint32_t *offset, uint32_t *length);
+// The name of an error number: a declared failure code's (RFC-0037), or pnx_err_name's.
+pinax_str pnx_err_label(const pinax_state *state, int64_t err);
 bool pnx_tasks_alive(const pinax_state *state); // a task was spawned and has not ended
 // Offset of the last `part` in `bytes`, or UINT32_MAX. An empty part is found at the end.
 uint32_t pnx_find_last(const uint8_t *bytes, uint32_t length, const uint8_t *part, uint32_t part_length);

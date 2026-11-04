@@ -433,10 +433,12 @@ enum {
 
 // The container pinax_load_bytecode() accepts: head, word records, global records, import
 // records, integer constants, string constant records, code, string bytes, line records, local
-// records; in this order, native byte order.
+// records, the names of declared failure codes; in this order, native byte order.
 #define PNX_MAGIC "PNXB"
-#define PNX_CONTAINER_VERSION 4
+#define PNX_CONTAINER_VERSION 5
 #define PNX_ORDER_MARK 0x0102
+#define PNX_ERR_DECLARED 0x400 // the first failure code a program declares (RFC-0037)
+#define PNX_MAX_ERRS 1024       // codes a state may declare
 
 // A container carries one load: what the program gains. Its records are numbered on from the
 // program it continues (base_*: the counts that program had, all zero for a container made for
@@ -450,14 +452,14 @@ typedef struct pnx_head {
     uint32_t n_words, n_globals, n_imports, n_iconst, n_sconst, n_code, n_strbytes;
     uint32_t n_lines; // line records after the string bytes; a loader that wants none may skip them
     uint32_t n_locals; // local records after the line records; may be 0
-    uint32_t reserved; // 0: keeps the records after the head 8-byte aligned
+    uint32_t n_errs; // failure codes the source declares (RFC-0037): a pnx_sconst of each name, after the locals
     uint32_t base_words, base_globals, base_imports, base_iconst, base_sconst, base_code, base_strbytes, base_lines,
              base_locals;
     // redefine: the word of the program (below base_words) whose code this container replaces, and the
     // new word (one of this container's) that carries the new body; the loader trades their code.
     // UINT32_MAX: none.
     uint32_t redefine_old, redefine_new;
-    uint32_t reserved2; // 0
+    uint32_t base_errs; // the codes declared before: the first of this container is 0x400 + base_errs
 } pnx_head;
 
 // Debug information: from code word `pc` on, the code came from source line `line` (of the
