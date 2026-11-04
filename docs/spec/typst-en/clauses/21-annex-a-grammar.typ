@@ -77,7 +77,7 @@ control     = "if" { body } [ "else" { body } ] "end"
             | "case" { branch } [ "otherwise" { body } "end" ] "end" ;
 defer       = "defer" { body } "end" ;             (* 10.7 *)
 branch      = ( case-value | "(" case-value { "," case-value } ")" ) "of" { body } "end" ;
-case-value  = literal | NAME ;
+case-value  = literal | NAME | PATH ;
 ```
 
 #para("3")[A source read by data load follows `data-source` of 13.4.]

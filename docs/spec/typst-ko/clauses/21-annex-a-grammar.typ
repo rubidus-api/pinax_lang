@@ -76,7 +76,7 @@ control     = "if" { body } [ "else" { body } ] "end"
             | "case" { branch } [ "otherwise" { body } "end" ] "end" ;
 defer       = "defer" { body } "end" ;             (* 10.7 *)
 branch      = ( case-value | "(" case-value { "," case-value } ")" ) "of" { body } "end" ;
-case-value  = literal | NAME ;
+case-value  = literal | NAME | PATH ;
 ```
 
 #para("3")[자료 적재(13.4)의 소스는 13.4 의 `data-source` 를 따른다.]
