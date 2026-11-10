@@ -266,17 +266,22 @@ An image and a clone forget it, as they forget host words (19.9), unless the clo
 == Exported code <host-native>
 
 #para("1")[`pnx export-c` (20 (3)) writes a program's code as C. The host compiles that file with `pinax_native.h` of
-the same build and gets one `pinax_native` table. `pinax_native_attach(state, table)` makes the state run its code
-through the table from the first run at which the program is the one exported: the same code, the same start of
-every word, the same build. Given before the loads, it serves a load's own code too. While the program differs (after
-another load) the table is not used; `NULL` takes it back.]
+the same build and gets one `pinax_native` table. It covers the program as it was exported: its code and its words,
+counted in `code_words` and `words`. `pinax_native_attach(state, table)` makes the state run that code through the
+table from the first run at which the state's program begins with the one exported: the same code, the same start of
+every word, the same build. Given before the loads, it serves a load's own code too. `NULL` takes it back.]
+
+#para("1a")[What is loaded after it (the lines of a session, a module loaded later) is interpreted, and the table stays
+in use: a call, a return or a task switch that goes into the code it covers runs there through the table again. A
+`redefine` (19.4 (1c)) of one of its words changes the program it covers: from then on the table is not used.]
 
 #para("2")[A program and a host see the same as interpreted: results, faults with their places and locals, failures,
 the budget (a run stops at the same CHECKs), waiting and tasks. Exported code does not make the checks the loader
 proved cannot fire (20 (1b)); a build with `PINAX_CHECK_PROOFS` makes them and stops the program when one fires.]
 
 #para("3")[An image or a clone does not carry the table: attach it again. Attaching while a run is suspended or waits
-is `PINAX_ERR_STATE`; a table whose `struct_size` is another is `PINAX_ERR_ARGUMENT`.]
+is `PINAX_ERR_STATE`. A table whose `struct_size` is another, or with one of `code_words` and `words` 0 and the other
+not, is `PINAX_ERR_ARGUMENT`; both 0 is a table of the whole program, whatever its length.]
 
 #para("4")[The table is data the host vouches for, as an image is (4 (2a)): only its hash is checked, not its machine
 code. For exported code the guarantee of 4 (2a) holds as far as the loader's proofs are right.]
