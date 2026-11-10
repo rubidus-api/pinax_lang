@@ -264,17 +264,22 @@ size_t pnx_export_c(const pinax_state *st, const char *name, char *buffer, size_
                 put(&o, "at = ");
                 put_u(&o, i);
                 // a host call is done in place, without the interpreter's dispatch (D0066)
-                put(&o, op == PNX_HCALL || op == PNX_HCALLF ? "u; PNX_STEP_OUT(pnx_step_host); if (at == "
-                                                            : "u; PNX_STEP_OUT(pnx_step); if (at == ");
-                if (op == PNX_HCALLF) { // a good result goes on past the failure word
+                put(&o, op == PNX_HCALL || op == PNX_HCALLF ? "u; PNX_STEP_OUT(pnx_step_host);"
+                                                            : "u; PNX_STEP_OUT(pnx_step);");
+                // the places it may go on at, when they are instructions: the last instruction of the
+                // code (a RETOK that ends the program's last word) has none after it
+                if (op == PNX_HCALLF && after + 1 < n) { // a good result goes on past the failure word
+                    put(&o, " if (at == ");
                     put_u(&o, after + 1);
                     put(&o, "u) ");
                     go_to(&o, after + 1);
-                    put(&o, " if (at == ");
                 }
-                put_u(&o, after);
-                put(&o, "u) ");
-                go_to(&o, after);
+                if (after < n) {
+                    put(&o, " if (at == ");
+                    put_u(&o, after);
+                    put(&o, "u) ");
+                    go_to(&o, after);
+                }
                 put(&o, " goto go; /* ");
                 put(&o, op_name[op] ? op_name[op] : "?");
                 put(&o, " */");
