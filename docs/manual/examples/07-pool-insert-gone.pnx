@@ -1,0 +1,13 @@
+rem refused
+record item
+  name str(12)
+  count int
+end
+pool items item 3
+index by_name items item.name
+word enter (name str or fail)
+  items alloc or_fail to r
+  name r to item.name
+  r by_name insert or_fail
+  1 r to item.count
+end

@@ -187,6 +187,10 @@ PNX_INLINE int pnx_tail_word(pinax_state *st, const pnx_wordrec *callee, uint32_
     X(RUNFG, IXGETS) \
     X(RUNF, IXPUT) \
     X(RUN, IXDEL) \
+    X(RUNG, IXHAS) \
+    X(RUNG, IXHASS) \
+    X(RUNF, IXPUTO) \
+    X(RUNF2, POOLNX) \
     X(RUN2, SREPL) \
     X(RUNF, QPUT) \
     X(RUNF, QTAKE) \
@@ -1174,25 +1178,43 @@ PNX_OP(PALLOC) {
     R[OP_A(w)] = (int64_t)((uint64_t)generation << 32 | (slot + 1u));
     return PNX_R_OK;
 }
+// Gives slot `row` (its number) of pool `gi` back; first takes it out of every index over the pool
+// (RFC-0038). A pool's `key` is nonzero once an index over it was loaded.
+PNX_INLINE void pnx_pool_give(pinax_state *st, uint32_t gi, uint64_t row);
 PNX_OP(PFREE) {
-    pnx_global *g = &st->globals[PNX_GX(st, OP_BX(w))];
+    const uint32_t gi = PNX_GX(st, OP_BX(w));
     uint64_t row;
-    const int bad = pnx_row_of(g, R[OP_A(w)], &row);
+    const int bad = pnx_row_of(&st->globals[gi], R[OP_A(w)], &row);
     if (bad)
         return bad;
-    uint8_t *meta = g->ptr + (size_t)g->capacity * g->elem_bytes + (size_t)row * 8;
-    uint32_t generation;
-    __builtin_memcpy(&generation, meta, 4);
-    ++generation; // even: free
-    __builtin_memcpy(meta, &generation, 4);
-    __builtin_memcpy(meta + 4, &g->head, 4);
-    g->head = (uint32_t)row + 1;
+    pnx_pool_give(st, gi, row);
     return PNX_R_OK;
 }
 PNX_OP(PALIVE) {
     uint64_t row;
     R[OP_A(w)] = pnx_row_of(&st->globals[PNX_GX(st, x)], R[OP_B(w)], &row) == PNX_R_OK;
     return PNX_R_OK;
+}
+
+PNX_OP(POOLNX) { // the next live row from slot R[A] on; PNX_R_FAILED when none is left
+    const pnx_global *g = &st->globals[PNX_GX(st, x)];
+    const uint8_t    *meta = g->ptr + (size_t)g->capacity * g->elem_bytes;
+    const uint64_t    from = (uint64_t)R[OP_A(w)];
+    uint64_t          slot = from;
+    for (; slot < g->capacity; ++slot) {
+        uint32_t generation;
+        __builtin_memcpy(&generation, meta + slot * 8, 4);
+        if (generation & 1u) { // odd: handed out
+            R[OP_B(w)] = (int64_t)((uint64_t)generation << 32 | (slot + 1u));
+            R[OP_A(w)] = (int64_t)slot + 1;
+            st->charge += (slot - from) * 8; // the 8 bytes of every free slot passed over, as bytes scanned
+            return PNX_R_OK;
+        }
+    }
+    if (from < g->capacity)
+        st->charge += (g->capacity - from) * 8;
+    R[OP_A(w)] = g->capacity;
+    return PNX_R_FAILED;
 }
 
 // ---- more string words --------------------------------------------------------------------
@@ -2344,6 +2366,22 @@ PNX_INLINE uint32_t pnx_index_find(const pinax_state *st, const pnx_global *x, c
     return spare; // every slot was used once; UINT32_MAX when none is free
 }
 
+// The table an index finds rows of.
+PNX_INLINE const pnx_global *pnx_index_table(const pinax_state *st, const pnx_global *x) {
+    return &st->globals[x->key & 0xfffu];
+}
+
+// The row an index slot holds (number plus one) as the value a register holds: for a pool, with the
+// current generation of its slot (RFC-0038).
+PNX_INLINE int64_t pnx_index_row(const pinax_state *st, const pnx_global *x, uint32_t row) {
+    const pnx_global *t = pnx_index_table(st, x);
+    if (t->kind != PNX_G_POOL)
+        return row;
+    uint32_t generation;
+    __builtin_memcpy(&generation, t->ptr + (size_t)t->capacity * t->elem_bytes + (size_t)(row - 1) * 8, 4);
+    return (int64_t)((uint64_t)generation << 32 | row);
+}
+
 PNX_INLINE int pnx_index_get(pinax_state *st, const pnx_global *x, const uint8_t *key, uint32_t length,
                              int64_t *out) {
     bool found;
@@ -2354,7 +2392,7 @@ PNX_INLINE int pnx_index_get(pinax_state *st, const pnx_global *x, const uint8_t
     }
     uint32_t row;
     __builtin_memcpy(&row, x->ptr + (size_t)slot * 4, 4);
-    *out = row;
+    *out = pnx_index_row(st, x, row);
     return PNX_R_OK;
 }
 PNX_OP(IXGET) {
@@ -2366,43 +2404,99 @@ PNX_OP(IXGETS) {
     const pnx_scell s = S[OP_B(w)];
     return pnx_index_get(st, &st->globals[PNX_GX(st, x)], pnx_view_bytes(st, s), s.length, &R[OP_A(w)]);
 }
-PNX_OP(IXPUT) {
-    const pnx_global *ix = &st->globals[PNX_GX(st, OP_BX(w))];
-    const uint64_t row = (uint64_t)R[OP_A(w)];
-    if (row - 1 >= st->globals[ix->key & 0xfffu].length)
-        return PINAX_ERR_RANGE;
+PNX_OP(IXHAS) {
+    uint8_t key[8];
+    __builtin_memcpy(key, &R[OP_B(w)], 8);
+    bool found;
+    (void)pnx_index_find(st, &st->globals[PNX_GX(st, x)], key, 8, &found);
+    R[OP_A(w)] = found;
+    return PNX_R_OK;
+}
+PNX_OP(IXHASS) {
+    const pnx_scell s = S[OP_B(w)];
+    bool found;
+    (void)pnx_index_find(st, &st->globals[PNX_GX(st, x)], pnx_view_bytes(st, s), s.length, &found);
+    R[OP_A(w)] = found;
+    return PNX_R_OK;
+}
+
+// The row in register `value` as its number in the index's table (checked as every use of a row is).
+PNX_INLINE int pnx_index_row_of(const pinax_state *st, const pnx_global *ix, int64_t value, uint32_t *row) {
+    uint64_t at;
+    const int bad = pnx_row_of(pnx_index_table(st, ix), value, &at);
+    *row = (uint32_t)at + 1;
+    return bad;
+}
+
+PNX_INLINE int pnx_index_put(pinax_state *st, const pnx_global *ix, uint32_t row) {
     uint32_t n;
     uint8_t  scratch[8];
-    const uint8_t *key = pnx_index_key(st, ix, (uint32_t)row, &n, scratch);
+    const uint8_t *key = pnx_index_key(st, ix, row, &n, scratch);
     bool found;
     const uint32_t slot = pnx_index_find(st, ix, key, n, &found);
     if (found || slot == UINT32_MAX) {
         st->fail = found ? PINAX_ERR_FAILED : PINAX_ERR_FULL;
         return PNX_R_FAILED;
     }
-    const uint32_t value = (uint32_t)row;
-    __builtin_memcpy(ix->ptr + (size_t)slot * 4, &value, 4);
+    __builtin_memcpy(ix->ptr + (size_t)slot * 4, &row, 4);
     return PNX_R_OK;
 }
-PNX_OP(IXDEL) { // nothing happens when the row is not in the index
+PNX_OP(IXPUT) {
     const pnx_global *ix = &st->globals[PNX_GX(st, OP_BX(w))];
-    const uint64_t row = (uint64_t)R[OP_A(w)];
-    if (row - 1 >= st->globals[ix->key & 0xfffu].length)
-        return PINAX_ERR_RANGE;
+    uint32_t row;
+    const int bad = pnx_index_row_of(st, ix, R[OP_A(w)], &row);
+    return bad ? bad : pnx_index_put(st, ix, row);
+}
+
+// Takes row (number plus one) out of index ix; nothing happens when it is not in it.
+PNX_INLINE void pnx_index_drop(pinax_state *st, const pnx_global *ix, uint32_t row) {
     uint32_t n;
     uint8_t  scratch[8];
-    const uint8_t *key = pnx_index_key(st, ix, (uint32_t)row, &n, scratch);
+    const uint8_t *key = pnx_index_key(st, ix, row, &n, scratch);
     bool found;
     const uint32_t slot = pnx_index_find(st, ix, key, n, &found);
     if (found) {
         uint32_t have;
         __builtin_memcpy(&have, ix->ptr + (size_t)slot * 4, 4);
-        if (have == (uint32_t)row) {
+        if (have == row) {
             const uint32_t gone = PNX_IX_GONE;
             __builtin_memcpy(ix->ptr + (size_t)slot * 4, &gone, 4);
         }
     }
-    return PNX_R_OK;
+}
+PNX_OP(IXDEL) {
+    const pnx_global *ix = &st->globals[PNX_GX(st, OP_BX(w))];
+    uint32_t row;
+    const int bad = pnx_index_row_of(st, ix, R[OP_A(w)], &row);
+    if (!bad)
+        pnx_index_drop(st, ix, row);
+    return bad;
+}
+
+PNX_INLINE void pnx_pool_give(pinax_state *st, uint32_t gi, uint64_t row) {
+    pnx_global *g = &st->globals[gi];
+    if (g->key) // the indexes over a pool come after it
+        for (uint32_t j = gi + 1; j < st->head->n_globals; ++j)
+            if (st->globals[j].kind == PNX_G_INDEX && (st->globals[j].key & 0xfffu) == gi)
+                pnx_index_drop(st, &st->globals[j], (uint32_t)row + 1);
+    uint8_t *meta = g->ptr + (size_t)g->capacity * g->elem_bytes + (size_t)row * 8;
+    uint32_t generation;
+    __builtin_memcpy(&generation, meta, 4);
+    ++generation; // even: free
+    __builtin_memcpy(meta, &generation, 4);
+    __builtin_memcpy(meta + 4, &g->head, 4);
+    g->head = (uint32_t)row + 1;
+}
+PNX_OP(IXPUTO) { // a row just taken: when it does not go in, it goes back to its pool
+    const pnx_global *ix = &st->globals[PNX_GX(st, OP_BX(w))];
+    uint32_t row;
+    const int bad = pnx_index_row_of(st, ix, R[OP_A(w)], &row);
+    if (bad)
+        return bad;
+    const int r = pnx_index_put(st, ix, row);
+    if (r == PNX_R_FAILED)
+        pnx_pool_give(st, ix->key & 0xfffu, row - 1);
+    return r;
 }
 
 // ---- sorting (RFC-0030) -------------------------------------------------------------------
@@ -2501,7 +2595,12 @@ PNX_OP(SORTBY) {
     for (uint32_t i = 0; i < n; ++i) { // every cell a row of the table, before anything moves
         uint64_t row;
         __builtin_memcpy(&row, g->ptr + (size_t)i * 8, 8);
-        if (row - bias >= t->length)
+        if (t->kind == PNX_G_POOL) { // rows of a pool (RFC-0038): each still the one handed out
+            uint64_t slot;
+            const int bad = pnx_row_of(t, (int64_t)row, &slot);
+            if (bad)
+                return bad;
+        } else if (row - bias >= t->length)
             return PINAX_ERR_RANGE;
     }
     if (n < 2)

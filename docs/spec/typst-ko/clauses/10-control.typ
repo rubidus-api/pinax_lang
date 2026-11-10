@@ -148,7 +148,8 @@ block   = "do" [ "(" effect ")" ] { body } "end" ;
 바로 뒤의 조합 낱말이 받아야 한다. 둘이 합쳐 루프 하나가 된다. 줄기를 내는 것은 다음과 같다.
 #table(columns: (auto, 1fr), inset: 5pt, stroke: 0.5pt + luma(170),
   [*줄기*], [*원소*],
-  [배열, 목록의 이름], [칸의 값(레코드면 줄). 목록은 길이까지. 큐, 풀, 버퍼, 찾아보기는 줄기가 아니다],
+  [배열, 목록의 이름], [칸의 값(레코드면 줄). 목록은 길이까지. 큐, 버퍼, 찾아보기는 줄기가 아니다],
+  [풀의 이름], [살아 있는 줄, 칸의 차례로. `each` 에만(8.9 (3a))],
   [`lo hi range`], [`lo` 부터 `hi` 앞까지의 `int`],
   [`s sep str.split`, `s str.lines`, `s str.words`, `s str.chars`], [`str` 뷰(16.1). `chars` 는 UTF-8 글자 하나씩],
   [`s str.bytes`], [`u8`: 바이트(16.1)],
@@ -232,7 +233,7 @@ defer = "defer" { body } "end" ;
   ([펼쳐지는 블록이 스택을 바꿈], "this block must leave the stack as it found it"),
   ([정의 밖의 `return`], "return belongs inside a definition"),
   ([상수가 아닌 가지의 값], "a case value is a literal or the name of a const"),
-  ([줄기가 아닌 것에 조합 낱말], "only an array or a list is a stem (not a queue, a pool, a buffer or an index)"),
+  ([줄기가 아닌 것에 조합 낱말], "only an array, a list or a pool is a stem (not a queue, a buffer or an index)"),
   ([가지 안의 `defer`], "defer is written right in a word's body, a loop's body or a do block, not in a branch"),
   ([정의 밖의 `defer`], "defer belongs inside a definition"),
   ([미룬 코드가 스택을 바꿈], "a defer leaves the stack as it found it"),

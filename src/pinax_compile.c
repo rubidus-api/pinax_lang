@@ -37,7 +37,8 @@ enum {
     STEM_LINES, STEM_SPLIT, STEM_SPLIT_BYTE, // like STEM_WORDS, these take their next piece off the string
     STEM_CHARS, STEM_PTN, // ptn.matches: the string and its pattern, like STEM_SPLIT
     STEM_REX, STEM_RSPLIT, // rex.matches and rex.split: the string and its program
-    STEM_CSV // csv.fields: like STEM_WORDS
+    STEM_CSV, // csv.fields: like STEM_WORDS
+    STEM_POOL // the live rows of a pool, taken slot by slot (RFC-0038)
 };
 enum { GK_SCALAR, GK_ARRAY, GK_LIST, GK_BUFFER, GK_INDEX, GK_QUEUE, GK_POOL, GK_TASKS };
 enum { L_PLAIN, L_OWNS, L_MOVED }; // what a local holds of a value that must be given exactly once
@@ -418,6 +419,7 @@ typedef struct comp {
     uint8_t     *rx_buf;    // where rx compiles a constant pattern, PNX_REX_BUF bytes
     bool         data_only; // PINAX_LOAD_DATA: declarations, literals, stores and rows only
     bool         sink;      // the word being compiled may take an owned value off the stack
+    bool         pool_each; // the stem about to begin is walked by each, which may walk a pool
     bool         in_defer;  // the body of a defer is being read
     bool         leaving;   // the defers run because the word fails: the stack below them is dropped (RFC-0035)
     name         modules[MAX_MODULES]; // the names the source writes: `use rex as rx` opens rx
@@ -1272,6 +1274,8 @@ static uint32_t wide_of(uint32_t op) {
     case PNX_PALIVE: return PNX_PALIVEW;
     case PNX_IXGET: return PNX_IXGETW;
     case PNX_IXGETS: return PNX_IXGETSW;
+    case PNX_IXHAS: return PNX_IXHASW;
+    case PNX_IXHASS: return PNX_IXHASSW;
     case PNX_BPUT: return PNX_BPUTW;
     case PNX_BENC: return PNX_BENCW;
     case PNX_JPUTI: return PNX_JPUTIW;
@@ -1787,7 +1791,7 @@ enum {
     BW_IDX, BW_CAPACITY, BW_IS_FULL, BW_CLEAR, BW_PUSH, BW_POP, BW_FIND, BW_TO_INT, BW_TO_STR, BW_ASSERT,
     BW_WORDS, BW_ERR_TEXT, BW_ADD_ROW, BW_IS_NONE, BW_NONE, BW_ROW_INDEX, BW_MAX, BW_MIN,
     BW_APPEND, BW_APPEND_BYTE, BW_APPEND_INT, BW_CONTENTS, BW_TAKE, BW_SKIP, BW_TAKE_LAST, BW_SKIP_LAST,
-    BW_STARTS_WITH, BW_ENDS_WITH, BW_CONTAINS, BW_LOOKUP, BW_INSERT, BW_REMOVE, BW_REPLACE, BW_PUT, BW_PEEK,
+    BW_STARTS_WITH, BW_ENDS_WITH, BW_CONTAINS, BW_LOOKUP, BW_INSERT, BW_REMOVE, BW_HAS, BW_REPLACE, BW_PUT, BW_PEEK,
     BW_ALLOC, BW_FREE, BW_IS_ALIVE, BW_COUNT, BW_ANY, BW_ALL, BW_FIRST, BW_EACH_INDEX, BW_MAP_INTO, BW_FILTER_INTO, BW_MINIMUM, BW_MAXIMUM,
     BW_SPAWN, BW_YIELD, BW_RESUME, BW_IS_DONE, BW_CANCEL, BW_RUN_ALL, BW_TASK_TAG,
     BW_SLICE, BW_CUT, BW_TRY_CUT, BW_TRIM, BW_TRIM_LEFT, BW_TRIM_RIGHT, BW_LINES, BW_SPLIT, BW_FIND_LAST, BW_COMPARE,
@@ -1817,7 +1821,7 @@ static const struct builtin {
     {"contents", BW_CONTENTS, 0}, {"take", BW_TAKE, 0},    {"skip", BW_SKIP, 1},
     {"take_last", BW_TAKE_LAST, 1}, {"skip_last", BW_SKIP_LAST, 1},
     {"starts_with", BW_STARTS_WITH, 1}, {"ends_with", BW_ENDS_WITH, 1}, {"contains", BW_CONTAINS, 1},
-    {"lookup", BW_LOOKUP, 0},   {"insert", BW_INSERT, 0},  {"remove", BW_REMOVE, 0},
+    {"lookup", BW_LOOKUP, 0},   {"insert", BW_INSERT, 0},  {"remove", BW_REMOVE, 0}, {"has", BW_HAS, 0},
     {"replace", BW_REPLACE, 1},  {"put", BW_PUT, 0},        {"peek", BW_PEEK, 0},
     {"alloc", BW_ALLOC, 0},     {"free", BW_FREE, 0},      {"is_alive", BW_IS_ALIVE, 0},
     {"count", BW_COUNT, 0},     {"any", BW_ANY, 0},        {"all", BW_ALL, 0},
@@ -3961,8 +3965,24 @@ static bool stem_begin(comp *c, uint8_t *kind, uint8_t *cur, uint8_t *lim, uint1
     *element = TY_INT;
     if (stem.type == TY_COLL) { // an array or list: an index and the length
         const globalsym *g = gsym(c, stem.value);
+        const bool pool_each = c->pool_each;
+        c->pool_each = false;
+        if (g->kind == GK_POOL) { // RFC-0038: a slot counter; the next live row is taken from it
+            if (!pool_each)
+                return type_error(c, "a pool is walked by each only");
+            if (!push_slot(c, TY_INT))
+                return false;
+            f->stack[f->depth - 1].hidden = true;
+            *kind = STEM_POOL;
+            *src = (uint16_t)stem.value;
+            *cur = (uint8_t)slot_of(c, f->depth - 1);
+            *lim = 0;
+            *count = 1;
+            *element = g->type;
+            return emit(c, PNX_ABX(PNX_LOADI, *cur, 0)) != NONE;
+        }
         if (g->kind != GK_ARRAY && g->kind != GK_LIST)
-            return type_error(c, "only an array or a list is a stem (not a queue, a pool, a buffer or an index)");
+            return type_error(c, "only an array, a list or a pool is a stem (not a queue, a buffer or an index)");
         if (!push_slot(c, TY_INT) || !push_slot(c, TY_INT))
             return false;
         f->stack[f->depth - 2].hidden = f->stack[f->depth - 1].hidden = true;
@@ -4029,7 +4049,8 @@ static bool stem_begin(comp *c, uint8_t *kind, uint8_t *cur, uint8_t *lim, uint1
 // Stems that hand out pieces of a string until none is left.
 static bool stem_takes(uint8_t kind) {
     return kind == STEM_WORDS || kind == STEM_LINES || kind == STEM_SPLIT || kind == STEM_SPLIT_BYTE ||
-           kind == STEM_CHARS || kind == STEM_PTN || kind == STEM_REX || kind == STEM_RSPLIT || kind == STEM_CSV;
+           kind == STEM_CHARS || kind == STEM_PTN || kind == STEM_REX || kind == STEM_RSPLIT || kind == STEM_CSV ||
+           kind == STEM_POOL;
 }
 
 // Takes the next piece into `reg`; the instruction after it runs when there is none.
@@ -4039,6 +4060,8 @@ static bool stem_take(comp *c, uint8_t kind, uint32_t reg, uint32_t src, uint32_
         return false;
     if (kind == STEM_REX || kind == STEM_RSPLIT)
         return emit(c, lim) != NONE;
+    if (kind == STEM_POOL) // the row into reg, from slot cur on; the pool in the second word
+        return emit(c, PNX_ABC(PNX_POOLNX, cur, reg, 0)) != NONE && emit(c, src) != NONE;
     return emit(c, kind == STEM_WORDS   ? PNX_ABC(PNX_SWORD, src, reg, 0)
                    : kind == STEM_CHARS ? PNX_ABC(PNX_SCHAR, src, reg, 0)
                    : kind == STEM_CSV   ? PNX_ABC(PNX_CNEXT, src, reg, 0)
@@ -4370,6 +4393,7 @@ static bool do_block(comp *c) {
         if (!has_stem)
             return error_at(c, PINAX_ERR_TYPE, at.line, at.column,
                             "this combining word needs a stem before its block (for example lo hi range)");
+        c->pool_each = use == USE_EACH;
         if (!stem_begin(c, &kind, &cur, &lim, &src, &hidden, &element))
             return false;
     } else {
@@ -5796,7 +5820,9 @@ static bool builtin(comp *c, const struct builtin *w) {
         uint32_t         ti;
         if (!need_coll(c, &t, &ti) || !need_coll(c, &g, &gi))
             return false;
-        if (t->record == NONE || (t->kind != GK_ARRAY && t->kind != GK_LIST) || (g->kind != GK_ARRAY && g->kind != GK_LIST) ||
+        // a list of rows of a pool (RFC-0038) too; the rows of a pool itself do not move
+        if (t->record == NONE || (t->kind != GK_ARRAY && t->kind != GK_LIST && !(t->kind == GK_POOL && is_row(g->type))) ||
+            (g->kind != GK_ARRAY && g->kind != GK_LIST) ||
             g->record != NONE || g->strcap || (base_of(c, g->type) != TY_INT && !is_row(g->type)))
             return type_error(c, "sort_by takes a list of rows or row numbers and a table of records: order table sort_by record.field");
         if (is_row(g->type) && row_global(g->type) != ti) // a list of rows (RFC-0031): of that table
@@ -6455,7 +6481,10 @@ static bool builtin(comp *c, const struct builtin *w) {
     }
     case BW_INSERT:
     case BW_REMOVE: { // row index insert : fails when the key is there already
-        if (!need_coll(c, &g, &gi) || !need(c, 1))
+        if (!need_coll(c, &g, &gi))
+            return false;
+        c->sink = w->id == BW_INSERT; // insert takes a row just taken from a pool over (RFC-0038)
+        if (!need(c, 1))
             return false;
         if (g->kind != GK_INDEX)
             return type_error(c, "this word takes a row and the name of an index: row by_name insert");
@@ -6464,10 +6493,29 @@ static bool builtin(comp *c, const struct builtin *w) {
         if (!settle(c, f->depth - 1))
             return false;
         ra = slot_of(c, f->depth - 1);
+        // an owned row is spent; when it does not go in, it goes back to its pool
+        const bool owned = w->id == BW_INSERT && give(c, f->depth - 1);
         --f->depth;
         if (w->id == BW_REMOVE)
             return emit(c, PNX_ABX(PNX_IXDEL, ra, gi)) != NONE && advance(c);
-        return settle_all(c) && emit(c, PNX_ABX(PNX_IXPUT, ra, gi)) != NONE && guard_op(c, TY_NONE);
+        return settle_all(c) && emit(c, PNX_ABX(owned ? PNX_IXPUTO : PNX_IXPUT, ra, gi)) != NONE &&
+               guard_op(c, TY_NONE);
+    }
+    case BW_HAS: { // key index has : is a row with that key in the index
+        if (!need_coll(c, &g, &gi) || !need(c, 1))
+            return false;
+        if (g->kind != GK_INDEX)
+            return type_error(c, "has takes a key and the name of an index: key by_name has");
+        const field *key = (const field *)c->fields.ptr + g->key;
+        if (f->stack[f->depth - 1].type != key->type)
+            return type_error(c, "the key has another type than the key field of the index");
+        if (!settle(c, f->depth - 1))
+            return false;
+        ra = slot_of(c, f->depth - 1);
+        --f->depth;
+        const uint32_t dst = top_slot(c, BANK_I, 1);
+        return emit_g_def(c, key->is_str ? PNX_IXHASS : PNX_IXHAS, dst, ra, gi, BANK_I) != NONE &&
+               push_slot(c, TY_BOOL) && advance(c);
     }
     case BW_PUSH: { // v names push : fails when the list is full
         if (!need_coll(c, &g, &gi) || !need(c, 1))
@@ -8111,7 +8159,7 @@ static bool declare_buffer(comp *c) {
 }
 
 // index NAME table record.field : finds rows of the table by that field
-static bool declare_index(comp *c) {
+static bool declare_index(comp *c, bool shared) {
     if (!advance(c))
         return false;
     if (c->tok.kind != PNX_T_NAME)
@@ -8125,8 +8173,10 @@ static bool declare_index(comp *c) {
         return false;
     g.table = c->tok.kind == PNX_T_NAME ? find_global(c, tok_name(c)) : NONE;
     const globalsym *table = g.table == NONE ? NULL : (const globalsym *)c->globals.ptr + g.table;
-    if (!table || table->record == NONE || table->forward || table->kind == GK_POOL)
-        return type_error(c, "an index belongs to a declared array or list of records");
+    if (!table || table->record == NONE || table->forward)
+        return type_error(c, "an index belongs to a declared array, list or pool of records");
+    if (shared && table->kind == GK_POOL) // RFC-0038: free writes the indexes over its pool
+        return type_error(c, "an index over a pool is not shared, as a pool is not");
     if (!advance(c))
         return false;
     if (c->tok.kind != PNX_T_PATH)
@@ -8639,7 +8689,7 @@ static bool compile(comp *c, image *im, bool *has_top) {
             const name shared_name = {c->lx->source + named.start, named.length};
             if (scalar ? !declare_global(c)
                 : bytes ? !declare_buffer(c)
-                : index ? !declare_index(c)
+                : index ? !declare_index(c, true)
                         : !declare_collection(c, list ? GK_LIST : GK_ARRAY))
                 return false;
             const uint32_t gi = find_global(c, shared_name);
@@ -8683,7 +8733,7 @@ static bool compile(comp *c, image *im, bool *has_top) {
             if (!declare_tasks(c))
                 return false;
         } else if (is_word(c, PNX_KW_index) && !c->top_fn->n_blocks) {
-            if (!declare_index(c))
+            if (!declare_index(c, false))
                 return false;
         } else if (is_word(c, PNX_KW_record) && !c->top_fn->n_blocks) {
             if (!declare_record(c))

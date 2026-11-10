@@ -77,7 +77,8 @@ a mark of the region. A processor checks at load that such a value is handed ove
 - #term("borrowing"): giving it to a word that takes the type without `owned` (`f file.write`); any number of times;
   the value stays;
 - #term("handing over"): giving it to a word that takes it `owned` (`f file.close`), storing it in a global or field,
-  or returning it as an `owned` result; after that the name is empty and cannot be read.]
+  putting a row just taken into an index over its pool (`insert`, 8.10 (3a)), or returning it as an `owned` result;
+  after that the name is empty and cannot be read.]
 
 #para("3")[An `owned` value is put into a local or handed over at once. It cannot be doubled with `dup` or discarded
 with `drop`. It shall be handed over on the paths of failures (`or_fail` `or_return`) and at `return` too.]

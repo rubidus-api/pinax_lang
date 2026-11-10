@@ -1,0 +1,25 @@
+rem run
+use io
+record user
+  name str(16)
+  age int
+end
+pool users user 4
+index by_name users user.name
+word add_user (name str, age int or fail)
+  users alloc or_fail to r
+  name r to user.name
+  age r to user.age
+  r by_name insert or_fail                rem hands the row over to the index
+end
+word forget (name str)
+  name by_name lookup or_else (e) return end to r
+  r users free                            rem out of by_name too
+end
+"kim" 30 add_user or_else (e) end
+"lee" 25 add_user or_else (e) end
+"kim" 41 add_user or_else (e) cat ("kim again: ", e err_text) io.println end
+cat ("kim: ", "kim" by_name has, ", park: ", "park" by_name has) io.println
+"kim" forget
+cat ("kim after free: ", "kim" by_name has) io.println
+users do (r users) cat (r user.name, " ", r user.age) io.println end each

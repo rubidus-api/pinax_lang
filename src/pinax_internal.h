@@ -137,7 +137,7 @@ typedef struct pnx_global {
 static inline bool pnx_writes_global(uint32_t op) {
     switch (op) {
     case PNX_SETG: case PNX_ASET: case PNX_ASETW: case PNX_GCLEAR: case PNX_LPUSH: case PNX_LPUSHS: case PNX_LPOP:
-    case PNX_LPOPS: case PNX_FSET: case PNX_FSETS: case PNX_ADDROW: case PNX_IXPUT: case PNX_IXDEL: case PNX_BCLEAR:
+    case PNX_LPOPS: case PNX_FSET: case PNX_FSETS: case PNX_ADDROW: case PNX_IXPUT: case PNX_IXPUTO: case PNX_IXDEL: case PNX_BCLEAR:
     case PNX_BPUT: case PNX_BPUTS: case PNX_BPUTW: case PNX_BPUTSW: case PNX_BCAT: case PNX_BCATI: case PNX_BENC:
     case PNX_BENCW: case PNX_BTRUNC: case PNX_JPUTI: case PNX_JPUTIW: case PNX_JPUTS: case PNX_JPUTSW: case PNX_CPUTS:
     case PNX_CPUTSW: case PNX_CPUTI: case PNX_CPUTIW: case PNX_LCOPYR: case PNX_QPUT: case PNX_QTAKE: case PNX_QWTAKE:

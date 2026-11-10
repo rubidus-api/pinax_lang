@@ -238,19 +238,31 @@ value    = literal | NAME ;                         (* NAME: a const, a row name
 
 #ex("spec", "08-pool.pnx")
 
+#para("3a")[`풀 do (r 풀) … end each` 는 풀에서 살아 있는 줄을 칸의 차례로 들른다. 얻은 차례가 아니다. 걷기가 닿기 전에
+블록 안에서 돌려준 줄은 들르지 않는다. 블록 안에서 얻은 줄은 그 칸이 뒤에 있으면 들른다. 풀을 걷는 조합 낱말(10.6)은
+`each` 하나뿐이다.]
+
 #part("제약")
 
 #para("4")[얻은 줄을 넣지도 돌려주지도 않는 경로가 있으면 거절된다.]
 #ex("spec", "08-pool-leak.pnx")
+
+#para("4a")[풀에 `each` 가 아닌 조합 낱말을 쓰면 거절된다.]
+#ex("spec", "08-pool-walk.pnx")
 
 #part("결함")
 
 #para("5")[돌려준 줄을 쓰면 결함 `stale` 이다. `pnx` 는 결함 아래에 그 낱말의 지역 변수를 함께 보인다.]
 #ex("spec", "08-pool-stale.pnx")
 
+#part("진단")
+#diag(
+  ([풀에 `each` 가 아닌 조합 낱말], "a pool is walked by each only"),
+)
+
 == 찾아보기 <decl-index>
 
-#para("1")[`index 이름 표 레코드.필드` 는 레코드의 표를 한 필드로 찾는 #term("찾아보기", en: "index")를
+#para("1")[`index 이름 표 레코드.필드` 는 레코드의 표(배열, 목록, 풀)를 한 필드로 찾는 #term("찾아보기", en: "index")를
 만든다. 키 필드는 `int` 이거나 `str(N)` 이다. 찾아보기는 표의 용량에 맞춘 고정 크기의 해시 표이고 줄의 번호만
 담는다. 자료는 표에 있다.]
 
@@ -258,14 +270,34 @@ value    = literal | NAME ;                         (* NAME: a const, a row name
 `줄 찾아보기 insert` 는 줄을 넣고(`or fail`, 같은 키가 이미 있으면 실패), `줄 찾아보기 remove` 는 뺀다.
 키 필드를 바꾸려면 빼고, 고치고, 다시 넣는다.]
 
+#para("2a")[`키 찾아보기 has` 는 그 키의 줄이 찾아보기에 있으면 `true`, 없으면 `false` 를 준다. 실패하지 않는다.]
+
 #para("3")[적재 때 `row` 로 적은 줄은 찾아보기에 들어 있다. 돌 때 `add_row` 로 더한 줄은 `insert` 해야
 찾아진다.]
 
 #ex("spec", "08-index.pnx")
 #ex("spec", "08-index-insert.pnx")
 
+#para("3a")[찾아보기의 표는 풀(8.9)일 수 있다. 그러면 `lookup` 은 줄을 지금 모습대로, 세대와 함께 준다. 돌려준 뒤의 줄을
+`insert` 나 `remove` 에 주면 결함 `stale` 이다. `free` 는 먼저 그 풀 위의 모든 찾아보기에서 줄을 뺀다. `alloc` 이 방금 준
+줄은 `insert` 에 넘겨준다(12.4). `insert` 가 실패하면 실패를 넘기기 전에 줄을 풀에 돌려준다.]
+
+#ex("spec", "08-index-pool.pnx")
+
 #para("4")[해시는 키가 있는 해시(SipHash-2-4)다. 키는 호스트가 준다(19.2). 밖에서 온 글을 키로 쓰는 호스트는
 무작위 키를 줘야 한다 --- 키를 아는 쪽은 충돌을 몰아 찾기를 느리게 만들 수 있다.]
+
+#part("제약")
+
+#para("5")[풀 위의 찾아보기는 풀처럼 `shared` 가 아니다(8.13).]
+#ex("spec", "08-index-pool-shared.pnx")
+
+#part("진단")
+#diag(
+  ([레코드의 배열, 목록, 풀이 아닌 표], "an index belongs to a declared array, list or pool of records"),
+  ([풀 위의 찾아보기 앞의 `shared`], "an index over a pool is not shared, as a pool is not"),
+  ([찾아보기가 아닌 것의 `has`], "has takes a key and the name of an index: key by_name has"),
+)
 
 == 앞선 선언 <decl-forward>
 

@@ -245,19 +245,32 @@ or global, or given to `free`. Once stored, the generation check guards it.]
 
 #ex("spec", "08-pool.pnx")
 
+#para("3a")[`POOL do (r POOL) … end each` visits the rows of the pool that are alive, in the order of their slots, not in
+the order they were taken. A row given back in the block before the walk reaches it is not visited; a row taken in the
+block is visited when its slot comes later. `each` is the only combining word (10.6) that walks a pool.]
+
 #part("Constraints")
 
 #para("4")[A path on which a taken row is neither stored nor given back is refused.]
 #ex("spec", "08-pool-leak.pnx")
+
+#para("4a")[A combining word other than `each` on a pool is refused.]
+#ex("spec", "08-pool-walk.pnx")
 
 #part("Faults")
 
 #para("5")[Using a row that was given back is the fault `stale`. `pnx` shows the locals of the word below the fault.]
 #ex("spec", "08-pool-stale.pnx")
 
+#part("Diagnostics")
+#diag(
+  ([A combining word other than `each` on a pool], "a pool is walked by each only"),
+)
+
 == Indexes <decl-index>
 
-#para("1")[`index NAME TABLE RECORD.FIELD` makes an #term("index") that finds rows of a table of records by one field.
+#para("1")[`index NAME TABLE RECORD.FIELD` makes an #term("index") that finds rows of a table of records (an array, a
+list or a pool) by one field.
 The key field is `int` or `str(N)`. An index is a hash table of fixed size, matched to the table's capacity, that holds
 only row numbers; the data stay in the table.]
 
@@ -265,14 +278,35 @@ only row numbers; the data stay in the table.]
 `row INDEX insert` puts a row in (`or fail`; it fails when the key is there already) and `row INDEX remove` takes it
 out. To change a key field, remove the row, change it and insert it again.]
 
+#para("2a")[`key INDEX has` gives `true` when a row with that key is in the index, else `false`. It does not fail.]
+
 #para("3")[Rows written with `row` at load are in the index. Rows added while running with `add_row` are found only
 after `insert`.]
 
 #ex("spec", "08-index.pnx")
 #ex("spec", "08-index-insert.pnx")
 
+#para("3a")[The table of an index may be a pool (8.9). Then `lookup` gives the row as it is now, with its generation; a row
+given to `insert` or `remove` after it was given back is the fault `stale`. `free` takes the row out of every index over
+its pool first. A row `alloc` has just given is handed over to `insert` (12.4): when `insert` fails, the row goes back to
+the pool before the failure passes on.]
+
+#ex("spec", "08-index-pool.pnx")
+
 #para("4")[The hash is keyed (SipHash-2-4); the host gives the key (19.2). A host that indexes text from outside should
 give a random key: whoever knows the key can pile up collisions and make lookups slow.]
+
+#part("Constraints")
+
+#para("5")[An index over a pool is not `shared` (8.13), as a pool is not.]
+#ex("spec", "08-index-pool-shared.pnx")
+
+#part("Diagnostics")
+#diag(
+  ([A table that is no array, list or pool of records], "an index belongs to a declared array, list or pool of records"),
+  ([`shared` before an index over a pool], "an index over a pool is not shared, as a pool is not"),
+  ([`has` on what is not an index], "has takes a key and the name of an index: key by_name has"),
+)
 
 == Forward declarations <decl-forward>
 

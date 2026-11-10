@@ -75,7 +75,13 @@ enum {
 // the last n (as many as there are; a negative n is a fault). SPRE, SSUF, SHAS give 1 when the
 // second string starts, ends or occurs in the first.
 // IXGET and IXGETS find the row with an int or str key in an index (fail when there is none);
-// IXPUT enters a row (fails when its key is there already); IXDEL takes a row out.
+// IXPUT enters a row (fails when its key is there already); IXDEL takes a row out. The table of an
+// index may be a pool (RFC-0038): the index holds slot numbers, IXGET gives the row with its slot's
+// generation, IXPUT and IXDEL check the row's generation, and PFREE takes the row out of every index
+// over its pool first. IXHAS and IXHASS give 1 when a row with the key is in the index. IXPUTO is
+// IXPUT of a row just taken from a pool: when it fails, the row is given back first. POOLNX takes the
+// next live row of the pool in the second word into R[B], from slot R[A] on, and moves R[A] past it
+// (fails, so the next word runs, when none is left).
 // SREPL A, B, C and a second word X: the string in S[B] with every S[C] replaced by S[X], built
 // in the region.
 // dec(N) (RFC-0019): DRESC A, B, C is R[B] divided by 10^C, rounded half away from zero (C 1
@@ -357,7 +363,14 @@ enum {
     X(RCATD, 0xf1, PNX_K_S, PNX_K_I, PNX_K_IMM, PNX_F_ABC, PNX_X_NONE, 0, "mr-") \
     X(STODEC, 0xf2, PNX_K_I, PNX_K_S, PNX_K_IMM, PNX_F_ABC, PNX_X_NONE, 1, "wr-") \
     X(SORT, 0xf5, PNX_K_IMM, PNX_K_NONE, PNX_K_NONE, PNX_F_GLOBAL, PNX_X_NONE, 0, "---") \
-    X(SORTBY, 0xf6, PNX_K_IMM, PNX_K_NONE, PNX_K_NONE, PNX_F_GLOBAL, PNX_X_FIELD, 0, "---")
+    X(SORTBY, 0xf6, PNX_K_IMM, PNX_K_NONE, PNX_K_NONE, PNX_F_GLOBAL, PNX_X_FIELD, 0, "---") \
+    /* RFC-0038: membership in an index, insert of an owned row, the walk over a pool */ \
+    X(IXHAS, 0xf7, PNX_K_I, PNX_K_I, PNX_K_G, PNX_F_ABC, PNX_X_NONE, 0, "wr-") \
+    X(IXHASS, 0xf8, PNX_K_I, PNX_K_S, PNX_K_G, PNX_F_ABC, PNX_X_NONE, 0, "wr-") \
+    X(IXHASW, 0xf9, PNX_K_I, PNX_K_I, PNX_K_NONE, PNX_F_ABC, PNX_X_GLOBAL, 0, "wr-") \
+    X(IXHASSW, 0xfa, PNX_K_I, PNX_K_S, PNX_K_NONE, PNX_F_ABC, PNX_X_GLOBAL, 0, "wr-") \
+    X(IXPUTO, 0xfb, PNX_K_I, PNX_K_NONE, PNX_K_NONE, PNX_F_GLOBAL, PNX_X_NONE, 1, "r--") \
+    X(POOLNX, 0xfc, PNX_K_I, PNX_K_I, PNX_K_NONE, PNX_F_ABC, PNX_X_GLOBAL, 1, "mw-")
 
 enum {
 #define PNX_ENUM(name, number, a, b, c, shape, second, fails, roles) PNX_##name = number,

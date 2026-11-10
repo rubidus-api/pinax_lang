@@ -597,7 +597,7 @@ static const char *sort_check(const pinax_state *st, const uint32_t *code, uint3
         const uint32_t table = x & 0xfffu, offset = (x >> 12) & 0xfffu, extra = x >> 24;
         const uint32_t tkind = sx ? gsel_kind : st->globals[table].kind, telem = sx ? gsel_elem : st->globals[table].elem_bytes;
         const bool is_text = (flags & PNX_SORT_STR) != 0;
-        if (tkind != PNX_G_TABLE && tkind != PNX_G_ROWS)
+        if (tkind != PNX_G_TABLE && tkind != PNX_G_ROWS && !(tkind == PNX_G_POOL && (flags & PNX_SORT_ROWS)))
             return "code: a sort by a field of a global that holds no rows";
         if (!is_text && extra >= PNX_W_COUNT)
             return "code: unknown field width";
@@ -712,7 +712,8 @@ static const char *check_word(const pinax_state *st, uint32_t index, span range,
         case PNX_PALLOC: case PNX_PFREE: want = PNX_G_POOL; global = bx; break;
         case PNX_PALIVE: want = PNX_G_POOL; global = c; break;
         case PNX_IXPUT: case PNX_IXDEL: want = PNX_G_INDEX; global = bx; break;
-        case PNX_IXGET: case PNX_IXGETS: want = PNX_G_INDEX; global = c; break;
+        case PNX_IXPUTO: want = PNX_G_INDEX; global = bx; break; // an index over a pool, below
+        case PNX_IXGET: case PNX_IXGETS: case PNX_IXHAS: case PNX_IXHASS: want = PNX_G_INDEX; global = c; break;
         case PNX_LPUSH: case PNX_LPOP: want = PNX_G_LIST; global = bx; break;
         case PNX_LPUSHS: case PNX_LPOPS: want = PNX_G_ROWS; global = bx; break;
         case PNX_TSPAWN: case PNX_TRESUME: case PNX_TDONE: want = PNX_G_TASKS; global = c; break;
@@ -745,7 +746,8 @@ static const char *check_word(const pinax_state *st, uint32_t index, span range,
             case PNX_AGETW: case PNX_ASETW: want = PNX_G_ARRAY; break;
             case PNX_ROWW: want = PNX_G_TABLE; break;
             case PNX_PALIVEW: want = PNX_G_POOL; break;
-            case PNX_IXGETW: case PNX_IXGETSW: want = PNX_G_INDEX; break;
+            case PNX_IXGETW: case PNX_IXGETSW: case PNX_IXHASW: case PNX_IXHASSW: want = PNX_G_INDEX; break;
+            case PNX_POOLNX: want = PNX_G_POOL; break;
             case PNX_BPUTW: case PNX_BPUTSW: case PNX_BENCW: case PNX_JPUTIW: case PNX_JPUTSW: case PNX_CPUTSW:
             case PNX_CPUTIW: want = PNX_G_BUFFER; break;
             default: want = PNX_G_TASKS; break; // TSPAWNW TRESUMEW TDONEW
@@ -780,8 +782,12 @@ static const char *check_word(const pinax_state *st, uint32_t index, span range,
                 return "code: a shared global is written";
             if (selected && (want == PNX_G_INDEX || want == PNX_G_POOL || want == PNX_G_TASKS))
                 return "code: this global cannot be chosen by a reference";
-            if (((op == PNX_IXGET || op == PNX_IXGETW) && st->globals[global].key_is_str) ||
-                ((op == PNX_IXGETS || op == PNX_IXGETSW) && !st->globals[global].key_is_str))
+            if (op == PNX_IXPUTO && st->globals[st->globals[global].key & 0xfffu].kind != PNX_G_POOL)
+                return "code: a row given back to a pool the index is not over";
+            if (((op == PNX_IXGET || op == PNX_IXGETW || op == PNX_IXHAS || op == PNX_IXHASW) &&
+                 st->globals[global].key_is_str) ||
+                ((op == PNX_IXGETS || op == PNX_IXGETSW || op == PNX_IXHASS || op == PNX_IXHASSW) &&
+                 !st->globals[global].key_is_str))
                 return "code: key of the wrong kind for this index";
         }
         if (sorts) { // RFC-0030: what is sorted, by what, and room for it in the work area
@@ -1971,7 +1977,9 @@ pinax_err pnx_load_container(pinax_state *st, pinax_str bytecode) {
                            extra = rec->elem_bytes >> 24;
             const uint32_t is_str = rec->reserved & 1u;
             if ((rec->capacity & (rec->capacity - 1)) != 0 || table >= k || (rec->reserved & ~5u) ||
-                (st->globals[table].kind != PNX_G_TABLE && st->globals[table].kind != PNX_G_ROWS) ||
+                (st->globals[table].kind != PNX_G_TABLE && st->globals[table].kind != PNX_G_ROWS &&
+                 st->globals[table].kind != PNX_G_POOL) || // a pool since RFC-0038, never shared
+                (st->globals[table].kind == PNX_G_POOL && (rec->reserved & 4u)) ||
                 (!is_str && extra >= PNX_W_COUNT) ||
                 offset + (is_str ? 1u + extra : width_bytes[extra]) > st->globals[table].elem_bytes)
                 goto rollback;
@@ -2050,6 +2058,8 @@ pinax_err pnx_load_container(pinax_state *st, pinax_str bytecode) {
             g->head = g->capacity - 1; // run_all takes the slot after the one it took last: slot 0 first
         }
         if (rec->kind == PNX_G_INDEX) {
+            if (st->globals[rec->elem_bytes & 0xfffu].kind == PNX_G_POOL)
+                st->globals[rec->elem_bytes & 0xfffu].key = 1; // free looks for the indexes over it
             g->key = rec->elem_bytes;
             g->key_is_str = (rec->reserved & 1u) != 0;
             g->elem_bytes = 4;

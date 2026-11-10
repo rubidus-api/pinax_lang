@@ -1,0 +1,6 @@
+rem refused
+record user
+  age int
+end
+pool users user 4
+shared index by_age users user.age

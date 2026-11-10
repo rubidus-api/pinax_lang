@@ -78,6 +78,21 @@ with `not_found` when there is none). Rows written with `row` are in it from the
 after `insert`, as `register` above does. When the key is there already, `insert` fails and the row added with `add_row`
 stays in the list --- so it is cleaner to `lookup` the key first and add after.]
 
+An index may also be over a pool. Then a store can both find its rows by key and give rows back: `free` takes the row
+out of every index over its pool, so a key given back is not found any more, and its slot is taken again by the next
+`alloc`. `key INDEX has` asks whether a key is there, without failing. A pool is walked with `each`, which visits the
+rows alive, in the order of their slots; to read them in another order, push them into a list of rows and sort that.
+
+#ex("manual", "07-pool-index.pnx")
+
+#mistake[After `insert` the local still holds the new row][It does not. A row `alloc` has just given is owned, and
+`insert` takes it over as storing it in a field does: when the key is there already, `insert` gives the row back to the
+pool and fails, so nothing is lost. Fill the row before `insert`, and find it again by its key afterwards, as
+`count_in` above does.
+
+#ex("manual", "07-pool-insert-gone.pnx")
+]
+
 #qa[Can a row of one table go into another table?][No. The type of a row is the name of its table. A row of `cart`
 is used with `cart` only; given to a field or a list of another table it is refused as the wrong type. To move a row
 between two tables of the same record, read the fields one by one into a new row, or copy with `filter_into`
@@ -110,4 +125,6 @@ backwards would reverse them.]
 - A row is a number checked on every use; a field of the none row is a fault (8.8).
 - A row of a pool is handed over once; a row given back is a fault (8.9, 12.4).
 - An index holds the rows of `row`; rows added while running are `insert`ed (8.10).
+- An index may be over a pool: `insert` takes over a row just taken, `free` takes a row out of the indexes, `has` asks
+  for a key, and `each` walks the live rows (8.9, 8.10).
 ]

@@ -1,0 +1,8 @@
+rem refused
+record node
+  value int
+end
+pool nodes node 4
+word live (gives n int)
+  nodes do (r nodes) true end count
+end

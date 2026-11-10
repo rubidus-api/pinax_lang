@@ -1,0 +1,35 @@
+rem run
+use io
+record item
+  name str(12)
+  count int
+end
+pool items item 3
+index by_name items item.name
+list order items 3
+word count_in (name str or fail)
+  name by_name has not if
+    items alloc or_fail to r              rem a free row: three at most
+    name r to item.name
+    r by_name insert or_fail              rem the index keeps it now
+  end
+  name by_name lookup or_fail to r
+  r item.count 1 add r to item.count
+end
+word drop_out (name str)
+  name by_name lookup or_else (e) return end items free
+end
+word show ()
+  order clear
+  items do (r items) r order push or_else (e) end end each
+  order items sort_by item.name
+  order do (r items) cat (r item.name, " ", r item.count) io.println end each
+end
+"pear" count_in or_else (e) end
+"fig" count_in or_else (e) end
+"pear" count_in or_else (e) end
+"plum" count_in or_else (e) end
+"kiwi" count_in or_else (e) cat ("kiwi: ", e err_text) io.println end
+"fig" drop_out
+"kiwi" count_in or_else (e) end           rem the row fig gave back
+show

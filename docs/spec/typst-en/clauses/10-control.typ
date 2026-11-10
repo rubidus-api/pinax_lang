@@ -153,7 +153,8 @@ shows both forms of (2a).]
 combining word right after it shall take it. Together they make one loop. These make stems:
 #table(columns: (auto, 1fr), inset: 5pt, stroke: 0.5pt + luma(170),
   [*Stem*], [*Elements*],
-  [the name of an array or list], [the cells' values (rows, for records); a list up to its length. Queues, pools, buffers and indexes are not stems],
+  [the name of an array or list], [the cells' values (rows, for records); a list up to its length. Queues, buffers and indexes are not stems],
+  [the name of a pool], [its live rows, in the order of their slots; for `each` only (8.9 (3a))],
   [`lo hi range`], [the `int`s from `lo` up to but not including `hi`],
   [`s sep str.split`, `s str.lines`, `s str.words`, `s str.chars`], [`str` views (16.1); `chars` one UTF-8 character each],
   [`s str.bytes`], [`u8`: the bytes (16.1)],
@@ -241,7 +242,7 @@ the value can still be lent.]
   ([An expanded block changes the stack], "this block must leave the stack as it found it"),
   ([`return` outside a definition], "return belongs inside a definition"),
   ([A branch value that is not a constant], "a case value is a literal or the name of a const"),
-  ([A combining word on something that is not a stem], "only an array or a list is a stem (not a queue, a pool, a buffer or an index)"),
+  ([A combining word on something that is not a stem], "only an array, a list or a pool is a stem (not a queue, a buffer or an index)"),
   ([`defer` in a branch], "defer is written right in a word's body, a loop's body or a do block, not in a branch"),
   ([`defer` outside a definition], "defer belongs inside a definition"),
   ([Deferred code changes the stack], "a defer leaves the stack as it found it"),
