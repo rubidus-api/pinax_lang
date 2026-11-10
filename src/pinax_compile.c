@@ -3959,14 +3959,14 @@ static bool found_or_fail(comp *c, tid type, uint32_t value, uint32_t flag);
 static bool stem_begin(comp *c, uint8_t *kind, uint8_t *cur, uint8_t *lim, uint16_t *src, uint8_t *count,
                        tid *element) {
     fn *f = c->f;
+    const bool pool_each = c->pool_each; // set for this stem only, by the each of stem_block
+    c->pool_each = false;
     const entry stem = f->stack[--f->depth];
     *kind = stem.op;
     *src = 0;
     *element = TY_INT;
     if (stem.type == TY_COLL) { // an array or list: an index and the length
         const globalsym *g = gsym(c, stem.value);
-        const bool pool_each = c->pool_each;
-        c->pool_each = false;
         if (g->kind == GK_POOL) { // RFC-0038: a slot counter; the next live row is taken from it
             if (!pool_each)
                 return type_error(c, "a pool is walked by each only");

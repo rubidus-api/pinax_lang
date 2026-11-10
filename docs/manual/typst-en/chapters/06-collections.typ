@@ -75,8 +75,8 @@ In a `queue`, what goes in first comes out first. `put` puts in, `take` takes ou
 
 #ex("manual", "06-queue.pnx")
 
-#mistake[A queue can be walked with `each` too][Only arrays and lists are stems. Queues, pools, buffers and indexes are
-not. To handle the elements of a queue in order, call `take` in a loop.
+#mistake[A queue can be walked with `each` too][Only arrays and lists are stems, and a pool for `each` alone (chapter 7).
+Queues, buffers and indexes are not. To handle the elements of a queue in order, call `take` in a loop.
 #ex("manual", "06-queue-stem.pnx")]
 
 == Filtering and mapping into a place
