@@ -231,7 +231,7 @@ demo <span style="color: #d73948">or_else</span> (e) <span style="color: #198810
 </code></pre><p class="ex-label">출력</p><pre><code data-lang="text">$ pnx 08-pool.pnx
 value 7, alive: true
 alive after free: false
-</code></pre></div><h5>제약</h5><p class="para"><span class="pn">(4)</span> 얻은 줄을 넣지도 돌려주지도 않는 경로가 있으면 거절된다.</p><div class="example refused"><p class="ex-file"><code>08-pool-leak.pnx</code></p><pre><code data-lang="pinax"><span style="color: #d73948">record</span> node
+</code></pre></div><p class="para"><span class="pn">(3a)</span> <code>풀 do (r 풀) … end each</code> 는 풀에서 살아 있는 줄을 칸의 차례로 들른다. 얻은 차례가 아니다. 걷기가 닿기 전에 블록 안에서 돌려준 줄은 들르지 않는다. 블록 안에서 얻은 줄은 그 칸이 뒤에 있으면 들른다. 풀을 걷는 조합 낱말(10.6)은 <code>each</code> 하나뿐이다.</p><h5>제약</h5><p class="para"><span class="pn">(4)</span> 얻은 줄을 넣지도 돌려주지도 않는 경로가 있으면 거절된다.</p><div class="example refused"><p class="ex-file"><code>08-pool-leak.pnx</code></p><pre><code data-lang="pinax"><span style="color: #d73948">record</span> node
   value <span style="color: #d73948">int</span>
 <span style="color: #d73948">end</span>
 <span style="color: #d73948">pool</span> nodes node <span style="color: #b60157">2</span>
@@ -241,6 +241,15 @@ alive after free: false
 <span style="color: #d73948">end</span>
 </code></pre><p class="ex-label">거절</p><pre><code data-lang="text">$ pnx 08-pool-leak.pnx
 08-pool-leak.pnx:8:1: an owned value in a local is not given on every path (close, free or store it)
+</code></pre></div><p class="para"><span class="pn">(4a)</span> 풀에 <code>each</code> 가 아닌 조합 낱말을 쓰면 거절된다.</p><div class="example refused"><p class="ex-file"><code>08-pool-walk.pnx</code></p><pre><code data-lang="pinax"><span style="color: #d73948">record</span> node
+  value <span style="color: #d73948">int</span>
+<span style="color: #d73948">end</span>
+<span style="color: #d73948">pool</span> nodes node <span style="color: #b60157">4</span>
+<span style="color: #d73948">word</span> live (<span style="color: #d73948">gives</span> n <span style="color: #d73948">int</span>)
+  nodes <span style="color: #d73948">do</span> (r nodes) <span style="color: #d73948">true</span> <span style="color: #d73948">end</span> count
+<span style="color: #d73948">end</span>
+</code></pre><p class="ex-label">거절</p><pre><code data-lang="text">$ pnx 08-pool-walk.pnx
+08-pool-walk.pnx:6:22: a pool is walked by each only
 </code></pre></div><h5>결함</h5><p class="para"><span class="pn">(5)</span> 돌려준 줄을 쓰면 결함 <code>stale</code> 이다. <code>pnx</code> 는 결함 아래에 그 낱말의 지역 변수를 함께 보인다.</p><div class="example fault"><p class="ex-file"><code>08-pool-stale.pnx</code></p><pre><code data-lang="pinax"><span style="color: #d73948">record</span> node
   value <span style="color: #d73948">int</span>
 <span style="color: #d73948">end</span>
@@ -256,7 +265,7 @@ demo <span style="color: #d73948">or_else</span> (e) <span style="color: #d73948
 </code></pre><p class="ex-label">결함으로 멈춤</p><pre><code data-lang="text">$ pnx 08-pool-stale.pnx
 08-pool-stale.pnx:10: a row or handle was used after it was given back
   a nodes = 4294967297
-</code></pre></div><h3>8.10 찾아보기</h3><p class="para"><span class="pn">(1)</span> <code>index 이름 표 레코드.필드</code> 는 레코드의 표를 한 필드로 찾는 <strong>찾아보기</strong>(index)를 만든다. 키 필드는 <code>int</code> 이거나 <code>str(N)</code> 이다. 찾아보기는 표의 용량에 맞춘 고정 크기의 해시 표이고 줄의 번호만 담는다. 자료는 표에 있다.</p><p class="para"><span class="pn">(2)</span> <code>키 찾아보기 lookup</code> 은 그 키의 줄을 준다(<code>or fail</code>, 없으면 <code>err.not_found</code>). <code>줄 찾아보기 insert</code> 는 줄을 넣고(<code>or fail</code>, 같은 키가 이미 있으면 실패), <code>줄 찾아보기 remove</code> 는 뺀다. 키 필드를 바꾸려면 빼고, 고치고, 다시 넣는다.</p><p class="para"><span class="pn">(3)</span> 적재 때 <code>row</code> 로 적은 줄은 찾아보기에 들어 있다. 돌 때 <code>add_row</code> 로 더한 줄은 <code>insert</code> 해야 찾아진다.</p><div class="example run"><p class="ex-file"><code>08-index.pnx</code></p><pre><code data-lang="pinax"><span style="color: #d73948">use</span> io
+</code></pre></div><h5>진단</h5><table><thead><tr><th><strong>조건</strong></th><th><strong>메시지</strong></th></tr></thead><tbody><tr><td>풀에 <code>each</code> 가 아닌 조합 낱말</td><td><code>a pool is walked by each only</code></td></tr></tbody></table><h3>8.10 찾아보기</h3><p class="para"><span class="pn">(1)</span> <code>index 이름 표 레코드.필드</code> 는 레코드의 표(배열, 목록, 풀)를 한 필드로 찾는 <strong>찾아보기</strong>(index)를 만든다. 키 필드는 <code>int</code> 이거나 <code>str(N)</code> 이다. 찾아보기는 표의 용량에 맞춘 고정 크기의 해시 표이고 줄의 번호만 담는다. 자료는 표에 있다.</p><p class="para"><span class="pn">(2)</span> <code>키 찾아보기 lookup</code> 은 그 키의 줄을 준다(<code>or fail</code>, 없으면 <code>err.not_found</code>). <code>줄 찾아보기 insert</code> 는 줄을 넣고(<code>or fail</code>, 같은 키가 이미 있으면 실패), <code>줄 찾아보기 remove</code> 는 뺀다. 키 필드를 바꾸려면 빼고, 고치고, 다시 넣는다.</p><p class="para"><span class="pn">(2a)</span> <code>키 찾아보기 has</code> 는 그 키의 줄이 찾아보기에 있으면 <code>true</code>, 없으면 <code>false</code> 를 준다. 실패하지 않는다.</p><p class="para"><span class="pn">(3)</span> 적재 때 <code>row</code> 로 적은 줄은 찾아보기에 들어 있다. 돌 때 <code>add_row</code> 로 더한 줄은 <code>insert</code> 해야 찾아진다.</p><div class="example run"><p class="ex-file"><code>08-index.pnx</code></p><pre><code data-lang="pinax"><span style="color: #d73948">use</span> io
 <span style="color: #d73948">use</span> <span style="color: #d73948">str</span>
 <span style="color: #d73948">record</span> user
   name <span style="color: #d73948">str</span>(<span style="color: #b60157">16</span>)
@@ -294,7 +303,43 @@ demo <span style="color: #d73948">or_else</span> (e) <span style="color: #d73948
 </code></pre><p class="ex-label">출력</p><pre><code data-lang="text">$ pnx 08-index-insert.pnx
 30
 -1
-</code></pre></div><p class="para"><span class="pn">(4)</span> 해시는 키가 있는 해시(SipHash-2-4)다. 키는 호스트가 준다(19.2). 밖에서 온 글을 키로 쓰는 호스트는 무작위 키를 줘야 한다 — 키를 아는 쪽은 충돌을 몰아 찾기를 느리게 만들 수 있다.</p><h3>8.11 앞선 선언</h3><h5>구문</h5><pre><code data-lang="ebnf">forward = "forward" ( "array" | "list" | "pool" ) NAME
+</code></pre></div><p class="para"><span class="pn">(3a)</span> 찾아보기의 표는 풀(8.9)일 수 있다. 그러면 <code>lookup</code> 은 줄을 지금 모습대로, 세대와 함께 준다. 돌려준 뒤의 줄을 <code>insert</code> 나 <code>remove</code> 에 주면 결함 <code>stale</code> 이다. <code>free</code> 는 먼저 그 풀 위의 모든 찾아보기에서 줄을 뺀다. <code>alloc</code> 이 방금 준 줄은 <code>insert</code> 에 넘겨준다(12.4). <code>insert</code> 가 실패하면 실패를 넘기기 전에 줄을 풀에 돌려준다.</p><div class="example run"><p class="ex-file"><code>08-index-pool.pnx</code></p><pre><code data-lang="pinax"><span style="color: #d73948">use</span> io
+<span style="color: #d73948">record</span> user
+  name <span style="color: #d73948">str</span>(<span style="color: #b60157">16</span>)
+  age <span style="color: #d73948">int</span>
+<span style="color: #d73948">end</span>
+<span style="color: #d73948">pool</span> users user <span style="color: #b60157">4</span>
+<span style="color: #d73948">index</span> by_name users user.name
+<span style="color: #d73948">word</span> add_user (name <span style="color: #d73948">str</span>, age <span style="color: #d73948">int</span> <span style="color: #d73948">or</span> <span style="color: #d73948">fail</span>)
+  users alloc <span style="color: #d73948">or_fail</span> <span style="color: #d73948">to</span> r
+  name r <span style="color: #d73948">to</span> user.name
+  age r <span style="color: #d73948">to</span> user.age
+  r by_name insert <span style="color: #d73948">or_fail</span>                <span style="color: #74747c">rem hands the row over to the index</span>
+<span style="color: #d73948">end</span>
+<span style="color: #d73948">word</span> forget (name <span style="color: #d73948">str</span>)
+  name by_name lookup <span style="color: #d73948">or_else</span> (e) <span style="color: #d73948">return</span> <span style="color: #d73948">end</span> <span style="color: #d73948">to</span> r
+  r users free                            <span style="color: #74747c">rem out of by_name too</span>
+<span style="color: #d73948">end</span>
+<span style="color: #198810">"kim"</span> <span style="color: #b60157">30</span> add_user <span style="color: #d73948">or_else</span> (e) <span style="color: #d73948">end</span>
+<span style="color: #198810">"lee"</span> <span style="color: #b60157">25</span> add_user <span style="color: #d73948">or_else</span> (e) <span style="color: #d73948">end</span>
+<span style="color: #198810">"kim"</span> <span style="color: #b60157">41</span> add_user <span style="color: #d73948">or_else</span> (e) <span style="color: #d73948">cat</span> (<span style="color: #198810">"kim again: "</span>, e err_text) io.println <span style="color: #d73948">end</span>
+<span style="color: #d73948">cat</span> (<span style="color: #198810">"kim: "</span>, <span style="color: #198810">"kim"</span> by_name has, <span style="color: #198810">", park: "</span>, <span style="color: #198810">"park"</span> by_name has) io.println
+<span style="color: #198810">"kim"</span> forget
+<span style="color: #d73948">cat</span> (<span style="color: #198810">"kim after free: "</span>, <span style="color: #198810">"kim"</span> by_name has) io.println
+users <span style="color: #d73948">do</span> (r users) <span style="color: #d73948">cat</span> (r user.name, <span style="color: #198810">" "</span>, r user.age) io.println <span style="color: #d73948">end</span> each
+</code></pre><p class="ex-label">출력</p><pre><code data-lang="text">$ pnx 08-index-pool.pnx
+kim again: failed
+kim: true, park: false
+kim after free: false
+lee 25
+</code></pre></div><p class="para"><span class="pn">(4)</span> 해시는 키가 있는 해시(SipHash-2-4)다. 키는 호스트가 준다(19.2). 밖에서 온 글을 키로 쓰는 호스트는 무작위 키를 줘야 한다 — 키를 아는 쪽은 충돌을 몰아 찾기를 느리게 만들 수 있다.</p><h5>제약</h5><p class="para"><span class="pn">(5)</span> 풀 위의 찾아보기는 풀처럼 <code>shared</code> 가 아니다(8.13).</p><div class="example refused"><p class="ex-file"><code>08-index-pool-shared.pnx</code></p><pre><code data-lang="pinax"><span style="color: #d73948">record</span> user
+  age <span style="color: #d73948">int</span>
+<span style="color: #d73948">end</span>
+<span style="color: #d73948">pool</span> users user <span style="color: #b60157">4</span>
+<span style="color: #d73948">shared</span> <span style="color: #d73948">index</span> by_age users user.age
+</code></pre><p class="ex-label">거절</p><pre><code data-lang="text">$ pnx 08-index-pool-shared.pnx
+08-index-pool-shared.pnx:5:21: an index over a pool is not shared, as a pool is not
+</code></pre></div><h5>진단</h5><table><thead><tr><th><strong>조건</strong></th><th><strong>메시지</strong></th></tr></thead><tbody><tr><td>레코드의 배열, 목록, 풀이 아닌 표</td><td><code>an index belongs to a declared array, list or pool of records</code></td></tr><tr><td>풀 위의 찾아보기 앞의 <code>shared</code></td><td><code>an index over a pool is not shared, as a pool is not</code></td></tr><tr><td>찾아보기가 아닌 것의 <code>has</code></td><td><code>has takes a key and the name of an index: key by_name has</code></td></tr></tbody></table><h3>8.11 앞선 선언</h3><h5>구문</h5><pre><code data-lang="ebnf">forward = "forward" ( "array" | "list" | "pool" ) NAME
         | "forward" "word" NAME "(" effect ")" ;</code></pre><p class="para"><span class="pn">(1)</span> <code>forward list 이름</code> 은 뒤에서 선언할 표를 미리 알린다. 레코드가 자기를 담을 표의 줄을 필드로 가질 때 쓴다. 미리 알린 표의 이름은 타입 자리에만 쓴다. <code>forward word</code> 는 9.7 이 정한다.</p><div class="example run"><p class="ex-file"><code>08-forward.pnx</code></p><pre><code data-lang="pinax"><span style="color: #d73948">use</span> io
 <span style="color: #d73948">use</span> <span style="color: #d73948">str</span>
 <span style="color: #d73948">forward</span> <span style="color: #d73948">list</span> nodes                         <span style="color: #74747c">rem the record below points into this list</span>

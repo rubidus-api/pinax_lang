@@ -231,7 +231,7 @@ demo <span style="color: #d73948">or_else</span> (e) <span style="color: #198810
 </code></pre><p class="ex-label">Output</p><pre><code data-lang="text">$ pnx 08-pool.pnx
 value 7, alive: true
 alive after free: false
-</code></pre></div><h5>Constraints</h5><p class="para"><span class="pn">(4)</span> A path on which a taken row is neither stored nor given back is refused.</p><div class="example refused"><p class="ex-file"><code>08-pool-leak.pnx</code></p><pre><code data-lang="pinax"><span style="color: #d73948">record</span> node
+</code></pre></div><p class="para"><span class="pn">(3a)</span> <code>POOL do (r POOL) … end each</code> visits the rows of the pool that are alive, in the order of their slots, not in the order they were taken. A row given back in the block before the walk reaches it is not visited; a row taken in the block is visited when its slot comes later. <code>each</code> is the only combining word (10.6) that walks a pool.</p><h5>Constraints</h5><p class="para"><span class="pn">(4)</span> A path on which a taken row is neither stored nor given back is refused.</p><div class="example refused"><p class="ex-file"><code>08-pool-leak.pnx</code></p><pre><code data-lang="pinax"><span style="color: #d73948">record</span> node
   value <span style="color: #d73948">int</span>
 <span style="color: #d73948">end</span>
 <span style="color: #d73948">pool</span> nodes node <span style="color: #b60157">2</span>
@@ -241,6 +241,15 @@ alive after free: false
 <span style="color: #d73948">end</span>
 </code></pre><p class="ex-label">Refused</p><pre><code data-lang="text">$ pnx 08-pool-leak.pnx
 08-pool-leak.pnx:8:1: an owned value in a local is not given on every path (close, free or store it)
+</code></pre></div><p class="para"><span class="pn">(4a)</span> A combining word other than <code>each</code> on a pool is refused.</p><div class="example refused"><p class="ex-file"><code>08-pool-walk.pnx</code></p><pre><code data-lang="pinax"><span style="color: #d73948">record</span> node
+  value <span style="color: #d73948">int</span>
+<span style="color: #d73948">end</span>
+<span style="color: #d73948">pool</span> nodes node <span style="color: #b60157">4</span>
+<span style="color: #d73948">word</span> live (<span style="color: #d73948">gives</span> n <span style="color: #d73948">int</span>)
+  nodes <span style="color: #d73948">do</span> (r nodes) <span style="color: #d73948">true</span> <span style="color: #d73948">end</span> count
+<span style="color: #d73948">end</span>
+</code></pre><p class="ex-label">Refused</p><pre><code data-lang="text">$ pnx 08-pool-walk.pnx
+08-pool-walk.pnx:6:22: a pool is walked by each only
 </code></pre></div><h5>Faults</h5><p class="para"><span class="pn">(5)</span> Using a row that was given back is the fault <code>stale</code>. <code>pnx</code> shows the locals of the word below the fault.</p><div class="example fault"><p class="ex-file"><code>08-pool-stale.pnx</code></p><pre><code data-lang="pinax"><span style="color: #d73948">record</span> node
   value <span style="color: #d73948">int</span>
 <span style="color: #d73948">end</span>
@@ -256,7 +265,7 @@ demo <span style="color: #d73948">or_else</span> (e) <span style="color: #d73948
 </code></pre><p class="ex-label">Fault</p><pre><code data-lang="text">$ pnx 08-pool-stale.pnx
 08-pool-stale.pnx:10: a row or handle was used after it was given back
   a nodes = 4294967297
-</code></pre></div><h3>8.10 Indexes</h3><p class="para"><span class="pn">(1)</span> <code>index NAME TABLE RECORD.FIELD</code> makes an <strong>index</strong> that finds rows of a table of records by one field. The key field is <code>int</code> or <code>str(N)</code>. An index is a hash table of fixed size, matched to the table’s capacity, that holds only row numbers; the data stay in the table.</p><p class="para"><span class="pn">(2)</span> <code>key INDEX lookup</code> gives the row with that key (<code>or fail</code>, <code>err.not_found</code> when there is none). <code>row INDEX insert</code> puts a row in (<code>or fail</code>; it fails when the key is there already) and <code>row INDEX remove</code> takes it out. To change a key field, remove the row, change it and insert it again.</p><p class="para"><span class="pn">(3)</span> Rows written with <code>row</code> at load are in the index. Rows added while running with <code>add_row</code> are found only after <code>insert</code>.</p><div class="example run"><p class="ex-file"><code>08-index.pnx</code></p><pre><code data-lang="pinax"><span style="color: #d73948">use</span> io
+</code></pre></div><h5>Diagnostics</h5><table><thead><tr><th><strong>Condition</strong></th><th><strong>Message</strong></th></tr></thead><tbody><tr><td>A combining word other than <code>each</code> on a pool</td><td><code>a pool is walked by each only</code></td></tr></tbody></table><h3>8.10 Indexes</h3><p class="para"><span class="pn">(1)</span> <code>index NAME TABLE RECORD.FIELD</code> makes an <strong>index</strong> that finds rows of a table of records (an array, a list or a pool) by one field. The key field is <code>int</code> or <code>str(N)</code>. An index is a hash table of fixed size, matched to the table’s capacity, that holds only row numbers; the data stay in the table.</p><p class="para"><span class="pn">(2)</span> <code>key INDEX lookup</code> gives the row with that key (<code>or fail</code>, <code>err.not_found</code> when there is none). <code>row INDEX insert</code> puts a row in (<code>or fail</code>; it fails when the key is there already) and <code>row INDEX remove</code> takes it out. To change a key field, remove the row, change it and insert it again.</p><p class="para"><span class="pn">(2a)</span> <code>key INDEX has</code> gives <code>true</code> when a row with that key is in the index, else <code>false</code>. It does not fail.</p><p class="para"><span class="pn">(3)</span> Rows written with <code>row</code> at load are in the index. Rows added while running with <code>add_row</code> are found only after <code>insert</code>.</p><div class="example run"><p class="ex-file"><code>08-index.pnx</code></p><pre><code data-lang="pinax"><span style="color: #d73948">use</span> io
 <span style="color: #d73948">use</span> <span style="color: #d73948">str</span>
 <span style="color: #d73948">record</span> user
   name <span style="color: #d73948">str</span>(<span style="color: #b60157">16</span>)
@@ -294,7 +303,43 @@ demo <span style="color: #d73948">or_else</span> (e) <span style="color: #d73948
 </code></pre><p class="ex-label">Output</p><pre><code data-lang="text">$ pnx 08-index-insert.pnx
 30
 -1
-</code></pre></div><p class="para"><span class="pn">(4)</span> The hash is keyed (SipHash-2-4); the host gives the key (19.2). A host that indexes text from outside should give a random key: whoever knows the key can pile up collisions and make lookups slow.</p><h3>8.11 Forward declarations</h3><h5>Syntax</h5><pre><code data-lang="ebnf">forward = "forward" ( "array" | "list" | "pool" ) NAME
+</code></pre></div><p class="para"><span class="pn">(3a)</span> The table of an index may be a pool (8.9). Then <code>lookup</code> gives the row as it is now, with its generation; a row given to <code>insert</code> or <code>remove</code> after it was given back is the fault <code>stale</code>. <code>free</code> takes the row out of every index over its pool first. A row <code>alloc</code> has just given is handed over to <code>insert</code> (12.4): when <code>insert</code> fails, the row goes back to the pool before the failure passes on.</p><div class="example run"><p class="ex-file"><code>08-index-pool.pnx</code></p><pre><code data-lang="pinax"><span style="color: #d73948">use</span> io
+<span style="color: #d73948">record</span> user
+  name <span style="color: #d73948">str</span>(<span style="color: #b60157">16</span>)
+  age <span style="color: #d73948">int</span>
+<span style="color: #d73948">end</span>
+<span style="color: #d73948">pool</span> users user <span style="color: #b60157">4</span>
+<span style="color: #d73948">index</span> by_name users user.name
+<span style="color: #d73948">word</span> add_user (name <span style="color: #d73948">str</span>, age <span style="color: #d73948">int</span> <span style="color: #d73948">or</span> <span style="color: #d73948">fail</span>)
+  users alloc <span style="color: #d73948">or_fail</span> <span style="color: #d73948">to</span> r
+  name r <span style="color: #d73948">to</span> user.name
+  age r <span style="color: #d73948">to</span> user.age
+  r by_name insert <span style="color: #d73948">or_fail</span>                <span style="color: #74747c">rem hands the row over to the index</span>
+<span style="color: #d73948">end</span>
+<span style="color: #d73948">word</span> forget (name <span style="color: #d73948">str</span>)
+  name by_name lookup <span style="color: #d73948">or_else</span> (e) <span style="color: #d73948">return</span> <span style="color: #d73948">end</span> <span style="color: #d73948">to</span> r
+  r users free                            <span style="color: #74747c">rem out of by_name too</span>
+<span style="color: #d73948">end</span>
+<span style="color: #198810">"kim"</span> <span style="color: #b60157">30</span> add_user <span style="color: #d73948">or_else</span> (e) <span style="color: #d73948">end</span>
+<span style="color: #198810">"lee"</span> <span style="color: #b60157">25</span> add_user <span style="color: #d73948">or_else</span> (e) <span style="color: #d73948">end</span>
+<span style="color: #198810">"kim"</span> <span style="color: #b60157">41</span> add_user <span style="color: #d73948">or_else</span> (e) <span style="color: #d73948">cat</span> (<span style="color: #198810">"kim again: "</span>, e err_text) io.println <span style="color: #d73948">end</span>
+<span style="color: #d73948">cat</span> (<span style="color: #198810">"kim: "</span>, <span style="color: #198810">"kim"</span> by_name has, <span style="color: #198810">", park: "</span>, <span style="color: #198810">"park"</span> by_name has) io.println
+<span style="color: #198810">"kim"</span> forget
+<span style="color: #d73948">cat</span> (<span style="color: #198810">"kim after free: "</span>, <span style="color: #198810">"kim"</span> by_name has) io.println
+users <span style="color: #d73948">do</span> (r users) <span style="color: #d73948">cat</span> (r user.name, <span style="color: #198810">" "</span>, r user.age) io.println <span style="color: #d73948">end</span> each
+</code></pre><p class="ex-label">Output</p><pre><code data-lang="text">$ pnx 08-index-pool.pnx
+kim again: failed
+kim: true, park: false
+kim after free: false
+lee 25
+</code></pre></div><p class="para"><span class="pn">(4)</span> The hash is keyed (SipHash-2-4); the host gives the key (19.2). A host that indexes text from outside should give a random key: whoever knows the key can pile up collisions and make lookups slow.</p><h5>Constraints</h5><p class="para"><span class="pn">(5)</span> An index over a pool is not <code>shared</code> (8.13), as a pool is not.</p><div class="example refused"><p class="ex-file"><code>08-index-pool-shared.pnx</code></p><pre><code data-lang="pinax"><span style="color: #d73948">record</span> user
+  age <span style="color: #d73948">int</span>
+<span style="color: #d73948">end</span>
+<span style="color: #d73948">pool</span> users user <span style="color: #b60157">4</span>
+<span style="color: #d73948">shared</span> <span style="color: #d73948">index</span> by_age users user.age
+</code></pre><p class="ex-label">Refused</p><pre><code data-lang="text">$ pnx 08-index-pool-shared.pnx
+08-index-pool-shared.pnx:5:21: an index over a pool is not shared, as a pool is not
+</code></pre></div><h5>Diagnostics</h5><table><thead><tr><th><strong>Condition</strong></th><th><strong>Message</strong></th></tr></thead><tbody><tr><td>A table that is no array, list or pool of records</td><td><code>an index belongs to a declared array, list or pool of records</code></td></tr><tr><td><code>shared</code> before an index over a pool</td><td><code>an index over a pool is not shared, as a pool is not</code></td></tr><tr><td><code>has</code> on what is not an index</td><td><code>has takes a key and the name of an index: key by_name has</code></td></tr></tbody></table><h3>8.11 Forward declarations</h3><h5>Syntax</h5><pre><code data-lang="ebnf">forward = "forward" ( "array" | "list" | "pool" ) NAME
         | "forward" "word" NAME "(" effect ")" ;</code></pre><p class="para"><span class="pn">(1)</span> <code>forward list NAME</code> announces a table declared further on. It is for a record that holds rows of the table that holds it. The name of an announced table may be used only where a type goes. <code>forward word</code> is in 9.7.</p><div class="example run"><p class="ex-file"><code>08-forward.pnx</code></p><pre><code data-lang="pinax"><span style="color: #d73948">use</span> io
 <span style="color: #d73948">use</span> <span style="color: #d73948">str</span>
 <span style="color: #d73948">forward</span> <span style="color: #d73948">list</span> nodes                         <span style="color: #74747c">rem the record below points into this list</span>

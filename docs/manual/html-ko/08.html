@@ -167,7 +167,60 @@ kim again: failed
 lee: 25
 park: 41
 choi: -1
-</code></pre></div><div class="box mistake"><p class="box-title">흔한 오해: <code>add_row</code> 한 줄은 찾아보기에도 들어간다</p>들어가지 않는다. 돌면서 더한 줄은 <code>insert</code> 해야 <code>lookup</code> 이 찾는다. 위 예의 <code>register</code> 가 그렇게 한다. 같은 키가 이미 있으면 <code>insert</code> 는 실패하고, <code>add_row</code> 로 더한 줄은 목록에 남는다 — 키를 먼저 <code>lookup</code> 해 보고 더하는 것이 깔끔하다.</div><div class="box qa"><p class="box-title">문답</p><p><strong>물음. 한 표의 줄을 다른 표에 넣을 수 있는가?</strong></p><p>답. 아니다. 줄의 타입은 표의 이름이다. <code>cart</code> 의 줄은 <code>cart</code> 에만 쓰이고, 다른 표의 필드나 목록에 주면 타입이 달라 거절된다. 같은 레코드를 담은 표 둘 사이에 줄을 옮기려면 필드를 하나씩 읽어 새 줄에 넣거나, <code>filter_into</code> 로 복사한다(6장).</p></div><h3>7.5 차례대로 놓인 줄</h3><p><code>sort</code> 는 배열이나 목록의 칸을 가장 작은 것부터 차례로 놓는다. <code>sort_desc</code> 는 가장 큰 것부터 놓는다. 줄은 그렇게 정렬하지 않는다. 찾아보기, 필드, 전역이 줄을 번호로 붙들고 있을 수 있어서, 줄을 옮기면 그것들이 틀린다. 대신 줄의 목록을 줄의 필드로 정렬한다. <code>order cities sort_by city.name</code> 이고, <code>order</code> 는 <code>list order cities 8</code> 로, 칸이 <code>cities</code> 의 줄인 목록으로 선언한다. 줄은 제자리에 있고, <code>order</code> 가 어떤 차례로 읽을지를 말한다. 줄 번호(<code>int</code>)의 목록도 같은 꼴로 정렬한다.</p><div class="example run"><p class="ex-file"><code>07-sort.pnx</code></p><pre><code data-lang="pinax"><span style="color: #d73948">use</span> io
+</code></pre></div><div class="box mistake"><p class="box-title">흔한 오해: <code>add_row</code> 한 줄은 찾아보기에도 들어간다</p>들어가지 않는다. 돌면서 더한 줄은 <code>insert</code> 해야 <code>lookup</code> 이 찾는다. 위 예의 <code>register</code> 가 그렇게 한다. 같은 키가 이미 있으면 <code>insert</code> 는 실패하고, <code>add_row</code> 로 더한 줄은 목록에 남는다 — 키를 먼저 <code>lookup</code> 해 보고 더하는 것이 깔끔하다.</div><p>찾아보기는 풀 위에도 만들 수 있다. 그러면 저장소가 줄을 키로 찾으면서 줄을 돌려줄 수도 있다. <code>free</code> 는 그 풀 위의 모든 찾아보기에서 줄을 빼므로, 돌려준 키는 더 찾아지지 않고, 그 칸은 다음 <code>alloc</code> 이 다시 얻는다. <code>키 찾아보기 has</code> 는 실패 없이 키가 있는지 묻는다. 풀은 <code>each</code> 로 걷고, 살아 있는 줄을 칸의 차례로 들른다. 다른 차례로 읽으려면 줄의 목록에 넣고 그 목록을 정렬한다.</p><div class="example run"><p class="ex-file"><code>07-pool-index.pnx</code></p><pre><code data-lang="pinax"><span style="color: #d73948">use</span> io
+<span style="color: #d73948">record</span> item
+  name <span style="color: #d73948">str</span>(<span style="color: #b60157">12</span>)
+  count <span style="color: #d73948">int</span>
+<span style="color: #d73948">end</span>
+<span style="color: #d73948">pool</span> items item <span style="color: #b60157">3</span>
+<span style="color: #d73948">index</span> by_name items item.name
+<span style="color: #d73948">list</span> order items <span style="color: #b60157">3</span>
+<span style="color: #d73948">word</span> count_in (name <span style="color: #d73948">str</span> <span style="color: #d73948">or</span> <span style="color: #d73948">fail</span>)
+  name by_name has not <span style="color: #d73948">if</span>
+    items alloc <span style="color: #d73948">or_fail</span> <span style="color: #d73948">to</span> r              <span style="color: #74747c">rem a free row: three at most</span>
+    name r <span style="color: #d73948">to</span> item.name
+    r by_name insert <span style="color: #d73948">or_fail</span>              <span style="color: #74747c">rem the index keeps it now</span>
+  <span style="color: #d73948">end</span>
+  name by_name lookup <span style="color: #d73948">or_fail</span> <span style="color: #d73948">to</span> r
+  r item.count <span style="color: #b60157">1</span> add r <span style="color: #d73948">to</span> item.count
+<span style="color: #d73948">end</span>
+<span style="color: #d73948">word</span> drop_out (name <span style="color: #d73948">str</span>)
+  name by_name lookup <span style="color: #d73948">or_else</span> (e) <span style="color: #d73948">return</span> <span style="color: #d73948">end</span> items free
+<span style="color: #d73948">end</span>
+<span style="color: #d73948">word</span> show ()
+  order clear
+  items <span style="color: #d73948">do</span> (r items) r order push <span style="color: #d73948">or_else</span> (e) <span style="color: #d73948">end</span> <span style="color: #d73948">end</span> each
+  order items sort_by item.name
+  order <span style="color: #d73948">do</span> (r items) <span style="color: #d73948">cat</span> (r item.name, <span style="color: #198810">" "</span>, r item.count) io.println <span style="color: #d73948">end</span> each
+<span style="color: #d73948">end</span>
+<span style="color: #198810">"pear"</span> count_in <span style="color: #d73948">or_else</span> (e) <span style="color: #d73948">end</span>
+<span style="color: #198810">"fig"</span> count_in <span style="color: #d73948">or_else</span> (e) <span style="color: #d73948">end</span>
+<span style="color: #198810">"pear"</span> count_in <span style="color: #d73948">or_else</span> (e) <span style="color: #d73948">end</span>
+<span style="color: #198810">"plum"</span> count_in <span style="color: #d73948">or_else</span> (e) <span style="color: #d73948">end</span>
+<span style="color: #198810">"kiwi"</span> count_in <span style="color: #d73948">or_else</span> (e) <span style="color: #d73948">cat</span> (<span style="color: #198810">"kiwi: "</span>, e err_text) io.println <span style="color: #d73948">end</span>
+<span style="color: #198810">"fig"</span> drop_out
+<span style="color: #198810">"kiwi"</span> count_in <span style="color: #d73948">or_else</span> (e) <span style="color: #d73948">end</span>           <span style="color: #74747c">rem the row fig gave back</span>
+show
+</code></pre><p class="ex-label">출력</p><pre><code data-lang="text">$ pnx 07-pool-index.pnx
+kiwi: full
+kiwi 1
+pear 2
+plum 1
+</code></pre></div><div class="box mistake"><p class="box-title">흔한 오해: <code>insert</code> 뒤에도 지역 변수가 새 줄을 담고 있다</p><p>담고 있지 않다. <code>alloc</code> 이 방금 준 줄은 한 번만 쓰는 값이고, <code>insert</code> 는 필드에 넣을 때처럼 그 줄을 넘겨받는다. 키가 이미 있으면 <code>insert</code> 는 줄을 풀에 돌려주고 실패하므로 잃는 것이 없다. <code>insert</code> 전에 줄을 채우고, 그 뒤에는 위의 <code>count_in</code> 처럼 키로 다시 찾는다.</p><div class="example refused"><p class="ex-file"><code>07-pool-insert-gone.pnx</code></p><pre><code data-lang="pinax"><span style="color: #d73948">record</span> item
+  name <span style="color: #d73948">str</span>(<span style="color: #b60157">12</span>)
+  count <span style="color: #d73948">int</span>
+<span style="color: #d73948">end</span>
+<span style="color: #d73948">pool</span> items item <span style="color: #b60157">3</span>
+<span style="color: #d73948">index</span> by_name items item.name
+<span style="color: #d73948">word</span> enter (name <span style="color: #d73948">str</span> <span style="color: #d73948">or</span> <span style="color: #d73948">fail</span>)
+  items alloc <span style="color: #d73948">or_fail</span> <span style="color: #d73948">to</span> r
+  name r <span style="color: #d73948">to</span> item.name
+  r by_name insert <span style="color: #d73948">or_fail</span>
+  <span style="color: #b60157">1</span> r <span style="color: #d73948">to</span> item.count
+<span style="color: #d73948">end</span>
+</code></pre><p class="ex-label">거절</p><pre><code data-lang="text">$ pnx 07-pool-insert-gone.pnx
+07-pool-insert-gone.pnx:11:5: this local gave its owned value away; it holds nothing to read
+</code></pre></div></div><div class="box qa"><p class="box-title">문답</p><p><strong>물음. 한 표의 줄을 다른 표에 넣을 수 있는가?</strong></p><p>답. 아니다. 줄의 타입은 표의 이름이다. <code>cart</code> 의 줄은 <code>cart</code> 에만 쓰이고, 다른 표의 필드나 목록에 주면 타입이 달라 거절된다. 같은 레코드를 담은 표 둘 사이에 줄을 옮기려면 필드를 하나씩 읽어 새 줄에 넣거나, <code>filter_into</code> 로 복사한다(6장).</p></div><h3>7.5 차례대로 놓인 줄</h3><p><code>sort</code> 는 배열이나 목록의 칸을 가장 작은 것부터 차례로 놓는다. <code>sort_desc</code> 는 가장 큰 것부터 놓는다. 줄은 그렇게 정렬하지 않는다. 찾아보기, 필드, 전역이 줄을 번호로 붙들고 있을 수 있어서, 줄을 옮기면 그것들이 틀린다. 대신 줄의 목록을 줄의 필드로 정렬한다. <code>order cities sort_by city.name</code> 이고, <code>order</code> 는 <code>list order cities 8</code> 로, 칸이 <code>cities</code> 의 줄인 목록으로 선언한다. 줄은 제자리에 있고, <code>order</code> 가 어떤 차례로 읽을지를 말한다. 줄 번호(<code>int</code>)의 목록도 같은 꼴로 정렬한다.</p><div class="example run"><p class="ex-file"><code>07-sort.pnx</code></p><pre><code data-lang="pinax"><span style="color: #d73948">use</span> io
 <span style="color: #d73948">record</span> city
   name <span style="color: #d73948">str</span>(<span style="color: #b60157">16</span>)
   people <span style="color: #d73948">int</span>
@@ -205,4 +258,4 @@ Paris
 <span style="color: #d73948">word</span> order_them () cities sort <span style="color: #d73948">end</span>
 </code></pre><p class="ex-label">거절</p><pre><code data-lang="text">$ pnx 07-sort-rows.pnx
 07-sort-rows.pnx:7:27: rows do not move: sort a list of their numbers by a field: order table sort_by record.field
-</code></pre></div><div class="box qa"><p class="box-title">문답</p><p><strong>물음. 두 필드로 정렬하려면?</strong></p><p>답. 두 번 정렬한다. 덜 중요한 필드를 먼저 한다. <code>order t sort_by r.name</code> 한 뒤 <code>order t sort_by_desc r.count</code> 하면 개수가 큰 것부터 놓이고, 개수가 같으면 이름 차례다. 정렬은 키가 같은 것의 차례를 지키므로, 두 번째 정렬은 같다고 보는 줄 사이에 첫 번째 정렬의 차례를 남긴다.</p></div><div class="box mistake"><p class="box-title">흔한 오해: <code>sort_desc</code> 는 <code>sort</code> 를 거꾸로 읽은 것이다</p>칸에서만 그렇다. 같은 두 칸은 서로 구별되지 않기 때문이다. 줄에서는 그렇지 않다. <code>sort_by_desc</code> 도 <code>sort_by</code> 처럼 키가 같은 것의 차례를 지킨다. <code>sort_by</code> 를 거꾸로 읽으면 그 차례가 뒤집힌다.</div><div class="box summary"><p class="box-title">정리</p><ul><li>칸은 <code>sort</code> 와 <code>sort_desc</code> 로 정렬한다. 줄은 줄의 목록(또는 줄 번호의 목록)을 거쳐 <code>sort_by</code> 와 <code>sort_by_desc</code> 로 정렬하고, 키가 같은 것의 차례를 지킨다(표준 15.3).</li><li>레코드는 표의 줄로 다룬다. 필드는 <code>레코드.필드</code> 로 읽고 넣는다(표준 8.8).</li><li>줄은 번호이고, 쓸 때마다 검사된다. 없음 줄의 필드는 결함이다(8.8).</li><li>풀의 줄은 한 번 넘겨야 하고, 돌려준 줄은 결함이다(8.9, 12.4).</li><li>찾아보기는 <code>row</code> 의 줄을 담고, 돌면서 더한 줄은 <code>insert</code> 한다(8.10).</li></ul></div></main><nav class="bottom"><a href="index.html">처음</a> · <a href="07.html">앞</a> · <a href="09.html">다음</a> · <a href="../html-en/08.html">English</a></nav></body></html>
+</code></pre></div><div class="box qa"><p class="box-title">문답</p><p><strong>물음. 두 필드로 정렬하려면?</strong></p><p>답. 두 번 정렬한다. 덜 중요한 필드를 먼저 한다. <code>order t sort_by r.name</code> 한 뒤 <code>order t sort_by_desc r.count</code> 하면 개수가 큰 것부터 놓이고, 개수가 같으면 이름 차례다. 정렬은 키가 같은 것의 차례를 지키므로, 두 번째 정렬은 같다고 보는 줄 사이에 첫 번째 정렬의 차례를 남긴다.</p></div><div class="box mistake"><p class="box-title">흔한 오해: <code>sort_desc</code> 는 <code>sort</code> 를 거꾸로 읽은 것이다</p>칸에서만 그렇다. 같은 두 칸은 서로 구별되지 않기 때문이다. 줄에서는 그렇지 않다. <code>sort_by_desc</code> 도 <code>sort_by</code> 처럼 키가 같은 것의 차례를 지킨다. <code>sort_by</code> 를 거꾸로 읽으면 그 차례가 뒤집힌다.</div><div class="box summary"><p class="box-title">정리</p><ul><li>칸은 <code>sort</code> 와 <code>sort_desc</code> 로 정렬한다. 줄은 줄의 목록(또는 줄 번호의 목록)을 거쳐 <code>sort_by</code> 와 <code>sort_by_desc</code> 로 정렬하고, 키가 같은 것의 차례를 지킨다(표준 15.3).</li><li>레코드는 표의 줄로 다룬다. 필드는 <code>레코드.필드</code> 로 읽고 넣는다(표준 8.8).</li><li>줄은 번호이고, 쓸 때마다 검사된다. 없음 줄의 필드는 결함이다(8.8).</li><li>풀의 줄은 한 번 넘겨야 하고, 돌려준 줄은 결함이다(8.9, 12.4).</li><li>찾아보기는 <code>row</code> 의 줄을 담고, 돌면서 더한 줄은 <code>insert</code> 한다(8.10).</li><li>찾아보기는 풀 위에도 둔다. <code>insert</code> 는 방금 얻은 줄을 넘겨받고, <code>free</code> 는 줄을 찾아보기에서 빼고, <code>has</code> 는 키를 묻고, <code>each</code> 는 살아 있는 줄을 걷는다(8.9, 8.10).</li></ul></div></main><nav class="bottom"><a href="index.html">처음</a> · <a href="07.html">앞</a> · <a href="09.html">다음</a> · <a href="../html-en/08.html">English</a></nav></body></html>

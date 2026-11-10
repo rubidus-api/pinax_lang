@@ -86,11 +86,11 @@ served 2
 served 3
 served 5
 nobody waits: range
-</code></pre></div><div class="box mistake"><p class="box-title">흔한 오해: 큐도 <code>each</code> 로 훑는다</p>줄기가 되는 것은 배열과 목록뿐이다. 큐, 풀, 버퍼, 찾아보기는 줄기가 아니다. 큐의 원소를 차례로 다루려면 <code>take</code> 를 루프에서 부른다.<div class="example refused"><p class="ex-file"><code>06-queue-stem.pnx</code></p><pre><code data-lang="pinax"><span style="color: #d73948">use</span> io
+</code></pre></div><div class="box mistake"><p class="box-title">흔한 오해: 큐도 <code>each</code> 로 훑는다</p>줄기가 되는 것은 배열과 목록, 그리고 <code>each</code> 에만 풀이다(7장). 큐, 버퍼, 찾아보기는 줄기가 아니다. 큐의 원소를 차례로 다루려면 <code>take</code> 를 루프에서 부른다.<div class="example refused"><p class="ex-file"><code>06-queue-stem.pnx</code></p><pre><code data-lang="pinax"><span style="color: #d73948">use</span> io
 <span style="color: #d73948">queue</span> q <span style="color: #d73948">int</span> <span style="color: #b60157">4</span>
 q <span style="color: #d73948">do</span> (x <span style="color: #d73948">int</span>) <span style="color: #d73948">end</span> each
 </code></pre><p class="ex-label">거절</p><pre><code data-lang="text">$ pnx 06-queue-stem.pnx
-06-queue-stem.pnx:3:14: only an array or a list is a stem (not a queue, a pool, a buffer or an index)
+06-queue-stem.pnx:3:14: only an array, a list or a pool is a stem (not a queue, a buffer or an index)
 </code></pre></div></div><h3>6.4 거르고 바꿔 담기</h3><p><code>map_into</code> 와 <code>filter_into</code> 는 줄기의 원소를 블록으로 바꾸거나 거른 결과를 <strong>이미 있는 자리</strong>에 담는다. 새 배열이 생기지 않는다. 목적지가 목록이면 끝에 넣고, 배열이면 0 번 칸부터 쓰고 쓴 칸의 수를 준다. 목적지가 차면 실패한다.</p><div class="example run"><p class="ex-file"><code>06-map-filter.pnx</code></p><pre><code data-lang="pinax"><span style="color: #d73948">use</span> io
 <span style="color: #d73948">use</span> <span style="color: #d73948">str</span>
 <span style="color: #d73948">array</span> prices <span style="color: #d73948">int</span> <span style="color: #b60157">6</span>

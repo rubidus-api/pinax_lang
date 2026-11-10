@@ -86,11 +86,11 @@ served 2
 served 3
 served 5
 nobody waits: range
-</code></pre></div><div class="box mistake"><p class="box-title">Common mistake: A queue can be walked with <code>each</code> too</p>Only arrays and lists are stems. Queues, pools, buffers and indexes are not. To handle the elements of a queue in order, call <code>take</code> in a loop.<div class="example refused"><p class="ex-file"><code>06-queue-stem.pnx</code></p><pre><code data-lang="pinax"><span style="color: #d73948">use</span> io
+</code></pre></div><div class="box mistake"><p class="box-title">Common mistake: A queue can be walked with <code>each</code> too</p>Only arrays and lists are stems, and a pool for <code>each</code> alone (chapter 7). Queues, buffers and indexes are not. To handle the elements of a queue in order, call <code>take</code> in a loop.<div class="example refused"><p class="ex-file"><code>06-queue-stem.pnx</code></p><pre><code data-lang="pinax"><span style="color: #d73948">use</span> io
 <span style="color: #d73948">queue</span> q <span style="color: #d73948">int</span> <span style="color: #b60157">4</span>
 q <span style="color: #d73948">do</span> (x <span style="color: #d73948">int</span>) <span style="color: #d73948">end</span> each
 </code></pre><p class="ex-label">Refused</p><pre><code data-lang="text">$ pnx 06-queue-stem.pnx
-06-queue-stem.pnx:3:14: only an array or a list is a stem (not a queue, a pool, a buffer or an index)
+06-queue-stem.pnx:3:14: only an array, a list or a pool is a stem (not a queue, a buffer or an index)
 </code></pre></div></div><h3>6.4 Filtering and mapping into a place</h3><p><code>map_into</code> and <code>filter_into</code> put the results of transforming or filtering the elements of a stem with a block into a <strong>place that already exists</strong> no new array is made. A list destination is added to at the end; an array is written from cell 0, and the number of cells written is given. When the destination is full, they fail.</p><div class="example run"><p class="ex-file"><code>06-map-filter.pnx</code></p><pre><code data-lang="pinax"><span style="color: #d73948">use</span> io
 <span style="color: #d73948">use</span> <span style="color: #d73948">str</span>
 <span style="color: #d73948">array</span> prices <span style="color: #d73948">int</span> <span style="color: #b60157">6</span>
