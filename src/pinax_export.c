@@ -7,7 +7,9 @@
 // pnx_exec_end, pnx_exec_suspend). Every other instruction is given to the interpreter itself, one at
 // a time (pnx_step), and the function goes on from wherever that left the run: so tasks, host words,
 // waiting and the rest are the interpreter's own. The function works on the state as the interpreter
-// does, and is entered through a switch on the pc, so a run can stop and go on anywhere.
+// does, and is entered through a switch on the pc, so a run can stop and go on anywhere. The code loaded
+// after it is not in the switch: there the interpreter runs until a call or a return comes back
+// (pnx_leave_native, RFC-0039).
 //
 // The output is plain text; no C library is used here (the core is freestanding).
 
@@ -160,7 +162,7 @@ size_t pnx_export_c(const pinax_state *st, const char *name, char *buffer, size_
         go_to(&o, i);
         put(&o, "\n");
     }
-    put(&o, "    default: goto step;\n    }\n");
+    put(&o, "    default: goto leave;\n    }\n");
     for (uint32_t i = 0; i < n;) {
         const uint32_t w = code[i], op = w & 0xffu;
         const pnx_opinfo info = pnx_ops_info[op];
@@ -292,6 +294,9 @@ size_t pnx_export_c(const pinax_state *st, const char *name, char *buffer, size_
     put(&o, "step: // the interpreter runs this one instruction, and the run goes on from where it stands then\n"
             "    PNX_STEP_OUT(pnx_step);\n"
             "    goto go;\n"
+            "leave: // past this code (a later load, RFC-0039): the interpreter runs until a call or a return comes back\n"
+            "    PNX_STEP_OUT(pnx_leave_native);\n"
+            "    goto go;\n"
             "fault: // or a task of an `apart` set ends alone, and this is entered again where the run stands\n"
             "    return pnx_exec_fault(st, (pinax_err)r, next, ibase, sbase, R, floor, left, count);\n"
             "suspend: // or a task's turn ran out, and it faults\n"
@@ -300,10 +305,14 @@ size_t pnx_export_c(const pinax_state *st, const char *name, char *buffer, size_
     put(&o, "const pinax_native ");
     put(&o, name);
     put(&o, " = {sizeof(pinax_native), ");
-    put_hex(&o, pnx_native_hash(st), 16);
+    put_hex(&o, pnx_native_hash(st, n, st->head ? st->head->n_words : 0), 16);
     put(&o, "u, run_");
     put(&o, name);
-    put(&o, "};\n");
+    put(&o, ", ");
+    put_u(&o, n);
+    put(&o, "u, ");
+    put_u(&o, st->head ? st->head->n_words : 0);
+    put(&o, "u};\n");
     if (o.len < o.cap)
         o.p[o.len] = 0;
     return o.len < o.cap ? o.len : 0;

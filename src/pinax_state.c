@@ -3727,7 +3727,7 @@ static uint64_t image_layout(void) {
 
 // ---- exported code (RFC-0028) -------------------------------------------------------------
 
-uint64_t pnx_native_hash(const pinax_state *st) {
+uint64_t pnx_native_hash(const pinax_state *st, uint32_t n_code, uint32_t n_words) {
     uint64_t hash = image_layout();
 #if defined(PINAX_BUDGET_EACH)
     hash = (hash ^ 0x45414348u) * 0x100000001b3u; // a build that charges every instruction counts otherwise
@@ -3735,7 +3735,6 @@ uint64_t pnx_native_hash(const pinax_state *st) {
 #if defined(PINAX_CHECK_PROOFS)
     hash = (hash ^ 0x50524f46u) * 0x100000001b3u;
 #endif
-    const uint32_t n_code = st->head ? st->head->n_code : 0, n_words = st->head ? st->head->n_words : 0;
     hash = (hash ^ n_code) * 0x100000001b3u;
     for (uint32_t k = 0; k < n_code; ++k)
         hash = (hash ^ st->code[k]) * 0x100000001b3u;
@@ -3745,15 +3744,30 @@ uint64_t pnx_native_hash(const pinax_state *st) {
     return hash;
 }
 
+// Checked again when the program's length changed since: a load only appends (its code after the code
+// there is, its words after the words), a load undone gives back exactly what it took, and `redefine`,
+// the one change to an earlier word, appends the new body. So the same lengths are the same program.
+static void native_check(pinax_state *st) {
+    const uint32_t n_code = st->head ? st->head->n_code : 0, n_words = st->head ? st->head->n_words : 0;
+    if (st->native_code == n_code && st->native_words == n_words)
+        return;
+    st->native_code = n_code;
+    st->native_words = n_words;
+    const pinax_native *t = st->native;
+    const uint32_t code_words = t->code_words ? t->code_words : n_code, words = t->code_words ? t->words : n_words;
+    st->native_bound = code_words <= n_code && words <= n_words && pnx_native_hash(st, code_words, words) == t->hash;
+    st->native_prefix = st->native_bound ? code_words : 0;
+}
+
+static void native_forget(pinax_state *st) {
+    st->native_bound = false;
+    st->native_code = st->native_words = UINT32_MAX; // checked at the next run
+    st->native_prefix = 0;
+}
+
 pinax_err pnx_run_code(pinax_state *st) {
     if (st->native) {
-        const uint32_t n_code = st->head ? st->head->n_code : 0;
-        if (st->native_bound && st->native_code != n_code)
-            st->native_bound = false; // a load changed the program
-        if (!st->native_bound && pnx_native_hash(st) == st->native->hash) {
-            st->native_bound = true;
-            st->native_code = n_code;
-        }
+        native_check(st);
         if (st->native_bound) {
             ++st->native_runs;
             pinax_err err;
@@ -3766,13 +3780,18 @@ pinax_err pnx_run_code(pinax_state *st) {
     return pnx_execute(st);
 }
 
+pinax_err pnx_leave_native(pinax_state *st) {
+    ++st->native_leaves;
+    return pnx_execute_prefix(st);
+}
+
 pinax_err pinax_native_attach(pinax_state *st, const pinax_native *native) {
-    if (!st || (native && (native->struct_size != sizeof *native || !native->run)))
+    if (!st || (native && (native->struct_size != sizeof *native || !native->run || (native->code_words == 0) != (native->words == 0))))
         return PINAX_ERR_ARGUMENT;
     if (st->suspended || st->host_cur || st->loading)
         return fail(st, PINAX_ERR_STATE, "a run is not finished");
     st->native = native;
-    st->native_bound = false;
+    native_forget(st);
     return PINAX_OK;
 }
 
@@ -3951,8 +3970,8 @@ pinax_err pinax_image_open(pinax_mem block, pinax_str image, const pinax_config 
     }
     st->from_image = true;
     st->native = NULL; // exported code is attached again, as host words are given again
-    st->native_bound = false;
-    st->native_runs = 0;
+    native_forget(st);
+    st->native_runs = st->native_leaves = st->native_backs = 0;
     st->on_task_fault = NULL; // and so is the task fault callback
     st->on_task_fault_user = NULL;
     st->frozen = st->load_runs = false; // what the saved state lent stays with it

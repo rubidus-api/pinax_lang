@@ -486,8 +486,15 @@ pinax_err pnx_exec_suspend(pinax_state *st, uint32_t at, uint32_t ibase, uint32_
 
 #define PNX_EXEC_NAME pnx_execute
 #define PNX_EXEC_STEP 0
+#define PNX_EXEC_PREFIX 0
+#include "pinax_exec.h"
+
+#define PNX_EXEC_NAME pnx_execute_prefix
+#define PNX_EXEC_STEP 0
+#define PNX_EXEC_PREFIX 1
 #include "pinax_exec.h"
 
 #define PNX_EXEC_NAME pnx_step
 #define PNX_EXEC_STEP 1
+#define PNX_EXEC_PREFIX 0
 #include "pinax_exec.h"

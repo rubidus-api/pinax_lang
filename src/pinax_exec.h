@@ -1,8 +1,11 @@
-// pinax_exec.h - the body of the interpreter loop, included twice by pinax_vm.c (RFC-0028):
+// pinax_exec.h - the body of the interpreter loop, included three times by pinax_vm.c (RFC-0028):
 // PNX_EXEC_STEP 0 makes pnx_execute, which runs until the run ends, stops or waits; PNX_EXEC_STEP 1
 // makes pnx_step, which runs one instruction and gives back PNX_STEP_ON with where the run stands
 // in the state, so that exported code (pinax_export.c) hands the interpreter the instructions it
-// does not do itself and goes on. One body, so the two cannot differ.
+// does not do itself and goes on. PNX_EXEC_PREFIX 1 makes pnx_execute_prefix, pnx_execute for a state
+// whose exported code covers a prefix of the program (RFC-0039): a call or a return into that prefix gives
+// the run back to it. A body of its own, so that the compare is not paid by any other run (in pnx_execute
+// it cost calls 5 to 14 percent, measured). One body, so the three cannot differ.
 // Not a header to include anywhere else: it uses the static functions of pinax_vm.c.
 
 pinax_err PNX_EXEC_NAME(pinax_state *st) {
@@ -16,6 +19,11 @@ pinax_err PNX_EXEC_NAME(pinax_state *st) {
     uint64_t left = st->left, count = 0;
     uint32_t w = 0, gl = 0; // gl: the global of a task instruction, narrow or wide
     pinax_err result = PINAX_OK;
+#if PNX_EXEC_PREFIX
+    // RFC-0039: the code below this is exported code's, which runs it from a call or a return that goes
+    // there (0: none, and the compare is never true). No load or attach happens during a run.
+    const uint32_t prefix = st->native_prefix;
+#endif
 
 #define FAULT(error)                                                                               \
     do {                                                                                           \
@@ -44,6 +52,16 @@ pinax_err PNX_EXEC_NAME(pinax_state *st) {
         R = st->ibank + ibase;                                                                     \
         S = st->sbank + sbase;                                                                     \
     } while (0)
+
+#if !PNX_EXEC_PREFIX
+#define GIVE_BACK() ((void)0) // no exported code to give back to; pnx_step gives the run back anyway
+#else
+#define GIVE_BACK()                                                                                \
+    do {                                                                                           \
+        if ((uint32_t)(pc - code) < prefix)                                                        \
+            goto given_back;                                                                       \
+    } while (0)
+#endif
 
 #if defined(PINAX_BUDGET_EACH)
 #define BUDGET_STEP()                                                                              \
@@ -189,6 +207,7 @@ again:
             R = st->ibank + ibase;
             S = st->sbank + sbase;
             pc = code + callee->entry;
+            GIVE_BACK();
             NEXT();
         }
         CASE(CALLR) { // the word number comes from a register; what it takes and gives is checked here
@@ -208,6 +227,7 @@ again:
             R = st->ibank + ibase;
             S = st->sbank + sbase;
             pc = code + callee->entry;
+            GIVE_BACK();
             NEXT();
         }
         CASE(TCALL) {
@@ -216,6 +236,7 @@ again:
             if (r != PNX_R_OK)
                 FAULT((pinax_err)r);
             pc = code + callee->entry;
+            GIVE_BACK();
             NEXT();
         }
         CASE(RET) {
@@ -225,6 +246,7 @@ again:
                 SAVE_CTX(); // the word of a task returned: the task is over
                 task_leave(st, true);
                 LOAD_CTX();
+                GIVE_BACK();
                 NEXT();
             }
             const pnx_frame f = st->ctrl[--depth];
@@ -233,6 +255,7 @@ again:
             sbase = f.str_base;
             R = st->ibank + ibase;
             S = st->sbank + sbase;
+            GIVE_BACK();
             NEXT();
         }
         CASE(RETOK) { // success of a word that may fail: skip the caller's failure word
@@ -244,6 +267,7 @@ again:
             sbase = f.str_base;
             R = st->ibank + ibase;
             S = st->sbank + sbase;
+            GIVE_BACK();
             NEXT();
         }
         CASE(FAIL) {
@@ -264,6 +288,7 @@ again:
             sbase = f.str_base;
             R = st->ibank + ibase;
             S = st->sbank + sbase;
+            GIVE_BACK();
             NEXT();
         }
         // The host word left its operation pending: this run waits. A task gives the run back
@@ -278,6 +303,7 @@ again:
         task_leave(st, false);                                                                     \
         wait_task->state = PNX_TASK_WAITING;                                                       \
         LOAD_CTX();                                                                                \
+        GIVE_BACK();                                                                               \
         NEXT();                                                                                    \
     } while (0)
         CASE(HCALL) {
@@ -378,6 +404,7 @@ again:
             LOAD_CTX();
             if (t->wake_fault != PINAX_OK)
                 FAULT(t->wake_fault);
+            GIVE_BACK();
             NEXT();
         }
         CASE(TYIELD) { // the next word runs when the task was cancelled
@@ -402,6 +429,7 @@ again:
             SAVE_CTX();
             task_leave(st, false);
             LOAD_CTX();
+            GIVE_BACK();
             NEXT();
         }
         CASE(GSEL) { // the global a reference names, for the instruction after this one
@@ -451,6 +479,7 @@ again:
             SAVE_CTX();
             task_leave(st, false);
             LOAD_CTX();
+            GIVE_BACK();
             NEXT();
         }
         CASE(TDONE) {
@@ -512,6 +541,7 @@ again:
             LOAD_CTX();
             if (t->wake_fault != PINAX_OK)
                 FAULT(t->wake_fault);
+            GIVE_BACK();
             NEXT();
         }
 
@@ -558,6 +588,18 @@ stepped: // the one instruction is done: where the run stands goes back into the
     st->instructions += count;
     return PNX_STEP_ON;
 #endif
+#if PNX_EXEC_PREFIX
+given_back: // to exported code (RFC-0039), which goes on from where the run stands
+    st->pc = (uint32_t)(pc - code);
+    st->int_base = ibase;
+    st->str_base = sbase;
+    st->depth = depth;
+    st->depth_floor = floor;
+    st->left = left;
+    st->instructions += count;
+    ++st->native_backs;
+    return PNX_STEP_ON;
+#endif
 
 waiting: // like suspended; the host goes on with pinax_resume() after pinax_complete()
     st->waiting = true;
@@ -583,12 +625,14 @@ finished:
     if (result != PINAX_OK && pnx_fault_apart(st, result, (uint32_t)(pc - code), ibase, sbase)) {
         LOAD_CTX(); // a task of an `apart` set faulted: it alone ends (RFC-0029)
         result = PINAX_OK;
+        GIVE_BACK();
         AGAIN();
     }
     return pnx_exec_end(st, result, (uint32_t)(pc - code), ibase, sbase, R, floor, left, count);
 }
 
 #undef FAULT
+#undef GIVE_BACK
 #undef AGAIN
 #undef SAVE_CTX
 #undef LOAD_CTX
@@ -606,3 +650,4 @@ finished:
 #undef AWAIT
 #undef PNX_EXEC_NAME
 #undef PNX_EXEC_STEP
+#undef PNX_EXEC_PREFIX

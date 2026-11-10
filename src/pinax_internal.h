@@ -348,11 +348,16 @@ struct pinax_state {
     bool     frozen;     // lent a global with pinax_share(): it neither runs nor loads again
     bool     load_runs;  // the code of a load runs: shared globals not given yet read as empty
     // exported code (RFC-0028): the table the host attached, and whether it is in use for the program
-    // as it stands (native_code: the length of the code it was bound to; another length unbinds it)
+    // as it stands (native_code and native_words: the program it was checked against; another length
+    // checks it again). native_prefix: the code words it covers while it is in use, else 0 (RFC-0039);
+    // the interpreter gives a run back to it at a call or a return to a place below that.
     const pinax_native *native;
     bool                native_bound;
-    uint32_t            native_code;
-    uint64_t            native_runs; // runs that went through it (for the tests)
+    uint32_t            native_code, native_words;
+    uint32_t            native_prefix;
+    uint64_t            native_runs;  // runs that went through it (for the tests)
+    uint64_t            native_leaves; // times it gave the run to the interpreter past its code (for the tests)
+    uint64_t            native_backs;  // times the interpreter gave the run back to it (for the tests)
     bool                export_only; // pnx export-c: a load compiles and checks its code and runs none of it
     pnx_program before_load; // what that load would be undone to
     // redefine: the record of the word whose code a load traded, as it was, until the load is final
@@ -421,14 +426,22 @@ static inline bool pnx_width_holds(int64_t value, uint8_t code_plus_one) {
 
 // Runs from state->pc until the top word returns, faults, fails or the budget runs out.
 pinax_err pnx_execute(pinax_state *state);
+// The same for a state whose exported code covers a prefix (RFC-0039, pnx_leave_native): a call or a
+// return to a place below native_prefix gives the run back (PNX_STEP_ON, the place in the state).
+pinax_err pnx_execute_prefix(pinax_state *state);
 // One instruction of the run that stands in the state (RFC-0028): PNX_STEP_ON when it went on, with the
 // pc, bases, depth and budget put back into the state; otherwise how the run ended, stopped or waits.
 #define PNX_STEP_ON ((pinax_err)0x7ffffff1)
 pinax_err pnx_step(pinax_state *state);
-// The hash an exported program carries: the code, where each word starts, and the layout of this build.
-uint64_t pnx_native_hash(const pinax_state *st);
-// Runs the code from where the run stands: through the attached exported code when it is the program's.
+// The hash an exported program carries: its first code_words of code, where each of its first `words`
+// words starts, and the layout of this build.
+uint64_t pnx_native_hash(const pinax_state *st, uint32_t code_words, uint32_t words);
+// Runs the code from where the run stands: through the attached exported code when the program begins
+// with the code it covers.
 pinax_err pnx_run_code(pinax_state *st);
+// Exported code at a place past the code it covers (RFC-0039): pnx_execute_prefix runs from there until
+// a call or a return goes back below native_prefix (PNX_STEP_ON, the place in the state) or the run ends.
+pinax_err pnx_leave_native(pinax_state *st);
 // The program's code as C (pinax_export.c): `name` is the table's name. 0 when `cap` is too small.
 size_t pnx_export_c(const pinax_state *st, const char *name, char *out, size_t cap);
 // A fault in a task of an `apart` set (RFC-0029 P-L1): noted (pnx_note_task_fault), the task ended, the

@@ -421,18 +421,24 @@ PINAX_API pinax_err pinax_clone_with(const pinax_state *source, pinax_mem block,
 /* The code of a program written out as C by `pnx export-c` and compiled by the host with its own
  * build (it includes pinax_native.h, which ./nob dist writes beside this header). That file
  * defines one pinax_native. The table is the host's: like an image, it is trusted, and only
- * its hash is checked. */
+ * its hash is checked. It covers the program as it was when exported: its first code_words
+ * words of code and its first `words` words, which later loads leave where they are. */
 typedef struct pinax_native {
     size_t    struct_size;               /* sizeof(pinax_native) */
-    uint64_t  hash;                      /* the program and the build it was exported from */
+    uint64_t  hash;                      /* that code, its words and the build it was exported from */
     pinax_err (*run)(pinax_state *state); /* runs the state's code from where the run stands */
+    uint32_t  code_words;                /* how much it covers; both 0: the whole program, */
+    uint32_t  words;                     /* whatever its length */
 } pinax_native;
 /* Runs the state's code through `native` from now on. It may be given before the loads that make
  * the program: it is used from the first run (the code of a load included) at which the
- * program's hash is native->hash, and not while the program differs (after a later load, say).
- * Results, faults, budget and waiting are those of the interpreter. NULL takes it back. An
- * image or a clone of the state does not carry it. PINAX_ERR_ARGUMENT for a table of another
- * struct_size; PINAX_ERR_STATE while a run is not finished. */
+ * program's first code_words and words hash to native->hash, and stays in use after later loads
+ * (a session's lines, a module loaded late): their code is interpreted, and a call or a return
+ * into the code the table covers goes back to it. A `redefine` of one of its words changes the
+ * program under it: it is not used from then on. Results, faults, budget and waiting are those of
+ * the interpreter. NULL takes it back. An image or a clone of the state does not carry it.
+ * PINAX_ERR_ARGUMENT for a table of another struct_size, or with one of the two counts 0;
+ * PINAX_ERR_STATE while a run is not finished. */
 PINAX_API pinax_err pinax_native_attach(pinax_state *state, const pinax_native *native);
 
 /* ---- measuring --------------------------------------------------------------------- */
