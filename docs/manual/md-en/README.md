@@ -1,6 +1,6 @@
 # The Pinax Manual
 
-Learning and using the embeddable scripting language Pinax — Edition 0.19.0, October 2026
+Learning and using the embeddable scripting language Pinax — Edition 0.19.1, October 2026
 
 ## Contents
 
