@@ -197,8 +197,9 @@ PINAX_API void pinax_set_resolver(pinax_state *state, pinax_resolve_fn resolve, 
 /* ---- host objects ----------------------------------------------------------------- */
 
 /* A kind of host pointer scripts can hold as a use-once value of type `name`. close may be NULL.
- * On a state opened from an image, a type of the image is given again by its name and gets its
- * number back; another name is refused. */
+ * A name given again with the same close and user gets the number it has (two modules share the
+ * type); with another close or user it is refused. On a state opened from an image, a type of the
+ * image is given again by its name and gets its number back; another name is refused. */
 PINAX_API pinax_err pinax_handle_type(pinax_state *state, const char *name,
                                       void (*close)(void *object, void *user), void *user,
                                       uint32_t *out_type);

@@ -1,0 +1,9 @@
+rem run
+search (io, sh)
+word main (or fail)
+  "echo first" run or_fail drop
+  cat ("the shell says: ", "echo hello" output or_fail) print
+  "exit 2" run or_fail to s
+  cat ("exit 2 gave status ", s) println
+end
+main or_else (e) cat ("failed: ", e err_text) println end

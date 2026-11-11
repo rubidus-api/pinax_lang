@@ -4,7 +4,7 @@
 = 표준 호스트 모듈 <host-modules>
 
 #para("1")[이 절의 모듈은 처리기가 함께 내는 호스트 낱말이다. 언어의 일부가 아니다 --- 호스트가 등록할 때만
-있다(13.3). `pnx` 는 다섯 모두를 등록한다. 라이브러리를 끼워 쓰는 호스트는 `pinax_host_register(state,
+있다(13.3). `pnx` 는 여섯 모두를 등록한다. 라이브러리를 끼워 쓰는 호스트는 `pinax_host_register(state,
 "io")` 처럼 모듈 하나씩 고른다(라이브러리 `libpinax_host`). 등록하지 않은 모듈을 `use` 하면 거절된다(13.1).]
 
 #para("2")[호스트 낱말도 다른 낱말과 같은 규칙을 따른다: 서명은 적재 때 검사되고, `or fail` 이 있는 낱말은
@@ -94,3 +94,29 @@
 `PINAX_ERR_DEADLOCK` 으로 끝낸다.]
 
 #ex("spec", "17-channel.c")
+
+== `sh` --- 명령 <host-sh>
+
+#para("1")[`sh` 는 시스템 셸(`/bin/sh -c`, Windows 에서는 `cmd.exe /c`)로 명령을 돌린다. `pnx` 는 이를 등록한다.
+라이브러리를 넣는 호스트는 명령을 돌려도 되는 스크립트에만 등록한다(`pinax_host_register(state, "sh")`.
+`pinax_host_register_all` 은 등록하지 않는다). WebAssembly 호스트에는 `sh` 가 없다.
+#table(columns: (auto, auto, 1fr), inset: 5pt, stroke: 0.5pt + luma(170),
+  [*낱말*], [*서명*], [*뜻*],
+  [`sh.run`], [`(cmd str gives status int or fail)`], [`cmd` 를 돌린다. 그 출력은 프로그램이 쓴 것 뒤에, 프로그램의 출력이 가는 곳으로 간다. 상태는 명령의 것이다: 0 이 아닌 상태는 실패가 아니다. 셸을 띄우지 못할 때만 실패한다],
+  [`sh.output`], [`(cmd str gives out str or fail)`], [`cmd` 를 돌리고, 그것이 표준 출력에 쓴 것을 쓴 그대로(줄바꿈과 함께) 영역에 준다],
+  [`sh.output_into`], [`(cmd str, buf buffer gives status int or fail)`], [같은 것을 버퍼에 덧붙인다. 들어가지 않으면 `err.full`(명령은 끝까지 읽는다)],
+  [`sh.open_read`], [`(cmd str gives owned file or fail)`], [명령의 표준 출력에서 오는 관을 `file`(17.2)로 준다: `file.read_line`, `file.read`, `file.close`],
+  [`sh.open_write`], [`(cmd str gives owned file or fail)`], [명령의 표준 입력으로 가는 관: `file.write`, `file.close`],
+  [`sh.status`], [`(gives int)`], [마지막으로 끝난 명령의 상태: `run`, `output`, `output_into`, 또는 관의 `file.close`(명령이 끝나기를 기다린다)],
+  [`sh.quote`], [`(s str gives str)`], [`s` 를 시스템 셸의 낱말 하나로 만든다. 자료로 명령을 만들 때 쓴다: `/bin/sh` 에는 작은따옴표로, `cmd.exe` 에는 큰따옴표로 싼다(거기서 `%` 와 `!` 는 뜻을 지킨다)],
+  [`sh.cd`], [`(path str or fail)`], [프로세스의 작업 디렉터리를 바꾼다. 못 하면 `err.not_found`],
+  [`sh.cwd`], [`(gives path str or fail)`], [작업 디렉터리],
+  [`sh.setenv`], [`(name str, value str or fail)`], [뒤따르는 명령(과 `env.getenv`)이 볼 환경 변수를 정한다],
+  [`sh.exit`], [`(status int)`], [붙들린 것을 내보낸 뒤 그 상태(0 부터 255, 밖의 값은 잘린다)로 프로그램을 끝낸다. 실행은 거기서 멈추고, `pnx repl` 에서는 세션이 끝난다],
+)]
+
+#ex("spec", "17-sh.pnx")
+
+#para("2")[상태는 명령의 종료 코드다. 신호로 끝난 명령은 128 에 신호의 번호를 더한 것이다. 찾지 못한 명령은 실패가 아니라
+상태다(`/bin/sh` 에서 127). 0 바이트를 담은 명령은 `err.argument` 다. 읽기를 멈춘 명령으로 가는 관에 쓰면 실패한다
+(`err.failed`). `sh.status` 와 `sh.exit` 는 상태를 돌리는 스레드의 것이다.]

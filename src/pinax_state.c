@@ -3696,6 +3696,11 @@ pinax_err pinax_handle_type(pinax_state *st, const char *name, void (*close)(voi
     if (st->n_handle_types == PNX_MAX_HANDLE_TYPES)
         return fail(st, PINAX_ERR_NO_ROOM, "too many handle types");
     for (uint32_t k = 0; k < st->n_handle_types; ++k) {
+        if (text_equal(st->handle_types[k].name, name) && st->handle_types[k].close == close &&
+            st->handle_types[k].user == user) { // the same type given again (two modules share it): its number
+            *out_type = k + 1;
+            return PINAX_OK;
+        }
         if (text_equal(st->handle_types[k].name, name))
             return fail(st, PINAX_ERR_ARGUMENT, "a handle type of this name exists");
     }

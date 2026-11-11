@@ -27,14 +27,18 @@
 extern "C" {
 #endif
 
-/* Registers one module by name ("io", "file", "clock", "random", "env"), before code is
- * loaded. PINAX_ERR_NOT_FOUND for another name. */
+/* Registers one module by name ("io", "file", "clock", "random", "env", "sh"), before code is
+ * loaded. PINAX_ERR_NOT_FOUND for another name. "sh" runs commands through the system shell
+ * (RFC-0040 part B): register it only for scripts that may; its pipes are files of "file". */
 pinax_err pinax_host_register(pinax_state *state, const char *module);
-/* Registers all five, and pinax_host_barrier as the state's barrier. */
+/* Registers the first five (not "sh"), and pinax_host_barrier as the state's barrier. */
 pinax_err pinax_host_register_all(pinax_state *state);
 /* What a dot that ends a statement finishes for these modules (pinax_on_barrier): the output
  * they hold back is written. `user` is not used. */
 void pinax_host_barrier(void *user);
+/* After a run or a load that sh.exit stopped (it answers PINAX_ERR_INTERRUPTED): true, and the
+ * status asked for (0 to 255). */
+bool pinax_host_exit_asked(int *status);
 /* What env.arg_count and env.arg report. The strings must outlive the states that read them. */
 void pinax_host_set_args(int count, const char *const *args);
 

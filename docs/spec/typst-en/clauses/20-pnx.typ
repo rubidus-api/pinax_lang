@@ -21,7 +21,7 @@ registered, it first loads `MODULE.pnx` from beside the file (13.1). The file is
 without `.pnx`; when that name is not written like a word (it begins with a digit or contains `-`), the module has no
 name.]
 
-#para("2")[There are three exit statuses.
+#para("2")[There are three exit statuses, and the one a program gives with `sh.exit` (17.5).
 #table(columns: (auto, 1fr), inset: 5pt, stroke: 0.5pt + luma(170),
   [*Status*], [*When*],
   [0], [the load code ran to its end; for `pnx test`, every test passed],

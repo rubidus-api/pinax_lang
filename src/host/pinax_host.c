@@ -1,5 +1,8 @@
 // pinax_host.c - the standard host modules (see pinax_host.h). Written against pinax.h; the
 // operating system is reached through the vendored proven.
+#if !defined(_WIN32) && !defined(_WIN64) && !defined(_POSIX_C_SOURCE)
+#define _POSIX_C_SOURCE 200809L // popen, pclose, setenv, chdir: the sh module
+#endif
 #include "pinax_host.h"
 #include "pnx_streams.h"
 
@@ -14,7 +17,16 @@
 
 #include <stdatomic.h>
 #include <stdint.h>
+#include <stdio.h>
+#include <stdlib.h>
 #include <string.h>
+#if defined(_WIN32) || defined(_WIN64)
+#include <direct.h>
+#include <io.h>
+#else
+#include <sys/wait.h>
+#include <unistd.h>
+#endif
 
 static proven_u8str_view_t view_of(pinax_str s) {
     return (proven_u8str_view_t){s.ptr, s.len};
@@ -216,16 +228,24 @@ static uint32_t file_type(void *user) {
     return (uint32_t)(uintptr_t)user;
 }
 
-// An open file of the module: what proven opened, and the bytes its reads took ahead.
+// An open file of the module: what proven opened, and the bytes its reads took ahead. A pipe
+// to or from a command (sh.open_read, sh.open_write) is a file too, read and written through
+// its descriptor; `pipe` is what popen gave, closed with pclose, which waits for the command.
 typedef struct {
     reader        in;
+    FILE         *pipe;
     unsigned char bytes[4096];
 } host_file;
+
+static void sh_ended(int raw);
 
 static void file_close_object(void *object, void *user) {
     (void)user;
     host_file *file = object;
-    (void)proven_fs_close(file->in.file);
+    if (file->pipe)
+        sh_ended(pclose(file->pipe));
+    else
+        (void)proven_fs_close(file->in.file);
     proven_allocator_t heap = proven_heap_allocator();
     heap.free_fn(heap.ctx, file);
 }
@@ -242,6 +262,7 @@ static pinax_err file_open(pinax_call *call, void *user, const pinax_args *args,
     }
     host_file *file = (host_file *)(void *)room.value.ptr;
     file->in = (reader){opened.value, file->bytes, 0, 0, sizeof file->bytes, false};
+    file->pipe = NULL;
     pinax_handle handle;
     const pinax_err err = pinax_handle_new(pinax_call_state(call), file_type(user), file, &handle);
     if (err != PINAX_OK) {
@@ -486,6 +507,306 @@ static pinax_err env_getenv(pinax_call *call, void *user, const pinax_args *args
     return PINAX_OK;
 }
 
+// ---- sh (RFC-0040 part B) -------------------------------------------------------------------
+
+#if defined(_WIN32) || defined(_WIN64)
+#define sh_popen  _popen
+#define sh_pclose _pclose
+#else
+#define sh_popen  popen
+#define sh_pclose pclose
+#endif
+
+// The status of the last command that ended, and whether sh.exit was asked for: of the thread,
+// as the commands it ran.
+static _Thread_local int  sh_status = 0;
+static _Thread_local bool sh_exit_asked = false;
+static _Thread_local int  sh_exit_with = 0;
+
+// What the system gave for an ended command, as a status: its exit code, 128 and the signal when a
+// signal ended it.
+static void sh_ended(int raw) {
+#if defined(_WIN32) || defined(_WIN64)
+    sh_status = raw;
+#else
+    sh_status = raw == -1 ? -1 : WIFEXITED(raw) ? WEXITSTATUS(raw) : WIFSIGNALED(raw) ? 128 + WTERMSIG(raw) : raw;
+#endif
+}
+
+// The command as C text, on the heap; NULL when it holds a zero byte or there is no room.
+static char *sh_text(pinax_str s) {
+    if (memchr(s.ptr, 0, s.len))
+        return NULL;
+    proven_allocator_t heap = proven_heap_allocator();
+    const proven_result_mem_mut_t room = heap.alloc_fn(heap.ctx, s.len + 1, 1);
+    if (room.err != PROVEN_OK)
+        return NULL;
+    char *text = (char *)(void *)room.value.ptr;
+    memcpy(text, s.ptr, s.len);
+    text[s.len] = '\0';
+    return text;
+}
+static void sh_free(char *text) {
+    proven_allocator_t heap = proven_heap_allocator();
+    heap.free_fn(heap.ctx, text);
+}
+
+// (cmd str gives status int or fail): through the system shell; what the program wrote comes first
+static pinax_err sh_run(pinax_call *call, void *user, const pinax_args *args) {
+    (void)call, (void)user;
+    char *cmd = sh_text(args->s[0]);
+    if (!cmd)
+        return PINAX_ERR_ARGUMENT;
+    pnx_streams_flush();
+    fflush(stdout);
+    const int raw = system(cmd);
+    sh_free(cmd);
+    if (raw == -1)
+        return PINAX_ERR_FAILED; // the shell could not be started
+    sh_ended(raw);
+    args->ri[0] = sh_status;
+    return PINAX_OK;
+}
+
+// The output of a command, read to its end: appended to the buffer `buffer`, or (buffer < 0)
+// collected on the heap and copied into the caller's region.
+static pinax_err sh_collect(pinax_call *call, pinax_str command, int64_t buffer, pinax_str *out) {
+    char *cmd = sh_text(command);
+    if (!cmd)
+        return PINAX_ERR_ARGUMENT;
+    pnx_streams_flush();
+    fflush(stdout);
+    FILE *pipe = sh_popen(cmd, "r");
+    sh_free(cmd);
+    if (!pipe)
+        return PINAX_ERR_FAILED;
+    proven_allocator_t heap = proven_heap_allocator();
+    unsigned char     *all = NULL, chunk[4096];
+    size_t             n = 0, cap = 0;
+    pinax_err          err = PINAX_OK;
+    for (;;) {
+        const size_t got = fread(chunk, 1, sizeof chunk, pipe);
+        if (got == 0)
+            break;
+        if (err != PINAX_OK)
+            continue; // read to the end, so that the command is not stopped by a closed pipe
+        if (buffer >= 0) {
+            const pinax_mem room = pinax_call_buffer(call, buffer, 0);
+            const size_t    fits = got < room.len ? got : room.len;
+            memcpy(room.ptr, chunk, fits);
+            (void)pinax_call_buffer(call, buffer, fits);
+            if (fits < got)
+                err = PINAX_ERR_FULL;
+            continue;
+        }
+        if (n + got > cap) {
+            const size_t bigger = cap ? cap * 2 : 8192;
+            const proven_result_mem_mut_t room = heap.alloc_fn(heap.ctx, bigger < n + got ? n + got : bigger, 1);
+            if (room.err != PROVEN_OK) {
+                err = PINAX_ERR_FULL;
+                continue;
+            }
+            if (n)
+                memcpy(room.value.ptr, all, n);
+            if (all)
+                heap.free_fn(heap.ctx, all);
+            all = room.value.ptr;
+            cap = room.value.size;
+        }
+        memcpy(all + n, chunk, got);
+        n += got;
+    }
+    sh_ended(sh_pclose(pipe));
+    if (buffer < 0 && err == PINAX_OK) {
+        const pinax_mem room = n ? pinax_call_alloc(call, n) : (pinax_mem){NULL, 0};
+        if (n && !room.ptr)
+            err = PINAX_ERR_FULL;
+        else if (n)
+            memcpy(room.ptr, all, n);
+        if (err == PINAX_OK)
+            *out = (pinax_str){room.ptr, n};
+    }
+    if (all)
+        heap.free_fn(heap.ctx, all);
+    return err;
+}
+// (cmd str gives out str or fail): what the command wrote on its standard output, as written
+static pinax_err sh_output(pinax_call *call, void *user, const pinax_args *args) {
+    (void)user;
+    return sh_collect(call, args->s[0], -1, &args->rs[0]);
+}
+// (cmd str, buf buffer gives status int or fail): the same, appended to a buffer; full when it does not fit
+static pinax_err sh_output_into(pinax_call *call, void *user, const pinax_args *args) {
+    (void)user;
+    pinax_str none;
+    const pinax_err err = sh_collect(call, args->s[0], args->i[0], &none);
+    if (err == PINAX_OK)
+        args->ri[0] = sh_status;
+    return err;
+}
+
+// (cmd str gives owned file or fail): a pipe from (read) or to (write) the command, as a file
+static pinax_err sh_open(pinax_call *call, void *user, const pinax_args *args, bool write) {
+    char *cmd = sh_text(args->s[0]);
+    if (!cmd)
+        return PINAX_ERR_ARGUMENT;
+    pnx_streams_flush();
+    fflush(stdout);
+#if defined(_WIN32) || defined(_WIN64)
+    FILE *pipe = sh_popen(cmd, write ? "wb" : "rb");
+#else
+    FILE *pipe = sh_popen(cmd, write ? "w" : "r");
+#endif
+    sh_free(cmd);
+    if (!pipe)
+        return PINAX_ERR_FAILED;
+    proven_allocator_t heap = proven_heap_allocator();
+    const proven_result_mem_mut_t room = heap.alloc_fn(heap.ctx, sizeof(host_file), _Alignof(host_file));
+    if (room.err != PROVEN_OK) {
+        sh_ended(sh_pclose(pipe));
+        return PINAX_ERR_FULL;
+    }
+    host_file    *file = (host_file *)(void *)room.value.ptr;
+    proven_file_t through = {0};
+#if defined(_WIN32) || defined(_WIN64)
+    through.internal.ptr = (void *)_get_osfhandle(_fileno(pipe));
+#else
+    through.internal.fd = fileno(pipe);
+#endif
+    file->in = (reader){through, file->bytes, 0, 0, sizeof file->bytes, false};
+    file->pipe = pipe;
+    pinax_handle handle;
+    const pinax_err err = pinax_handle_new(pinax_call_state(call), file_type(user), file, &handle);
+    if (err != PINAX_OK) {
+        file_close_object(file, NULL);
+        return err;
+    }
+    args->ri[0] = (int64_t)handle;
+    return PINAX_OK;
+}
+static pinax_err sh_open_read(pinax_call *call, void *user, const pinax_args *args) {
+    return sh_open(call, user, args, false);
+}
+static pinax_err sh_open_write(pinax_call *call, void *user, const pinax_args *args) {
+    return sh_open(call, user, args, true);
+}
+
+// (gives int): the status of the last command that ended (sh.run, sh.output, a pipe closed)
+static pinax_err sh_status_word(pinax_call *call, void *user, const pinax_args *args) {
+    (void)call, (void)user;
+    args->ri[0] = sh_status;
+    return PINAX_OK;
+}
+
+// (s str gives str): `s` as one word for the system shell. /bin/sh: in single quotes, a quote as
+// '\''. cmd.exe: in double quotes, a double quote doubled; % and ! keep their meaning there.
+static pinax_err sh_quote(pinax_call *call, void *user, const pinax_args *args) {
+    (void)user;
+    const pinax_str s = args->s[0];
+#if defined(_WIN32) || defined(_WIN64)
+    const unsigned char mark = '"';
+    size_t extra = 2;
+    for (size_t k = 0; k < s.len; ++k)
+        extra += s.ptr[k] == '"';
+#else
+    const unsigned char mark = '\'';
+    size_t extra = 2;
+    for (size_t k = 0; k < s.len; ++k)
+        extra += s.ptr[k] == '\'' ? 3 : 0;
+#endif
+    const pinax_mem room = pinax_call_alloc(call, s.len + extra);
+    if (!room.ptr)
+        return PINAX_ERR_FULL; // a fault: the word has no `or fail`
+    unsigned char *to = room.ptr;
+    size_t         n = 0;
+    to[n++] = mark;
+    for (size_t k = 0; k < s.len; ++k) {
+#if defined(_WIN32) || defined(_WIN64)
+        if (s.ptr[k] == '"')
+            to[n++] = '"';
+        to[n++] = s.ptr[k];
+#else
+        if (s.ptr[k] == '\'') {
+            memcpy(to + n, "'\\''", 4);
+            n += 4;
+        } else {
+            to[n++] = s.ptr[k];
+        }
+#endif
+    }
+    to[n++] = mark;
+    args->rs[0] = (pinax_str){to, n};
+    return PINAX_OK;
+}
+
+// (path str or fail), (gives path str or fail): the working directory of the process
+static pinax_err sh_cd(pinax_call *call, void *user, const pinax_args *args) {
+    (void)call, (void)user;
+    char *path = sh_text(args->s[0]);
+    if (!path)
+        return PINAX_ERR_ARGUMENT;
+#if defined(_WIN32) || defined(_WIN64)
+    const int done = _chdir(path);
+#else
+    const int done = chdir(path);
+#endif
+    sh_free(path);
+    return done == 0 ? PINAX_OK : PINAX_ERR_NOT_FOUND;
+}
+static pinax_err sh_cwd(pinax_call *call, void *user, const pinax_args *args) {
+    (void)user;
+    char here[4096];
+#if defined(_WIN32) || defined(_WIN64)
+    if (!_getcwd(here, (int)sizeof here))
+#else
+    if (!getcwd(here, sizeof here))
+#endif
+        return PINAX_ERR_FAILED;
+    const size_t    n = strlen(here);
+    const pinax_mem room = pinax_call_alloc(call, n ? n : 1);
+    if (!room.ptr)
+        return PINAX_ERR_FULL;
+    memcpy(room.ptr, here, n);
+    args->rs[0] = (pinax_str){room.ptr, n};
+    return PINAX_OK;
+}
+
+// (name str, value str or fail): for the commands that follow (and env.getenv)
+static pinax_err sh_setenv(pinax_call *call, void *user, const pinax_args *args) {
+    (void)call, (void)user;
+    char *name = sh_text(args->s[0]), *value = sh_text(args->s[1]);
+    pinax_err err = name && value && args->s[0].len && !memchr(args->s[0].ptr, '=', args->s[0].len) ? PINAX_OK
+                                                                                                      : PINAX_ERR_ARGUMENT;
+#if defined(_WIN32) || defined(_WIN64)
+    if (err == PINAX_OK && _putenv_s(name, value) != 0)
+#else
+    if (err == PINAX_OK && setenv(name, value, 1) != 0)
+#endif
+        err = PINAX_ERR_FAILED;
+    if (name)
+        sh_free(name);
+    if (value)
+        sh_free(value);
+    return err;
+}
+
+// (status int): ends the program with that status, 0 to 255. The run stops here
+// (PINAX_ERR_INTERRUPTED), and pinax_host_exit_asked tells the host the status.
+static pinax_err sh_exit(pinax_call *call, void *user, const pinax_args *args) {
+    (void)call, (void)user;
+    sh_exit_asked = true;
+    sh_exit_with = args->i[0] < 0 ? 0 : args->i[0] > 255 ? 255 : (int)args->i[0];
+    return PINAX_ERR_INTERRUPTED;
+}
+
+bool pinax_host_exit_asked(int *status) {
+    if (!sh_exit_asked)
+        return false;
+    if (status)
+        *status = sh_exit_with;
+    return true;
+}
+
 // ---- registration -------------------------------------------------------------------------
 
 static bool same(const char *a, const char *b) {
@@ -543,6 +864,27 @@ pinax_err pinax_host_register(pinax_state *state, const char *module) {
             {"seed", "(n int)", random_seed, NULL, 0},
         };
         return pinax_register(state, "random", words, sizeof words / sizeof words[0]);
+    }
+    if (same(module, "sh")) { // shares the handle type of file: a pipe is a file
+        uint32_t type;
+        const pinax_err err = pinax_handle_type(state, "file", file_close_object, NULL, &type);
+        if (err != PINAX_OK)
+            return err;
+        void *tag = (void *)(uintptr_t)type;
+        const pinax_word_def words[] = {
+            {"run", "(cmd str gives status int or fail)", sh_run, NULL, 0},
+            {"output", "(cmd str gives out str or fail)", sh_output, NULL, 0},
+            {"output_into", "(cmd str, buf buffer gives status int or fail)", sh_output_into, NULL, 0},
+            {"open_read", "(cmd str gives owned file or fail)", sh_open_read, tag, 0},
+            {"open_write", "(cmd str gives owned file or fail)", sh_open_write, tag, 0},
+            {"status", "(gives int)", sh_status_word, NULL, 0},
+            {"quote", "(s str gives str)", sh_quote, NULL, 0},
+            {"cd", "(path str or fail)", sh_cd, NULL, 0},
+            {"cwd", "(gives path str or fail)", sh_cwd, NULL, 0},
+            {"setenv", "(name str, value str or fail)", sh_setenv, NULL, 0},
+            {"exit", "(status int)", sh_exit, NULL, 0},
+        };
+        return pinax_register(state, "sh", words, sizeof words / sizeof words[0]);
     }
     if (same(module, "env")) {
         const pinax_word_def words[] = {

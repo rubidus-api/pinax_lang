@@ -1,0 +1,9 @@
+rem run
+use io
+use sh
+word main (or fail)
+  "echo one; echo two" sh.output or_fail io.print
+  cat ("status ", "exit 4" sh.run or_fail) io.println
+  cat ("echo ", "it's here" sh.quote) sh.output or_fail io.print
+end
+main or_else (e) cat ("failed: ", e err_text) io.println end

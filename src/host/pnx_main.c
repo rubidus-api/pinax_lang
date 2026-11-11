@@ -37,6 +37,7 @@
 #include "proven/heap.h"
 #include "proven/u8str.h"
 
+#include <signal.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -563,6 +564,13 @@ static int repl(pinax_state *state, size_t block_bytes) {
         if (err == PINAX_OK)
             show_values(state);
         holding = false;
+        int asked = 0;
+        if (err == PINAX_ERR_INTERRUPTED && pinax_host_exit_asked(&asked)) { // sh.exit ends the session
+            fwrite(held, 1, held_n, stdout);
+            fflush(stdout);
+            fputc('\n', stderr);
+            return asked;
+        }
         warn_block(state, block_bytes, &warned);
         const pinax_str why = pinax_error_text(state);
         if (err == PINAX_ERR_SYNTAX && why.len >= 11 && memcmp(why.ptr, "unfinished:", 11) == 0 &&
@@ -638,6 +646,9 @@ static int run_tests(pinax_state *state, const char *module) {
 }
 
 int main(int argc, char **argv) {
+#if defined(SIGPIPE)
+    signal(SIGPIPE, SIG_IGN); // a command that stops reading a pipe makes the write fail, not pnx end
+#endif
 #if defined(_WIN32)
     // What pnx prints is the same bytes on every system, as the module io writes them: no \r
     // before each \n.
@@ -720,6 +731,8 @@ static int run(int argc, char **argv) {
     pinax_err err = pinax_open((pinax_mem){block, block_bytes}, &config, &state);
     if (err == PINAX_OK)
         err = pinax_host_register_all(state);
+    if (err == PINAX_OK) // a command line tool runs commands (RFC-0040 part B)
+        err = pinax_host_register(state, "sh");
     if (err == PINAX_OK && n_libs)
         pinax_set_resolver(state, resolve, NULL);
     if (err != PINAX_OK) {
@@ -773,7 +786,10 @@ static int run(int argc, char **argv) {
         err = load_file(state, file_name, NULL, file_name, &said, false);
     }
     int status = 0;
-    if (err != PINAX_OK) {
+    int asked = 0;
+    if (err == PINAX_ERR_INTERRUPTED && pinax_host_exit_asked(&asked)) { // sh.exit: the program ends so
+        status = asked;
+    } else if (err != PINAX_OK) {
         if (!said && err >= PINAX_ERR_FAILED && err < PINAX_ERR_ARGUMENT)
             said = report_fault(state, err, plain ? NULL : file_name); // a fault of the script: with its line when the state knows it
         if (!said && err != PINAX_ERR_SYNTAX && err != PINAX_ERR_TYPE) // those two were reported with their place

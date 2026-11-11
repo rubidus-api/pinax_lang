@@ -71,6 +71,19 @@ prompt, and the end of a program's code, are a dot already.
 In bash terms, a comma is like `&` and a dot like `wait`. Use a dot where what came before must be seen, or must have
 happened, before going on: before a long computation, after a progress line.
 
+== Shell scripts
+
+The module `sh` runs commands through the system shell, and a search order lets its words and those of `io` be written
+bare. A file that begins with `#!/usr/bin/env pnx` runs as a command.
+
+#ex("manual", "15-shell.pnx")
+
+A command's status is a value, not a failure: `"exit 2" run` gives 2. Only a shell that cannot start fails. To put data
+into a command, quote it first: `cat ("ls ", name sh.quote) run`. `sh.open_read` and `sh.open_write` give a pipe as a
+`file`, read and written with the words of `file`; closing it waits for the command, and `sh.status` then tells how it
+ended. `sh.exit` ends the program with a status of its own. A host that embeds Pinax has `sh` only when it registers it
+(standard 17.5).
+
 == Seeing the stack, and formatting
 
 `pnx see` shows, for each line of a definition, the stack where that line ends. Use it when the stack is not what you
