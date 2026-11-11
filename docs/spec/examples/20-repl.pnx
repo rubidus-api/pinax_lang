@@ -1,7 +1,10 @@
 rem repl
 use str
-1 2 add
+3 4
+mul
 word sq (n int gives int) n n mul end
-7 sq
+sq
 "x" 3 str.repeat
 1 0 div
+clear
+2 sq

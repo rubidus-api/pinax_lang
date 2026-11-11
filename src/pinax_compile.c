@@ -394,7 +394,8 @@ typedef struct comp {
     bool         unfinished; // the text ended inside a definition or a block: more is to come
     bool         see;        // list the stack after every line of the definitions that follow
     uint32_t     see_line;
-    sig          eval_sig;   // what the line leaves on the stack: the results of its code
+    sig          eval_sig;   // the line as a word: the session stack before it and after it (RFC-0040 part A)
+    bool         cleared;    // the line began with the tool word `clear`: it starts from an empty stack
     // redefine word NAME ... : the session's word that is replaced and the new word whose code
     // takes its place (RFC-0006 S11); NONE when the text redefines nothing
     uint32_t     redefine_old, redefine_new;
@@ -8566,6 +8567,24 @@ static void mark_new(comp *c, struct counts *seen) {
     c->exporting = false;
 }
 
+// A line of a session starts with the session stack as its inputs (RFC-0040 part A), unless it
+// begins with the tool word `clear`, which empties it.
+static bool session_inputs(comp *c) {
+    // (the core's `clear` takes a collection before it, so at the start of a line it is this one)
+    if (c->tok.kind == PNX_T_NAME && name_is(tok_name(c), "clear") && !find_word(c, tok_name(c), NULL) &&
+        !find_const(c, tok_name(c)) && find_global(c, tok_name(c)) == NONE) {
+        c->cleared = true;
+        return advance(c);
+    }
+    const pinax_state *st = c->st;
+    sig               *s = &c->eval_sig;
+    for (uint32_t k = 0; k < st->eval_n; ++k)
+        s->in[k] = st->eval_type[k];
+    s->n_in = (uint8_t)st->eval_n;
+    c->top_fn->sig = s;
+    return bind_inputs(c, s);
+}
+
 static bool compile(comp *c, image *im, bool *has_top) {
     if (!advance(c))
         return false;
@@ -8580,6 +8599,8 @@ static bool compile(comp *c, image *im, bool *has_top) {
         if (!advance(c))
             return false;
     }
+    if (c->eval && !session_inputs(c))
+        return false;
     struct counts seen = c->base;
     while (c->tok.kind != PNX_T_END) {
         if (c->eval && c->tok.kind == PNX_T_NAME && !c->top_fn->n_blocks && c->top_fn->depth == 0 &&
@@ -8774,7 +8795,7 @@ static bool compile(comp *c, image *im, bool *has_top) {
             for (uint32_t k = 0; k < top->depth; ++k) {
                 const tid t = top->stack[k].type;
                 if (s->n_out == MAX_PARAMS || t == TY_COLL || t == TY_STEM || top->stack[k].owned)
-                    return type_error(c, s->n_out == MAX_PARAMS ? "the line leaves too many values"
+                    return type_error(c, s->n_out == MAX_PARAMS ? "the session stack holds at most 16 values"
                                          : top->stack[k].owned  ? "the line leaves an owned value that nothing takes"
                                                                 : "the line leaves a name or a stem, which is not a value");
                 s->out[s->n_out++] = t;
@@ -8875,8 +8896,11 @@ static bool serialize(comp *c, const image *im, uint8_t **out, size_t *out_len) 
         rec.int_results = (uint8_t)out[0];
         rec.str_results = (uint8_t)out[1];
         put_text(rec.name, sizeof rec.name, w->name);
-        if (!sig_text(c, &w->sig, rec.signature, sizeof rec.signature))
-            return syntax(c, "the signature is longer than 71 bytes");
+        if (!sig_text(c, &w->sig, rec.signature, sizeof rec.signature)) {
+            if (!name_is(w->name, LOAD_WORD)) // a line of a session may take and leave 16 values each
+                return syntax(c, "the signature is longer than 71 bytes");
+            __builtin_memcpy(rec.signature, "(session)", sizeof "(session)");
+        }
         __builtin_memcpy(p, &rec, sizeof rec);
         p += sizeof rec;
     }
@@ -9355,6 +9379,11 @@ uint32_t pinax_eval_count(const pinax_state *st) {
     return st ? st->eval_n : 0;
 }
 
+void pinax_eval_clear(pinax_state *st) {
+    if (st)
+        st->eval_n = 0;
+}
+
 pinax_err pinax_eval_value(const pinax_state *st, uint32_t index, pinax_value *out) {
     if (!st || !out)
         return PINAX_ERR_ARGUMENT;
@@ -9372,7 +9401,7 @@ pinax_err pinax_eval_value(const pinax_state *st, uint32_t index, pinax_value *o
     const tid base = base_of(&view, type);
     *out = (pinax_value){.kind = bank_of(type) == BANK_S ? PINAX_VALUE_STR : base == TY_BOOL ? PINAX_VALUE_BOOL
                                  : base == TY_ERR ? PINAX_VALUE_ERR : PINAX_VALUE_INT,
-                         .i = st->eval_int[index], .s = st->eval_str[index],
+                         .i = st->eval_int[index], .s = {st->eval_bytes[index], st->eval_len[index]},
                          .type = {(const unsigned char *)n.text, n.length}};
     if (out->kind == PINAX_VALUE_ERR)
         out->s = pnx_err_label(st, out->i);
@@ -9444,7 +9473,6 @@ static bool truncs_ok(comp *c) {
 static pinax_err load_source(pinax_state *st, const char *file, pinax_str source, uint32_t mode, bool eval) {
     if (!st || (!source.ptr && source.len))
         return PINAX_ERR_ARGUMENT;
-    st->eval_n = 0;
     if (st->suspended || st->host_cur) {
         st->error_text = "a run is suspended or a host word is running; finish it before loading";
         return PINAX_ERR_STATE;
@@ -9552,8 +9580,13 @@ static pinax_err load_source(pinax_state *st, const char *file, pinax_str source
 
     // what the line of a session leaves, and whether it declared anything worth keeping
     const uint32_t n_values = eval ? c.eval_sig.n_out : 0;
-    for (uint32_t k = 0; k < n_values; ++k)
-        st->eval_type[k] = c.eval_sig.out[k];
+    const uint32_t n_inputs = eval ? c.eval_sig.n_in : 0;
+    st->eval_next_n = n_values;
+    st->eval_next_text = 0;
+    for (uint32_t k = 0; k < n_values; ++k) {
+        st->eval_next_type[k] = c.eval_sig.out[k];
+        st->eval_next_text |= (uint16_t)((bank_of(c.eval_sig.out[k]) == BANK_S ? 1u : 0u) << k);
+    }
     const pnx_symbols *session_before = &st->symbols;
     const bool         declared = !eval || c.words.n != c.base.words + (has_top ? 1u : 0u) || c.consts.n != c.base.consts ||
                                   c.globals.n != c.base.globals || c.records.n != c.base.records ||
@@ -9604,6 +9637,8 @@ static pinax_err load_source(pinax_state *st, const char *file, pinax_str source
     if (err != PINAX_OK)
         return err;
     st->symbols = keep.next;
+    if (eval && c.cleared && !has_top) // `clear` alone: the session stack is empty
+        st->eval_n = 0;
     if (has_top && st->export_only) // pnx export-c: the code as it stands right before it would run (RFC-0028)
         return PINAX_OK;
 
@@ -9611,21 +9646,23 @@ static pinax_err load_source(pinax_state *st, const char *file, pinax_str source
         const uint64_t budget = st->budget;
         if (mode == PINAX_LOAD_DATA) // its stores run on a small budget of their own, not the host's
             st->budget = 1024 + 16 * (uint64_t)source.len;
-        int64_t    ints[MAX_PARAMS];
-        pinax_str  strs[MAX_PARAMS];
-        pinax_args values = {.ri = ints, .rs = strs};
+        int64_t    ints[MAX_PARAMS], in_ints[MAX_PARAMS];
+        pinax_str  strs[MAX_PARAMS], in_strs[MAX_PARAMS];
+        pinax_args values = {.i = in_ints, .s = in_strs, .ri = ints, .rs = strs};
+        for (uint32_t k = 0, ni = 0, ns = 0; k < n_inputs; ++k) { // the session stack, each bank on its own
+            if (bank_of(st->eval_type[k]) == BANK_S)
+                in_strs[ns++] = (pinax_str){st->eval_bytes[k], st->eval_len[k]};
+            else
+                in_ints[ni++] = st->eval_int[k];
+        }
         st->load_runs = true;
-        err = pinax_run(st, st->head->n_words - 1, n_values ? &values : NULL);
+        err = pinax_run(st, st->head->n_words - 1, n_values || n_inputs ? &values : NULL);
         st->load_runs = false;
         st->budget = budget;
-        if (err == PINAX_OK && n_values) { // in the order of the stack, each bank counted on its own
-            for (uint32_t k = 0, ni = 0, ns = 0; k < n_values; ++k) {
-                const bool text = bank_of(st->eval_type[k]) == BANK_S;
-                st->eval_int[k] = text ? 0 : ints[ni++];
-                st->eval_str[k] = text ? strs[ns++] : (pinax_str){(const unsigned char *)"", 0};
-            }
-            st->eval_n = n_values;
-        }
+        if (err == PINAX_OK && eval) // what the line left becomes the session stack
+            err = pnx_session_keep(st, ints, strs);
+        else if (eval && (err == PINAX_SUSPENDED || err == PINAX_WAITING))
+            st->eval_pending = true; // kept when the line ends (pinax_resume)
         if (mode == PINAX_LOAD_DATA && err == PINAX_SUSPENDED) {
             st->error_text = "the data source did not finish inside its budget";
             err = PINAX_ERR_STATE;

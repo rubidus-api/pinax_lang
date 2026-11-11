@@ -122,6 +122,16 @@ another; such a load runs without it.]
 #para("2")[`pinax_eval(state, text)` runs one line as a session does. All lines form one module (the session). What a
 line leaves is read with `pinax_eval_count` and `pinax_eval_value`.]
 
+#para("2a")[The session has a stack that stays from line to line. A line starts with what the lines before it left
+and is checked as a word whose inputs are those values and whose results are what it leaves. The session stack holds
+at most 16 values: an int or a type over it, a bool, an err, a str of at most 255 bytes, a handle that is not owned. A
+line that would leave more, or a collection, a stem or an owned value, is refused; one that leaves a longer str ends
+with `PINAX_ERR_NO_ROOM` after it ran. A line that is refused or ends with a fault leaves the stack as it was before it;
+so does one that ran out of budget and is abandoned, while one resumed to its end leaves what it left. A str of the
+session stack is copied into the state and stays valid until the next `pinax_eval` or `pinax_eval_clear`.
+`pinax_eval_clear(state)` empties the stack, as does a line that begins with the tool word `clear`. A load, a run or a
+clone leave it as it is; an image does not carry it.]
+
 == Finding and running <host-run>
 
 #para("1")[`pinax_find(state, name, signature, flags, &word)` finds a word and checks that its signature is the one

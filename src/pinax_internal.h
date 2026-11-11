@@ -371,11 +371,18 @@ struct pinax_state {
     void (*diag)(void *user, pinax_str file, uint32_t line, uint32_t column, pinax_str message);
     void *diag_user;
     pinax_resolve_fn resolve; // gives the C functions that `extern` names
-    // what the last pinax_eval() left: its types (the compiler's numbers) and values
+    // the session stack (RFC-0040 part A): what the lines of pinax_eval() left, the deepest
+    // first; its types (the compiler's numbers) and values, a str's bytes copied here
     uint32_t  eval_n;
     uint16_t  eval_type[16];
     int64_t   eval_int[16];
-    pinax_str eval_str[16];
+    uint8_t   eval_len[16];
+    uint8_t   eval_bytes[16][255];
+    // a line that was suspended: what it will leave, kept when it ends (pinax_resume)
+    bool      eval_pending;
+    uint32_t  eval_next_n;
+    uint16_t  eval_next_type[16];
+    uint16_t  eval_next_text; // bit k: value k is a str
     void            *resolve_user;
     uint8_t hash_key[16]; // of the lookup indexes; inside the block, so images carry it
 
@@ -525,6 +532,9 @@ void pnx_err_name(int64_t err, uint32_t *offset, uint32_t *length);
 // The name of an error number: a declared failure code's (RFC-0037), or pnx_err_name's.
 pinax_str pnx_err_label(const pinax_state *state, int64_t err);
 bool pnx_tasks_alive(const pinax_state *state); // a task was spawned and has not ended
+// The session stack takes what a line left (st->eval_next_*): ints in `ri`, strs in `rs`, each
+// bank in the order of the stack. Refused when a str is longer than 255 bytes; then it stays.
+pinax_err pnx_session_keep(pinax_state *state, const int64_t *ri, const pinax_str *rs);
 // Offset of the last `part` in `bytes`, or UINT32_MAX. An empty part is found at the end.
 uint32_t pnx_find_last(const uint8_t *bytes, uint32_t length, const uint8_t *part, uint32_t part_length);
 // Offset of the first `byte`, or UINT32_MAX.

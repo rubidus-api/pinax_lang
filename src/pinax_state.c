@@ -2318,14 +2318,45 @@ void pnx_compact(pinax_state *st) {
             t->ptn = (pnx_ptn_found){0};
         }
     }
-    for (uint32_t k = 0; k < st->eval_n; ++k)
-        RELOC(st->eval_str[k].ptr);
     st->fault_ibank = NULL, st->fault_sbank = NULL; // read right after the fault, as an image does not carry them
     st->ptn = (pnx_ptn_found){0};                   // a match's offsets into a global's storage do not survive the move
     give_back(st, mark);
     st->used = (size_t)(cursor - st->block);
 }
 #undef RELOC
+
+pinax_err pnx_session_keep(pinax_state *st, const int64_t *ri, const pinax_str *rs) {
+    st->eval_pending = false;
+    const uint32_t n = st->eval_next_n;
+    for (uint32_t k = 0, ns = 0; k < n; ++k) {
+        if ((st->eval_next_text >> k & 1u) && rs[ns++].len > 255)
+            return fail(st, PINAX_ERR_NO_ROOM, "the session stack holds a str of at most 255 bytes");
+    }
+    // a str left may be one the line was given, so its bytes are staged before they are written
+    static_assert(sizeof st->eval_bytes == 16 * 255, "16 cells of 255 bytes");
+    uint8_t staged[16][255];
+    uint8_t lengths[16];
+    for (uint32_t k = 0, ni = 0, ns = 0; k < n; ++k) {
+        if (st->eval_next_text >> k & 1u) {
+            const pinax_str s = rs[ns++];
+            lengths[k] = (uint8_t)s.len;
+            if (s.len)
+                __builtin_memcpy(staged[k], s.ptr, s.len);
+            st->eval_int[k] = 0;
+        } else {
+            lengths[k] = 0;
+            st->eval_int[k] = ri[ni++];
+        }
+    }
+    for (uint32_t k = 0; k < n; ++k) {
+        st->eval_type[k] = st->eval_next_type[k];
+        st->eval_len[k] = lengths[k];
+        if (lengths[k])
+            __builtin_memcpy(st->eval_bytes[k], staged[k], lengths[k]);
+    }
+    st->eval_n = n;
+    return PINAX_OK;
+}
 
 bool pnx_tasks_alive(const pinax_state *st) {
     for (uint32_t k = 0; st->head && k < st->head->n_globals; ++k) {
@@ -2759,8 +2790,19 @@ static pinax_err deliver(pinax_state *st, pinax_err err, const pinax_args *resul
         return err;
     }
     const pnx_counts n = st->word_counts[st->top_word];
+    if (st->loading && st->eval_pending) { // a line of a session that was suspended: what it left stays
+        int64_t   ri[16];
+        pinax_str rs[16];
+        for (uint32_t k = 0; k < n.int_results && k < 16; ++k)
+            ri[k] = st->ibank[k];
+        for (uint32_t k = 0; k < n.str_results && k < 16; ++k)
+            rs[k] = (pinax_str){st->segment[st->sbank[k].segment] + st->sbank[k].offset, st->sbank[k].length};
+        const pinax_err kept = pnx_session_keep(st, ri, rs);
+        if (kept != PINAX_OK)
+            return kept;
+    }
     if (st->loading && !results)
-        return PINAX_OK; // a line of a session that was suspended: what it left is not shown
+        return PINAX_OK; // a line of a session that was suspended: shown through pinax_eval_value
     if ((n.int_results && !(results && results->ri)) || (n.str_results && !(results && results->rs)))
         return fail(st, PINAX_ERR_ARGUMENT, "no place given for the results");
     for (uint32_t k = 0; k < n.int_results; ++k)
@@ -2956,6 +2998,7 @@ pinax_err pinax_resume(pinax_state *st, const pinax_args *results) {
     const pinax_err err = deliver(st, run, results);
     if (st->loading && err != PINAX_SUSPENDED && err != PINAX_WAITING) { // the load ends here: done, or failed and undone
         st->loading = false;
+        st->eval_pending = false; // a line that failed leaves the session stack as it was
         if (err != PINAX_OK) {
             const char *text = st->error_text;
             const pnx_program before = st->before_load;
@@ -2982,6 +3025,7 @@ pinax_err pinax_abort(pinax_state *st) {
     st->fault_n = 0;
     if (st->loading) { // a load whose code ran out of budget: undone, as a failed load is
         st->loading = false;
+        st->eval_pending = false;
         const pnx_program before = st->before_load;
         pnx_program_restore(st, &before);
     }
@@ -3955,7 +3999,8 @@ pinax_err pinax_image_open(pinax_mem block, pinax_str image, const pinax_config 
     st->diag = config->diag, st->diag_user = config->diag_user;
     st->budget = config->budget;
     st->error_text = "";
-    st->eval_n = 0;
+    st->eval_n = 0; // the session stack does not survive an image
+    st->eval_pending = false;
     st->fault_n = 0;
     st->ptn = (pnx_ptn_found){0}; // the last match (ptn.capture, the groups of rex) does not survive an image
     scrub_cells(st, st->sbank, st->str_slots);

@@ -25,13 +25,15 @@ takes and gives nothing, so a test that leaves a value is refused. End it with `
 
 == Sessions
 
-`pnx repl` reads and runs one line at a time and shows what each line leaves. Later lines use the definitions of earlier
-ones. A line that is refused or ends with a fault leaves nothing behind.
+`pnx repl` reads and runs one line at a time and shows the stack after each line, the bottom on the left. The stack
+stays from line to line, as in Forth: later lines use the definitions of earlier ones and the values they left. A line
+that is refused or ends with a fault leaves the stack as it was. A line that begins with `clear` starts from an empty
+stack.
 
 #ex("manual", "15-repl.pnx")
 
-The last line, `cube cube`, was refused because the stack was empty. The message of a refusal goes to standard error,
-so it is not in the output above.
+The line `1 0 div` ended with a fault and left the stack as it was. The last line, `cube`, was refused because the
+top of the stack is a `str`. The message of a refusal goes to standard error, so it is not in the output above.
 
 A line that declares a word or a global adds just what it declares to the program, so even in a long session a
 line loads in the time its own length takes, and the memory block fills with what was declared. A line that only computes
@@ -39,15 +41,16 @@ values uses none of it. When three quarters of the block are used, `pnx` says so
 session that declares many large globals with a larger block through `PNX_BLOCK_KB` (the default is 16384, that is
 16 MiB).
 
-What each line leaves on the stack, followed. The values left at the end of a line are what is shown; the next line
-starts from an empty stack again.
+What the stack holds after each line, followed. The next line starts from it.
 
 #trace(
-  ("2 3 add", "5", [Shows the value left, `5`.]),
-  ("word cube … end", "—", [A definition leaves no value.]),
-  ("4 cube", "64", [Uses the definition of the line before.]),
-  ("1 0 div", "—", [A line that ends with a fault leaves nothing.]),
-  ("cube cube", "—", [Refused: no `int` to take from an empty stack.]),
+  ("2 3", "2 3", [Two values stay on the stack.]),
+  ("add", "5", [The next line takes them.]),
+  ("word cube … end", "5", [A definition leaves the stack as it is.]),
+  ("cube", "125", [Uses the definition and the value of the lines before.]),
+  ("\"pinax\" str.upper", "125 \"PINAX\"", [A `str` stays too, up to 255 bytes.]),
+  ("1 0 div", "125 \"PINAX\"", [A line that ends with a fault leaves the stack as it was.]),
+  ("cube", "125 \"PINAX\"", [Refused: the top is a `str`, not an `int`.]),
 )
 
 == Seeing the stack, and formatting

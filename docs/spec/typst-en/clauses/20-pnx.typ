@@ -61,13 +61,15 @@ test = "test" NAME { body } "end" ;
 
 == Sessions <pnx-repl>
 
-#para("1")[`pnx repl` reads lines from standard input and runs them one at a time (`pinax_eval` of 19.4). It writes what
-each line leaves on standard output. A line can use what earlier lines defined. A line that ends inside a definition or
-a block is read together with the next. A line that is refused or ends with a fault leaves nothing behind.]
+#para("1")[`pnx repl` reads lines from standard input and runs them one at a time (`pinax_eval` of 19.4). After each
+line it writes the session stack on standard output, the deepest value first, when it is not empty. A line can use
+what earlier lines defined and the values they left (19.4 (2a)). A line that ends inside a definition or a block is
+read together with the next. A line that is refused or ends with a fault leaves the stack as it was.]
 
 #para("2")[There are tool words only for sessions: `list_words` (the words defined), `stack` (the types on the stack
-there), `see` (the stack after every line of the definitions that follow), `redefine word …` (replaces a word with the
-same signature; code that calls it calls the new one).]
+there), `clear` (at the start of a line: the line starts from an empty stack), `see` (the stack after every line of
+the definitions that follow), `redefine word …` (replaces a word with the same signature; code that calls it calls the
+new one).]
 
 #ex("spec", "20-repl.pnx")
 

@@ -289,7 +289,13 @@ PINAX_API pinax_err pinax_load_bytecode(pinax_state *state, pinax_str bytecode);
  *  - All the texts given to pinax_eval() are one module, the session: a line sees what the
  *    lines before it defined and the modules they opened with `use`. Sources loaded with
  *    pinax_load() do not see the session's names.
- *  - What the line leaves on the stack is read with pinax_eval_count() and pinax_eval_value().
+ *  - The session has a stack that stays from line to line: a line starts with what the lines
+ *    before it left and is checked as a word from that stack to the stack it leaves. It holds
+ *    at most 16 values (int and the types over it, bool, err, str of at most 255 bytes, a handle
+ *    that is not owned); a line that would leave more, or a longer str, is refused or faults. It
+ *    is read with pinax_eval_count() and pinax_eval_value(), emptied by pinax_eval_clear() or by
+ *    a line that begins with the tool word `clear`. A load, a run or a clone leaves it as it is;
+ *    an image does not carry it.
  *  - The tool words that exist only here answer through config.diag: `list_words` and `stack`
  *    (the types on the stack at that place: "stack: int str") with line 0, one message each;
  *    `see`, after which every definition in the text is listed, one message for each of its
@@ -297,13 +303,13 @@ PINAX_API pinax_err pinax_load_bytecode(pinax_state *state, pinax_str bytecode);
  *    word an earlier text defined, keeping its signature; code that calls it runs the new one.
  *  - A text that ends inside a definition or a block answers PINAX_ERR_SYNTAX with an error
  *    text that begins "unfinished:"; give the longer text when the rest has come.
- *  - A text that is refused or ends in a fault leaves nothing behind. A name that exists is
- *    not defined again. */
+ *  - A text that is refused or ends in a fault leaves nothing behind: the session stack is as
+ *    it was before it. A name that exists is not defined again. */
 PINAX_API pinax_err pinax_eval(pinax_state *state, pinax_str line);
 
-/* What the last pinax_eval() that answered PINAX_OK left on the stack: pinax_eval_count()
- * values, the deepest at index 0. Strings point into the state's memory and stay valid until
- * the next load, eval or run; so does the type's name. */
+/* The session stack: pinax_eval_count() values, the deepest at index 0. A str points into the
+ * state and stays valid until the next pinax_eval() or pinax_eval_clear(); the type's name
+ * until the next load, eval or run. */
 enum {
     PINAX_VALUE_INT = 1, /* also characters, handles and distinct types over int */
     PINAX_VALUE_BOOL,
@@ -318,6 +324,8 @@ typedef struct pinax_value {
 } pinax_value;
 PINAX_API uint32_t  pinax_eval_count(const pinax_state *state);
 PINAX_API pinax_err pinax_eval_value(const pinax_state *state, uint32_t index, pinax_value *out);
+/* Empties the session stack. */
+PINAX_API void      pinax_eval_clear(pinax_state *state);
 
 /* After a run that ended with a fault: the locals of the word the fault happened in, as they
  * were then, with their names (code compiled from source carries them; a container without

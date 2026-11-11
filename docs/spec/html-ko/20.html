@@ -23,17 +23,23 @@ ok   middle_of_two_is_empty
 ok   doubles
 FAIL wrong (failed)
 2 tests, 1 failed
-</code></pre></div><h3>20.3 대화</h3><p class="para"><span class="pn">(1)</span> <code>pnx repl</code> 은 표준 입력에서 한 줄씩 읽어 돌린다(19.4 의 <code>pinax_eval</code>). 줄이 남긴 값을 표준 출력에 쓴다. 앞 줄에서 정의한 것을 뒤 줄에서 쓸 수 있다. 정의나 블록이 끝나지 않은 줄은 다음 줄과 이어 읽는다. 거절되거나 결함으로 끝난 줄은 아무것도 남기지 않는다.</p><p class="para"><span class="pn">(2)</span> 대화에서만 쓰는 도구 낱말이 있다: <code>list_words</code>(정의한 낱말), <code>stack</code>(그 자리의 스택의 타입), <code>see</code>(뒤따르는 정의의 줄마다 스택), <code>redefine word …</code>(같은 서명으로 낱말을 바꿈. 그 낱말을 부르는 코드도 새것을 부른다).</p><div class="example repl"><p class="ex-file"><code>20-repl.pnx</code></p><pre><code data-lang="pinax"><span style="color: #d73948">use</span> <span style="color: #d73948">str</span>
-<span style="color: #b60157">1</span> <span style="color: #b60157">2</span> add
+</code></pre></div><h3>20.3 대화</h3><p class="para"><span class="pn">(1)</span> <code>pnx repl</code> 은 표준 입력에서 한 줄씩 읽어 돌린다(19.4 의 <code>pinax_eval</code>). 줄마다, 세션 스택이 비어 있지 않으면 가장 깊은 값부터 표준 출력에 쓴다. 앞 줄에서 정의한 것과 앞 줄이 남긴 값을 뒤 줄에서 쓸 수 있다(19.4 (2a)). 정의나 블록이 끝나지 않은 줄은 다음 줄과 이어 읽는다. 거절되거나 결함으로 끝난 줄은 스택을 그대로 둔다.</p><p class="para"><span class="pn">(2)</span> 대화에서만 쓰는 도구 낱말이 있다: <code>list_words</code>(정의한 낱말), <code>stack</code>(그 자리의 스택의 타입), <code>clear</code>(줄 맨 앞에서: 그 줄은 빈 스택에서 시작한다), <code>see</code>(뒤따르는 정의의 줄마다 스택), <code>redefine word …</code>(같은 서명으로 낱말을 바꿈. 그 낱말을 부르는 코드도 새것을 부른다).</p><div class="example repl"><p class="ex-file"><code>20-repl.pnx</code></p><pre><code data-lang="pinax"><span style="color: #d73948">use</span> <span style="color: #d73948">str</span>
+<span style="color: #b60157">3</span> <span style="color: #b60157">4</span>
+mul
 <span style="color: #d73948">word</span> sq (n <span style="color: #d73948">int</span> <span style="color: #d73948">gives</span> <span style="color: #d73948">int</span>) n n mul <span style="color: #d73948">end</span>
-<span style="color: #b60157">7</span> sq
+sq
 <span style="color: #198810">"x"</span> <span style="color: #b60157">3</span> <span style="color: #d73948">str</span>.repeat
 <span style="color: #b60157">1</span> <span style="color: #b60157">0</span> div
+clear
+<span style="color: #b60157">2</span> sq
 </code></pre><p class="ex-label">대화</p><pre><code data-lang="text">$ pnx repl
-3
-49
-"xxx"
+3 4
+12
+12
+144
+144 "xxx"
 error: line 1: div_zero
+4
 </code></pre></div><h3>20.4 스택 보기와 정리</h3><p class="para"><span class="pn">(1)</span> <code>pnx see file.pnx</code> 는 정의의 줄마다 그 줄이 끝난 자리의 스택(타입)을 보인다.</p><div class="example see"><p class="ex-file"><code>20-see.pnx</code></p><pre><code data-lang="pinax"><span style="color: #d73948">use</span> <span style="color: #d73948">str</span>
 <span style="color: #d73948">word</span> tally (s <span style="color: #d73948">str</span> <span style="color: #d73948">gives</span> n <span style="color: #d73948">int</span>, longest <span style="color: #d73948">int</span>)
   <span style="color: #b60157">0</span> <span style="color: #d73948">to</span> n
