@@ -49,7 +49,7 @@ static const size_t core_count = COUNT(core_sources);
 // proven_c_lib files that build without an operating system.
 static const char *const proven_portable[] = {
     "src/proven/algorithm.c", "src/proven/arena.c",         "src/proven/array.c",
-    "src/proven/buffer.c",    "src/proven/deflate.c",       "src/proven/encode.c",
+    "src/proven/buffer.c",    "src/proven/encode.c",
     "src/proven/float_decimal.c", "src/proven/float_format.c", "src/proven/float_parse.c",
     "src/proven/fmt.c",       "src/proven/hash.c",          "src/proven/heap.c",
     "src/proven/map.c",       "src/proven/memory.c",        "src/proven/panic.c",
