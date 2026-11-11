@@ -287,6 +287,7 @@ static int n_sources;
 
 static const char *eval_path = "(eval)"; // the file whose text is given to pinax_eval, when there is one
 static bool        refused;              // the last text was refused with a message
+static bool        tool_to_stderr;       // pnx export-c: standard output is the C, so tool output goes beside it
 static void put_text(void *user, const char *text, size_t len) { fwrite(text, 1, len, (FILE *)user); }
 
 static const char *see_text;             // pnx see: the text being listed, to print each line beside its stack
@@ -346,7 +347,10 @@ static void diag(void *user, pinax_str file, uint32_t line, uint32_t column, pin
     if (line == 0) { // tool output: the list of words, the stack at a place, the order
         char out[600];
         snprintf(out, sizeof out, "%.*s\n", (int)message.len, (const char *)message.ptr);
-        say(out);
+        if (tool_to_stderr)
+            fputs(out, stderr);
+        else
+            say(out);
         return;
     }
     if (column == 0) { // the listing of `see`: the line as written, then the stack after it
@@ -750,6 +754,7 @@ static int run(int argc, char **argv) {
     pnx_streams_own(!talking); // the repl reads standard input itself: no read-ahead there
     if (exporting || effects)
         state->export_only = true; // compile and check, run nothing
+    tool_to_stderr = exporting;
 #if defined(PNX_WITH_NATIVE) // a pnx with a program's exported code linked in (tests/tools/export_check.sh)
     extern const pinax_native PNX_WITH_NATIVE;
     pinax_native_attach(state, &PNX_WITH_NATIVE);

@@ -112,4 +112,4 @@ breaks and remarks stay where they are. Formatting the result again changes noth
 
 #para("3")[`pnx export-c file.pnx [NAME]` loads the file as `pnx file.pnx` does but runs none of its code, and
 writes the program's code as C to standard output: a file that defines the table `NAME` (`pnx_native` when left out)
-for `pinax_native_attach` (19.11).]
+for `pinax_native_attach` (19.11). Tool output, such as that of `get_order`, goes to standard error.]
