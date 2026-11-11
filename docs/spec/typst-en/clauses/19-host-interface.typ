@@ -307,7 +307,8 @@ table is not used. One with another signature leaves the code it covers as it wa
 the budget (a run stops at the same CHECKs), waiting and tasks. Exported code does not make the checks the loader
 proved cannot fire (20 (1b)); a build with `PINAX_CHECK_PROOFS` makes them and stops the program when one fires.]
 
-#para("3")[An image or a clone does not carry the table: attach it again. Attaching while a run is suspended or waits
+#para("3")[An image does not carry the table: attach it again. Nor does a clone, unless it is made with
+`PINAX_CLONE_KEEP_HOSTS` (19.9 (2b)). Attaching while a run is suspended or waits
 is `PINAX_ERR_STATE`. A table whose `struct_size` is another, or with one of `code_words` and `words` 0 and the other
 not, is `PINAX_ERR_ARGUMENT`; both 0 is a table of the whole program, whatever its length.]
 

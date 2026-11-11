@@ -37,7 +37,8 @@ pinax_err pinax_host_register_all(pinax_state *state);
  * they hold back is written. `user` is not used. */
 void pinax_host_barrier(void *user);
 /* After a run or a load that sh.exit stopped (it answers PINAX_ERR_INTERRUPTED): true, and the
- * status asked for (0 to 255). */
+ * status asked for (0 to 255). It tells it once, and of the calling thread: asked again, or after
+ * an interruption of another cause, it is false. */
 bool pinax_host_exit_asked(int *status);
 /* What env.arg_count and env.arg report. The strings must outlive the states that read them. */
 void pinax_host_set_args(int count, const char *const *args);

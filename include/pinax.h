@@ -357,7 +357,8 @@ typedef struct pinax_effects {
     uint32_t    module_effects[16]; /* for each: PINAX_EFFECT_READS_OUTSIDE, _WRITES_OUTSIDE */
 } pinax_effects;
 /* PINAX_ERR_NOT_FOUND for a word number the state does not have; PINAX_ERR_NO_ROOM when the
- * block has no room for the walk (a bit for each word). */
+ * block has no room for the walk (a bit and four bytes for each word); PINAX_ERR_STATE while a
+ * run is suspended or a host word runs. */
 PINAX_API pinax_err pinax_word_effects(pinax_state *state, pinax_word word, pinax_effects *out);
 
 /* A dot that ends a statement (`3 4 add .`) is a barrier: every effect begun before it is

@@ -804,6 +804,7 @@ bool pinax_host_exit_asked(int *status) {
         return false;
     if (status)
         *status = sh_exit_with;
+    sh_exit_asked = false; // told once: a later interruption is the budget's or the host's
     return true;
 }
 

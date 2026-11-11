@@ -2479,6 +2479,8 @@ pinax_err pnx_word_effects(pinax_state *st, uint32_t word, pnx_effects *out) {
 pinax_err pinax_word_effects(pinax_state *st, pinax_word word, pinax_effects *out) {
     if (!st || !out || out->struct_size != sizeof *out)
         return PINAX_ERR_ARGUMENT;
+    if (st->suspended || st->host_cur || st->loading) // the block above `used` belongs to the run
+        return fail(st, PINAX_ERR_STATE, "a run is suspended or a host word is running");
     pnx_effects all;
     const pinax_err err = pnx_word_effects(st, word, &all);
     if (err == PINAX_OK)
