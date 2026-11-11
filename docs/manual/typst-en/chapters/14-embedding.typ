@@ -178,7 +178,7 @@ the block it opened. A loop or a block waits until its `end` is typed and then r
 at the bottom says how deep the typing is and in what (`depth 2: loop › if`). The stack shows after each statement.
 A statement that declares something (`word`, `const`, `use`, `set_order` and the rest) is added to a program, as
 GW-BASIC keeps one, and a name declared again takes the place of its lines. `:list` shows the program with line
-numbers. `:edit N` puts line N in the prompt, `:insert N` adds lines after line N (0: at the top) until an empty line,
+numbers. `:edit N` puts line N in the prompt, `:insert N` adds lines above line N (0: at the end) until an empty line,
 `:delete N` (`:del`, also `N-M`) removes lines, and `:edit` (F2) opens the whole program in an editor; after each the
 program runs again. `:run` (F5) is a reset: it empties the stack, forgets every definition and runs the program from
 line 1, the lines left as they are. `:help` tells the rest; the page links to this manual.

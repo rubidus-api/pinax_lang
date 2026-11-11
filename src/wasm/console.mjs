@@ -16,7 +16,8 @@
 // block is open in it. Then it runs as one line of the session: a loop or a block runs once, when
 // it is all typed. A statement that succeeds and begins with a declaration (word, const, global,
 // use, set_order and the others) is added to the program; one that declares a name the program
-// declares already takes the place of those lines. :edit N and :insert N change lines by number.
+// declares already takes the place of those lines. :edit N and :insert N change lines by number
+// (:insert N above line N, :insert 0 at the end).
 // enter() gives { prompt }, and for some commands what the page is to do: { fill } (text for the
 // prompt), { editor } (the program to edit whole), { download }, { upload }. status() says what
 // the terminal waits for: the definitions and blocks open, the line being edited or inserted.
@@ -31,7 +32,7 @@ A loop or a block runs once, when its end is typed. A statement that declares so
   :list [N[-M]]     the program with its line numbers
   :edit N           line N into the prompt; Enter puts it back and runs the program again
   :edit             the whole program in an editor (F2; Ctrl+S saves and runs it, Esc leaves)
-  :insert N         new lines after line N (0: at the top); an empty line ends, and the program runs
+  :insert N         new lines above line N (0: at the end); an empty line ends, and the program runs
   :delete N[-M]     removes lines N to M (:del)
   :run              RESETS: empties the stack and forgets every definition, then runs the program
                     from line 1 (F5). The program's lines stay.
@@ -163,10 +164,10 @@ export async function createConsole({ createPinax, bytes, print, store = null })
         case "insert": case "ins": {
             const n = Number(arg);
             if (!/^\d+$/.test(arg ?? "") || n > lines.length) {
-                print("err", `:insert N puts lines after line N, 0 to ${lines.length} (0: at the top)\n`);
+                print("err", `:insert N puts lines above line N: ${lines.length ? `1 to ${lines.length}, or ` : ""}0 for the end\n`);
                 return {};
             }
-            mode = { kind: "insert", at: n, first: n, added: 0 };
+            mode = { kind: "insert", at: n === 0 ? lines.length : n - 1, first: n, added: 0 };
             return {};
         }
         case "delete": case "del": {
@@ -212,13 +213,14 @@ export async function createConsole({ createPinax, bytes, print, store = null })
         return gathered.length ? MORE : PROMPT;
     }
 
+    const where = (first) => (first === 0 ? "at the end" : `above line ${first}`);
     // the end of an :insert: the program runs again when lines were added
     function endInsert() {
         const { first, added } = mode;
         mode = null;
         if (added === 0)
             return print("info", "nothing inserted\n");
-        print("info", `${plural(added, "line")} inserted after line ${first}; the program runs again from a fresh state\n`);
+        print("info", `${plural(added, "line")} inserted ${where(first)}; the program runs again from a fresh state\n`);
         runProgram();
     }
 
@@ -275,7 +277,7 @@ export async function createConsole({ createPinax, bytes, print, store = null })
         if (mode?.kind === "edit")
             return `editing line ${mode.at + 1}: Enter puts it back (several lines may take its place), Esc leaves it`;
         if (mode?.kind === "insert")
-            return `inserting after line ${mode.first}, as line ${mode.at + 1}: an empty line ends, and the program runs`;
+            return `inserting ${where(mode.first)}, as line ${mode.at + 1}: an empty line ends, and the program runs`;
         const text = [...gathered, pending].join("\n");
         if (text.trim() !== "" && !text.trimStart().startsWith(":")) {
             const b = pinax.blocks(text);
