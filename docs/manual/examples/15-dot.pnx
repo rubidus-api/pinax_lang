@@ -1,0 +1,7 @@
+rem run
+use io
+word countdown (n int)
+  0 n range do (i int) cat (n i sub, " ") io.print , end each
+  "go" io.println .
+end
+3 countdown

@@ -64,7 +64,8 @@ test = "test" NAME { body } "end" ;
 #para("1")[`pnx repl` reads lines from standard input and runs them one at a time (`pinax_eval` of 19.4). After each
 line it writes the session stack on standard output, the deepest value first, when it is not empty. A line can use
 what earlier lines defined and the values they left (19.4 (2a)). A line that ends inside a definition or a block is
-read together with the next. A line that is refused or ends with a fault leaves the stack as it was.]
+read together with the next. A line that is refused or ends with a fault leaves the stack as it was. The end of a line, Enter,
+is a dot (10.8): what the line wrote is on the screen before the prompt comes back.]
 
 #para("2")[There are tool words only for sessions: `list_words` (the words defined), `stack` (the types on the stack
 there), `clear` (at the start of a line: the line starts from an empty stack), `see` (the stack after every line of

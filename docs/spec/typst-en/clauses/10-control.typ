@@ -252,3 +252,23 @@ the value can still be lent.]
   ([Too few values in a block value with no signature], "a block without a signature takes nothing; a word of the program is given as do NAME end, any other word with the block's signature: do (str, str gives bool) str.starts_with end"),
   ([A forward word as a value before its definition], "a word declared with forward is given as a value only after its definition"),
 )
+
+== Ends of statements <control-ends>
+
+#para("1")[A comma or a dot written in code (not inside the parentheses of a signature, of `cat` or of a list of names)
+ends a #term("statement"): the code since the last comma or dot. Neither changes the stack, and neither is required:
+code without them means what it meant before.]
+
+#para("2")[A comma waits for nothing: the effects of the statement may still be under way when the next one starts.]
+
+#para("3")[A dot is a #term("barrier"): every effect begun before it is finished before anything after it. The
+processor's part is to call the function the host gave with `pinax_on_barrier` (19.4 (3)); the host's part is to
+write what its host words hold back (standard output, a file's writes) and to wait for what they started in the
+background. The end of the code of a load and the end of a session line are a dot, also when they end with a fault.
+In a source loaded as data the two mark statements and call nothing.]
+
+#para("4")[An effect whose result the statement needs (a read, a command's output) is done when it is reached. Between
+two dots, effects on the same resource keep the order of the program; effects on different resources may overlap.
+This edition runs every effect in the order of the program; the overlap is the freedom a later edition may use.]
+
+#ex("spec", "10-statements.pnx")

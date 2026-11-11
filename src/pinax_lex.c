@@ -28,6 +28,8 @@ static bool lex_is_digit(uint8_t c) {
 static bool is_run(uint8_t c) {
     return is_letter(c) || lex_is_digit(c);
 }
+// A dot at `i` that ends a statement: nothing of a name or a number follows it.
+static bool ends_here(const pnx_lexer *lx, uint32_t i);
 static int lex_hex_value(uint8_t c) {
     if (c >= '0' && c <= '9')
         return c - '0';
@@ -57,6 +59,11 @@ static bool fail_at(pnx_lexer *lx, uint32_t at, const char *message) {
 // start, so 0 is a safe "nothing here".
 static uint8_t peek(const pnx_lexer *lx, uint32_t at) {
     return at < lx->length ? lx->source[at] : 0;
+}
+
+static bool ends_here(const pnx_lexer *lx, uint32_t i) {
+    const uint8_t next = peek(lx, i + 1);
+    return peek(lx, i) == '.' && !is_run(next) && next != '.' && next != '"' && next != '\'';
 }
 
 static pnx_word_id reserved_word(const uint8_t *p, uint32_t n) {
@@ -238,7 +245,7 @@ static bool number(pnx_lexer *lx, pnx_token *t) {
             const proven_result_i64_t r = proven_scan_i64(&scan);
             if (r.err != PROVEN_OK || scan.cursor != n)
                 return fail_at(lx, start, "the decimal does not fit in 64 bits at its scale");
-            if (is_run(peek(lx, i)) || peek(lx, i) == '.')
+            if (is_run(peek(lx, i)) || (peek(lx, i) == '.' && !ends_here(lx, i)))
                 return fail_at(lx, i, "a number must not run into letters, an underscore or a dot");
             t->integer = r.val;
             t->scale = (uint8_t)scale;
@@ -260,7 +267,7 @@ static bool number(pnx_lexer *lx, pnx_token *t) {
             t->integer = r.val;
         }
     }
-    if (is_run(peek(lx, i)) || peek(lx, i) == '.')
+    if (is_run(peek(lx, i)) || (peek(lx, i) == '.' && !ends_here(lx, i)))
         return fail_at(lx, i, "a number must not run into letters, an underscore or a dot");
     t->kind = real ? PNX_T_FLOAT : PNX_T_INT;
     lx->at = i;
@@ -536,9 +543,15 @@ static bool lex_token(pnx_lexer *lx, pnx_token *t) {
             t->length = lx->at - t->start;
             return true;
         }
+        if (c == '.' && ends_here(lx, lx->at)) {
+            t->kind = PNX_T_DOT;
+            t->length = 1;
+            ++lx->at;
+            return true;
+        }
         if (!is_letter(c)) {
             if (c == '.')
-                return fail_at(lx, lx->at, "a dot joins two names or sits inside a number; it does not stand alone");
+                return fail_at(lx, lx->at, "a dot joins two names or sits inside a number, or ends a statement");
             if (c == '+' || c == '-')
                 return fail_at(lx, lx->at, "a sign is attached to its number; arithmetic uses words (add, sub)");
             return fail_at(lx, lx->at, "this character is not allowed outside literals and remarks");
@@ -569,7 +582,7 @@ static bool lex_token(pnx_lexer *lx, pnx_token *t) {
         }
         const pnx_word_id word = reserved_word(lx->source + lx->at, run);
         if (word != PNX_KW_NONE) {
-            if (peek(lx, i) == '.')
+            if (peek(lx, i) == '.' && !ends_here(lx, i))
                 return fail_at(lx, i, "a reserved word is not part of a path");
             lx->at = i;
             if ((word == PNX_KW_rem || word == PNX_KW_note || word == PNX_KW_text) &&
@@ -600,7 +613,7 @@ static bool lex_token(pnx_lexer *lx, pnx_token *t) {
             return true;
         }
         t->kind = PNX_T_NAME;
-        while (peek(lx, i) == '.') {
+        while (peek(lx, i) == '.' && !ends_here(lx, i)) {
             const uint32_t part = i + 1;
             if (!is_letter(peek(lx, part)))
                 return fail_at(lx, i, "a dot is followed by a name, with no space");

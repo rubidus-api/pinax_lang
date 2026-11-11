@@ -370,7 +370,9 @@ enum {
     X(IXHASW, 0xf9, PNX_K_I, PNX_K_I, PNX_K_NONE, PNX_F_ABC, PNX_X_GLOBAL, 0, "wr-") \
     X(IXHASSW, 0xfa, PNX_K_I, PNX_K_S, PNX_K_NONE, PNX_F_ABC, PNX_X_GLOBAL, 0, "wr-") \
     X(IXPUTO, 0xfb, PNX_K_I, PNX_K_NONE, PNX_K_NONE, PNX_F_GLOBAL, PNX_X_NONE, 1, "r--") \
-    X(POOLNX, 0xfc, PNX_K_I, PNX_K_I, PNX_K_NONE, PNX_F_ABC, PNX_X_GLOBAL, 1, "mw-")
+    X(POOLNX, 0xfc, PNX_K_I, PNX_K_I, PNX_K_NONE, PNX_F_ABC, PNX_X_GLOBAL, 1, "mw-") \
+    /* a dot that ends a statement (RFC-0040 part F): the host finishes every effect begun */ \
+    X(BARRIER, 0xfd, PNX_K_NONE, PNX_K_NONE, PNX_K_NONE, PNX_F_ABC, PNX_X_NONE, 0, "---")
 
 enum {
 #define PNX_ENUM(name, number, a, b, c, shape, second, fails, roles) PNX_##name = number,

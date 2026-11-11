@@ -62,6 +62,15 @@ the name, and the words compiled before keep calling the old body, as in Forth; 
 After the first redefinition `quad` doubles twice (12). After the second, `sq` multiplies two values, and `quad` still
 runs the old `sq`. A word of a file is changed in the file, then loaded again.
 
+A statement may end with a comma or a dot. A comma waits for nothing. A dot is a barrier: what the statements before it
+started is finished there, so output held in a buffer is written. Neither is required; the end of a line at the
+prompt, and the end of a program's code, are a dot already.
+
+#ex("manual", "15-dot.pnx")
+
+In bash terms, a comma is like `&` and a dot like `wait`. Use a dot where what came before must be seen, or must have
+happened, before going on: before a long computation, after a progress line.
+
 == Seeing the stack, and formatting
 
 `pnx see` shows, for each line of a definition, the stack where that line ends. Use it when the stack is not what you

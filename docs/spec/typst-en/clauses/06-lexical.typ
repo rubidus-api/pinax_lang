@@ -49,8 +49,9 @@ member = letter { letter | digit } ;              (* a reserved word too: json.a
 classified. A run that is a reserved word (6.6) is a reserved word; one that begins with a digit is a number (6.4);
 anything else is a name. So `remark` is a name, not a remark, and `12ab` is neither a name nor a number.]
 
-#para("2")[A #term("path") is names joined by dots, with no space around a dot. A dot appears only in paths and in
-float literals (not in this edition); it is never a token of its own. A path names a word of a module (`io.println`),
+#para("2")[A #term("path") is names joined by dots, with no space around a dot. Inside a run of text a dot appears only
+in paths and in numbers (`2.5`). A dot that no name, digit, dot or quote follows is a token of its own: it ends a
+statement (10.8), also when it is written against the run before it (`7 sq.`). A path names a word of a module (`io.println`),
 a field of a record (`p.x`) or a constant (`str.digit`).]
 
 #para("3")[A run after a dot is part of the path even when it is a reserved word (`json.array`). The first run of a
@@ -58,7 +59,7 @@ path cannot be a reserved word.]
 
 #part("Constraints")
 
-#para("4")[A dot shall be followed by a name, with no space.]
+#para("4")[A dot inside a path shall be followed by a name, with no space.]
 
 #ex("spec", "06-dot-apart.pnx")
 
@@ -212,8 +213,8 @@ reserved = "rem" | "note" | "text" | "true" | "false" | "pinax"
 #para("2")[`or` is a reserved word only inside a signature (`or fail`). In the body of a word `or` is a core word
 (logical or).]
 
-#para("3")[The only punctuation is `(` `)` `,`. Each is a token of its own even when written against other text:
-`str(32)` is four tokens.]
+#para("3")[The only punctuation is `(` `)` `,` and the dot that ends a statement (6.2 (2)). Each is a token of its own
+even when written against other text: `str(32)` is four tokens, `7 sq.` three.]
 
 #para("4")[The names of types (`int` `str` `bool` …) and of core words (`add` `dup` …) are not reserved words but names
 declared in advance. Declaring them again is refused by the rule against hiding names (9.5).]

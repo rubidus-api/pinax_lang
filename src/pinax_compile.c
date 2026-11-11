@@ -7136,6 +7136,13 @@ static bool body_token(comp *c) {
     const pnx_token t = c->tok;
     if (f->n_blocks && f->blocks[f->n_blocks - 1]->kind == B_CASE)
         return case_item(c);
+    // The end of a statement (RFC-0040 part F). A comma waits for nothing. A dot is a barrier: the
+    // host finishes every effect begun before it (pinax_on_barrier).
+    if (t.kind == PNX_T_COMMA || t.kind == PNX_T_DOT) {
+        if (t.kind == PNX_T_DOT && !f->dead && !c->data_only && emit(c, PNX_ABC(PNX_BARRIER, 0, 0, 0)) == NONE)
+            return false;
+        return advance(c);
+    }
     if (c->data_only && t.kind == PNX_T_RESERVED && t.word != PNX_KW_true && t.word != PNX_KW_false &&
         t.word != PNX_KW_to && t.word != PNX_KW_set)
         return syntax(c, "a data source holds declarations, literals, stores and rows; this word is not allowed");
@@ -9721,6 +9728,8 @@ static pinax_err load_source(pinax_state *st, const char *file, pinax_str source
         err = pinax_run(st, st->head->n_words - 1, n_values || n_inputs ? &values : NULL);
         st->load_runs = false;
         st->budget = budget;
+        if (err != PINAX_SUSPENDED && err != PINAX_WAITING && st->barrier) // the end of load code is a dot (RFC-0040 part F)
+            st->barrier(st->barrier_user);
         if (err == PINAX_OK && eval) // what the line left becomes the session stack
             err = pnx_session_keep(st, ints, strs);
         else if (eval && (err == PINAX_SUSPENDED || err == PINAX_WAITING))

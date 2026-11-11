@@ -555,6 +555,11 @@ pinax_err pinax_host_register(pinax_state *state, const char *module) {
     return PINAX_ERR_NOT_FOUND;
 }
 
+void pinax_host_barrier(void *user) {
+    (void)user;
+    pnx_streams_flush(); // the files are written as they go: only standard output is held
+}
+
 pinax_err pinax_host_register_all(pinax_state *state) {
     static const char *const names[] = {"io", "file", "clock", "random", "env"};
     for (unsigned k = 0; k < sizeof names / sizeof names[0]; ++k) {
@@ -562,6 +567,7 @@ pinax_err pinax_host_register_all(pinax_state *state) {
         if (err != PINAX_OK)
             return err;
     }
+    pinax_on_barrier(state, pinax_host_barrier, NULL);
     return PINAX_OK;
 }
 

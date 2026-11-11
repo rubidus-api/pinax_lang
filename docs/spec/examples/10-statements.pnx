@@ -1,0 +1,8 @@
+rem run
+use io
+word show (n int)
+  cat ("square: ", n n mul) io.println .
+end
+"start" io.println ,
+3 show ,
+4 show .

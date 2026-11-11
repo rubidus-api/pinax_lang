@@ -129,8 +129,14 @@ line that would leave more, or a collection, a stem or an owned value, is refuse
 with `PINAX_ERR_NO_ROOM` after it ran. A line that is refused or ends with a fault leaves the stack as it was before it;
 so does one that ran out of budget and is abandoned, while one resumed to its end leaves what it left. A str of the
 session stack is copied into the state and stays valid until the next `pinax_eval` or `pinax_eval_clear`.
-`pinax_eval_clear(state)` empties the stack, as does a line that begins with the tool word `clear`. A load, a run or a
-clone leave it as it is; an image does not carry it.]
+`pinax_eval_clear(state)` empties the stack, as does a line that begins with the tool word `clear`. A load or a run
+leaves it as it is; an image and a clone do not carry it.]
+
+#para("3")[`pinax_on_barrier(state, function, user)` gives the function a dot calls (10.8 (3)): at each dot the code
+reaches, and at the end of the code of a load or of a session line, also one that ends with a fault, the processor
+calls `function(user)`. In it the host writes what its host words hold back and waits for what they started in the
+background; it does not call the state. `NULL`, the default, finishes nothing. A clone keeps the function; an image
+does not. The host library's `pinax_host_register_all` gives one that writes the output `io` holds back.]
 
 == Finding and running <host-run>
 

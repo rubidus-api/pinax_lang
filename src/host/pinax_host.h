@@ -30,8 +30,11 @@ extern "C" {
 /* Registers one module by name ("io", "file", "clock", "random", "env"), before code is
  * loaded. PINAX_ERR_NOT_FOUND for another name. */
 pinax_err pinax_host_register(pinax_state *state, const char *module);
-/* Registers all five. */
+/* Registers all five, and pinax_host_barrier as the state's barrier. */
 pinax_err pinax_host_register_all(pinax_state *state);
+/* What a dot that ends a statement finishes for these modules (pinax_on_barrier): the output
+ * they hold back is written. `user` is not used. */
+void pinax_host_barrier(void *user);
 /* What env.arg_count and env.arg report. The strings must outlive the states that read them. */
 void pinax_host_set_args(int count, const char *const *args);
 

@@ -370,6 +370,8 @@ struct pinax_state {
     const char *error_text;
     void (*diag)(void *user, pinax_str file, uint32_t line, uint32_t column, pinax_str message);
     void *diag_user;
+    void (*barrier)(void *user); // pinax_on_barrier: a dot, the end of a session line or of load code
+    void *barrier_user;
     pinax_resolve_fn resolve; // gives the C functions that `extern` names
     // the session stack (RFC-0040 part A): what the lines of pinax_eval() left, the deepest
     // first; its types (the compiler's numbers) and values, a str's bytes copied here

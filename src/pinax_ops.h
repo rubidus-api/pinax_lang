@@ -165,6 +165,7 @@ PNX_INLINE int pnx_tail_word(pinax_state *st, const pnx_wordrec *callee, uint32_
     X(RUN, GLEN) \
     X(RUN, GCLEAR) \
     X(RUN, GCAP) \
+    X(RUN, BARRIER) \
     X(RUNF, LPUSH) \
     X(RUNF, LPOP) \
     X(RUNF, LPUSHS) \
@@ -899,6 +900,11 @@ PNX_OP(RCATB) {
 
 // ---- arrays and lists of integers ---------------------------------------------------------
 
+PNX_OP(BARRIER) { // the host writes what it holds and waits for what it started (pinax_on_barrier)
+    if (st->barrier)
+        st->barrier(st->barrier_user);
+    return PNX_R_OK;
+}
 PNX_OP(GCAP) { R[OP_A(w)] = st->globals[PNX_GX(st, OP_BX(w))].capacity; return PNX_R_OK; }
 PNX_OP(GLEN) { R[OP_A(w)] = st->globals[PNX_GX(st, OP_BX(w))].length; return PNX_R_OK; }
 PNX_OP(GCLEAR) { // an array is zeroed; a list becomes empty

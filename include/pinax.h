@@ -294,8 +294,8 @@ PINAX_API pinax_err pinax_load_bytecode(pinax_state *state, pinax_str bytecode);
  *    at most 16 values (int and the types over it, bool, err, str of at most 255 bytes, a handle
  *    that is not owned); a line that would leave more, or a longer str, is refused or faults. It
  *    is read with pinax_eval_count() and pinax_eval_value(), emptied by pinax_eval_clear() or by
- *    a line that begins with the tool word `clear`. A load, a run or a clone leaves it as it is;
- *    an image does not carry it.
+ *    a line that begins with the tool word `clear`. A load or a run leaves it as it is; an image
+ *    and a clone do not carry it.
  *  - The tool words that exist only here answer through config.diag: `list_words` and `stack`
  *    (the types on the stack at that place: "stack: int str") with line 0, one message each;
  *    `see`, after which every definition in the text is listed, one message for each of its
@@ -330,6 +330,14 @@ PINAX_API uint32_t  pinax_eval_count(const pinax_state *state);
 PINAX_API pinax_err pinax_eval_value(const pinax_state *state, uint32_t index, pinax_value *out);
 /* Empties the session stack. */
 PINAX_API void      pinax_eval_clear(pinax_state *state);
+
+/* A dot that ends a statement (`3 4 add .`) is a barrier: every effect begun before it is
+ * finished before what follows. The host's part is this function, called at each dot and at the
+ * end of the code of a load or a session line (also one that faults): it writes what the host
+ * words hold back (buffered output, a file's writes) and waits for what they started in the
+ * background. It must not call this state. NULL (the default): nothing to finish. A clone keeps
+ * it; an image does not. A comma that ends a statement waits for nothing. */
+PINAX_API void      pinax_on_barrier(pinax_state *state, void (*barrier)(void *user), void *user);
 
 /* After a run that ended with a fault: the locals of the word the fault happened in, as they
  * were then, with their names (code compiled from source carries them; a container without

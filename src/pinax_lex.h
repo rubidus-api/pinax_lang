@@ -42,6 +42,7 @@ typedef enum pnx_token_kind {
     PNX_T_RPAREN,
     PNX_T_COMMA,
     PNX_T_DEC,      // digits.digits without an exponent: `integer` scaled by 10^scale (RFC-0019)
+    PNX_T_DOT,      // a dot not followed by a name or a digit: it ends a statement (RFC-0040 part F)
 } pnx_token_kind;
 
 typedef struct pnx_token {

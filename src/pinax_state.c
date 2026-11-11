@@ -3038,6 +3038,8 @@ pinax_err pinax_resume(pinax_state *st, const pinax_args *results) {
     const pinax_err err = deliver(st, run, results);
     if (st->loading && err != PINAX_SUSPENDED && err != PINAX_WAITING) { // the load ends here: done, or failed and undone
         st->loading = false;
+        if (st->barrier) // the end of load code, or of a session line, is a dot (RFC-0040 part F)
+            st->barrier(st->barrier_user);
         st->eval_pending = false; // a line that failed leaves the session stack as it was
         if (err != PINAX_OK) {
             const char *text = st->error_text;
@@ -4037,6 +4039,7 @@ pinax_err pinax_image_open(pinax_mem block, pinax_str image, const pinax_config 
     __builtin_memset(&st->before_load, 0, sizeof st->before_load);
     st->resolve = NULL, st->resolve_user = NULL;
     st->diag = config->diag, st->diag_user = config->diag_user;
+    st->barrier = NULL, st->barrier_user = NULL; // a function of the process that saved the image
     st->budget = config->budget;
     st->error_text = "";
     st->eval_n = 0; // the session stack does not survive an image
@@ -4087,7 +4090,15 @@ pinax_err pinax_clone(const pinax_state *source, pinax_mem block, pinax_state **
         return err;
     const pinax_config config = {.struct_size = sizeof config, .budget = source->budget, .diag = source->diag,
                                  .diag_user = source->diag_user};
-    return pinax_image_open(block, (pinax_str){(const unsigned char *)block.ptr, written}, &config, out);
+    const pinax_err opened = pinax_image_open(block, (pinax_str){(const unsigned char *)block.ptr, written}, &config, out);
+    if (opened == PINAX_OK) // the same process: its barrier too, as its diagnostics
+        (*out)->barrier = source->barrier, (*out)->barrier_user = source->barrier_user;
+    return opened;
+}
+
+void pinax_on_barrier(pinax_state *st, void (*barrier)(void *user), void *user) {
+    if (st)
+        st->barrier = barrier, st->barrier_user = user;
 }
 
 pinax_err pinax_clone_with(const pinax_state *source, pinax_mem block, uint32_t flags, pinax_state **out) {
