@@ -1827,6 +1827,10 @@ pinax_err pnx_load_container(pinax_state *st, pinax_str bytecode) {
     if (redefines && (!st->head || h.redefine_old >= base.n_words || h.redefine_new < base.n_words ||
                       h.redefine_new >= base.n_words + h.n_words))
         return fail(st, PINAX_ERR_FORMAT, "bytecode: the redefined word is not of the program, or the new one not of the container");
+    // the words of the container are read in place, so whether it renames is known from its record
+    const bool renames = redefines && bytecode.ptr[sizeof h + (size_t)(h.redefine_new - base.n_words) * sizeof(pnx_wordrec) +
+                                                   __builtin_offsetof(pnx_wordrec, reserved)] == PNX_WORD_TAKES_NAME;
+    const bool trades = redefines && !renames;
 
     const size_t mark = st->used;
     pinax_err err = PINAX_ERR_NO_ROOM;
@@ -1890,7 +1894,8 @@ pinax_err pnx_load_container(pinax_state *st, pinax_str bytecode) {
             (!word->counted && !pnx_signature_counts(word->signature, &st->word_counts[k])) ||
             st->word_counts[k].str_args > PNX_MAX_STR_ARGS || st->word_counts[k].str_results > PNX_MAX_STR_RESULTS ||
             word->entry != expected || word->length == 0 || word->length > now->n_code - word->entry ||
-            word->int_cells > 256 || word->str_cells > 256 || word->reserved2 != 0)
+            word->int_cells > 256 || word->str_cells > 256 || word->reserved2 != 0 ||
+            (word->reserved != 0 && (word->reserved != PNX_WORD_TAKES_NAME || k != h.redefine_new)))
             goto rollback;
     }
     if ((h.n_words == 0 && h.n_code != 0) ||
@@ -2072,8 +2077,24 @@ pinax_err pnx_load_container(pinax_state *st, pinax_str bytecode) {
     }
     st->segment[PNX_SEG_GLOBAL] = first_global ? first_global : empty_bytes;
 
+    // redefine with another signature: the new word takes the name, the old one keeps its code
+    // under a name no source writes (RFC-0040 part D)
+    if (renames) {
+        pnx_wordrec *old = &words[h.redefine_old];
+        const pnx_wordrec *made = &words[h.redefine_new];
+        err = PINAX_ERR_FORMAT;
+        why = "bytecode: the word that takes the name has another name or module";
+        if (!text_equal(old->name, made->name) || old->module != made->module || old->name[0] == '(')
+            goto rollback;
+        st->undo_word = *old; // put back by pnx_program_restore until the load is final
+        st->undo_old = h.redefine_old, st->undo_new = no_word;
+        st->undo_pending = true;
+        old->name[0] = '(';
+        __builtin_memcpy(old->name + 1, made->name, sizeof old->name - 2);
+        old->name[sizeof old->name - 1] = '\0';
+    }
     // redefine: the old word's number runs the new body, and the new word keeps the old code
-    if (redefines) {
+    if (trades) {
         pnx_wordrec *old = &words[h.redefine_old], *made = &words[h.redefine_new];
         err = PINAX_ERR_FORMAT;
         why = "bytecode: the redefined word has another signature";
@@ -2114,12 +2135,12 @@ pinax_err pnx_load_container(pinax_state *st, pinax_str bytecode) {
     __builtin_memset(st->region, 0, now->n_code); // scratch: which code words start an instruction
     for (uint32_t k = base.n_words, pass = 0; pass < 2; ++k) {
         if (k >= now->n_words) {
-            if (++pass == 2 || !redefines)
+            if (++pass == 2 || !trades)
                 break;
             k = h.redefine_old; // the second pass: that one word
             pass = 1;
         }
-        if (redefines && k == h.redefine_new && pass == 0)
+        if (trades && k == h.redefine_new && pass == 0)
             continue; // it holds the old word's code, checked when that word came
         const span range = pnx_word_span(st, k);
         why = check_word(st, k, range, st->region);
@@ -2143,11 +2164,11 @@ pinax_err pnx_load_container(pinax_state *st, pinax_str bytecode) {
         if (pass == 1)
             break;
     }
-    if (redefines) // the old word's number runs new code: its mark and its callers' may change either way
+    if (trades) // the old word's number runs new code: its mark and its callers' may change either way
         mark_yields_all(st);
     else
         mark_yields_from(st, base.n_words);
-    if (redefines) { // the old word's locals now describe the code the new word holds; done last, as it is in place
+    if (trades) { // the old word's locals now describe the code the new word holds; done last, as it is in place
         for (uint32_t k = 0; k < base.n_locals; ++k) {
             pnx_localrec rec;
             uint8_t     *at = (uint8_t *)(uintptr_t)st->localrecs + (size_t)k * sizeof rec;
@@ -2324,6 +2345,25 @@ void pnx_compact(pinax_state *st) {
     st->used = (size_t)(cursor - st->block);
 }
 #undef RELOC
+
+uint32_t pnx_callers_of(const pinax_state *st, uint32_t word, uint32_t *out, uint32_t cap) {
+    uint32_t n = 0;
+    for (uint32_t k = 0; st->head && k < st->head->n_words; ++k) {
+        if (k == word || st->words[k].name[0] == '(') // itself, the code outside definitions, value blocks
+            continue;
+        const uint32_t end = st->words[k].entry + st->words[k].length;
+        bool calls = false;
+        for (uint32_t i = st->words[k].entry; i < end && !calls;) {
+            const pnx_opinfo info = opinfo[st->code[i] & 0xffu];
+            calls = info.second == PNX_X_WORD && st->code[i + 1] == word;
+            i += info.second ? 2u : 1u;
+        }
+        if (calls && n < cap)
+            out[n] = k;
+        n += calls;
+    }
+    return n;
+}
 
 pinax_err pnx_session_keep(pinax_state *st, const int64_t *ri, const pinax_str *rs) {
     st->eval_pending = false;

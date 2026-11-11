@@ -53,6 +53,15 @@ What the stack holds after each line, followed. The next line starts from it.
   ("cube", "125 \"PINAX\"", [Refused: the top is a `str`, not an `int`.]),
 )
 
+A word can be defined again at any time: write `word` with its name once more. When the signature is the same, every
+word that calls it calls the new one, so a fix reaches every caller. When the signature is another, the new word takes
+the name, and the words compiled before keep calling the old body, as in Forth; `pnx repl` says which they are.
+
+#ex("manual", "15-redefine.pnx")
+
+After the first redefinition `quad` doubles twice (12). After the second, `sq` multiplies two values, and `quad` still
+runs the old `sq`. A word of a file is changed in the file, then loaded again.
+
 == Seeing the stack, and formatting
 
 `pnx see` shows, for each line of a definition, the stack where that line ends. Use it when the stack is not what you

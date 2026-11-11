@@ -283,7 +283,8 @@ every word, the same build. Given before the loads, it serves a load's own code 
 
 #para("1a")[What is loaded after it (the lines of a session, a module loaded later) is interpreted, and the table stays
 in use: a call, a return or a task switch that goes into the code it covers runs there through the table again. A
-`redefine` (19.4 (1c)) of one of its words changes the program it covers: from then on the table is not used.]
+redefinition (20.4 (2a)) of one of its words with the same signature changes the program it covers: from then on the
+table is not used. One with another signature leaves the code it covers as it was, and the table stays in use.]
 
 #para("2")[A program and a host see the same as interpreted: results, faults with their places and locals, failures,
 the budget (a run stops at the same CHECKs), waiting and tasks. Exported code does not make the checks the loader

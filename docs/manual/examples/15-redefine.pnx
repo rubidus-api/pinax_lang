@@ -1,0 +1,9 @@
+rem repl
+word sq (n int gives int) n n mul end
+word quad (n int gives int) n sq sq end
+3 quad
+word sq (n int gives int) n n add end
+clear 3 quad
+word sq (a int, b int gives int) a b mul end
+clear 3 quad
+4 sq

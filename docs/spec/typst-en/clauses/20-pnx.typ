@@ -68,8 +68,13 @@ read together with the next. A line that is refused or ends with a fault leaves 
 
 #para("2")[There are tool words only for sessions: `list_words` (the words defined), `stack` (the types on the stack
 there), `clear` (at the start of a line: the line starts from an empty stack), `see` (the stack after every line of
-the definitions that follow), `redefine word …` (replaces a word with the same signature; code that calls it calls the
-new one).]
+the definitions that follow), `redefine word …` (the same as `word …` for a word that exists, (2a)).]
+
+#para("2a")[`word NAME …` with the name of a word an earlier line of the session defined redefines it. With the same
+signature, every word that calls it calls the new one. With another signature the new word takes the name; the words
+compiled before keep calling the old body, which no longer has a name, and `pnx repl` names them ("2 words still call
+the old sq: quad, cube"). One word is redefined in a line, and none while a task is alive. A word of a module loaded
+from a file is not redefined in the session: edit the file and load it again.]
 
 #ex("spec", "20-repl.pnx")
 

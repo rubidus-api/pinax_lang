@@ -535,6 +535,9 @@ bool pnx_tasks_alive(const pinax_state *state); // a task was spawned and has no
 // The session stack takes what a line left (st->eval_next_*): ints in `ri`, strs in `rs`, each
 // bank in the order of the stack. Refused when a str is longer than 255 bytes; then it stays.
 pinax_err pnx_session_keep(pinax_state *state, const int64_t *ri, const pinax_str *rs);
+// The words whose code calls `word` or takes it as a value (not itself, not the code outside
+// definitions): how many, the first `cap` of them in `out`.
+uint32_t pnx_callers_of(const pinax_state *state, uint32_t word, uint32_t *out, uint32_t cap);
 // Offset of the last `part` in `bytes`, or UINT32_MAX. An empty part is found at the end.
 uint32_t pnx_find_last(const uint8_t *bytes, uint32_t length, const uint8_t *part, uint32_t part_length);
 // Offset of the first `byte`, or UINT32_MAX.

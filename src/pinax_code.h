@@ -449,6 +449,7 @@ enum {
 // records, the names of declared failure codes; in this order, native byte order.
 #define PNX_MAGIC "PNXB"
 #define PNX_CONTAINER_VERSION 5
+#define PNX_WORD_TAKES_NAME 1 // pnx_wordrec.reserved: see redefine_old in pnx_head
 #define PNX_ORDER_MARK 0x0102
 #define PNX_ERR_DECLARED 0x400 // the first failure code a program declares (RFC-0037)
 #define PNX_MAX_ERRS 1024       // codes a state may declare
@@ -470,7 +471,9 @@ typedef struct pnx_head {
              base_locals;
     // redefine: the word of the program (below base_words) whose code this container replaces, and the
     // new word (one of this container's) that carries the new body; the loader trades their code.
-    // UINT32_MAX: none.
+    // UINT32_MAX: none. When the new word's record has PNX_WORD_TAKES_NAME (another signature,
+    // RFC-0040 part D), nothing is traded: the new word takes the name and the old one keeps its
+    // code and its callers under a name that begins with "(", which no source can write.
     uint32_t redefine_old, redefine_new;
     uint32_t base_errs; // the codes declared before: the first of this container is 0x400 + base_errs
 } pnx_head;
@@ -502,7 +505,7 @@ typedef struct pnx_wordrec {
     // declared types (a type made of str) writes them here.
     uint8_t  counted, int_args, str_args, int_results, str_results, fails;
     uint8_t  module;   // the source module the word belongs to: 0 is the first source loaded
-    uint8_t  reserved;
+    uint8_t  reserved; // PNX_WORD_TAKES_NAME on the head's redefine_new, else 0
     uint32_t reserved2; // 0; keeps the record a multiple of 8 bytes, as the records after it are read in place
 } pnx_wordrec;
 

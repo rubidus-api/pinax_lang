@@ -400,6 +400,9 @@ typedef struct comp {
     // takes its place (RFC-0006 S11); NONE when the text redefines nothing
     uint32_t     redefine_old, redefine_new;
     bool         redefining; // `redefine` stands before the definition being read
+    bool         renames;    // the redefinition has another signature: the old word keeps its code and
+                             // its callers, under a name that begins with "(" (RFC-0040 part D)
+    name         old_name;   // the session word's name, while its new definition is read
     bool         in_extern; // a signature of an extern is being read: cstr is a type there
     bool         in_host;   // a signature of a host word is being read: buffer is a type there
     bool         drop_names; // the names in the signature being read are not wanted
@@ -7479,7 +7482,11 @@ static bool definition(comp *c, bool is_test) {
         n = (name){text, n.length + 5};
         if (find_word(c, n, NULL))
             return type_error(c, "a test of this name is already defined");
-    } else if (c->redefining) {
+    } else if (c->redefining || (c->eval && find_word(c, n, NULL) && find_word(c, n, NULL) - (wordsym *)c->words.ptr <
+                                                                         (ptrdiff_t)c->base.words)) {
+        // `word NAME` with the name of a word an earlier line of the session defined redefines it
+        // (RFC-0040 part D); `redefine word NAME` says the same
+        c->redefining = true;
         if (pnx_tasks_alive(c->st)) // the code of the words moves; a task's places in it would not
             return error(c, PINAX_ERR_STATE, "redefine waits until no task is alive (run_all, or cancel them)");
         uint32_t old;
@@ -7488,9 +7495,10 @@ static bool definition(comp *c, bool is_test) {
         if (c->redefine_old != NONE)
             return syntax(c, "one redefine in a text");
         c->redefine_old = old;
+        c->old_name = n;
         n = cname("(replaced)");
     } else if (name_is_global(c, n) && !(find_fwd(c, n, NULL) && find_fwd(c, n, NULL)->index == NONE)) {
-        return c->eval && find_word(c, n, NULL) ? type_error(c, "this name is already defined; redefine word replaces it")
+        return c->eval && find_word(c, n, NULL) ? type_error(c, "a word of this name is defined earlier in this text")
                                                 : defined_twice(c, n);
     }
     if (n.length > 31)
@@ -7510,9 +7518,25 @@ static bool definition(comp *c, bool is_test) {
         return syntax(c, "the signature is longer than 71 bytes");
     if (c->redefining) { // the code that calls the word was checked against this signature
         c->redefining = false;
-        if (__builtin_strcmp(c->st->words[c->redefine_old].signature, text) != 0)
-            return error(c, PINAX_ERR_SIGNATURE, "redefine keeps the signature of the word it replaces");
         c->redefine_new = c->def_index;
+        if (__builtin_strcmp(c->st->words[c->redefine_old].signature, text) != 0) {
+            // another signature: this word takes the name; the old one keeps its code, and the
+            // words compiled before keep calling it (as Forth does)
+            if (!vec_own(c, &c->words, sizeof(wordsym), PNX_SYM_WORDS))
+                return false;
+            uint8_t *hidden = arena_alloc(c, 31);
+            if (!hidden)
+                return false;
+            const uint32_t len = c->old_name.length < 30 ? c->old_name.length : 30;
+            hidden[0] = '(';
+            __builtin_memcpy(hidden + 1, c->old_name.text, len);
+            wordsym *all = c->words.ptr;
+            all[c->redefine_old].name = (name){hidden, len + 1};
+            all[c->def_index].name = c->old_name;
+            n = c->old_name;
+            c->renames = true;
+            w = all + c->def_index;
+        }
     }
     fwd *ahead = is_test ? NULL : find_fwd(c, n, NULL);
     if (ahead) { // the definition a forward declaration promised
@@ -8603,7 +8627,7 @@ static bool compile(comp *c, image *im, bool *has_top) {
         return false;
     struct counts seen = c->base;
     while (c->tok.kind != PNX_T_END) {
-        if (c->eval && c->tok.kind == PNX_T_NAME && !c->top_fn->n_blocks && c->top_fn->depth == 0 &&
+        if (c->eval && c->tok.kind == PNX_T_NAME && !c->top_fn->n_blocks && c->top_fn->depth == c->eval_sig.n_in &&
             name_is(tok_name(c), "redefine") && !find_word(c, tok_name(c), NULL)) {
             // redefine word NAME (effect) ... end : a tool word of an interactive session
             if (!advance(c))
@@ -8613,7 +8637,7 @@ static bool compile(comp *c, image *im, bool *has_top) {
             c->redefining = true;
             continue;
         }
-        if (c->eval && c->tok.kind == PNX_T_NAME && !c->top_fn->n_blocks && c->top_fn->depth == 0 &&
+        if (c->eval && c->tok.kind == PNX_T_NAME && !c->top_fn->n_blocks && c->top_fn->depth == c->eval_sig.n_in &&
             (name_is(tok_name(c), "see") || name_is(tok_name(c), "list_words"))) {
             // tool words of an interactive session (RFC-0009 section 6)
             if (name_is(tok_name(c), "see")) {
@@ -8888,7 +8912,8 @@ static bool serialize(comp *c, const image *im, uint8_t **out, size_t *out_len) 
         const wordsym *w = (const wordsym *)c->words.ptr + k;
         const uint32_t next = k + 1 < c->words.n ? ((const wordsym *)c->words.ptr + k + 1)->entry : im_pc(im);
         pnx_wordrec rec = {.entry = w->entry, .length = next - w->entry, .int_cells = w->cells[0], .str_cells = w->cells[1],
-                           .counted = 1, .fails = w->sig.fails, .module = (uint8_t)w->module};
+                           .counted = 1, .fails = w->sig.fails, .module = (uint8_t)w->module,
+                           .reserved = c->renames && k == c->redefine_new ? PNX_WORD_TAKES_NAME : 0};
         uint32_t in[2], out[2];
         count_sig(&w->sig, in, out);
         rec.int_args = (uint8_t)in[0];
@@ -8993,7 +9018,7 @@ static bool serialize(comp *c, const image *im, uint8_t **out, size_t *out_len) 
     // number, since the loader gives that word the new code
     for (uint32_t k = 0; k < head.n_locals; ++k, p += sizeof(pnx_localrec)) {
         pnx_localrec rec = ((const pnx_localrec *)c->localrecs.ptr)[k];
-        if (c->redefine_new != NONE && rec.word == c->redefine_new)
+        if (c->redefine_new != NONE && !c->renames && rec.word == c->redefine_new)
             rec.word = c->redefine_old;
         __builtin_memcpy(p, &rec, sizeof rec);
     }
@@ -9241,6 +9266,9 @@ static bool keep_symbols(comp *c, keeping *k) {
         k->next.session = c->module;
     k->name_bytes = 0;
     each_name(&now, c->sym_base, name_size, k);
+    name *hidden = c->renames ? &((wordsym *)c->words.ptr + c->redefine_old)->name : NULL; // RFC-0040 part D
+    if (hidden)
+        name_size(hidden, k);
     for (uint32_t i = opened_before; i < opened_now; ++i)
         k->name_bytes += c->modules[i].length + c->module_real[i].length;
     if (k->name_bytes) { // in the last chunk while it has room, else in a new one twice its size
@@ -9266,6 +9294,8 @@ static bool keep_symbols(comp *c, keeping *k) {
             ++s->n_chunks;
         }
         each_name(&now, c->sym_base, name_keep, k);
+        if (hidden)
+            name_keep(hidden, k);
         for (uint32_t i = opened_before; i < opened_now; ++i) {
             name_keep(&c->modules[i], k);
             name_keep(&c->module_real[i], k);
@@ -9433,10 +9463,10 @@ static bool truncs_ok(comp *c) {
             }
         }
     }
-    if (c->redefine_new != NONE && (words[c->redefine_new].truncs & ~words[c->redefine_old].truncs))
+    if (c->redefine_new != NONE && !c->renames && (words[c->redefine_new].truncs & ~words[c->redefine_old].truncs))
         return error(c, PINAX_ERR_TYPE, "redefine cannot make the word truncate a list parameter the old one did not "
                                         "truncate: the lists given to it were checked against the old one");
-    if (c->redefine_new != NONE && (words[c->redefine_new].writes & ~words[c->redefine_old].writes))
+    if (c->redefine_new != NONE && !c->renames && (words[c->redefine_new].writes & ~words[c->redefine_old].writes))
         return error(c, PINAX_ERR_TYPE, "redefine cannot make the word change a collection parameter the old one only "
                                         "read: shared collections may have been given to it");
     for (uint32_t k = 0; k < c->lends.n; ++k) {
@@ -9468,6 +9498,13 @@ static bool truncs_ok(comp *c) {
                                              "is given to truncates it");
     }
     return true;
+}
+
+// Appends `piece` to the text of `cap` bytes that holds `at`; what does not fit is left out.
+static size_t put_piece(char *text, size_t at, size_t cap, const char *piece) {
+    for (; *piece && at < cap; ++piece)
+        text[at++] = *piece;
+    return at;
 }
 
 static pinax_err load_source(pinax_state *st, const char *file, pinax_str source, uint32_t mode, bool eval) {
@@ -9637,6 +9674,31 @@ static pinax_err load_source(pinax_state *st, const char *file, pinax_str source
     if (err != PINAX_OK)
         return err;
     st->symbols = keep.next;
+    if (c.renames && st->diag) { // the words that still call the old body (RFC-0040 part D)
+        uint32_t       who[8];
+        const uint32_t n = pnx_callers_of(st, c.redefine_old, who, 8);
+        if (n) { // "3 words still call the old sq: cube, quad, tri"
+            char   text[400];
+            size_t at = 0;
+            char   count[12];
+            size_t digits = 0;
+            for (uint32_t v = n; v || !digits; v /= 10)
+                count[digits++] = (char)('0' + v % 10);
+            while (digits)
+                text[at++] = count[--digits];
+            at = put_piece(text, at, sizeof text, n == 1 ? " word still calls the old " : " words still call the old ");
+            at = put_piece(text, at, sizeof text, st->words[c.redefine_new].name);
+            at = put_piece(text, at, sizeof text, ":");
+            for (uint32_t k = 0; k < n && k < 8; ++k) {
+                at = put_piece(text, at, sizeof text, k ? ", " : " ");
+                at = put_piece(text, at, sizeof text, st->words[who[k]].name);
+            }
+            if (n > 8)
+                at = put_piece(text, at, sizeof text, ", ...");
+            const pinax_str file = {(const unsigned char *)c.file, __builtin_strlen(c.file)};
+            st->diag(st->diag_user, file, 0, 0, (pinax_str){(const unsigned char *)text, at});
+        }
+    }
     if (eval && c.cleared && !has_top) // `clear` alone: the session stack is empty
         st->eval_n = 0;
     if (has_top && st->export_only) // pnx export-c: the code as it stands right before it would run (RFC-0028)

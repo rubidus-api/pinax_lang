@@ -79,7 +79,7 @@ are exactly what the processor prints; the chapters in the right column have exa
   [`the module exports nothing of this name`],
   [The module has no such name, or did not `export` it. Add `export` in the module file.], [10],
   [`this name is already defined`],
-  [A word or a declaration of that name exists already. Use another name; in a session, `redefine word` replaces it.], [3, 15],
+  [A word or a declaration of that name exists already. Use another name. (In a session, `word` with the name of a word of an earlier line redefines it.)], [3, 15],
   [`this parameter takes one row of a table; a parameter that takes the whole table is written list RECORD or array RECORD`],
   [A table's name as a parameter type means one row. To take the whole table write `list RECORD` or `array RECORD`.], [6],
   [`the collection given here is of another kind, or holds another type, than the parameter says`],

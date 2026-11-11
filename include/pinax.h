@@ -299,8 +299,12 @@ PINAX_API pinax_err pinax_load_bytecode(pinax_state *state, pinax_str bytecode);
  *  - The tool words that exist only here answer through config.diag: `list_words` and `stack`
  *    (the types on the stack at that place: "stack: int str") with line 0, one message each;
  *    `see`, after which every definition in the text is listed, one message for each of its
- *    lines (that line number, column 0): "stack: int str". `redefine word NAME ...` replaces a
- *    word an earlier text defined, keeping its signature; code that calls it runs the new one.
+ *    lines (that line number, column 0): "stack: int str".
+ *  - `word NAME ...` with the name of a word an earlier text defined redefines it (`redefine
+ *    word NAME ...` says the same; one in a text, not while a task is alive). With the same
+ *    signature, code that calls it runs the new one. With another, the new word takes the name
+ *    and the words compiled before keep calling the old body; a message with line 0 names them:
+ *    "2 words still call the old sq: quad, cube".
  *  - A text that ends inside a definition or a block answers PINAX_ERR_SYNTAX with an error
  *    text that begins "unfinished:"; give the longer text when the rest has come.
  *  - A text that is refused or ends in a fault leaves nothing behind: the session stack is as

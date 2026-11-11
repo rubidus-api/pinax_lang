@@ -71,7 +71,7 @@
   [`the module exports nothing of this name`],
   [모듈에 그 이름이 없거나 `export` 하지 않았다. 모듈 파일에서 `export` 를 붙인다.], [10],
   [`this name is already defined`],
-  [같은 이름의 낱말이나 선언이 이미 있다. 다른 이름을 쓴다. 대화에서는 `redefine word` 로 바꾼다.], [3, 15],
+  [같은 이름의 낱말이나 선언이 이미 있다. 다른 이름을 쓴다. (대화에서는 앞 줄 낱말의 이름으로 `word` 를 쓰면 다시 정의된다.)], [3, 15],
   [`this parameter takes one row of a table; a parameter that takes the whole table is written list RECORD or array RECORD`],
   [표의 이름을 매개변수 타입으로 쓰면 줄 하나다. 표 전체를 받으려면 `list 레코드` 나 `array 레코드`.], [6],
   [`the collection given here is of another kind, or holds another type, than the parameter says`],
