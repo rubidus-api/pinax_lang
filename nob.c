@@ -90,7 +90,7 @@ static const char *const loop_test_sources[] = {"tests/test_loop.c"};
 static const char *const public_paths[] = {
     ".gitignore", "README.md", "README.ko.md", "LICENSE", "nob.c", "include/", "src/", "vendor/",
     "docs/spec/", "docs/manual/", "docs/tools/", // the standard and the manual (Korean and English)
-    "docs/index.html", "docs/.nojekyll", // the Pages front page
+    "docs/playground/", "docs/index.html", "docs/.nojekyll", // the Pages front page and the playground
 };
 
 typedef struct {
@@ -642,6 +642,17 @@ static int cmd_wasm(void) {
         return 1;
     if (write_playground())
         return 1;
+    // the Pages copy (docs/playground/index.html) is the same file, so it cannot drift
+    {
+        size_t n;
+        char  *page = slurp("build/dist/pinax-playground.html", &n);
+        FILE  *f = page && !mkdirs("docs/playground") ? fopen("docs/playground/index.html", "wb") : NULL;
+        if (!f || fwrite(page, 1, n, f) != n) {
+            fprintf(stderr, "nob: cannot write docs/playground/index.html\n");
+            return 1;
+        }
+        fclose(f);
+    }
     printf("nob: wrote build/wasm/pinax.wasm, build/wasm/pinax.mjs and build/dist/pinax-playground.html\n");
     return 0;
 }

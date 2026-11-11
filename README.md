@@ -1,4 +1,4 @@
-[한국어](README.ko.md) | **English** — **Pinax v0.22.0** — [ZIP(x64)](https://github.com/rubidus-api/pinax_lang/releases/download/v0.22.0/pinax-0.22.0-win64.zip) · [Spec PDF(ko)](https://github.com/rubidus-api/pinax_lang/releases/download/v0.22.0/pinax-spec-ko.pdf) · [Spec PDF(en)](https://github.com/rubidus-api/pinax_lang/releases/download/v0.22.0/pinax-spec-en.pdf) · [Manual PDF(ko)](https://github.com/rubidus-api/pinax_lang/releases/download/v0.22.0/pinax-manual-ko.pdf) · [Manual PDF(en)](https://github.com/rubidus-api/pinax_lang/releases/download/v0.22.0/pinax-manual-en.pdf) · [pinax.h](https://github.com/rubidus-api/pinax_lang/releases/download/v0.22.0/pinax.h) · [pinax.c](https://github.com/rubidus-api/pinax_lang/releases/download/v0.22.0/pinax.c) · [pinax_native.h](https://github.com/rubidus-api/pinax_lang/releases/download/v0.22.0/pinax_native.h) · [Web](https://rubidus-api.github.io/pinax_lang/)
+[한국어](README.ko.md) | **English** — **Pinax v0.22.0** — [ZIP(x64)](https://github.com/rubidus-api/pinax_lang/releases/download/v0.22.0/pinax-0.22.0-win64.zip) · [Spec PDF(ko)](https://github.com/rubidus-api/pinax_lang/releases/download/v0.22.0/pinax-spec-ko.pdf) · [Spec PDF(en)](https://github.com/rubidus-api/pinax_lang/releases/download/v0.22.0/pinax-spec-en.pdf) · [Manual PDF(ko)](https://github.com/rubidus-api/pinax_lang/releases/download/v0.22.0/pinax-manual-ko.pdf) · [Manual PDF(en)](https://github.com/rubidus-api/pinax_lang/releases/download/v0.22.0/pinax-manual-en.pdf) · [pinax.h](https://github.com/rubidus-api/pinax_lang/releases/download/v0.22.0/pinax.h) · [pinax.c](https://github.com/rubidus-api/pinax_lang/releases/download/v0.22.0/pinax.c) · [pinax_native.h](https://github.com/rubidus-api/pinax_lang/releases/download/v0.22.0/pinax_native.h) · [Web](https://rubidus-api.github.io/pinax_lang/) · [Playground](https://rubidus-api.github.io/pinax_lang/playground/)
 
 # Pinax
 
@@ -6,7 +6,7 @@ A small, fast scripting language to embed in C programs, with fixed, flat memory
 
 > **Status: early, and it runs.** Source files compile and run, from the command `pnx` and
 > from a C program. The language is not complete (no floating point
-> yet), the current release is 0.22.0, and the bytecode format carries no promise.
+> yet), the current release is 0.23.0, and the bytecode format carries no promise.
 
 Pinax is meant to live inside a host program. The host hands it one block of memory,
 registers the functions it may call, and runs scripts in it. Every value has a type and a

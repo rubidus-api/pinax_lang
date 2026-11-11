@@ -298,11 +298,11 @@ export async function createConsole({ createPinax, bytes, print, store = null })
             if (!b.ok)
                 return "inside a string: it runs when the string is closed";
             if (b.depth > 0)
-                return `in ${plural(b.depth, "block")}, depth ${b.depth}: ${b.open.join(" › ")}. It runs whole at its end`;
+                return `in ${plural(b.depth, "block")}, depth ${b.depth}: ${b.open.join(" \u203a ")}. It runs whole at its end`;
             if (gathered.length)
                 return "waiting for , or . to run";
         }
-        return `ready · program ${plural(lines.length, "line")} · stack ${plural(session.stack().length, "value")}`;
+        return `ready \u00b7 program ${plural(lines.length, "line")} \u00b7 stack ${plural(session.stack().length, "value")}`;
     }
 
     // the page's editor or a loaded file: the whole program, run again

@@ -1,4 +1,4 @@
-**한국어** | [English](README.md) — **Pinax v0.22.0** — [ZIP(x64)](https://github.com/rubidus-api/pinax_lang/releases/download/v0.22.0/pinax-0.22.0-win64.zip) · [Spec PDF(ko)](https://github.com/rubidus-api/pinax_lang/releases/download/v0.22.0/pinax-spec-ko.pdf) · [Spec PDF(en)](https://github.com/rubidus-api/pinax_lang/releases/download/v0.22.0/pinax-spec-en.pdf) · [Manual PDF(ko)](https://github.com/rubidus-api/pinax_lang/releases/download/v0.22.0/pinax-manual-ko.pdf) · [Manual PDF(en)](https://github.com/rubidus-api/pinax_lang/releases/download/v0.22.0/pinax-manual-en.pdf) · [pinax.h](https://github.com/rubidus-api/pinax_lang/releases/download/v0.22.0/pinax.h) · [pinax.c](https://github.com/rubidus-api/pinax_lang/releases/download/v0.22.0/pinax.c) · [pinax_native.h](https://github.com/rubidus-api/pinax_lang/releases/download/v0.22.0/pinax_native.h) · [웹판](https://rubidus-api.github.io/pinax_lang/)
+**한국어** | [English](README.md) — **Pinax v0.22.0** — [ZIP(x64)](https://github.com/rubidus-api/pinax_lang/releases/download/v0.22.0/pinax-0.22.0-win64.zip) · [Spec PDF(ko)](https://github.com/rubidus-api/pinax_lang/releases/download/v0.22.0/pinax-spec-ko.pdf) · [Spec PDF(en)](https://github.com/rubidus-api/pinax_lang/releases/download/v0.22.0/pinax-spec-en.pdf) · [Manual PDF(ko)](https://github.com/rubidus-api/pinax_lang/releases/download/v0.22.0/pinax-manual-ko.pdf) · [Manual PDF(en)](https://github.com/rubidus-api/pinax_lang/releases/download/v0.22.0/pinax-manual-en.pdf) · [pinax.h](https://github.com/rubidus-api/pinax_lang/releases/download/v0.22.0/pinax.h) · [pinax.c](https://github.com/rubidus-api/pinax_lang/releases/download/v0.22.0/pinax.c) · [pinax_native.h](https://github.com/rubidus-api/pinax_lang/releases/download/v0.22.0/pinax_native.h) · [웹판](https://rubidus-api.github.io/pinax_lang/) · [플레이그라운드](https://rubidus-api.github.io/pinax_lang/playground/)
 
 # Pinax
 
@@ -6,7 +6,7 @@ C 프로그램 안에 넣어 쓰는 작고 빠른 스크립트 언어입니다. 
 
 > **상태: 초기 단계이고, 돌아갑니다.** 소스 파일을 컴파일해 실행합니다. 명령 `pnx` 로도, C
 > 프로그램 안에서도 됩니다. 언어는 아직 다 갖춰지지 않았습니다(실수가 아직
-> 없습니다). 지금 릴리스는 0.22.0 이고, 바이트코드 형식은 아직 약속이 아닙니다.
+> 없습니다). 지금 릴리스는 0.23.0 이고, 바이트코드 형식은 아직 약속이 아닙니다.
 
 Pinax 는 호스트 프로그램 안에서 돌도록 만든 언어입니다. 호스트가 메모리 한 덩이를 주고,
 부를 수 있는 함수를 등록하고, 그 안에서 스크립트를 실행합니다. 모든 값의 타입과 자리가
