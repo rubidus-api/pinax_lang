@@ -63,14 +63,25 @@ mixed.
 
 == Bare names from modules
 
-A script that calls the same modules all the time, a shell script above all, can name them in a search order. Then
-their words are written bare.
+A script that calls the same modules all the time, a shell script above all, can name them in a search order with
+`set_order`. Then their words are written bare.
 
-#ex("manual", "10-search.pnx")
+#ex("manual", "10-order.pnx")
 
 The order is only a last resort. A bare name is first a local, then a name of the source, then a core word; only then
 are the modules of the order asked, left to right. So `len` stays the core word even with `str` in the order, and the
-`str` word is written `str.len`. `search ()` empties the order again. A path works with or without it.
+`str` word is written `str.len`. `set_order ()` empties the order again. A path works with or without it.
+
+#qa[How do I add one module without naming the others again?][Inside the parentheses, `get_order` stands for the
+order as it is: `set_order (get_order, str)` puts `str` behind it, `set_order (str, get_order)` in front. Alone,
+`get_order` shows the order. It speaks while the file is checked, so its line comes before anything the file
+prints.
+#ex("manual", "10-order-add.pnx")]
+
+#qa[Why is it `set_order (io, str)` and not `(io, str) set_order`?][What a word takes when it runs comes before it,
+on the stack: `2 3 add`. What a word reads when it is compiled comes after it, in parentheses: the signature of
+`word`, the names of `to (a, b)`, the modules of `set_order`. A module is not a value, so the list could not be on
+the stack.]
 
 == Data files
 

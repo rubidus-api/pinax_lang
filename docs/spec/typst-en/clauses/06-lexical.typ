@@ -205,7 +205,7 @@ reserved = "rem" | "note" | "text" | "true" | "false" | "pinax"
          | "gives" | "or" | "fail" | "owned"
          | "to" | "do" | "end" | "if" | "else" | "loop" | "while" | "until" | "break"
          | "case" | "of" | "otherwise" | "return" | "or_fail" | "or_return" | "or_else" | "cat"
-         | "defer" | "set" | "fits" | "search" ;
+         | "defer" | "set" | "fits" | "set_order" | "get_order" ;
 ```
 
 #para("1")[The list of #term("reserved word")s is closed. A reserved word cannot be a name.]
@@ -215,6 +215,11 @@ reserved = "rem" | "note" | "text" | "true" | "false" | "pinax"
 
 #para("3")[The only punctuation is `(` `)` `,` and the dot that ends a statement (6.2 (2)). Each is a token of its own
 even when written against other text: `str(32)` is four tokens, `7 sq.` three.]
+
+#para("3a")[Parentheses hold a list that belongs to the word before them, and that word reads the list when it is
+compiled: names (`to (a, b)`, `set_order (io, str)`), a signature (`word sq (n int gives int)`), a size (`str(32)`),
+the phrases of `cat`. So the list comes after its word, while the values a word takes when it runs come before it
+(`2 3 add`). The list itself is not a value and is never on the stack.]
 
 #para("4")[The names of types (`int` `str` `bool` …) and of core words (`add` `dup` …) are not reserved words but names
 declared in advance. Declaring them again is refused by the rule against hiding names (9.5).]

@@ -79,7 +79,7 @@ locals: the globals it reads and writes, the host modules it reaches, whether it
 
 == Shell scripts
 
-The module `sh` runs commands through the system shell, and a search order lets its words and those of `io` be written
+The module `sh` runs commands through the system shell, and `set_order` lets its words and those of `io` be written
 bare. A file that begins with `#!/usr/bin/env pnx` runs as a command.
 
 #ex("manual", "15-shell.pnx")

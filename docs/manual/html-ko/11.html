@@ -48,13 +48,20 @@ hits after reset 0
 <span style="color: #b60157">12</span> money.of_won <span style="color: #b60157">3</span> add drop
 </code></pre><p class="ex-label">거절</p><pre><code data-lang="text">$ pnx 10-mixed.pnx
 10-mixed.pnx:2:19: a declared type is added to and subtracted from its own type, and multiplied, divided or taken modulo by an int; for other arithmetic take raw
-</code></pre></div></div><h3>10.3 모듈의 맨 이름</h3><p>같은 모듈을 줄곧 부르는 스크립트, 무엇보다 셸 스크립트는 찾는 순서에 그 모듈들을 이름 붙일 수 있다. 그러면 그 모듈의 낱말을 맨 이름으로 쓴다.</p><div class="example run"><p class="ex-file"><code>10-search.pnx</code></p><pre><code data-lang="pinax">search (io, <span style="color: #d73948">str</span>)
+</code></pre></div></div><h3>10.3 모듈의 맨 이름</h3><p>같은 모듈을 줄곧 부르는 스크립트, 무엇보다 셸 스크립트는 <code>set_order</code> 로 찾는 순서에 그 모듈들을 이름 붙일 수 있다. 그러면 그 모듈의 낱말을 맨 이름으로 쓴다.</p><div class="example run"><p class="ex-file"><code>10-order.pnx</code></p><pre><code data-lang="pinax">set_order (io, <span style="color: #d73948">str</span>)
 <span style="color: #198810">"pinax"</span> upper println
 <span style="color: #198810">"a,b,c"</span> <span style="color: #198810">","</span> <span style="color: #198810">"+"</span> replace println
-</code></pre><p class="ex-label">출력</p><pre><code data-lang="text">$ pnx 10-search.pnx
+</code></pre><p class="ex-label">출력</p><pre><code data-lang="text">$ pnx 10-order.pnx
 PINAX
 a+b+c
-</code></pre></div><p>순서는 마지막에 쓰인다. 맨 이름은 먼저 지역 변수, 다음은 소스의 이름, 다음은 핵 낱말이다. 그다음에야 순서의 모듈을 왼쪽부터 찾는다. 그래서 <code>str</code> 이 순서에 있어도 <code>len</code> 은 핵 낱말이고, <code>str</code> 의 낱말은 <code>str.len</code> 으로 쓴다. <code>search ()</code> 는 순서를 다시 비운다. 경로는 순서가 있든 없든 쓸 수 있다.</p><h3>10.4 자료 파일</h3><p>호스트는 소스를 <strong>자료 적재</strong>로 읽을 수 있다. 자료 적재는 선언과 값만 받고, 낱말 정의와 부르기, 제어를 모두 거절한다. 그래서 믿지 못하는 설정 파일을 읽어도 그 파일이 코드를 돌릴 수 없다.</p><div class="example embed"><p class="ex-file"><code>10-data.c</code></p><pre><code data-lang="c"><span style="color: #d73948">#include</span> <span style="color: #198810">"</span><span style="color: #198810">pinax.h</span><span style="color: #198810">"</span>
+</code></pre></div><p>순서는 마지막에 쓰인다. 맨 이름은 먼저 지역 변수, 다음은 소스의 이름, 다음은 핵 낱말이다. 그다음에야 순서의 모듈을 왼쪽부터 찾는다. 그래서 <code>str</code> 이 순서에 있어도 <code>len</code> 은 핵 낱말이고, <code>str</code> 의 낱말은 <code>str.len</code> 으로 쓴다. <code>set_order ()</code> 는 순서를 다시 비운다. 경로는 순서가 있든 없든 쓸 수 있다.</p><div class="box qa"><p class="box-title">문답</p><p><strong>물음. 다른 모듈을 다시 쓰지 않고 하나만 더하려면?</strong></p><p>답. 괄호 안의 <code>get_order</code> 는 지금의 순서를 뜻한다. <code>set_order (get_order,<br>str)</code> 는 <code>str</code> 을 그 뒤에, <code>set_order (str, get_order)</code> 는 앞에 둔다. 홀로 쓴 <code>get_order</code> 는 순서를 보인다. 파일을 검사할 때 알리므로, 그 줄은 파일이 찍는 어떤 것보다 먼저 나온다.</p><div class="example run"><p class="ex-file"><code>10-order-add.pnx</code></p><pre><code data-lang="pinax">set_order (io)
+set_order (get_order, <span style="color: #d73948">str</span>)
+get_order
+<span style="color: #198810">"pinax"</span> lower println
+</code></pre><p class="ex-label">출력</p><pre><code data-lang="text">$ pnx 10-order-add.pnx
+order: (io, str)
+pinax
+</code></pre></div></div><div class="box qa"><p class="box-title">문답</p><p><strong>물음. 왜 <code>(io, str) set_order</code> 가 아니고 <code>set_order (io, str)</code> 인가?</strong></p><p>답. 낱말이 실행 때 받는 것은 그 앞, 스택에 온다: <code>2 3 add</code>. 낱말이 컴파일될 때 읽는 것은 그 뒤 괄호에 온다: <code>word</code> 의 서명, <code>to (a, b)</code> 의 이름, <code>set_order</code> 의 모듈. 모듈은 값이 아니므로 그 목록이 스택에 있을 수 없다.</p></div><h3>10.4 자료 파일</h3><p>호스트는 소스를 <strong>자료 적재</strong>로 읽을 수 있다. 자료 적재는 선언과 값만 받고, 낱말 정의와 부르기, 제어를 모두 거절한다. 그래서 믿지 못하는 설정 파일을 읽어도 그 파일이 코드를 돌릴 수 없다.</p><div class="example embed"><p class="ex-file"><code>10-data.c</code></p><pre><code data-lang="c"><span style="color: #d73948">#include</span> <span style="color: #198810">"</span><span style="color: #198810">pinax.h</span><span style="color: #198810">"</span>
 <span style="color: #d73948">#include</span> <span style="color: #198810">&lt;</span><span style="color: #198810">stdio.h</span><span style="color: #198810">&gt;</span>
 <span style="color: #d73948">#include</span> <span style="color: #198810">&lt;</span><span style="color: #198810">string.h</span><span style="color: #198810">&gt;</span>
 

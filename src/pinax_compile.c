@@ -396,7 +396,7 @@ typedef struct comp {
     uint32_t     see_line;
     sig          eval_sig;   // the line as a word: the session stack before it and after it (RFC-0040 part A)
     bool         cleared;    // the line began with the tool word `clear`: it starts from an empty stack
-    // search (io, str): the modules a bare name is looked for in, after the source's own names
+    // set_order (io, str): the modules a bare name is looked for in, after the source's own names
     // and the core, left to right (RFC-0040 part C); numbers into modules[]
     uint8_t      n_search, search[16];
     // redefine word NAME ... : the session's word that is replaced and the new word whose code
@@ -7012,7 +7012,7 @@ static bool body_name(comp *c) {
         const struct builtin *bw = find_builtin(n, 0);
         if (bw)
             return builtin(c, bw);
-        // the modules of the search order, left to right (RFC-0040 part C)
+        // the modules of the order, left to right (RFC-0040 part C, RFC-0041)
         for (uint32_t k = 0; k < c->n_search; ++k) {
             if (module_has(c, c->module_real[c->search[k]], n))
                 return path_word(c, c->modules[c->search[k]], n);
@@ -7025,6 +7025,8 @@ static bool body_name(comp *c) {
             if (name_eq(cname(c->st->hosts[k].name), n) && module_used(c, cname(c->st->hosts[k].module)))
                 return error(c, PINAX_ERR_NOT_FOUND, "a word of a module is written with the module: io.println");
         }
+        if (name_is(n, "search")) // search (io, str) of 0.21 (RFC-0041)
+            return error(c, PINAX_ERR_NOT_FOUND, "search is now set_order: set_order (io, str)");
         return error(c, PINAX_ERR_NOT_FOUND, "this name is not declared before this place");
     }
     return true;
@@ -7187,8 +7189,10 @@ static bool body_token(comp *c) {
         return case_item(c);
     // The end of a statement (RFC-0040 part F). A comma waits for nothing. A dot is a barrier: the
     // host finishes every effect begun before it (pinax_on_barrier).
-    if (t.kind == PNX_T_RESERVED && t.word == PNX_KW_search)
-        return syntax(c, "search stands at the top level, outside definitions and blocks");
+    if (t.kind == PNX_T_RESERVED && t.word == PNX_KW_set_order)
+        return syntax(c, "set_order stands at the top level, outside definitions and blocks");
+    if (t.kind == PNX_T_RESERVED && t.word == PNX_KW_get_order)
+        return syntax(c, "get_order stands at the top level, or inside set_order (...)");
     if (t.kind == PNX_T_COMMA || t.kind == PNX_T_DOT) {
         if (t.kind == PNX_T_DOT && !f->dead && !c->data_only && emit(c, PNX_ABC(PNX_BARRIER, 0, 0, 0)) == NONE)
             return false;
@@ -7662,7 +7666,7 @@ static bool use_module(comp *c) {
     return open_module(c, n, prefix, NULL);
 }
 
-// Opens module `n` under `prefix` (use, search); `at` gets its number in modules[].
+// Opens module `n` under `prefix` (use, set_order); `at` gets its number in modules[].
 static bool open_module(comp *c, name n, name prefix, uint32_t *at) {
     name other;
     for (uint32_t k = 0; k < c->n_modules; ++k) {
@@ -7686,54 +7690,96 @@ static bool open_module(comp *c, name n, name prefix, uint32_t *at) {
     return true;
 }
 
-// search (io, str) : the modules a bare name is looked for in, left to right, after the
-// source's own names and the core (RFC-0040 part C). `search ()` and `search none` empty it.
-// It replaces the order from here on; a session keeps it for the lines after.
-static bool search_order(comp *c) {
+// set_order (io, str) : the modules a bare name is looked for in, left to right, after the
+// source's own names and the core (RFC-0040 part C, RFC-0041). `set_order ()` empties it;
+// `get_order` inside the parentheses stands for the order as it is, and a module it brings
+// again keeps its first place. It replaces the order from here on; a session keeps it for the
+// lines after.
+static bool set_order(comp *c) {
     if (c->data_only)
         return syntax(c, "a data source defines no words and uses no modules");
     if (c->top_fn->n_blocks)
-        return syntax(c, "search stands at the top level, outside definitions and blocks");
+        return syntax(c, "set_order stands at the top level, outside definitions and blocks");
     if (!advance(c))
         return false;
-    if (c->tok.kind == PNX_T_NAME && name_is(tok_name(c), "none")) {
-        c->n_search = 0;
-        return advance(c);
-    }
     if (c->tok.kind != PNX_T_LPAREN)
-        return syntax(c, "search is followed by modules in parentheses: search (io, str)");
+        return syntax(c, "set_order is followed by modules in parentheses: set_order (io, str)");
     if (!advance(c))
         return false;
     uint8_t  order[16];
+    bool     named[16]; // written by name, not brought by get_order
     uint32_t n_order = 0;
     while (c->tok.kind != PNX_T_RPAREN) {
-        if (c->tok.kind != PNX_T_NAME)
-            return syntax(c, "search names modules, separated by commas: search (io, str)");
-        const name n = tok_name(c);
-        bool known = standard_module(n) != 0;
-        for (uint32_t k = 0; !known && k < c->st->n_hosts; ++k)
-            known = name_eq(cname(c->st->hosts[k].module), n);
-        if (!known && source_module(c, n) == NONE)
-            return error(c, PINAX_ERR_NOT_FOUND, "no module of this name is registered or loaded");
-        uint32_t at;
-        if (!open_module(c, n, n, &at))
-            return false;
-        for (uint32_t k = 0; k < n_order; ++k) {
-            if (order[k] == at)
-                return type_error(c, "this module is named twice in the search order");
+        const bool all = c->tok.kind == PNX_T_RESERVED && c->tok.word == PNX_KW_get_order;
+        if (!all && c->tok.kind != PNX_T_NAME)
+            return syntax(c, "set_order names modules, separated by commas: set_order (io, str)");
+        uint8_t  bring[16];
+        uint32_t n_bring = 0;
+        if (all) {
+            __builtin_memcpy(bring, c->search, c->n_search);
+            n_bring = c->n_search;
+        } else {
+            const name n = tok_name(c);
+            bool known = standard_module(n) != 0;
+            for (uint32_t k = 0; !known && k < c->st->n_hosts; ++k)
+                known = name_eq(cname(c->st->hosts[k].module), n);
+            if (!known && source_module(c, n) == NONE)
+                return error(c, PINAX_ERR_NOT_FOUND, "no module of this name is registered or loaded");
+            uint32_t at;
+            if (!open_module(c, n, n, &at))
+                return false;
+            bring[n_bring++] = (uint8_t)at;
         }
-        if (n_order == sizeof order)
-            return syntax(c, "a search order names at most 16 modules");
-        order[n_order++] = (uint8_t)at;
+        for (uint32_t j = 0; j < n_bring; ++j) {
+            uint32_t k = 0;
+            while (k < n_order && order[k] != bring[j])
+                ++k;
+            if (k < n_order) { // already in the order: it keeps its first place
+                if (!all && named[k])
+                    return type_error(c, "this module is named twice in the order");
+                continue;
+            }
+            if (n_order == sizeof order)
+                return syntax(c, "an order names at most 16 modules");
+            named[n_order] = !all;
+            order[n_order++] = bring[j];
+        }
         if (!advance(c))
             return false;
         if (c->tok.kind == PNX_T_COMMA && !advance(c))
             return false;
-        else if (c->tok.kind != PNX_T_RPAREN && c->tok.kind != PNX_T_NAME)
-            return syntax(c, "search names modules, separated by commas: search (io, str)");
+        else if (c->tok.kind != PNX_T_RPAREN && c->tok.kind != PNX_T_NAME &&
+                 !(c->tok.kind == PNX_T_RESERVED && c->tok.word == PNX_KW_get_order))
+            return syntax(c, "set_order names modules, separated by commas: set_order (io, str)");
     }
     __builtin_memcpy(c->search, order, n_order);
     c->n_search = (uint8_t)n_order;
+    return advance(c);
+}
+
+// get_order alone : tells the order as tool output (line 0 of the diagnostics), written as
+// set_order takes it: "order: (io, str)". It changes nothing (RFC-0041).
+static bool get_order(comp *c) {
+    if (c->top_fn->n_blocks)
+        return syntax(c, "get_order stands at the top level, or inside set_order (...)");
+    if (c->st->diag) {
+        char   text[16 * 33 + 16] = "order: (";
+        size_t n                  = 8;
+        for (uint32_t k = 0; k < c->n_search; ++k) {
+            const name m = c->modules[c->search[k]];
+            if (k) {
+                text[n++] = ',';
+                text[n++] = ' ';
+            }
+            __builtin_memcpy(text + n, m.text, m.length);
+            n += m.length;
+        }
+        text[n++] = ')';
+        text[n]   = 0;
+        const pinax_str file    = {(const unsigned char *)c->file, __builtin_strlen(c->file)};
+        const pinax_str message = {(const unsigned char *)text, n};
+        c->st->diag(c->st->diag_user, file, 0, 0, message);
+    }
     return advance(c);
 }
 
@@ -8802,8 +8848,11 @@ static bool compile(comp *c, image *im, bool *has_top) {
         if (is_word(c, PNX_KW_use)) {
             if (!use_module(c))
                 return false;
-        } else if (is_word(c, PNX_KW_search)) {
-            if (!search_order(c))
+        } else if (is_word(c, PNX_KW_set_order)) {
+            if (!set_order(c))
+                return false;
+        } else if (is_word(c, PNX_KW_get_order)) {
+            if (!get_order(c))
                 return false;
         } else if (is_word(c, PNX_KW_export)) { // what other modules may name (RFC-0014)
             if (c->exporting || c->top_fn->n_blocks || !advance(c))

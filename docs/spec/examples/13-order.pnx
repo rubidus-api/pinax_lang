@@ -1,7 +1,9 @@
 rem run
 use io
 use str
-search (io, str)
+set_order (io)
+set_order (get_order, str)
+get_order
 "pinax" upper println
 word shout (s str) cat (s upper, "!") println end
 "hello" shout

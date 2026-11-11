@@ -13,9 +13,10 @@ literal     = INT | DEC | CHAR | STRING | RAWSTRING | TEXT | BOOL ;
 
 (* 6.7, 13: a source *)
 source      = [ "pinax" INT ] { item } ;
-item        = import | search | forward | declaration | definition | row-item | assign-item | body ;
+item        = import | order | forward | declaration | definition | row-item | assign-item | body ;
 import      = "use" NAME [ "as" NAME ] ;
-search      = "search" ( "(" [ NAME { "," NAME } ] ")" | "none" ) ;   (* 13.5 *)
+order       = "set_order" "(" [ order-one { "," order-one } ] ")" | "get_order" ;   (* 13.5 *)
+order-one   = NAME | "get_order" ;
 forward     = "forward" ( "array" | "list" | "pool" ) NAME
             | "forward" "word" NAME "(" effect ")" ;
 

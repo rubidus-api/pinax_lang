@@ -343,8 +343,8 @@ static void show_values(const pinax_state *state) {
 
 static void diag(void *user, pinax_str file, uint32_t line, uint32_t column, pinax_str message) {
     (void)user;
-    if (line == 0) { // tool output: the list of words, the stack at a place
-        char out[320];
+    if (line == 0) { // tool output: the list of words, the stack at a place, the order
+        char out[600];
         snprintf(out, sizeof out, "%.*s\n", (int)message.len, (const char *)message.ptr);
         say(out);
         return;
@@ -426,7 +426,7 @@ static pinax_err load_file(pinax_state *state, char *path, char *owned, const ch
     const char *slash = last_sep(path);
     const proven_u8str_view_t dir = proven_u8str_view_slice(view_of_c(path), 0, slash ? (size_t)(slash - path) + 1 : 0);
     for (size_t i = 0, at = 0, in_list = 0; i + 4 < length; ++i) {
-        // a line `use NAME`, or each NAME of a line `search (NAME, NAME)` (RFC-0040 part C)
+        // a line `use NAME`, or each NAME of a line `set_order (NAME, NAME)` (RFC-0040 part C, RFC-0041)
         if (in_list) {
             at = i;
             while (at < length && (text[at] == ' ' || text[at] == '\t' || text[at] == ','))
@@ -435,9 +435,9 @@ static pinax_err load_file(pinax_state *state, char *path, char *owned, const ch
                 in_list = 0;
                 continue;
             }
-        } else if ((i == 0 || text[i - 1] == '\n') && length - i > 7 && memcmp(text + i, "search", 6) == 0 &&
-                   (text[i + 6] == ' ' || text[i + 6] == '\t' || text[i + 6] == '(')) {
-            at = i + 6;
+        } else if ((i == 0 || text[i - 1] == '\n') && length - i > 10 && memcmp(text + i, "set_order", 9) == 0 &&
+                   (text[i + 9] == ' ' || text[i + 9] == '\t' || text[i + 9] == '(')) {
+            at = i + 9;
             while (at < length && (text[at] == ' ' || text[at] == '\t'))
                 ++at;
             if (at >= length || text[at] != '(')
@@ -459,6 +459,8 @@ static pinax_err load_file(pinax_state *state, char *path, char *owned, const ch
             i = end - 1; // the next name of the list, from the end of this one
         if (end == at || end - at > 31)
             continue;
+        if (in_list && end - at == 9 && memcmp(text + at, "get_order", 9) == 0)
+            continue; // the order as it is, not a module
         const proven_u8str_view_t used = proven_u8str_view_slice(source, at, end - at);
         bool loaded = false;
         for (int k = 0; k < n_sources; ++k)

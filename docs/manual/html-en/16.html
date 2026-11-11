@@ -80,7 +80,7 @@ double: none
 tally: reads hits; writes hits
 save: reads hits; file reads and writes; may fail
 say: reads hits; io writes
-</code></pre></div><h3>15.3 Shell scripts</h3><p>The module <code>sh</code> runs commands through the system shell, and a search order lets its words and those of <code>io</code> be written bare. A file that begins with <code>#!/usr/bin/env pnx</code> runs as a command.</p><div class="example run"><p class="ex-file"><code>15-shell.pnx</code></p><pre><code data-lang="pinax">search (io, sh)
+</code></pre></div><h3>15.3 Shell scripts</h3><p>The module <code>sh</code> runs commands through the system shell, and <code>set_order</code> lets its words and those of <code>io</code> be written bare. A file that begins with <code>#!/usr/bin/env pnx</code> runs as a command.</p><div class="example run"><p class="ex-file"><code>15-shell.pnx</code></p><pre><code data-lang="pinax">set_order (io, sh)
 <span style="color: #d73948">word</span> main (<span style="color: #d73948">or</span> <span style="color: #d73948">fail</span>)
   <span style="color: #198810">"echo first"</span> run <span style="color: #d73948">or_fail</span> drop
   <span style="color: #d73948">cat</span> (<span style="color: #198810">"the shell says: "</span>, <span style="color: #198810">"echo hello"</span> output <span style="color: #d73948">or_fail</span>) print

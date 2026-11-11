@@ -96,12 +96,17 @@ Everything a data source declares counts as exported.]
 
 #part("Syntax")
 ```ebnf
-search = "search" ( "(" [ NAME { "," NAME } ] ")" | "none" ) ;
+order     = "set_order" "(" [ order-one { "," order-one } ] ")" | "get_order" ;
+order-one = NAME | "get_order" ;
 ```
 
-#para("1")[`search (io, str)` gives the #term("search order"): the modules in which a bare name is looked for. Each
+#para("1")[`set_order (io, str)` gives the #term("search order"): the modules in which a bare name is looked for. Each
 module named is opened as by `use` (13.1 (2), (3)); `pnx` loads a file module beside the program first, as for `use`.
-`search ()` and `search none` empty the order. Without a search order, nothing is looked for in a module.]
+`set_order ()` empties the order. Without a search order, nothing is looked for in a module.]
+
+#para("1a")[Inside the parentheses, `get_order` stands for the search order as it is at that place: `set_order (json,
+get_order)` puts `json` in front of it, `set_order (get_order, csv)` behind it. A module that `get_order` brings again,
+or that is named again after `get_order` brought it, keeps its first place.]
 
 #para("2")[A bare name in code is looked for in this order, and the first that has it is taken: the locals and
 parameters; what this source (or session) declares; the core words; then the modules of the search order, left to
@@ -109,25 +114,32 @@ right. So a name of the source and a core word keep their meaning whatever the o
 cannot change code that compiled before. A word of a module named like a core word (`str.len` beside `len`) is written
 with its path. A path is read as before.]
 
-#ex("spec", "13-search.pnx")
-#ex("spec", "13-search-core.pnx")
+#ex("spec", "13-order.pnx")
+#ex("spec", "13-order-core.pnx")
 
-#para("3")[A search order stands at the top level of a source or of a session line, as often as needed. Each one
+#para("3")[`set_order` stands at the top level of a source or of a session line, as often as needed. Each one
 replaces the order from there to the end of the source; a session keeps it for the lines after, until the next one.
 A word takes what its names found when it was compiled.]
+
+#para("3a")[`get_order` alone at the top level tells the search order at that place, written as `set_order` takes
+it, `order: (io, str)`, as a diagnostic with line 0 at `config.diag` (19.4 (1)), and changes nothing. It speaks when the source is checked: in a
+file, before any of the file's code runs.]
 
 #para("4")[A name reached through the search order does not count for the rule against hiding names (9.5): a local
 may have the name of a word of a module in the order, and inside that word the local is meant.]
 
 #part("Constraints")
 
-#para("5")[A search order inside a definition or a block, one that names a module twice or more than 16 modules, and
-one that names a module that does not exist are refused.]
+#para("5")[`set_order` or `get_order` inside a definition or a block, a search order that names a module twice or more
+than 16 modules, and one that names a module that does not exist are refused.]
 
 #part("Diagnostics")
 #diag(
-  ([`search` inside a definition], "search stands at the top level, outside definitions and blocks"),
-  ([No parentheses], "search is followed by modules in parentheses: search (io, str)"),
-  ([A module named twice], "this module is named twice in the search order"),
-  ([More than 16], "a search order names at most 16 modules"),
+  ([`set_order` inside a definition], "set_order stands at the top level, outside definitions and blocks"),
+  ([`get_order` inside a definition], "get_order stands at the top level, or inside set_order (...)"),
+  ([No parentheses], "set_order is followed by modules in parentheses: set_order (io, str)"),
+  ([Not a module name], "set_order names modules, separated by commas: set_order (io, str)"),
+  ([A module named twice], "this module is named twice in the order"),
+  ([More than 16], "an order names at most 16 modules"),
+  ([`search (…)`, not a word of the language], "search is now set_order: set_order (io, str)"),
 )

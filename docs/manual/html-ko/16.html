@@ -80,7 +80,7 @@ double: none
 tally: reads hits; writes hits
 save: reads hits; file reads and writes; may fail
 say: reads hits; io writes
-</code></pre></div><h3>15.3 셸 스크립트</h3><p>모듈 <code>sh</code> 는 시스템 셸로 명령을 돌리고, 찾는 순서를 쓰면 그 낱말과 <code>io</code> 의 낱말을 맨 이름으로 쓸 수 있다. <code>#!/usr/bin/env pnx</code> 로 시작하는 파일은 명령처럼 돈다.</p><div class="example run"><p class="ex-file"><code>15-shell.pnx</code></p><pre><code data-lang="pinax">search (io, sh)
+</code></pre></div><h3>15.3 셸 스크립트</h3><p>모듈 <code>sh</code> 는 시스템 셸로 명령을 돌리고, <code>set_order</code> 로 찾는 순서를 정하면 그 낱말과 <code>io</code> 의 낱말을 맨 이름으로 쓸 수 있다. <code>#!/usr/bin/env pnx</code> 로 시작하는 파일은 명령처럼 돈다.</p><div class="example run"><p class="ex-file"><code>15-shell.pnx</code></p><pre><code data-lang="pinax">set_order (io, sh)
 <span style="color: #d73948">word</span> main (<span style="color: #d73948">or</span> <span style="color: #d73948">fail</span>)
   <span style="color: #198810">"echo first"</span> run <span style="color: #d73948">or_fail</span> drop
   <span style="color: #d73948">cat</span> (<span style="color: #198810">"the shell says: "</span>, <span style="color: #198810">"echo hello"</span> output <span style="color: #d73948">or_fail</span>) print

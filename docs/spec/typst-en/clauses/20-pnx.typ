@@ -16,8 +16,8 @@ pnx export-c file.pnx [NAME]
 
 == Running <pnx-run>
 
-#para("1")[`pnx file.pnx arguments…` loads the file and runs its load code. For each module the file uses that is not
-registered, it first loads `MODULE.pnx` from beside the file (13.1). The file is loaded as the module named after it
+#para("1")[`pnx file.pnx arguments…` loads the file and runs its load code. For each module the file uses or names in
+`set_order` that is not registered, it first loads `MODULE.pnx` from beside the file (13.1, 13.5). The file is loaded as the module named after it
 without `.pnx`; when that name is not written like a word (it begins with a digit or contains `-`), the module has no
 name.]
 
@@ -69,7 +69,8 @@ is a dot (10.8): what the line wrote is on the screen before the prompt comes ba
 
 #para("2")[There are tool words only for sessions: `list_words` (the words defined), `stack` (the types on the stack
 there), `clear` (at the start of a line: the line starts from an empty stack), `see` (the stack after every line of
-the definitions that follow), `redefine word …` (the same as `word …` for a word that exists, (2a)).]
+the definitions that follow), `redefine word …` (the same as `word …` for a word that exists, (2a)). `get_order` (13.5 (3a)) tells the search
+order, in a session and in a file.]
 
 #para("2a")[`word NAME …` with the name of a word an earlier line of the session defined redefines it. With the same
 signature, every word that calls it calls the new one. With another signature the new word takes the name; the words

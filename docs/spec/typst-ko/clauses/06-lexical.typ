@@ -200,7 +200,7 @@ reserved = "rem" | "note" | "text" | "true" | "false" | "pinax"
          | "gives" | "or" | "fail" | "owned"
          | "to" | "do" | "end" | "if" | "else" | "loop" | "while" | "until" | "break"
          | "case" | "of" | "otherwise" | "return" | "or_fail" | "or_return" | "or_else" | "cat"
-         | "defer" | "set" | "fits" | "search" ;
+         | "defer" | "set" | "fits" | "set_order" | "get_order" ;
 ```
 
 #para("1")[#term("예약 낱말", en: "reserved word")의 목록은 닫혀 있다. 예약 낱말은 이름으로 쓰지 못한다.]
@@ -209,6 +209,10 @@ reserved = "rem" | "note" | "text" | "true" | "false" | "pinax"
 
 #para("3")[구두점은 `(` `)` `,` 와 문장을 끝내는 점(6.2 (2))뿐이다. 붙여 써도 따로 토큰이다 --- `str(32)` 는 토큰
 넷이고, `7 sq.` 는 셋이다.]
+
+#para("3a")[괄호는 그 앞 낱말에 딸린 목록을 담고, 그 낱말은 컴파일될 때 목록을 읽는다: 이름(`to (a, b)`,
+`set_order (io, str)`), 서명(`word sq (n int gives int)`), 크기(`str(32)`), `cat` 의 구절. 그래서 목록은 낱말 뒤에 오고,
+낱말이 실행 때 받는 값은 낱말 앞에 온다(`2 3 add`). 목록 자체는 값이 아니고 스택에 오르지 않는다.]
 
 #para("4")[타입의 이름(`int` `str` `bool` …)과 핵 낱말의 이름(`add` `dup` …)은 예약 낱말이 아니라 미리
 선언된 이름이다. 그러나 그 이름을 다시 짓는 것은 가림 금지 규칙(9.5)이 거절한다.]

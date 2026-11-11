@@ -1,5 +1,5 @@
 rem run
-search (io, sh)
+set_order (io, sh)
 word main (or fail)
   "echo first" run or_fail drop
   cat ("the shell says: ", "echo hello" output or_fail) print
