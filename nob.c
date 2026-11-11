@@ -563,10 +563,12 @@ static void put_module(FILE *out, const char *text) {
 // in that order. One file that runs Pinax opened from disk, with no server (the page cannot fetch
 // beside itself there).
 static int write_playground(void) {
-    size_t page_n, mjs_n, con_n, wasm_n;
+    size_t page_n, mjs_n, con_n, words_n, comp_n, wasm_n;
     char  *page = slurp("src/wasm/playground.html", &page_n);
     char  *mjs = slurp("src/wasm/pinax.mjs", &mjs_n);
     char  *con = slurp("src/wasm/console.mjs", &con_n);
+    char  *words = slurp("src/wasm/words.mjs", &words_n);
+    char  *comp = slurp("src/wasm/complete.mjs", &comp_n);
     char  *wasm = slurp("build/wasm/pinax.wasm", &wasm_n);
     FILE  *out = NULL;
     int    bad = 1;
@@ -574,7 +576,7 @@ static int write_playground(void) {
     char *at[3] = {NULL, NULL, NULL};
     for (int k = 0; k < 3 && page; ++k)
         at[k] = strstr(k ? at[k - 1] : page, marks[k]);
-    if (!at[2] || !mjs || !con || !wasm || strstr(mjs, "</script") || strstr(con, "</script") ||
+    if (!at[2] || !mjs || !con || !words || !comp || !wasm || strstr(mjs, "</script") || strstr(con, "</script") || strstr(words, "</script") || strstr(comp, "</script") ||
         mkdirs("build/dist") || !(out = fopen("build/dist/pinax-playground.html", "wb"))) {
         fprintf(stderr, "nob: cannot write build/dist/pinax-playground.html\n");
         goto done;
@@ -585,8 +587,11 @@ static int write_playground(void) {
         from = at[k] + strlen(marks[k]);
         if (k == 1)
             put_module(out, mjs);
-        else if (k == 2)
+        else if (k == 2) { // the words and the completion come before the terminal that the page builds on
+            put_module(out, words);
+            put_module(out, comp);
             put_module(out, con);
+        }
         else {
             static const char digits[] = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
             const unsigned char *b = (const unsigned char *)wasm;

@@ -30,7 +30,14 @@
   #log { white-space: pre-wrap; word-break: break-word; }
   .echo { color: #9fb3c8; } .out { color: #e6edf3; } .err { color: #ff7b72; }
   .stack { color: #7ee787; } .info { color: #d2a8ff; }
-  #line { display: flex; align-items: flex-start; }
+  #line { display: flex; align-items: flex-start; position: relative; }
+  #hint { position: absolute; left: 0; bottom: 100%; display: none; max-width: 100%; box-sizing: border-box;
+          background: #161b22; border: 1px solid #30363d; padding: 4px 0; font-size: 13px; z-index: 2; }
+  #hint.open { display: block; }
+  #hint .item { padding: 1px 10px; white-space: pre; } #hint .item.on { background: #1f6feb55; }
+  #hint .item b { color: #79c0ff; font-weight: normal; } #hint .item i { color: #8b949e; font-style: normal; }
+  #hint .detail { padding: 4px 10px 2px; margin-top: 3px; border-top: 1px solid #30363d; color: #8b949e;
+                  white-space: pre-wrap; max-width: 60em; }
   #prompt { white-space: pre; color: #9fb3c8; }
   #input { flex: 1; background: transparent; color: #e6edf3; border: 0; outline: 0; resize: none; padding: 0;
            font: inherit; line-height: inherit; overflow: hidden; height: 1.45em; caret-color: #7ee787; }
@@ -50,7 +57,7 @@
 <div id="log"><span class="info">Pinax. Code runs when it is whole: it ends with "," or ".", and a loop or a block runs at its end.
 :help lists the commands; :list shows the program with its line numbers.
 </span></div>
-<div id="line"><span id="prompt">pinax> </span><textarea id="input" rows="1" spellcheck="false" autofocus></textarea></div>
+<div id="line"><div id="hint"></div><span id="prompt">pinax> </span><textarea id="input" rows="1" spellcheck="false" autofocus></textarea></div>
 </div>
 <aside id="guide"></aside>
 </div>
@@ -183,10 +190,69 @@ function closeEditor(save) {
     input.focus();
     show();
 }
+// completion: the words that fit what is typed, with their signature and meaning (WORDS from the standard)
+const hint = $("hint");
+let offered = null, chosen = 0;
+function offer(force) {
+    const at = input.selectionStart;
+    const word = /[A-Za-z_][A-Za-z_0-9.]*$/.exec(input.value.slice(0, at))?.[0] ?? "";
+    offered = input.value.trimStart().startsWith(":") || (!force && word.length < 2 && !word.includes(".")) ? null
+        : complete(WORDS, input.value, at);
+    chosen = 0;
+    drawHint();
+}
+function drawHint() {
+    hint.classList.toggle("open", !!offered);
+    if (!offered)
+        return;
+    hint.textContent = "";
+    offered.items.forEach((it, k) => {
+        const row = document.createElement("div");
+        row.className = "item" + (k === chosen ? " on" : "");
+        const name = document.createElement("b");
+        name.textContent = it.label;
+        const sig = document.createElement("i");
+        sig.textContent = it.signature ? "  " + it.signature : "";
+        row.appendChild(name);
+        row.appendChild(sig);
+        hint.appendChild(row);
+    });
+    const it = offered.items[chosen];
+    const detail = document.createElement("div");
+    detail.className = "detail";
+    detail.textContent = [it.signature && `${it.label} ${it.signature}`, it.meaning].filter(Boolean).join("\n");
+    hint.appendChild(detail);
+}
+function accept() {
+    const it = offered.items[chosen];
+    input.setRangeText(it.insert, offered.from, offered.to, "end");
+    offered = null;
+    drawHint();
+    fit();
+    show();
+    if (it.insert.endsWith("."))
+        offer(true);
+}
 let walk = 0; // where Up and Down are in the history
-input.addEventListener("input", () => { fit(); show(); });
+input.addEventListener("input", () => { fit(); show(); offer(false); });
+input.addEventListener("blur", () => { offered = null; drawHint(); });
 input.addEventListener("keydown", (e) => {
-    if (e.key === "Enter" && !e.shiftKey) {
+    if (offered && (e.key === "ArrowUp" || e.key === "ArrowDown")) {
+        e.preventDefault();
+        const n = offered.items.length;
+        chosen = (chosen + (e.key === "ArrowDown" ? 1 : n - 1)) % n;
+        drawHint();
+    } else if (e.key === "Tab" && !e.shiftKey) {
+        e.preventDefault();
+        if (!offered)
+            offer(true);
+        if (offered)
+            accept();
+    } else if (e.key === "Escape" && offered) {
+        e.preventDefault();
+        offered = null;
+        drawHint();
+    } else if (e.key === "Enter" && !e.shiftKey) {
         e.preventDefault();
         submit();
     } else if (e.key === "Escape") {

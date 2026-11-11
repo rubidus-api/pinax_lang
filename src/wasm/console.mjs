@@ -47,6 +47,7 @@ export const GUIDE = {
     ],
     keys: [
         ["Enter", "enters the line"], ["Shift+Enter", "a new line without entering"],
+        ["Tab", "completes a word: its module, signature and meaning show above the prompt (Up, Down choose)"],
         ["Up, Down", "walk the history"], ["Esc", "drops the lines gathered, or ends :edit N and :insert N"],
         ["F5", ":run"], ["F2", ":edit"], ["F1", "shows or hides this guide"], ["Ctrl+L", "clears the screen"],
     ],
@@ -70,10 +71,14 @@ function declared(text) {
 export async function createConsole({ createPinax, bytes, print, store = null }) {
     let offset = 0; // while the program runs: the line before the part running, for the places said
     const placed = (text) => (offset ? text.replace(/^input:(\d+):/gm, (_, n) => `input:${Number(n) + offset}:`) : text);
-    const pinax = await createPinax(bytes, { write: (stream, text) => print(stream === 1 ? "out" : "err", placed(text)) });
+    const pinax = await createPinax(bytes, {
+        write: (stream, text) => (trialLog ? trialLog.push(text) : print(stream === 1 ? "out" : "err", placed(text))),
+    });
     const session = pinax.session("input");
     let lines = [];      // the program
     let gathered = [];   // the lines of the text not yet run
+    let trialLog = null; // while a word is checked: what Pinax says, kept to be told or not
+    let trialled = false; // a word was checked and may stand half written in the session
     let mode = null;     // { kind: "edit", at } or { kind: "insert", at, first, added }: at is a line index
     const history = [];
 
@@ -273,17 +278,51 @@ export async function createConsole({ createPinax, bytes, print, store = null })
             return { ...command(line.trim()), prompt: prompt() };
         gathered.push(line);
         const text = gathered.join("\n");
-        if (!whole(text))
+        if (!whole(text)) {
+            if (ends(line.trimEnd()) && checkWord(text) === false) {
+                gathered.pop(); // the line with the mistake comes back to the prompt, to be corrected
+                return { prompt: prompt(), fill: line };
+            }
             return { prompt: prompt() };
+        }
         const r = session.eval(text);
         if (r.unfinished)
             return { prompt: prompt() };
         gathered = [];
+        trialled = false;
         if (r.ok) {
             remember(text);
             showStack(r.stack);
+            const head = /^\s*word\s+([A-Za-z_][A-Za-z_0-9]*)\s*(\([^)]*\))?/.exec(text);
+            if (head)
+                print("info", `word ${head[1]} ${head[2] ?? "()"} compiled; nothing ran. It runs when it is called: ` +
+                    "its arguments first, then its name\n");
         }
         return { prompt: prompt() };
+    }
+
+    // Inside a word, at each "," or ".": the lines so far, with the blocks still open closed by `end`,
+    // are compiled as the word, so a mistake is told at its line. Nothing in the word runs: a definition
+    // only declares. A word cannot be checked while it holds the stack apart from its signature's
+    // results, so that one message is not a mistake here.
+    function checkWord(text) {
+        const b = pinax.blocks(text);
+        if (!b.ok || !b.open.length || !b.open[0].startsWith("word "))
+            return;
+        trialLog = [];
+        const r = session.eval(text + "\n" + "end\n".repeat(b.open.length));
+        const said = trialLog.join("");
+        trialLog = null;
+        if (r.ok) {
+            trialled = true;
+            print("info", "(so far it compiles; it is not finished)\n");
+        } else if (!/exactly the results of the signature/.test(said)) {
+            print("err", placed(said));
+            print("info", "(that line is back in the prompt to be corrected; the lines before it stay)\n");
+            return false;
+        } else {
+            print("info", "(so far no mistake; the word is not finished)\n");
+        }
     }
 
     // what the terminal waits for, for the page's status line; pending: the text in the prompt
@@ -318,6 +357,10 @@ export async function createConsole({ createPinax, bytes, print, store = null })
     // Esc: the lines gathered are dropped, an :edit leaves its line, an :insert ends
     function cancel() {
         gathered = [];
+        if (trialled) { // a half-written word was compiled in the session: start again from the program
+            trialled = false;
+            runProgram();
+        }
         if (mode?.kind === "insert")
             endInsert();
         mode = null;

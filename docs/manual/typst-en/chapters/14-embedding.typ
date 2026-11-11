@@ -181,7 +181,10 @@ GW-BASIC keeps one, and a name declared again takes the place of its lines. `:li
 numbers. `:edit N` puts line N in the prompt, `:insert N` adds lines above line N (0: at the end) until an empty line,
 `:delete N` (`:del`, also `N-M`) removes lines, and `:edit` (F2) opens the whole program in an editor; after each the
 program runs again. `:run` (F5) is a reset: it empties the stack, forgets every definition and runs the program from
-line 1, the lines left as they are. `:help`, and the guide beside the terminal (F1), list the commands and keys; the page links to this manual. Each release
+line 1, the lines left as they are. Inside a word, nothing runs line by line: at each `,` or `.` the lines so far are only compiled, and a mistake is told at
+its line, with that line back in the prompt to be corrected. A word runs when it is called, its arguments first and then
+its name. Tab completes a word, and shows its module, signature and meaning (taken from the standard) above the prompt.
+`:help`, and the guide beside the terminal (F1), list the commands and keys; the page links to this manual. Each release
 carries the page as `pinax-playground.html`.
 
 In this edition the WebAssembly host registers one module, `io`; `io.read_line` always fails with `not_found`. There is
