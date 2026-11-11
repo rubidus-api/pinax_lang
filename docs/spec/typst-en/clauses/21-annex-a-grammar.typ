@@ -28,8 +28,9 @@ literal     = INT | DEC | CHAR | STRING | RAWSTRING | TEXT | BOOL ;
 
 (* 6.7, 13: a source *)
 source      = [ "pinax" INT ] { item } ;
-item        = import | forward | declaration | definition | row-item | assign-item | body ;
+item        = import | search | forward | declaration | definition | row-item | assign-item | body ;
 import      = "use" NAME [ "as" NAME ] ;
+search      = "search" ( "(" [ NAME { "," NAME } ] ")" | "none" ) ;   (* 13.5 *)
 forward     = "forward" ( "array" | "list" | "pool" ) NAME
             | "forward" "word" NAME "(" effect ")" ;
 
@@ -64,6 +65,7 @@ coll-type   = ( "array" | "list" | "queue" ) NAME [ "(" size ")" ] | "buffer" ; 
 
 (* 9 to 11: the body *)
 body        = literal | NAME | PATH | store | set | fits | block | cat | guard | control | defer
+            | "," | "."                                       (* the end of a statement, 10.8 *)
             | "return" | "fail" | ( "while" | "until" | "break" ) [ "(" NAME ")" ] ;
 store       = "to" ( NAME | PATH | "(" NAME { "," NAME } ")" ) ;   (* a local, or a field *)
 set         = "set" ( NAME | PATH ) ;                         (* a global, 9.4 *)

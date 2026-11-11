@@ -1,0 +1,4 @@
+rem run
+search (io, str)
+"pinax" upper println
+"a,b,c" "," "+" replace println

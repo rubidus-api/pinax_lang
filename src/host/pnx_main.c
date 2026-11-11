@@ -424,15 +424,38 @@ static pinax_err load_file(pinax_state *state, char *path, char *owned, const ch
     const proven_u8str_view_t source = {(const proven_byte_t *)text, length};
     const char *slash = last_sep(path);
     const proven_u8str_view_t dir = proven_u8str_view_slice(view_of_c(path), 0, slash ? (size_t)(slash - path) + 1 : 0);
-    for (size_t i = 0; i + 4 < length; ++i) {
-        if ((i != 0 && text[i - 1] != '\n') || memcmp(text + i, "use", 3) != 0 || (text[i + 3] != ' ' && text[i + 3] != '\t'))
+    for (size_t i = 0, at = 0, in_list = 0; i + 4 < length; ++i) {
+        // a line `use NAME`, or each NAME of a line `search (NAME, NAME)` (RFC-0040 part C)
+        if (in_list) {
+            at = i;
+            while (at < length && (text[at] == ' ' || text[at] == '\t' || text[at] == ','))
+                ++at;
+            if (at >= length || !is_name_byte(text[at])) {
+                in_list = 0;
+                continue;
+            }
+        } else if ((i == 0 || text[i - 1] == '\n') && length - i > 7 && memcmp(text + i, "search", 6) == 0 &&
+                   (text[i + 6] == ' ' || text[i + 6] == '\t' || text[i + 6] == '(')) {
+            at = i + 6;
+            while (at < length && (text[at] == ' ' || text[at] == '\t'))
+                ++at;
+            if (at >= length || text[at] != '(')
+                continue;
+            i = at;
+            in_list = 1;
             continue;
-        size_t at = i + 3;
-        while (at < length && (text[at] == ' ' || text[at] == '\t'))
-            ++at;
+        } else {
+            if ((i != 0 && text[i - 1] != '\n') || memcmp(text + i, "use", 3) != 0 || (text[i + 3] != ' ' && text[i + 3] != '\t'))
+                continue;
+            at = i + 3;
+            while (at < length && (text[at] == ' ' || text[at] == '\t'))
+                ++at;
+        }
         size_t end = at;
         while (end < length && is_name_byte(text[end]))
             ++end;
+        if (in_list)
+            i = end - 1; // the next name of the list, from the end of this one
         if (end == at || end - at > 31)
             continue;
         const proven_u8str_view_t used = proven_u8str_view_slice(source, at, end - at);

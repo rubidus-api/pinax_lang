@@ -14,7 +14,7 @@ import = "use" NAME [ "as" NAME ] ;
 
 #para("2")[`use 모듈` 은 그 모듈을 이 소스에서 연다. 그 뒤로 모듈의 것은 *경로*`모듈.이름` 으로 쓴다.
 `use 모듈 as 별명` 은 같은 모듈을 `별명.이름` 으로 쓰게 한다. 맨 이름으로 쓰는 것은 핵 낱말과 이 소스가 선언한
-것뿐이다.]
+것, 그리고 찾는 순서가 이름 붙인 모듈의 낱말(13.5)뿐이다.]
 
 #para("3")[`use` 하는 모듈은 이미 있어야 한다: 표준 모듈, 호스트가 등록한 모듈, 또는 먼저 적재된 소스.
 `pnx` 는 `use 이름` 을 만나면 프로그램 파일 옆의 `이름.pnx` 를 먼저 적재한다.]
@@ -27,7 +27,8 @@ import = "use" NAME [ "as" NAME ] ;
 #para("4")[없는 모듈을 `use` 하면 거절된다.]
 #ex("spec", "13-unknown-module.pnx")
 
-#para("5")[모듈의 낱말을 맨 이름으로 쓰면 거절된다. 열지 않은 모듈의 경로도 거절된다.]
+#para("5")[모듈의 낱말을 맨 이름으로 쓰면 거절된다. 찾는 순서(13.5)가 그 모듈을 이름 붙였으면 그렇지 않다. 열지 않은 모듈의
+경로도 거절된다.]
 #ex("spec", "13-bare-name.pnx")
 #ex("spec", "13-no-use.pnx")
 
@@ -90,4 +91,42 @@ data-value  = literal | NAME ;                      (* NAME: a const or a row na
   ([내보내지 않은 이름], "the module exports nothing of this name"),
   ([자료 적재의 정의나 `use`], "a data source defines no words and uses no modules"),
   ([자료 적재의 낱말 부르기], "a data source calls no words; only literals, const names and stores"),
+)
+
+== 찾는 순서 <modules-search>
+
+#part("구문")
+```ebnf
+search = "search" ( "(" [ NAME { "," NAME } ] ")" | "none" ) ;
+```
+
+#para("1")[`search (io, str)` 는 #term("찾는 순서", en: "search order")를 준다: 맨 이름을 찾아볼 모듈들이다. 이름 붙인
+모듈은 `use` 처럼 열린다(13.1 (2), (3)). `pnx` 는 `use` 때처럼 프로그램 옆의 파일 모듈을 먼저 적재한다. `search ()` 와
+`search none` 은 순서를 비운다. 찾는 순서가 없으면 어느 모듈에서도 찾지 않는다.]
+
+#para("2")[코드의 맨 이름은 이 차례로 찾고, 처음 가진 것을 쓴다: 지역 변수와 매개변수, 이 소스(또는 세션)가 선언한 것, 핵
+낱말, 그리고 찾는 순서의 모듈들을 왼쪽부터. 그래서 소스의 이름과 핵 낱말은 순서에 무엇이 있든 뜻이 바뀌지 않고, 순서에 더한
+모듈이 전에 컴파일된 코드를 바꾸지 못한다. 핵 낱말과 이름이 같은 모듈의 낱말(`len` 곁의 `str.len`)은 경로로 쓴다. 경로는
+전과 같이 읽는다.]
+
+#ex("spec", "13-search.pnx")
+#ex("spec", "13-search-core.pnx")
+
+#para("3")[찾는 순서는 소스나 세션 줄의 맨 위 수준에 필요한 만큼 쓸 수 있다. 하나하나가 그 자리부터 소스 끝까지의 순서를
+바꾸고, 세션은 다음 순서가 나올 때까지 뒤 줄들에 그것을 지닌다. 낱말은 컴파일될 때 그 이름들이 찾은 것을 쓴다.]
+
+#para("4")[찾는 순서로 닿는 이름은 이름 가리기 규칙(9.5)에 들지 않는다: 지역 변수는 순서에 있는 모듈의 낱말과 같은 이름일
+수 있고, 그 낱말 안에서는 지역 변수를 뜻한다.]
+
+#part("제약")
+
+#para("5")[정의나 블록 안의 찾는 순서, 모듈을 두 번 이름 붙이거나 16 개보다 많이 이름 붙인 순서, 없는 모듈을 이름 붙인
+순서는 거절된다.]
+
+#part("진단")
+#diag(
+  ([정의 안의 `search`], "search stands at the top level, outside definitions and blocks"),
+  ([괄호가 없음], "search is followed by modules in parentheses: search (io, str)"),
+  ([모듈을 두 번], "this module is named twice in the search order"),
+  ([16 개보다 많음], "a search order names at most 16 modules"),
 )

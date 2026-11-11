@@ -190,7 +190,7 @@ BOOL      = "true" | "false" ;
 
 #part("구문")
 ```ebnf
-punct    = "(" | ")" | "," ;
+punct    = "(" | ")" | "," | "." ;              (* a lone dot ends a statement, (2) *)
 token    = reserved | NAME | PATH | INT | CHAR | STRING | RAWSTRING | TEXT | BOOL | punct ;
 reserved = "rem" | "note" | "text" | "true" | "false" | "pinax"
          | "use" | "as" | "export"
@@ -200,7 +200,7 @@ reserved = "rem" | "note" | "text" | "true" | "false" | "pinax"
          | "gives" | "or" | "fail" | "owned"
          | "to" | "do" | "end" | "if" | "else" | "loop" | "while" | "until" | "break"
          | "case" | "of" | "otherwise" | "return" | "or_fail" | "or_return" | "or_else" | "cat"
-         | "defer" | "set" | "fits" ;
+         | "defer" | "set" | "fits" | "search" ;
 ```
 
 #para("1")[#term("예약 낱말", en: "reserved word")의 목록은 닫혀 있다. 예약 낱말은 이름으로 쓰지 못한다.]

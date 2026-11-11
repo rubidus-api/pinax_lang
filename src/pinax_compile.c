@@ -396,6 +396,9 @@ typedef struct comp {
     uint32_t     see_line;
     sig          eval_sig;   // the line as a word: the session stack before it and after it (RFC-0040 part A)
     bool         cleared;    // the line began with the tool word `clear`: it starts from an empty stack
+    // search (io, str): the modules a bare name is looked for in, after the source's own names
+    // and the core, left to right (RFC-0040 part C); numbers into modules[]
+    uint8_t      n_search, search[16];
     // redefine word NAME ... : the session's word that is replaced and the new word whose code
     // takes its place (RFC-0006 S11); NONE when the text redefines nothing
     uint32_t     redefine_old, redefine_new;
@@ -6826,6 +6829,93 @@ static bool module_symbol(comp *c, uint16_t m, name n) {
     return error(c, PINAX_ERR_NOT_FOUND, "the module exports nothing of this name");
 }
 
+// Whether module `real` (as `use` names it) has `n` for code to name: a word, or a constant or
+// global it exports (RFC-0040 part C). json, csv and bytes make some words from their names; for
+// them the forms are tested, and a name of such a form that is no word is refused at its path.
+static bool module_has(comp *c, name real, name n) {
+    const uint32_t source = source_module(c, real);
+    if (source != NONE)
+        return name_first(c, &c->ix_words, &c->words, sizeof(wordsym), n, 0, c->base.words, wordsym_from, source) != NONE ||
+               name_first(c, &c->ix_consts, &c->consts, sizeof(constant), n, 0, c->base.consts, constant_from, source) != NONE ||
+               name_first(c, &c->ix_globals, &c->globals, sizeof(globalsym), n, 0, c->base.globals, globalsym_from, source) != NONE ||
+               name_first(c, &c->ix_externs, &c->externs, sizeof(externsym), n, 0, c->base.externs, externsym_from, source) != NONE;
+    const uint8_t standard = standard_module(real);
+    static const char *const json_names[] = {"object", "object_end", "array", "array_end", "key", "string", "number",
+                                             "boolean", "null", "begin_object", "end_object", "begin_array", "end_array",
+                                             "put_null", "put_int", "put_bool", "put_dec", "put_key", "put_str", "pack",
+                                             "unpack", "next", "skip"};
+    static const char *const csv_names[] = {"end_line", "fields", "next", "pack", "put", "put_bool", "put_dec", "put_int",
+                                            "skip", "unpack"};
+    static const char *const classes[] = {"digit", "alpha", "alnum", "space", "upper_case", "lower_case", "hex_digit", "punct"};
+    const char *const *names = standard == 8 ? json_names : standard == 9 ? csv_names : standard == 1 ? classes : NULL;
+    const size_t       count = standard == 8 ? sizeof json_names / sizeof json_names[0]
+                               : standard == 9 ? sizeof csv_names / sizeof csv_names[0]
+                               : standard == 1 ? sizeof classes / sizeof classes[0] : 0;
+    for (size_t k = 0; k < count; ++k) {
+        if (name_is(n, names[k]))
+            return true;
+    }
+    if (standard == 5)
+        return name_is(n, "pack") || name_is(n, "unpack") || name_is(n, "packed_size") ||
+               (n.length > 4 && (__builtin_memcmp(n.text, "get_", 4) == 0 || __builtin_memcmp(n.text, "put_", 4) == 0));
+    if (standard)
+        return standard != 8 && standard != 9 && find_builtin(n, standard) != NULL;
+    return find_host(c, real, n) != NONE;
+}
+
+// A word, a constant or a field named by a path: module.name, or record.field when module is no
+// module in use; also a bare name found through the search order (RFC-0040 part C).
+static bool path_word(comp *c, name module, name n) {
+    if (name_is(module, "err")) {
+        int64_t value;
+        if (!err_constant(n, &value))
+            return error(c, PINAX_ERR_NOT_FOUND, "there is no error number of this name");
+        return push(c, (entry){.type = TY_ERR, .kind = E_CONST, .value = value}) && advance(c);
+    }
+    if (c->data_only)
+        return syntax(c, "a data source calls no words and reads no fields; only literals, const names and stores");
+    name real;
+    if (!module_of(c, module, &real)) // not a module in use: a field of a record
+        return field_access(c, false) && advance(c);
+    module = real;
+    const uint32_t source = source_module(c, module);
+    if (source != NONE)
+        return module_symbol(c, (uint16_t)source, n);
+    const uint8_t standard = standard_module(module);
+    if (standard == 1) { // the byte classes of str.span
+        static const char *const classes[] = {"digit",      "alpha",      "alnum",     "space",
+                                            "upper_case", "lower_case", "hex_digit", "punct"};
+        for (uint32_t k = 0; k < sizeof classes / sizeof classes[0]; ++k) {
+            if (name_is(n, classes[k]))
+                return push(c, (entry){.type = TY_INT, .kind = E_CONST, .value = k + 1}) && advance(c);
+        }
+    }
+    if (standard == 8 || standard == 9) { // json, csv
+        if (c->data_only)
+            return syntax(c, "a data source calls no words; only literals, const names and stores");
+        return standard == 8 ? json_word(c, n) : csv_word(c, n);
+    }
+    if (standard == 5) { // bytes: the name says the width
+        if (c->data_only)
+            return syntax(c, "a data source calls no words; only literals, const names and stores");
+        return bytes_word(c, n);
+    }
+    if (standard) { // a word of a standard module
+        if (c->data_only)
+            return syntax(c, "a data source calls no words; only literals, const names and stores");
+        const struct builtin *bw = find_builtin(n, standard);
+        if (!bw)
+            return error(c, PINAX_ERR_NOT_FOUND, "the module has no word of this name");
+        return builtin(c, bw);
+    }
+    if (c->data_only)
+        return syntax(c, "a data source calls no words; only literals, const names and stores");
+    const uint32_t host = find_host(c, module, n);
+    if (host == NONE)
+        return error(c, PINAX_ERR_NOT_FOUND, "the module has no word of this name");
+    return call_host(c, host);
+}
+
 static bool body_name(comp *c) {
     fn *f = c->f;
     name n = tok_name(c), module = {0};
@@ -6835,48 +6925,7 @@ static bool body_name(comp *c) {
             ++dot;
         module = (name){n.text, dot};
         n = (name){n.text + dot + 1, n.length - dot - 1};
-        if (name_is(module, "err")) {
-            int64_t value;
-            if (!err_constant(n, &value))
-                return error(c, PINAX_ERR_NOT_FOUND, "there is no error number of this name");
-            return push(c, (entry){.type = TY_ERR, .kind = E_CONST, .value = value}) && advance(c);
-        }
-        if (c->data_only)
-            return syntax(c, "a data source calls no words and reads no fields; only literals, const names and stores");
-        name real;
-        if (!module_of(c, module, &real)) // not a module in use: a field of a record
-            return field_access(c, false) && advance(c);
-        module = real;
-        const uint32_t source = source_module(c, module);
-        if (source != NONE)
-            return module_symbol(c, (uint16_t)source, n);
-        const uint8_t standard = standard_module(module);
-        if (standard == 1) { // the byte classes of str.span
-            static const char *const classes[] = {"digit",      "alpha",      "alnum",     "space",
-                                                "upper_case", "lower_case", "hex_digit", "punct"};
-            for (uint32_t k = 0; k < sizeof classes / sizeof classes[0]; ++k) {
-                if (name_is(n, classes[k]))
-                    return push(c, (entry){.type = TY_INT, .kind = E_CONST, .value = k + 1}) && advance(c);
-            }
-        }
-        if (standard == 8 || standard == 9) { // json, csv
-            if (c->data_only)
-                return syntax(c, "a data source calls no words; only literals, const names and stores");
-            return standard == 8 ? json_word(c, n) : csv_word(c, n);
-        }
-        if (standard == 5) { // bytes: the name says the width
-            if (c->data_only)
-                return syntax(c, "a data source calls no words; only literals, const names and stores");
-            return bytes_word(c, n);
-        }
-        if (standard) { // a word of a standard module
-            if (c->data_only)
-                return syntax(c, "a data source calls no words; only literals, const names and stores");
-            const struct builtin *bw = find_builtin(n, standard);
-            if (!bw)
-                return error(c, PINAX_ERR_NOT_FOUND, "the module has no word of this name");
-            return builtin(c, bw);
-        }
+        return path_word(c, module, n);
     } else {
         const local *l = find_local(f, n);
         if (l) {
@@ -6963,6 +7012,11 @@ static bool body_name(comp *c) {
         const struct builtin *bw = find_builtin(n, 0);
         if (bw)
             return builtin(c, bw);
+        // the modules of the search order, left to right (RFC-0040 part C)
+        for (uint32_t k = 0; k < c->n_search; ++k) {
+            if (module_has(c, c->module_real[c->search[k]], n))
+                return path_word(c, c->modules[c->search[k]], n);
+        }
         // not a name of the core: say so when it is a word of a module, which is written with it
         if (find_builtin(n, 1) || find_builtin(n, 2) || find_builtin(n, 3) || find_builtin(n, 4) || find_builtin(n, 6) ||
             find_builtin(n, 7))
@@ -6973,12 +7027,7 @@ static bool body_name(comp *c) {
         }
         return error(c, PINAX_ERR_NOT_FOUND, "this name is not declared before this place");
     }
-    if (c->data_only)
-        return syntax(c, "a data source calls no words; only literals, const names and stores");
-    const uint32_t host = find_host(c, module, n);
-    if (host == NONE)
-        return error(c, PINAX_ERR_NOT_FOUND, "the module has no word of this name");
-    return call_host(c, host);
+    return true;
 }
 
 // The stack as it stands, in words, for the listing and for the values a line leaves.
@@ -7138,6 +7187,8 @@ static bool body_token(comp *c) {
         return case_item(c);
     // The end of a statement (RFC-0040 part F). A comma waits for nothing. A dot is a barrier: the
     // host finishes every effect begun before it (pinax_on_barrier).
+    if (t.kind == PNX_T_RESERVED && t.word == PNX_KW_search)
+        return syntax(c, "search stands at the top level, outside definitions and blocks");
     if (t.kind == PNX_T_COMMA || t.kind == PNX_T_DOT) {
         if (t.kind == PNX_T_DOT && !f->dead && !c->data_only && emit(c, PNX_ABC(PNX_BARRIER, 0, 0, 0)) == NONE)
             return false;
@@ -7579,6 +7630,8 @@ static bool definition(comp *c, bool is_test) {
     return advance(c);
 }
 
+static bool open_module(comp *c, name n, name prefix, uint32_t *at);
+
 static bool use_module(comp *c) {
     if (c->data_only)
         return syntax(c, "a data source defines no words and uses no modules");
@@ -7606,16 +7659,82 @@ static bool use_module(comp *c) {
         if (!advance(c))
             return false;
     }
+    return open_module(c, n, prefix, NULL);
+}
+
+// Opens module `n` under `prefix` (use, search); `at` gets its number in modules[].
+static bool open_module(comp *c, name n, name prefix, uint32_t *at) {
     name other;
-    if (module_of(c, prefix, &other))
-        return name_eq(other, n) ? true : type_error(c, "this name already stands for another module");
+    for (uint32_t k = 0; k < c->n_modules; ++k) {
+        if (name_eq(c->modules[k], prefix)) {
+            other = c->module_real[k];
+            if (!name_eq(other, n))
+                return type_error(c, "this name already stands for another module");
+            if (at)
+                *at = k;
+            return true;
+        }
+    }
     if (name_is(prefix, "err") || find_record_any(c, prefix) != NONE)
         return type_error(c, "this name is already the first part of other paths (err, or a record)");
     if (c->n_modules == MAX_MODULES)
         return syntax(c, "too many modules in use");
+    if (at)
+        *at = c->n_modules;
     c->modules[c->n_modules] = prefix;
     c->module_real[c->n_modules++] = n;
     return true;
+}
+
+// search (io, str) : the modules a bare name is looked for in, left to right, after the
+// source's own names and the core (RFC-0040 part C). `search ()` and `search none` empty it.
+// It replaces the order from here on; a session keeps it for the lines after.
+static bool search_order(comp *c) {
+    if (c->data_only)
+        return syntax(c, "a data source defines no words and uses no modules");
+    if (c->top_fn->n_blocks)
+        return syntax(c, "search stands at the top level, outside definitions and blocks");
+    if (!advance(c))
+        return false;
+    if (c->tok.kind == PNX_T_NAME && name_is(tok_name(c), "none")) {
+        c->n_search = 0;
+        return advance(c);
+    }
+    if (c->tok.kind != PNX_T_LPAREN)
+        return syntax(c, "search is followed by modules in parentheses: search (io, str)");
+    if (!advance(c))
+        return false;
+    uint8_t  order[16];
+    uint32_t n_order = 0;
+    while (c->tok.kind != PNX_T_RPAREN) {
+        if (c->tok.kind != PNX_T_NAME)
+            return syntax(c, "search names modules, separated by commas: search (io, str)");
+        const name n = tok_name(c);
+        bool known = standard_module(n) != 0;
+        for (uint32_t k = 0; !known && k < c->st->n_hosts; ++k)
+            known = name_eq(cname(c->st->hosts[k].module), n);
+        if (!known && source_module(c, n) == NONE)
+            return error(c, PINAX_ERR_NOT_FOUND, "no module of this name is registered or loaded");
+        uint32_t at;
+        if (!open_module(c, n, n, &at))
+            return false;
+        for (uint32_t k = 0; k < n_order; ++k) {
+            if (order[k] == at)
+                return type_error(c, "this module is named twice in the search order");
+        }
+        if (n_order == sizeof order)
+            return syntax(c, "a search order names at most 16 modules");
+        order[n_order++] = (uint8_t)at;
+        if (!advance(c))
+            return false;
+        if (c->tok.kind == PNX_T_COMMA && !advance(c))
+            return false;
+        else if (c->tok.kind != PNX_T_RPAREN && c->tok.kind != PNX_T_NAME)
+            return syntax(c, "search names modules, separated by commas: search (io, str)");
+    }
+    __builtin_memcpy(c->search, order, n_order);
+    c->n_search = (uint8_t)n_order;
+    return advance(c);
 }
 
 // extern NAME ( effect ) from "lib" [as LOCAL] : a C function, called as RFC-0015 section 4.3
@@ -8683,6 +8802,9 @@ static bool compile(comp *c, image *im, bool *has_top) {
         if (is_word(c, PNX_KW_use)) {
             if (!use_module(c))
                 return false;
+        } else if (is_word(c, PNX_KW_search)) {
+            if (!search_order(c))
+                return false;
         } else if (is_word(c, PNX_KW_export)) { // what other modules may name (RFC-0014)
             if (c->exporting || c->top_fn->n_blocks || !advance(c))
                 return c->err == PINAX_OK ? syntax(c, "export stands once, before a definition or a declaration") : false;
@@ -9269,8 +9391,11 @@ static bool keep_symbols(comp *c, keeping *k) {
     // opened before are kept already, with their names)
     const uint32_t opened_before = old->kept ? old->n[PNX_SYM_OPENED] : 0;
     const uint32_t opened_now = c->eval ? c->n_modules : opened_before;
-    if (c->eval)
+    if (c->eval) {
         k->next.session = c->module;
+        k->next.n_search = c->n_search;
+        __builtin_memcpy(k->next.search, c->search, sizeof c->search);
+    }
     k->name_bytes = 0;
     each_name(&now, c->sym_base, name_size, k);
     name *hidden = c->renames ? &((wordsym *)c->words.ptr + c->redefine_old)->name : NULL; // RFC-0040 part D
@@ -9578,6 +9703,8 @@ static pinax_err load_source(pinax_state *st, const char *file, pinax_str source
                 c.modules[k] = o->alias;
                 c.module_real[k] = o->real;
             }
+            c.n_search = kept_before->n_search; // and its search order
+            __builtin_memcpy(c.search, kept_before->search, sizeof c.search);
         } else {
             c.module = (uint16_t)c.srcmods.n;
         }
@@ -9636,7 +9763,9 @@ static pinax_err load_source(pinax_state *st, const char *file, pinax_str source
                                   c.globals.n != c.base.globals || c.records.n != c.base.records ||
                                   c.dtypes.n != c.base.dtypes || c.externs.n != c.base.externs ||
                                   !session_before->kept || session_before->session == NONE ||
-                                  c.n_modules != session_before->n[PNX_SYM_OPENED];
+                                  c.n_modules != session_before->n[PNX_SYM_OPENED] ||
+                                  c.n_search != session_before->n_search ||
+                                  __builtin_memcmp(c.search, session_before->search, c.n_search) != 0;
     (void)kept;
 
     // The container and the parcels move to the very end of the block, out of the way of the

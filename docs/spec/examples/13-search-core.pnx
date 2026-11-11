@@ -1,0 +1,3 @@
+rem refused
+search (str)
+word size (s str gives int) s len end

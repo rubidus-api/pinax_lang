@@ -248,6 +248,8 @@ typedef struct pnx_symbols {
     // the session of pinax_eval(): its module number (UINT32_MAX before the first line); the
     // modules its lines opened are the part PNX_SYM_OPENED
     uint32_t    session;
+    // the session's search order (RFC-0040 part C): numbers of entries of PNX_SYM_OPENED
+    uint8_t     n_search, search[16];
 } pnx_symbols;
 
 // What a load changes, kept so that a failed load can put it back: the counts by value, the

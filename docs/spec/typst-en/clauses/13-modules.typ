@@ -14,7 +14,7 @@ the file name without `.pnx`). Standard modules and host modules (13.3) are modu
 
 #para("2")[`use MODULE` opens that module in this source; from then on its parts are written as the *path*
 `MODULE.NAME`. `use MODULE as ALIAS` makes the same module be written `ALIAS.NAME`. Only core words and what this source
-declares are written as bare names.]
+declares are written as bare names, and the words of the modules a search order names (13.5).]
 
 #para("3")[A module that is used shall exist already: a standard module, a module the host registered, or a source
 loaded earlier. When `pnx` meets `use NAME` it first loads `NAME.pnx` from beside the program file.]
@@ -27,7 +27,8 @@ loaded earlier. When `pnx` meets `use NAME` it first loads `NAME.pnx` from besid
 #para("4")[Using a module that does not exist is refused.]
 #ex("spec", "13-unknown-module.pnx")
 
-#para("5")[A word of a module written as a bare name is refused; so is a path into a module that was not opened.]
+#para("5")[A word of a module written as a bare name is refused, unless a search order names that module (13.5); so is
+a path into a module that was not opened.]
 #ex("spec", "13-bare-name.pnx")
 #ex("spec", "13-no-use.pnx")
 
@@ -89,4 +90,44 @@ Everything a data source declares counts as exported.]
   ([A name not exported], "the module exports nothing of this name"),
   ([A definition or `use` in a data load], "a data source defines no words and uses no modules"),
   ([A call in a data load], "a data source calls no words; only literals, const names and stores"),
+)
+
+== The search order <modules-search>
+
+#part("Syntax")
+```ebnf
+search = "search" ( "(" [ NAME { "," NAME } ] ")" | "none" ) ;
+```
+
+#para("1")[`search (io, str)` gives the #term("search order"): the modules in which a bare name is looked for. Each
+module named is opened as by `use` (13.1 (2), (3)); `pnx` loads a file module beside the program first, as for `use`.
+`search ()` and `search none` empty the order. Without a search order, nothing is looked for in a module.]
+
+#para("2")[A bare name in code is looked for in this order, and the first that has it is taken: the locals and
+parameters; what this source (or session) declares; the core words; then the modules of the search order, left to
+right. So a name of the source and a core word keep their meaning whatever the order holds, and a module added to it
+cannot change code that compiled before. A word of a module named like a core word (`str.len` beside `len`) is written
+with its path. A path is read as before.]
+
+#ex("spec", "13-search.pnx")
+#ex("spec", "13-search-core.pnx")
+
+#para("3")[A search order stands at the top level of a source or of a session line, as often as needed. Each one
+replaces the order from there to the end of the source; a session keeps it for the lines after, until the next one.
+A word takes what its names found when it was compiled.]
+
+#para("4")[A name reached through the search order does not count for the rule against hiding names (9.5): a local
+may have the name of a word of a module in the order, and inside that word the local is meant.]
+
+#part("Constraints")
+
+#para("5")[A search order inside a definition or a block, one that names a module twice or more than 16 modules, and
+one that names a module that does not exist are refused.]
+
+#part("Diagnostics")
+#diag(
+  ([`search` inside a definition], "search stands at the top level, outside definitions and blocks"),
+  ([No parentheses], "search is followed by modules in parentheses: search (io, str)"),
+  ([A module named twice], "this module is named twice in the search order"),
+  ([More than 16], "a search order names at most 16 modules"),
 )

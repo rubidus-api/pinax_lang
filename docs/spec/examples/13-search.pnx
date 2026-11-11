@@ -1,0 +1,8 @@
+rem run
+use io
+use str
+search (io, str)
+"pinax" upper println
+word shout (s str) cat (s upper, "!") println end
+"hello" shout
+"abc" str.len 3 eq if "three bytes" println end

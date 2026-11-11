@@ -61,6 +61,17 @@ the same declared type are added and subtracted; the types are kept apart to sto
 mixed.
 #ex("manual", "10-mixed.pnx")]
 
+== Bare names from modules
+
+A script that calls the same modules all the time, a shell script above all, can name them in a search order. Then
+their words are written bare.
+
+#ex("manual", "10-search.pnx")
+
+The order is only a last resort. A bare name is first a local, then a name of the source, then a core word; only then
+are the modules of the order asked, left to right. So `len` stays the core word even with `str` in the order, and the
+`str` word is written `str.len`. `search ()` empties the order again. A path works with or without it.
+
 == Data files
 
 A host can read a source by #strong[data load]. A data load accepts declarations and values only, and refuses word
