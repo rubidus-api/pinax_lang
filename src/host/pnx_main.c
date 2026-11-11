@@ -694,14 +694,16 @@ static void give_sources(void) {
 static int run(int argc, char **argv) {
     const bool testing = argc > 1 && strcmp(argv[1], "test") == 0;
     const bool checking = argc > 2 && strcmp(argv[1], "see") == 0 && strcmp(argv[2], "--checks") == 0;
-    const bool seeing = argc > 1 && strcmp(argv[1], "see") == 0 && !checking;
+    const bool effects = argc > 2 && strcmp(argv[1], "see") == 0 && strcmp(argv[2], "--effects") == 0;
+    const bool seeing = argc > 1 && strcmp(argv[1], "see") == 0 && !checking && !effects;
     const bool formatting = argc > 1 && strcmp(argv[1], "fmt") == 0;
     const bool talking = argc == 2 && strcmp(argv[1], "repl") == 0;
     const bool exporting = argc > 1 && strcmp(argv[1], "export-c") == 0;
-    const int  at = checking ? 3 : testing || seeing || formatting || exporting ? 2 : 1;
+    const int  at = checking || effects ? 3 : testing || seeing || formatting || exporting ? 2 : 1;
     if (argc <= at) {
         fprintf(stderr, "usage: pnx [--lib NAME=PATH]... [--capacity NAME=N]... file.pnx [arguments]\n       pnx test file.pnx\n"
                         "       pnx repl\n       pnx see file.pnx\n       pnx see --checks file.pnx\n"
+                        "       pnx see --effects file.pnx\n"
                         "       pnx fmt file.pnx\n       pnx export-c file.pnx [NAME]   (the code as C, RFC-0028)\n");
         return 2;
     }
@@ -744,7 +746,7 @@ static int run(int argc, char **argv) {
     }
     pinax_host_set_args(argc - at, (const char *const *)(argv + at));
     pnx_streams_own(!talking); // the repl reads standard input itself: no read-ahead there
-    if (exporting)
+    if (exporting || effects)
         state->export_only = true; // compile and check, run nothing
 #if defined(PNX_WITH_NATIVE) // a pnx with a program's exported code linked in (tests/tools/export_check.sh)
     extern const pinax_native PNX_WITH_NATIVE;
@@ -800,6 +802,11 @@ static int run(int argc, char **argv) {
         status = run_tests(state, plain ? module : "");
     } else if (checking) {
         pnx_checks_report(state, put_text, stdout);
+    } else if (effects) { // the words of the file itself: the last module loaded
+        uint32_t module = 0;
+        for (uint32_t k = 0; state->head && k < state->head->n_words; ++k)
+            module = state->words[k].module > module ? state->words[k].module : module;
+        pnx_effects_report(state, module, put_text, stdout);
     } else if (exporting) {
         const char *name = argc > at + 1 ? argv[at + 1] : "pnx_native";
         size_t      cap = 1u << 20, len = 0;

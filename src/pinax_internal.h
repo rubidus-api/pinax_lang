@@ -542,6 +542,18 @@ pinax_err pnx_session_keep(pinax_state *state, const int64_t *ri, const pinax_st
 // The words whose code calls `word` or takes it as a value (not itself, not the code outside
 // definitions): how many, the first `cap` of them in `out`.
 uint32_t pnx_callers_of(const pinax_state *state, uint32_t word, uint32_t *out, uint32_t cap);
+// The effects of a word in full (RFC-0040 part G): pinax_effects, and which globals it reads and
+// writes (the first 32 of each; `chosen`: one a GSEL chooses, which is not known here).
+typedef struct pnx_effects {
+    pinax_effects pub;
+    uint32_t      n_reads, n_writes;
+    uint16_t      reads[32], writes[32];
+    bool          chosen_read, chosen_write;
+} pnx_effects;
+pinax_err pnx_word_effects(pinax_state *state, uint32_t word, pnx_effects *out);
+// pnx see --effects: a line for each word of module `module`, "name: none" or what it may do.
+void pnx_effects_report(pinax_state *state, uint32_t module, void (*put)(void *user, const char *text, size_t len),
+                        void *user);
 // Offset of the last `part` in `bytes`, or UINT32_MAX. An empty part is found at the end.
 uint32_t pnx_find_last(const uint8_t *bytes, uint32_t length, const uint8_t *part, uint32_t part_length);
 // Offset of the first `byte`, or UINT32_MAX.

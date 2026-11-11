@@ -153,6 +153,15 @@ str, 소유하지 않은 핸들. 그보다 많이 남기거나 모음, 줄기, �
 #para("4")[호스트 낱말 안에서도 `pinax_run` 을 부를 수 있다. 그때는 `PINAX_FIND_NESTED` 깃발로 찾은 낱말만 돌리며,
 양보할 수 있는 낱말(14.2)은 그 깃발로 찾지 못한다.]
 
+#para("5")[`pinax_word_effects(state, word, &effects)` 는 낱말이 스택과 지역 변수 밖에서 할 수 있는 일을, 그 낱말과 그것이
+부를 수 있는 모든 낱말의 적재된 코드에서 알아내 알린다. `effects.effects` 에는 `PINAX_EFFECT_READS_GLOBALS` 와
+`PINAX_EFFECT_WRITES_GLOBALS`(목록의 길이, 큐, 작업 집합도 전역으로 친다), `PINAX_EFFECT_READS_OUTSIDE` 와
+`PINAX_EFFECT_WRITES_OUTSIDE`(호스트 낱말을 통해), `PINAX_EFFECT_YIELDS`, `PINAX_EFFECT_FAILS`, `PINAX_EFFECT_ANYTHING`
+(`extern` 의 C 함수)이 담긴다. `module` 과 `module_effects` 는 닿는 호스트 모듈을 이름 붙인다(`n_modules` 중 처음 16 개).
+호스트 낱말은 등록할 때 `PINAX_WORD_READS` 와 `PINAX_WORD_WRITES` 깃발로 무엇에 닿는지 알린다. 둘 다 없으면 둘 다로,
+`PINAX_WORD_PURE` 이면 어느 것도 아닌 것으로 친다. 낱말 값을 통한 호출은 그 서명을 가진 프로그램의 모든 낱말을, 띄운
+작업은 매개변수도 결과도 없는 모든 낱말을 셈에 넣는다. 호스트는 닿으면 안 되는 것에 닿는 프로그램을 거절할 수 있다.]
+
 == 핸들 <host-handles>
 
 #para("1")[`pinax_handle_type` 은 핸들 타입 하나를 이름과 닫는 함수로 만든다. 스크립트는 그 이름을 서명의 타입으로

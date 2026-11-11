@@ -1,0 +1,7 @@
+rem see-effects
+use io
+global total int
+word sq (n int gives int) n n mul end
+word add_up (n int) total n add set total end
+word report () cat ("total ", total sq) io.println end
+word ask (gives line str or fail) io.read_line or_fail end

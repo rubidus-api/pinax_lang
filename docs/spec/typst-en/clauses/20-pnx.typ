@@ -97,6 +97,13 @@ does; the checks still run.]
 
 #ex("spec", "20-see-checks.pnx")
 
+#para("1c")[`pnx see --effects file.pnx` loads the file without running it and shows, for each word of the file, what
+it may do beyond its stack and locals (`pinax_word_effects`, 19.5 (5)): the globals it reads and writes, the host
+modules it reaches and whether it reads or writes through them, "anything (a C function)" for `extern`, "may yield"
+and "may fail"; "none" for a word that uses only its stack and locals.]
+
+#ex("spec", "20-see-effects.pnx")
+
 #para("2")[`pnx fmt file.pnx` writes the text with only indentation and spaces changed to standard output. Tokens, line
 breaks and remarks stay where they are. Formatting the result again changes nothing.]
 

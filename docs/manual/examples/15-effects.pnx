@@ -1,0 +1,12 @@
+rem see-effects
+use io
+use file
+global hits int
+word double (n int gives int) n 2 mul end
+word tally (n int) hits n add set hits end
+word save (path str or fail)
+  path file.open_write or_fail to f
+  defer f file.close end
+  cat ("hits ", hits) f file.write or_fail
+end
+word say () cat ("hits ", hits double) io.println end

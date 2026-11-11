@@ -133,6 +133,7 @@
   see: tr("목록", "Listing"), embed: tr("출력", "Output"),
   see-refused: tr("목록과 거절", "Listing, then the refusal"),
   see-checks: tr("출력과 검사 목록", "Output, then the checks"),
+  see-effects: tr("낱말마다 효과", "The effects of each word"),
 ).at(kind, default: kind)
 
 // An example: the program from <tree>/examples/<name> and what running it printed, both read

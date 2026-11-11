@@ -91,6 +91,12 @@ test = "test" NAME { body } "end" ;
 
 #ex("spec", "20-see-checks.pnx")
 
+#para("1c")[`pnx see --effects file.pnx` 는 파일을 돌리지 않고 적재해, 파일의 낱말마다 스택과 지역 변수 밖에서 할 수 있는
+일(`pinax_word_effects`, 19.5 (5))을 보인다: 읽고 쓰는 전역, 닿는 호스트 모듈과 그것을 통해 읽는지 쓰는지, `extern` 이면
+"anything (a C function)", "may yield", "may fail". 스택과 지역 변수만 쓰는 낱말은 "none" 이다.]
+
+#ex("spec", "20-see-effects.pnx")
+
 #para("2")[`pnx fmt file.pnx` 는 들여쓰기와 공백만 고친 글을 표준 출력에 쓴다. 토큰과 줄바꿈의 자리, 주석은
 그대로다. 고친 글을 다시 고쳐도 같다.]
 

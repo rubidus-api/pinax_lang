@@ -123,7 +123,11 @@ typedef pinax_err (*pinax_host_fn)(pinax_call *call, void *user, const pinax_arg
 enum {
     PINAX_WORD_PURE      = 1u << 0, /* no effect outside its results; may be folded or run in parallel */
     PINAX_WORD_AWAITABLE = 1u << 1, /* may return PINAX_PENDING */
-    PINAX_WORD_KEEP_STR  = 1u << 2  /* string results point to memory that outlives the state */
+    PINAX_WORD_KEEP_STR  = 1u << 2, /* string results point to memory that outlives the state */
+    /* What a host word touches outside the state, for the effects of the words that call it
+     * (pinax_word_effects). A word with neither, and not PURE, counts as both. */
+    PINAX_WORD_READS     = 1u << 3, /* reads it: an input, a file, the clock, the environment */
+    PINAX_WORD_WRITES    = 1u << 4  /* changes it: an output, a file, a command, a setting */
 };
 
 typedef struct pinax_word_def {
@@ -331,6 +335,30 @@ PINAX_API uint32_t  pinax_eval_count(const pinax_state *state);
 PINAX_API pinax_err pinax_eval_value(const pinax_state *state, uint32_t index, pinax_value *out);
 /* Empties the session stack. */
 PINAX_API void      pinax_eval_clear(pinax_state *state);
+
+/* What a word may do beyond its stack and locals, worked out from its code and the code of every
+ * word it calls (RFC-0040 part G). A call through a word value counts every word of that
+ * signature; a spawned task, every word without parameters and results; a C function of `extern`
+ * counts as anything. 0 in `effects`: the word uses only its stack and locals. */
+enum {
+    PINAX_EFFECT_READS_GLOBALS  = 1u << 0,
+    PINAX_EFFECT_WRITES_GLOBALS = 1u << 1, /* also a list's length, a queue, a task set */
+    PINAX_EFFECT_READS_OUTSIDE  = 1u << 2, /* through a host word (PINAX_WORD_READS) */
+    PINAX_EFFECT_WRITES_OUTSIDE = 1u << 3, /* through a host word (PINAX_WORD_WRITES) */
+    PINAX_EFFECT_YIELDS         = 1u << 4, /* may give way to other tasks or wait for the host */
+    PINAX_EFFECT_FAILS          = 1u << 5, /* its signature says `or fail` */
+    PINAX_EFFECT_ANYTHING       = 1u << 6  /* calls a C function of extern */
+};
+typedef struct pinax_effects {
+    size_t      struct_size;       /* sizeof(pinax_effects) */
+    uint32_t    effects;           /* PINAX_EFFECT_... */
+    uint32_t    n_modules;         /* the host modules whose words it may call */
+    const char *module[16];        /* the names of the first 16, valid while the state is open */
+    uint32_t    module_effects[16]; /* for each: PINAX_EFFECT_READS_OUTSIDE, _WRITES_OUTSIDE */
+} pinax_effects;
+/* PINAX_ERR_NOT_FOUND for a word number the state does not have; PINAX_ERR_NO_ROOM when the
+ * block has no room for the walk (a bit for each word). */
+PINAX_API pinax_err pinax_word_effects(pinax_state *state, pinax_word word, pinax_effects *out);
 
 /* A dot that ends a statement (`3 4 add .`) is a barrier: every effect begun before it is
  * finished before what follows. The host's part is this function, called at each dot and at the

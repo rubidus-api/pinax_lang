@@ -166,6 +166,17 @@ too saves an image (19.9) before the run.]
 #para("4")[`pinax_run` may be called from inside a host word too. There it runs only words found with the flag
 `PINAX_FIND_NESTED`, and words that may yield (14.2) cannot be found with that flag.]
 
+#para("5")[`pinax_word_effects(state, word, &effects)` tells what a word may do beyond its stack and locals, worked out
+from the loaded code of the word and of every word it may call. `effects.effects` holds `PINAX_EFFECT_READS_GLOBALS`
+and `PINAX_EFFECT_WRITES_GLOBALS` (a list's length, a queue and a task set count as globals),
+`PINAX_EFFECT_READS_OUTSIDE` and `PINAX_EFFECT_WRITES_OUTSIDE` (through host words), `PINAX_EFFECT_YIELDS`,
+`PINAX_EFFECT_FAILS` and `PINAX_EFFECT_ANYTHING` (a C function of `extern`); `module` and `module_effects` name the
+host modules it reaches (the first 16 of `n_modules`). A host word tells what it touches with the flags
+`PINAX_WORD_READS` and `PINAX_WORD_WRITES` of its registration; one with neither counts as both, and one with
+`PINAX_WORD_PURE` as neither. A call through a word value counts every word of the program with that signature, a
+spawned task every word without parameters and results. A host may refuse a program whose words reach what they
+should not.]
+
 == Handles <host-handles>
 
 #para("1")[`pinax_handle_type` makes a handle type with a name and a close function; scripts use the name as a type in

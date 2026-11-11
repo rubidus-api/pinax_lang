@@ -2346,6 +2346,223 @@ void pnx_compact(pinax_state *st) {
 }
 #undef RELOC
 
+// ---- effects (RFC-0040 part G) --------------------------------------------------------------
+
+// The global instruction i names, NONE when none; PNX_GSELECTED when a GSEL chose it.
+static uint32_t effect_global(const pinax_state *st, uint32_t i) {
+    const uint32_t   w = st->code[i];
+    const pnx_opinfo info = opinfo[w & 0xffu];
+    const uint32_t   x = info.second ? st->code[i + 1] : 0;
+    uint32_t         g = UINT32_MAX;
+    if (info.shape == PNX_F_GLOBAL)
+        g = OP_BX(w);
+    else if (info.a == PNX_K_G)
+        g = OP_A(w);
+    else if (info.b == PNX_K_G)
+        g = OP_B(w);
+    else if (info.c == PNX_K_G)
+        g = OP_C(w);
+    if (info.second == PNX_X_GLOBAL)
+        g = x;
+    else if (info.second == PNX_X_FIELD)
+        g = (x & 0xfffu) == PNX_FSELECTED ? PNX_GSELECTED : x & 0xfffu;
+    return g;
+}
+
+static void effect_note(uint16_t *list, uint32_t *n, uint32_t g) {
+    for (uint32_t k = 0; k < *n; ++k) {
+        if (list[k] == g)
+            return;
+    }
+    if (*n < 32)
+        list[(*n)++] = (uint16_t)g;
+}
+
+pinax_err pnx_word_effects(pinax_state *st, uint32_t word, pnx_effects *out) {
+    *out = (pnx_effects){.pub = {.struct_size = sizeof(pinax_effects)}};
+    if (!st->head || word >= st->head->n_words)
+        return fail(st, PINAX_ERR_NOT_FOUND, "no such word");
+    const uint32_t n = st->head->n_words;
+    const size_t   mark = st->used; // the block as scratch, given back below (as mark_yields_all does)
+    uint8_t       *seen = take(st, (n + 7u) / 8u, 1);
+    uint32_t      *work = take(st, (size_t)n * 4, 4);
+    if (!seen || !work) {
+        give_back(st, mark);
+        return fail(st, PINAX_ERR_NO_ROOM, "block too small to walk the calls");
+    }
+    uint32_t n_work = 0;
+#define EFFECT_PUSH(k)                                                                             \
+    do {                                                                                           \
+        const uint32_t push_k = (k);                                                               \
+        if (push_k < n && !(seen[push_k / 8] >> (push_k % 8) & 1u)) {                              \
+            seen[push_k / 8] |= (uint8_t)(1u << (push_k % 8));                                     \
+            work[n_work++] = push_k;                                                               \
+        }                                                                                          \
+    } while (0)
+    EFFECT_PUSH(word);
+    uint32_t effects = 0;
+    while (n_work) {
+        const uint32_t k = work[--n_work];
+        const span     range = pnx_word_span(st, k);
+        for (uint32_t i = range.begin; i < range.end; i += opinfo[st->code[i] & 0xffu].second ? 2u : 1u) {
+            const uint32_t   op = st->code[i] & 0xffu;
+            const pnx_opinfo info = opinfo[op];
+            const uint32_t   x = info.second ? st->code[i + 1] : 0;
+            if (op == PNX_CALL || op == PNX_TCALL) {
+                EFFECT_PUSH(x);
+                continue;
+            }
+            if (op == PNX_CALLR || op == PNX_TSPAWN || op == PNX_TSPAWNW) { // a word value: any of its signature
+                const uint32_t want = op == PNX_CALLR ? x : 0;
+                for (uint32_t v = 0; v < n; ++v) {
+                    const pnx_counts c = st->word_counts[v];
+                    const uint32_t   has = (uint32_t)c.int_args | (uint32_t)c.str_args << 8 | (uint32_t)c.int_results << 16 |
+                                         (uint32_t)c.str_results << 24 | (st->words[v].fails ? 1u << 31 : 0u);
+                    if (has == want && !text_equal(st->words[v].name, "(load)"))
+                        EFFECT_PUSH(v);
+                }
+            }
+            if (op == PNX_HCALL || op == PNX_HCALLF) {
+                const pnx_host *h = st->imports[x];
+                if (h->module[0] == '@') { // a C function of extern
+                    effects |= PINAX_EFFECT_ANYTHING;
+                    continue;
+                }
+                if (h->flags & PINAX_WORD_PURE)
+                    continue;
+                uint32_t touch = (h->flags & PINAX_WORD_READS ? PINAX_EFFECT_READS_OUTSIDE : 0u) |
+                                 (h->flags & PINAX_WORD_WRITES ? PINAX_EFFECT_WRITES_OUTSIDE : 0u);
+                if (!touch)
+                    touch = PINAX_EFFECT_READS_OUTSIDE | PINAX_EFFECT_WRITES_OUTSIDE;
+                effects |= touch;
+                pinax_effects *p = &out->pub;
+                uint32_t       m = 0;
+                while (m < p->n_modules && m < 16 && !text_equal(p->module[m], h->module))
+                    ++m;
+                if (m == p->n_modules) {
+                    if (m < 16)
+                        p->module[m] = h->module;
+                    ++p->n_modules;
+                }
+                if (m < 16)
+                    p->module_effects[m] |= touch;
+                continue;
+            }
+            const uint32_t g = effect_global(st, i);
+            if (g == UINT32_MAX || op == PNX_GSEL)
+                continue;
+            const bool writes = pnx_writes_global(op) || op == PNX_TSPAWN || op == PNX_TSPAWNW || op == PNX_TRUNALL ||
+                                (g < st->head->n_globals && st->globals[g].kind == PNX_G_TASKS);
+            effects |= writes ? PINAX_EFFECT_WRITES_GLOBALS : PINAX_EFFECT_READS_GLOBALS;
+            if (g == PNX_GSELECTED || g == PNX_FSELECTED || g >= st->head->n_globals) {
+                if (writes)
+                    out->chosen_write = true;
+                else
+                    out->chosen_read = true;
+            } else if (writes) {
+                effect_note(out->writes, &out->n_writes, g);
+            } else {
+                effect_note(out->reads, &out->n_reads, g);
+            }
+        }
+    }
+#undef EFFECT_PUSH
+    give_back(st, mark);
+    if (st->word_counts[word].yields)
+        effects |= PINAX_EFFECT_YIELDS;
+    if (st->words[word].fails)
+        effects |= PINAX_EFFECT_FAILS;
+    out->pub.effects = effects;
+    return PINAX_OK;
+}
+
+pinax_err pinax_word_effects(pinax_state *st, pinax_word word, pinax_effects *out) {
+    if (!st || !out || out->struct_size != sizeof *out)
+        return PINAX_ERR_ARGUMENT;
+    pnx_effects all;
+    const pinax_err err = pnx_word_effects(st, word, &all);
+    if (err == PINAX_OK)
+        *out = all.pub;
+    return err;
+}
+
+void pnx_effects_report(pinax_state *st, uint32_t module, void (*put)(void *user, const char *text, size_t len),
+                        void *user) {
+    for (uint32_t k = 0; st->head && k < st->head->n_words; ++k) {
+        const pnx_wordrec *w = &st->words[k];
+        if (w->module != module || w->name[0] == '(' || __builtin_memcmp(w->name, "test.", 5) == 0)
+            continue;
+        pnx_effects e;
+        char        text[1024];
+        size_t      n = 0;
+#define PUT(s)                                                                                     \
+        do {                                                                                       \
+            const char *put_s = (s);                                                               \
+            for (; *put_s && n + 1 < sizeof text; ++put_s)                                         \
+                text[n++] = *put_s;                                                                \
+        } while (0)
+        PUT(w->name);
+        PUT(":");
+        if (pnx_word_effects(st, k, &e) != PINAX_OK) {
+            PUT(" (not worked out: the block is full)\n");
+            put(user, text, n);
+            continue;
+        }
+        const char *gap = " ";
+        for (unsigned list = 0; list < 2; ++list) {
+            const uint32_t  count = list ? e.n_writes : e.n_reads;
+            const uint16_t *all = list ? e.writes : e.reads;
+            const bool      chosen = list ? e.chosen_write : e.chosen_read;
+            if (!count && !chosen)
+                continue;
+            PUT(gap);
+            PUT(list ? "writes " : "reads ");
+            for (uint32_t g = 0; g < count; ++g) {
+                if (g)
+                    PUT(", ");
+                PUT(st->globalrecs[all[g]].name);
+            }
+            if (chosen)
+                PUT(count ? ", a table chosen at run time" : "a table chosen at run time");
+            gap = "; ";
+        }
+        for (uint32_t m = 0; m < e.pub.n_modules && m < 16; ++m) {
+            const uint32_t touch = e.pub.module_effects[m];
+            PUT(gap);
+            PUT(e.pub.module[m]);
+            PUT(touch == (PINAX_EFFECT_READS_OUTSIDE | PINAX_EFFECT_WRITES_OUTSIDE) ? " reads and writes"
+                : touch == PINAX_EFFECT_READS_OUTSIDE                               ? " reads"
+                                                                                    : " writes");
+            gap = "; ";
+        }
+        if (e.pub.n_modules > 16) {
+            PUT(gap);
+            PUT("more modules");
+            gap = "; ";
+        }
+        if (e.pub.effects & PINAX_EFFECT_ANYTHING) {
+            PUT(gap);
+            PUT("anything (a C function)");
+            gap = "; ";
+        }
+        if (e.pub.effects & PINAX_EFFECT_YIELDS) {
+            PUT(gap);
+            PUT("may yield");
+            gap = "; ";
+        }
+        if (e.pub.effects & PINAX_EFFECT_FAILS) {
+            PUT(gap);
+            PUT("may fail");
+            gap = "; ";
+        }
+        if (gap[0] == ' ')
+            PUT(" none");
+        PUT("\n");
+#undef PUT
+        put(user, text, n);
+    }
+}
+
 uint32_t pnx_callers_of(const pinax_state *st, uint32_t word, uint32_t *out, uint32_t cap) {
     uint32_t n = 0;
     for (uint32_t k = 0; st->head && k < st->head->n_words; ++k) {

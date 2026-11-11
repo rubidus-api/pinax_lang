@@ -71,6 +71,12 @@ prompt, and the end of a program's code, are a dot already.
 In bash terms, a comma is like `&` and a dot like `wait`. Use a dot where what came before must be seen, or must have
 happened, before going on: before a long computation, after a progress line.
 
+`pnx see --effects` tells, without running anything, what each word of a file may do beyond its own stack and
+locals: the globals it reads and writes, the host modules it reaches, whether it may yield or fail. A word marked
+`none` gives the same results for the same inputs and touches nothing else.
+
+#ex("manual", "15-effects.pnx")
+
 == Shell scripts
 
 The module `sh` runs commands through the system shell, and a search order lets its words and those of `io` be written

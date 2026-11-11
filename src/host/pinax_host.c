@@ -822,11 +822,11 @@ pinax_err pinax_host_register(pinax_state *state, const char *module) {
         return PINAX_ERR_ARGUMENT;
     if (same(module, "io")) {
         const pinax_word_def words[] = {
-            {"print", "(s str)", io_print, NULL, 0},
-            {"println", "(s str)", io_println, NULL, 0},
-            {"eprint", "(s str)", io_eprint, NULL, 0},
-            {"read_line", "(gives line str or fail)", io_read_line, NULL, 0},
-            {"read_line_into", "(buf buffer or fail)", io_read_line_into, NULL, 0},
+            {"print", "(s str)", io_print, NULL, PINAX_WORD_WRITES},
+            {"println", "(s str)", io_println, NULL, PINAX_WORD_WRITES},
+            {"eprint", "(s str)", io_eprint, NULL, PINAX_WORD_WRITES},
+            {"read_line", "(gives line str or fail)", io_read_line, NULL, PINAX_WORD_READS},
+            {"read_line_into", "(buf buffer or fail)", io_read_line_into, NULL, PINAX_WORD_READS},
         };
         return pinax_register(state, "io", words, sizeof words / sizeof words[0]);
     }
@@ -837,23 +837,23 @@ pinax_err pinax_host_register(pinax_state *state, const char *module) {
             return err;
         void *tag = (void *)(uintptr_t)type;
         const pinax_word_def words[] = {
-            {"open_read", "(path str gives owned file or fail)", file_open_read, tag, 0},
-            {"open_write", "(path str gives owned file or fail)", file_open_write, tag, 0},
-            {"write", "(s str, f file or fail)", file_write, tag, 0},
-            {"read_line", "(f file gives line str or fail)", file_read_line, tag, 0},
-            {"read", "(f file, buf buffer gives n int or fail)", file_read, tag, 0},
-            {"read_all", "(path str gives body str or fail)", file_read_all, tag, 0},
-            {"read_line_into", "(f file, buf buffer or fail)", file_read_line_into, tag, 0},
-            {"read_all_into", "(path str, buf buffer or fail)", file_read_all_into, tag, 0},
+            {"open_read", "(path str gives owned file or fail)", file_open_read, tag, PINAX_WORD_READS},
+            {"open_write", "(path str gives owned file or fail)", file_open_write, tag, PINAX_WORD_WRITES},
+            {"write", "(s str, f file or fail)", file_write, tag, PINAX_WORD_WRITES},
+            {"read_line", "(f file gives line str or fail)", file_read_line, tag, PINAX_WORD_READS},
+            {"read", "(f file, buf buffer gives n int or fail)", file_read, tag, PINAX_WORD_READS},
+            {"read_all", "(path str gives body str or fail)", file_read_all, tag, PINAX_WORD_READS},
+            {"read_line_into", "(f file, buf buffer or fail)", file_read_line_into, tag, PINAX_WORD_READS},
+            {"read_all_into", "(path str, buf buffer or fail)", file_read_all_into, tag, PINAX_WORD_READS},
             {"close", "(f owned file)", file_close, tag, 0},
         };
         return pinax_register(state, "file", words, sizeof words / sizeof words[0]);
     }
     if (same(module, "clock")) {
         const pinax_word_def words[] = {
-            {"now_ms", "(gives int)", clock_now_ms, NULL, 0},
-            {"monotonic_ns", "(gives int)", clock_monotonic_ns, NULL, 0},
-            {"sleep", "(ms int)", clock_sleep, NULL, 0},
+            {"now_ms", "(gives int)", clock_now_ms, NULL, PINAX_WORD_READS},
+            {"monotonic_ns", "(gives int)", clock_monotonic_ns, NULL, PINAX_WORD_READS},
+            {"sleep", "(ms int)", clock_sleep, NULL, PINAX_WORD_READS},
         };
         return pinax_register(state, "clock", words, sizeof words / sizeof words[0]);
     }
@@ -877,10 +877,10 @@ pinax_err pinax_host_register(pinax_state *state, const char *module) {
             {"output_into", "(cmd str, buf buffer gives status int or fail)", sh_output_into, NULL, 0},
             {"open_read", "(cmd str gives owned file or fail)", sh_open_read, tag, 0},
             {"open_write", "(cmd str gives owned file or fail)", sh_open_write, tag, 0},
-            {"status", "(gives int)", sh_status_word, NULL, 0},
-            {"quote", "(s str gives str)", sh_quote, NULL, 0},
+            {"status", "(gives int)", sh_status_word, NULL, PINAX_WORD_READS},
+            {"quote", "(s str gives str)", sh_quote, NULL, PINAX_WORD_PURE},
             {"cd", "(path str or fail)", sh_cd, NULL, 0},
-            {"cwd", "(gives path str or fail)", sh_cwd, NULL, 0},
+            {"cwd", "(gives path str or fail)", sh_cwd, NULL, PINAX_WORD_READS},
             {"setenv", "(name str, value str or fail)", sh_setenv, NULL, 0},
             {"exit", "(status int)", sh_exit, NULL, 0},
         };
@@ -888,9 +888,9 @@ pinax_err pinax_host_register(pinax_state *state, const char *module) {
     }
     if (same(module, "env")) {
         const pinax_word_def words[] = {
-            {"arg_count", "(gives int)", env_arg_count, NULL, 0},
-            {"arg", "(i int gives s str or fail)", env_arg, NULL, PINAX_WORD_KEEP_STR},
-            {"getenv", "(name str gives s str or fail)", env_getenv, NULL, 0},
+            {"arg_count", "(gives int)", env_arg_count, NULL, PINAX_WORD_READS},
+            {"arg", "(i int gives s str or fail)", env_arg, NULL, PINAX_WORD_KEEP_STR | PINAX_WORD_READS},
+            {"getenv", "(name str gives s str or fail)", env_getenv, NULL, PINAX_WORD_READS},
         };
         return pinax_register(state, "env", words, sizeof words / sizeof words[0]);
     }
