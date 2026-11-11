@@ -6,6 +6,7 @@
 // which grows on demand; a module serves one state at a time.
 
 #include "pinax.h"
+#include "pinax_lex.h"
 
 #include <stddef.h>
 #include <stdint.h>
@@ -256,6 +257,100 @@ WASM_EXPORT("pnx_wasm_eval_clear") void pnx_wasm_eval_clear(void) {
     if (state)
         pinax_eval_clear(state);
 }
+
+// The definitions and blocks open at the end of the text the page wrote at pnx_wasm_text(), the
+// outermost first, one a line ("word sq", "loop", "if"), at pnx_wasm_blocks_text(): the playground
+// shows them while it gathers lines. Returns how many are open, or -1 for text that is not Pinax.
+// pnx_wasm_blocks_closed() says whether the text's last token is the `end` that closed its
+// outermost one: 1, or 2 when that was a `do` block (a value, which a word after it may take).
+static char     blocks_text[1024];
+static uint32_t blocks_length, blocks_closed;
+
+static void blocks_put(const char *bytes, size_t n) {
+    for (size_t k = 0; k < n && blocks_length < sizeof blocks_text; ++k)
+        blocks_text[blocks_length++] = bytes[k];
+}
+
+WASM_EXPORT("pnx_wasm_blocks") int32_t pnx_wasm_blocks(const unsigned char *text, size_t length) {
+    enum { MAX_OPEN = 64 };
+    struct { pnx_word_id kind; uint32_t start, length; } open[MAX_OPEN];
+    uint32_t   depth = 0, parens = 0;
+    bool       named = false; // the token before was word, test or record: this one is its name
+    bool       forward = false;
+    pnx_word_id closed = PNX_KW_NONE;
+    pnx_lexer  lx;
+    pnx_token  t;
+    pnx_lex_init(&lx, text, length);
+    blocks_length = 0;
+    blocks_closed = 0;
+    for (;;) {
+        if (!pnx_lex_next(&lx, &t))
+            return -1;
+        if (t.kind == PNX_T_END)
+            break;
+        closed = PNX_KW_NONE;
+        if (named) {
+            named = false;
+            if (t.kind == PNX_T_NAME && depth <= MAX_OPEN) {
+                open[depth - 1].start = t.start;
+                open[depth - 1].length = t.length;
+            }
+        }
+        if (t.kind == PNX_T_LPAREN)
+            ++parens;
+        else if (t.kind == PNX_T_RPAREN && parens)
+            --parens;
+        if (t.kind != PNX_T_RESERVED || parens)
+            continue;
+        switch (t.word) {
+        case PNX_KW_forward:
+            forward = true;
+            continue;
+        case PNX_KW_word: case PNX_KW_test: case PNX_KW_record:
+            if (forward) { // forward word NAME (...) opens nothing
+                forward = false;
+                continue;
+            }
+            named = true;
+            [[fallthrough]];
+        case PNX_KW_do: case PNX_KW_if: case PNX_KW_loop: case PNX_KW_case: case PNX_KW_of:
+        case PNX_KW_otherwise: case PNX_KW_or_else: case PNX_KW_defer:
+            if (depth < MAX_OPEN)
+                open[depth] = (typeof(open[0])){t.word, 0, 0};
+            ++depth;
+            break;
+        case PNX_KW_end:
+            if (depth) {
+                --depth;
+                if (depth == 0)
+                    closed = open[0].kind;
+            }
+            break;
+        default:
+            break;
+        }
+        forward = false;
+    }
+    blocks_closed = closed == PNX_KW_NONE ? 0 : closed == PNX_KW_do ? 2 : 1;
+    static const char *const kinds[PNX_KW_COUNT] = {
+        [PNX_KW_word] = "word", [PNX_KW_test] = "test", [PNX_KW_record] = "record", [PNX_KW_do] = "do",
+        [PNX_KW_if] = "if", [PNX_KW_loop] = "loop", [PNX_KW_case] = "case", [PNX_KW_of] = "of",
+        [PNX_KW_otherwise] = "otherwise", [PNX_KW_or_else] = "or_else", [PNX_KW_defer] = "defer",
+    };
+    for (uint32_t k = 0; k < depth && k < MAX_OPEN; ++k) {
+        const char *kind = kinds[open[k].kind];
+        blocks_put(kind, __builtin_strlen(kind));
+        if (open[k].length) {
+            blocks_put(" ", 1);
+            blocks_put((const char *)text + open[k].start, open[k].length);
+        }
+        blocks_put("\n", 1);
+    }
+    return (int32_t)depth;
+}
+WASM_EXPORT("pnx_wasm_blocks_text") const char *pnx_wasm_blocks_text(void) { return blocks_text; }
+WASM_EXPORT("pnx_wasm_blocks_length") uint32_t pnx_wasm_blocks_length(void) { return blocks_length; }
+WASM_EXPORT("pnx_wasm_blocks_closed") uint32_t pnx_wasm_blocks_closed(void) { return blocks_closed; }
 
 static const uint32_t *packed(pinax_str name, const pinax_value *value) {
     static uint32_t out[9];

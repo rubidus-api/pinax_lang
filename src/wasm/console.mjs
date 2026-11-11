@@ -1,5 +1,6 @@
 // console.mjs - the terminal of the Pinax playground, without the page: a session, and a program
-// kept beside it as GW-BASIC keeps one, without line numbers. The page (playground.html) draws it.
+// kept beside it as GW-BASIC keeps one: lines with numbers, which the numbers do not change. The
+// page (playground.html) draws it.
 //
 //   import { createConsole } from "./console.mjs";
 //   const con = await createConsole({ createPinax, bytes, print, store });
@@ -10,32 +11,39 @@
 // command says). store, when given, keeps the program between visits: { get(): text or null,
 // set(text) }.
 //
-// A line that begins with ":" is a command. Other lines gather until the text ends with "," or
-// "."; then it runs as one line of the session. When it ends inside a definition or a block more
-// lines gather. A statement that succeeds and begins with a declaration (word, const, global,
-// use, set_order and the others) is kept in the program as one entry; one that declares a name
-// already kept replaces that entry. enter() gives { prompt }, and for some commands what the page
-// is to do: { fill } (text for the prompt), { editor } (the program to edit whole), { download },
-// { upload }. MIT (see ../../LICENSE).
+// A line that begins with ":" is a command. Other lines gather until the text is whole: it ends
+// with "," or ".", or with the `end` of the definition or block it opened, and no definition or
+// block is open in it. Then it runs as one line of the session: a loop or a block runs once, when
+// it is all typed. A statement that succeeds and begins with a declaration (word, const, global,
+// use, set_order and the others) is added to the program; one that declares a name the program
+// declares already takes the place of those lines. :edit N and :insert N change lines by number.
+// enter() gives { prompt }, and for some commands what the page is to do: { fill } (text for the
+// prompt), { editor } (the program to edit whole), { download }, { upload }. status() says what
+// the terminal waits for: the definitions and blocks open, the line being edited or inserted.
+// MIT (see ../../LICENSE).
 
 const DECLARATIONS = new Set(["word", "const", "global", "array", "list", "pool", "queue", "buffer", "tasks",
     "record", "type", "extern", "forward", "index", "bound", "shared", "test", "use", "set_order"]);
 const PROMPT = "pinax> ", MORE = "  ...> ";
-const HELP = `Pinax code runs when it ends with "," or "."; a definition may take several lines.
-A statement that declares something (word, const, global, use, set_order, ...) is kept in the program.
-  :list          the program, entry by entry
-  :edit N        entry N into the prompt; entering it replaces N and runs the program again
-  :edit          the whole program in an editor (F2; Ctrl+S saves and runs it, Esc leaves)
-  :delete N      removes entry N and runs the program again
-  :run           a fresh state, then the program from its first entry (F5): the code stays
-  :new           no program and a fresh state
-  :clear         empties the stack
-  :save, :load   the program as a .pnx file
-Keys: Up and Down walk the history, Esc drops the lines gathered, Ctrl+L clears the screen.`;
+const HELP = `Pinax code runs when it is whole: it ends with "," or ".", or with the end of its block.
+A loop or a block runs once, when its end is typed. A statement that declares something
+(word, const, global, use, set_order, ...) is added to the program.
+  :list [N[-M]]     the program with its line numbers
+  :edit N           line N into the prompt; Enter puts it back and runs the program again
+  :edit             the whole program in an editor (F2; Ctrl+S saves and runs it, Esc leaves)
+  :insert N         new lines after line N (0: at the top); an empty line ends, and the program runs
+  :delete N[-M]     removes lines N to M (:del)
+  :run              RESETS: empties the stack and forgets every definition, then runs the program
+                    from line 1 (F5). The program's lines stay.
+  :new              no program, and a fresh state
+  :clear            empties the stack only
+  :save, :load      the program as a .pnx file
+Keys: Up and Down walk the history, Esc drops the lines gathered, Ctrl+L clears the screen,
+Shift+Enter starts a new line without entering.`;
 
 // the declaration a text begins with, as "word sq", "use io"; "" for set_order; null for none
 function declared(text) {
-    const words = text.replace(/^(\s*rem\b[^\n]*\n)+/, "").trim().split(/[\s(]+/);
+    const words = text.replace(/^(\s*(rem\b[^\n]*)?\n)+/, "").trim().split(/[\s(]+/);
     let k = 0;
     if (words[k] === "export" || words[k] === "redefine")
         ++k;
@@ -44,42 +52,64 @@ function declared(text) {
     return words[k] === "set_order" ? "" : `${words[k]} ${words[k + 1] ?? ""}`;
 }
 
-// the program as entries: a new one at each line that begins, at its first column, with a declaration
-export function split(text) {
-    const entries = [];
-    for (const line of text.replace(/\r\n?/g, "\n").split("\n")) {
-        if (entries.length === 0 || (/^[a-z]/.test(line) && declared(line) !== null))
-            entries.push(line);
-        else
-            entries[entries.length - 1] += "\n" + line;
-    }
-    return entries.map((e) => e.replace(/\s+$/, "")).filter((e) => e !== "");
-}
-
 export async function createConsole({ createPinax, bytes, print, store = null }) {
-    const pinax = await createPinax(bytes, { write: (stream, text) => print(stream === 1 ? "out" : "err", text) });
+    let offset = 0; // while the program runs: the line before the part running, for the places said
+    const placed = (text) => (offset ? text.replace(/^input:(\d+):/gm, (_, n) => `input:${Number(n) + offset}:`) : text);
+    const pinax = await createPinax(bytes, { write: (stream, text) => print(stream === 1 ? "out" : "err", placed(text)) });
     const session = pinax.session("input");
-    let program = [];    // the entries, as typed
+    let lines = [];      // the program
     let gathered = [];   // the lines of the text not yet run
-    let editing = -1;    // the entry the prompt is editing (:edit N), or -1
+    let mode = null;     // { kind: "edit", at } or { kind: "insert", at, first, added }: at is a line index
     const history = [];
 
-    const keep = () => store && store.set(program.join("\n"));
+    const keep = () => store && store.set(lines.join("\n"));
     const showStack = (stack) => stack.length && print("stack", stack.join(" ") + "\n");
-    const number = (arg) => {
-        const n = Number(arg);
-        return Number.isInteger(n) && n >= 1 && n <= program.length ? n - 1 : -1;
-    };
+    const plural = (n, one) => `${n} ${one}${n === 1 ? "" : "s"}`;
     const ends = (text) => /[,.]\s*$/.test(text);
+    // the text is whole: nothing open, and it ends with , or . or with the end of what it opened (a
+    // do block excepted: a word after it takes it)
+    function whole(text) {
+        const b = pinax.blocks(text);
+        return b.ok && b.depth === 0 && (ends(text) || b.closed === 1);
+    }
+    // the program in the parts it runs in, as if typed: [{ start, end }], line indexes, end not in it
+    function parts() {
+        const out = [];
+        let start = 0;
+        for (let k = 0; k < lines.length; ++k) {
+            const text = lines.slice(start, k + 1).join("\n");
+            if (text.trim() === "")
+                continue;
+            if (whole(text)) {
+                out.push({ start, end: k + 1 });
+                start = k + 1;
+            }
+        }
+        if (lines.slice(start).join("\n").trim() !== "")
+            out.push({ start, end: lines.length });
+        return out;
+    }
+    // "3" or "3-5" as line indexes [from, to), within 1..lines.length; null when it is not
+    function range(arg) {
+        const m = /^(\d+)(?:-(\d+))?$/.exec(arg ?? "");
+        if (!m)
+            return null;
+        const from = Number(m[1]), to = Number(m[2] ?? m[1]);
+        return from >= 1 && from <= to && to <= lines.length ? [from - 1, to] : null;
+    }
+    const noLine = (arg) => print("err", `no line ${arg ?? ""}: the program has ${plural(lines.length, "line")}; :list shows them\n`);
 
-    // a fresh state, then every entry in order; it stops at the first that fails
+    // a fresh state, then the program from its first line; it stops at the first part that fails
     function runProgram() {
         session.reset();
-        for (let k = 0; k < program.length; ++k) {
-            const r = session.eval(program[k]);
+        for (const { start, end } of parts()) {
+            offset = start;
+            const r = session.eval(lines.slice(start, end).join("\n"));
+            offset = 0;
             if (!r.ok) {
-                print("info", r.unfinished ? `entry ${k + 1} ends inside a definition or a block\n`
-                                           : `entry ${k + 1} failed: the program stops there (:edit ${k + 1})\n`);
+                const at = end - start === 1 ? `line ${start + 1}` : `lines ${start + 1}-${end}`;
+                print("info", r.unfinished ? `${at}: a definition or a block is not closed by the program's end\n`
+                                           : `the program stops in ${at} (:list ${at.split(" ")[1]})\n`);
                 return false;
             }
         }
@@ -87,15 +117,16 @@ export async function createConsole({ createPinax, bytes, print, store = null })
         return true;
     }
 
+    // a statement typed that declares something: added, or in place of the lines declaring the same
     function remember(text) {
         const key = declared(text);
         if (key === null)
             return;
-        const at = key === "" ? -1 : program.findIndex((e) => declared(e) === key);
-        if (at >= 0)
-            program[at] = text;
+        const at = key === "" ? undefined : parts().find(({ start, end }) => declared(lines.slice(start, end).join("\n")) === key);
+        if (at)
+            lines.splice(at.start, at.end - at.start, ...text.split("\n"));
         else
-            program.push(text);
+            lines.push(...text.split("\n"));
         keep();
     }
 
@@ -105,39 +136,56 @@ export async function createConsole({ createPinax, bytes, print, store = null })
         case "help":
             print("info", HELP + "\n");
             return {};
-        case "list":
-            if (program.length === 0)
+        case "list": {
+            if (lines.length === 0) {
                 print("info", "the program is empty\n");
-            program.forEach((e, k) => print("info", `${String(k + 1).padStart(3)}  ${e.replace(/\n/g, "\n     ")}\n`));
+                return {};
+            }
+            const r = arg === undefined ? [0, lines.length] : range(arg);
+            if (!r)
+                return noLine(arg), {};
+            const width = String(lines.length).length;
+            let text = "";
+            for (let k = r[0]; k < r[1]; ++k)
+                text += `${String(k + 1).padStart(width + 2)}  ${lines[k]}\n`;
+            print("info", text);
             return {};
+        }
         case "edit": {
             if (arg === undefined)
-                return { editor: program.join("\n") };
-            const k = number(arg);
-            if (k < 0) {
-                print("err", `no entry ${arg}; :list shows them\n`);
-                return {};
-            }
-            editing = k;
-            return { fill: program[k] };
+                return { editor: lines.join("\n") };
+            const r = range(arg);
+            if (!r || r[1] - r[0] !== 1)
+                return noLine(arg), {};
+            mode = { kind: "edit", at: r[0] };
+            return { fill: lines[r[0]] };
         }
-        case "delete": {
-            const k = number(arg);
-            if (k < 0) {
-                print("err", `no entry ${arg ?? ""}; :list shows them\n`);
+        case "insert": case "ins": {
+            const n = Number(arg);
+            if (!/^\d+$/.test(arg ?? "") || n > lines.length) {
+                print("err", `:insert N puts lines after line N, 0 to ${lines.length} (0: at the top)\n`);
                 return {};
             }
-            program.splice(k, 1);
+            mode = { kind: "insert", at: n, first: n, added: 0 };
+            return {};
+        }
+        case "delete": case "del": {
+            const r = range(arg);
+            if (!r)
+                return noLine(arg), {};
+            lines.splice(r[0], r[1] - r[0]);
             keep();
-            print("info", `entry ${k + 1} removed\n`);
+            print("info", `${r[1] - r[0] === 1 ? `line ${r[0] + 1}` : `lines ${r[0] + 1}-${r[1]}`} removed; ` +
+                          "the program runs again from a fresh state\n");
             runProgram();
             return {};
         }
         case "run":
+            print("info", "reset: the stack is emptied and every definition forgotten; the program runs from line 1\n");
             runProgram();
             return {};
         case "new":
-            program = [];
+            lines = [];
             keep();
             session.reset();
             print("info", "no program; a fresh state\n");
@@ -147,7 +195,7 @@ export async function createConsole({ createPinax, bytes, print, store = null })
             print("info", "the stack is empty\n");
             return {};
         case "save":
-            return { download: program.join("\n") + "\n" };
+            return { download: lines.join("\n") + "\n" };
         case "load":
             return { upload: true };
         default:
@@ -156,59 +204,115 @@ export async function createConsole({ createPinax, bytes, print, store = null })
         }
     }
 
+    function prompt() {
+        if (mode?.kind === "edit")
+            return `edit ${mode.at + 1}> `;
+        if (mode?.kind === "insert")
+            return `insert ${mode.at + 1}> `;
+        return gathered.length ? MORE : PROMPT;
+    }
+
+    // the end of an :insert: the program runs again when lines were added
+    function endInsert() {
+        const { first, added } = mode;
+        mode = null;
+        if (added === 0)
+            return print("info", "nothing inserted\n");
+        print("info", `${plural(added, "line")} inserted after line ${first}; the program runs again from a fresh state\n`);
+        runProgram();
+    }
+
     function enter(line) {
-        print("echo", (gathered.length ? MORE : PROMPT) + line + "\n");
-        if (gathered.length === 0 && line.trim() === "")
-            return { prompt: PROMPT };
+        print("echo", prompt() + line + "\n");
         if (line.trim() !== "")
             history.push(line);
-        if (gathered.length === 0 && line.trimStart().startsWith(":")) {
-            const r = command(line.trim());
-            return { prompt: PROMPT, ...r };
+        if (mode?.kind === "edit") { // the text takes line N's place; it may be several lines
+            const at = mode.at;
+            mode = null;
+            if (line.trim() === "" || line === lines[at]) {
+                print("info", `line ${at + 1} unchanged\n`);
+                return { prompt: prompt() };
+            }
+            lines.splice(at, 1, ...line.split("\n"));
+            keep();
+            print("info", `line ${at + 1} replaced; the program runs again from a fresh state\n`);
+            runProgram();
+            return { prompt: prompt() };
         }
+        if (mode?.kind === "insert") {
+            if (line.trim() === "" || line.trimStart().startsWith(":")) {
+                endInsert();
+                if (line.trim() === "")
+                    return { prompt: prompt() };
+            } else {
+                lines.splice(mode.at++, 0, line);
+                ++mode.added;
+                keep();
+                return { prompt: prompt() };
+            }
+        }
+        if (gathered.length === 0 && line.trim() === "")
+            return { prompt: prompt() };
+        if (gathered.length === 0 && line.trimStart().startsWith(":"))
+            return { ...command(line.trim()), prompt: prompt() };
         gathered.push(line);
         const text = gathered.join("\n");
-        if (!ends(text))
-            return { prompt: MORE };
-        if (editing >= 0) { // :edit N: the text takes the entry's place, and the program runs again
-            program[editing] = text;
-            editing = -1;
-            gathered = [];
-            keep();
-            runProgram();
-            return { prompt: PROMPT };
-        }
+        if (!whole(text))
+            return { prompt: prompt() };
         const r = session.eval(text);
         if (r.unfinished)
-            return { prompt: MORE };
+            return { prompt: prompt() };
         gathered = [];
         if (r.ok) {
             remember(text);
             showStack(r.stack);
         }
-        return { prompt: PROMPT };
+        return { prompt: prompt() };
     }
 
-    // the page's editor or a loaded file: the whole program, split into entries, run again
+    // what the terminal waits for, for the page's status line; pending: the text in the prompt
+    function status(pending = "") {
+        if (mode?.kind === "edit")
+            return `editing line ${mode.at + 1}: Enter puts it back (several lines may take its place), Esc leaves it`;
+        if (mode?.kind === "insert")
+            return `inserting after line ${mode.first}, as line ${mode.at + 1}: an empty line ends, and the program runs`;
+        const text = [...gathered, pending].join("\n");
+        if (text.trim() !== "" && !text.trimStart().startsWith(":")) {
+            const b = pinax.blocks(text);
+            if (!b.ok)
+                return "inside a string: it runs when the string is closed";
+            if (b.depth > 0)
+                return `in ${plural(b.depth, "block")}, depth ${b.depth}: ${b.open.join(" › ")}. It runs whole at its end`;
+            if (gathered.length)
+                return "waiting for , or . to run";
+        }
+        return `ready · program ${plural(lines.length, "line")} · stack ${plural(session.stack().length, "value")}`;
+    }
+
+    // the page's editor or a loaded file: the whole program, run again
     function setProgram(text) {
-        program = split(text);
+        lines = text.replace(/\r\n?/g, "\n").replace(/\s+$/, "").split("\n");
+        if (lines.length === 1 && lines[0] === "")
+            lines = [];
         keep();
-        print("info", `the program has ${program.length} entr${program.length === 1 ? "y" : "ies"}\n`);
+        print("info", `the program has ${plural(lines.length, "line")}; it runs from a fresh state\n`);
         runProgram();
     }
 
-    // Esc: the lines gathered, and an :edit in progress, are dropped
+    // Esc: the lines gathered are dropped, an :edit leaves its line, an :insert ends
     function cancel() {
         gathered = [];
-        editing = -1;
-        return { prompt: PROMPT };
+        if (mode?.kind === "insert")
+            endInsert();
+        mode = null;
+        return { prompt: prompt() };
     }
 
     const saved = store && store.get();
     if (saved) {
-        program = split(saved);
-        print("info", `the program of the last visit: ${program.length} entr${program.length === 1 ? "y" : "ies"} (:list)\n`);
+        lines = saved.split("\n");
+        print("info", `the program of the last visit: ${plural(lines.length, "line")} (:list)\n`);
         runProgram();
     }
-    return { enter, cancel, setProgram, history, program: () => program.slice(), prompt: () => (gathered.length ? MORE : PROMPT) };
+    return { enter, cancel, setProgram, status, history, prompt, mode: () => mode?.kind ?? null, program: () => lines.slice() };
 }

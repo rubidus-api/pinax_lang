@@ -9,8 +9,14 @@
 <title>Pinax</title>
 <style>
   html, body { height: 100%; margin: 0; background: #101418; color: #d8dee4; }
-  body { font: 15px/1.45 ui-monospace, "Cascadia Mono", Menlo, Consolas, monospace; }
-  #screen { height: 100%; overflow-y: auto; padding: 12px 16px; box-sizing: border-box; }
+  body { font: 15px/1.45 ui-monospace, "Cascadia Mono", Menlo, Consolas, monospace;
+         display: flex; flex-direction: column; }
+  #top { padding: 4px 16px; color: #8b949e; border-bottom: 1px solid #30363d; }
+  #top a { color: #79c0ff; text-decoration: none; } #top a:hover { text-decoration: underline; }
+  #screen { flex: 1; min-height: 0; overflow-y: auto; padding: 12px 16px; box-sizing: border-box; }
+  #status { padding: 4px 16px; color: #0b0f13; background: #7ee787; white-space: pre; overflow: hidden;
+            text-overflow: ellipsis; }
+  #status.open { background: #e3b341; } #status.mode { background: #d2a8ff; }
   #log { white-space: pre-wrap; word-break: break-word; }
   .echo { color: #9fb3c8; } .out { color: #e6edf3; } .err { color: #ff7b72; }
   .stack { color: #7ee787; } .info { color: #d2a8ff; }
@@ -26,12 +32,17 @@
 </style>
 </head>
 <body>
+<div id="top">Pinax playground · manual: <a href="https://rubidus-api.github.io/pinax_lang/manual/html-en/"
+  target="_blank" rel="noopener">English</a> · <a href="https://rubidus-api.github.io/pinax_lang/manual/html-ko/"
+  target="_blank" rel="noopener">한국어</a> · F5 :run (resets) · F2 :edit</div>
 <div id="screen">
-<div id="log"><span class="info">Pinax. Code runs when it ends with "," or "."  :help lists the commands.
+<div id="log"><span class="info">Pinax. Code runs when it is whole: it ends with "," or ".", and a loop or a block runs at its end.
+:help lists the commands; :list shows the program with its line numbers.
 </span></div>
 <div id="line"><span id="prompt">pinax> </span><textarea id="input" rows="1" spellcheck="false" autofocus></textarea></div>
 </div>
-<div id="editor"><header>The program. Ctrl+S (or F2) saves it and runs it again; Esc leaves it unchanged.</header>
+<div id="status">ready</div>
+<div id="editor"><header>The program. Ctrl+S (or F2) saves it and runs it again from a fresh state; Esc leaves it unchanged.</header>
 <textarea id="code" spellcheck="false"></textarea></div>
 <input id="file" type="file" accept=".pnx,.txt" hidden>
 <script id="wasm" type="application/octet-stream">
@@ -42,7 +53,7 @@
 // @PINAX_CONSOLE@
 const $ = (id) => document.getElementById(id);
 const log = $("log"), input = $("input"), prompt = $("prompt"), screen = $("screen");
-const editor = $("editor"), code = $("code"), file = $("file");
+const editor = $("editor"), code = $("code"), file = $("file"), status = $("status");
 function print(kind, text) {
     const span = document.createElement("span");
     span.className = kind;
@@ -60,6 +71,16 @@ const bytes = Uint8Array.from(atob($("wasm").textContent.trim()), (c) => c.charC
 const con = await createConsole({ createPinax, bytes, print, store });
 
 const fit = () => { input.style.height = "auto"; input.style.height = input.scrollHeight + "px"; };
+// the status line: what the terminal waits for, with the text in the prompt
+function show() {
+    const said = con.status(input.value);
+    status.textContent = said;
+    status.classList.remove("open", "mode");
+    if (con.mode())
+        status.classList.add("mode");
+    else if (!said.startsWith("ready"))
+        status.classList.add("open");
+}
 function act(r) {
     prompt.textContent = r.prompt ?? con.prompt();
     if (r.fill !== undefined) {
@@ -77,8 +98,17 @@ function act(r) {
     }
     if (r.upload)
         file.click();
+    show();
 }
 function submit() {
+    if (con.mode() === "edit") { // the line edited, whole: what is in the prompt takes its place
+        const text = input.value;
+        input.value = "";
+        fit();
+        act(con.enter(text));
+        walk = con.history.length;
+        return;
+    }
     const lines = input.value.split("\n");
     input.value = "";
     fit();
@@ -103,18 +133,23 @@ function closeEditor(save) {
     if (save)
         con.setProgram(code.value);
     input.focus();
+    show();
 }
 let walk = 0; // where Up and Down are in the history
-input.addEventListener("input", fit);
+input.addEventListener("input", () => { fit(); show(); });
 input.addEventListener("keydown", (e) => {
     if (e.key === "Enter" && !e.shiftKey) {
         e.preventDefault();
         submit();
     } else if (e.key === "Escape") {
+        const was = con.mode();
         input.value = "";
         fit();
+        if (was === "edit")
+            print("info", "(the line is left as it was)\n");
+        else if (!was)
+            print("info", "(dropped)\n");
         act(con.cancel());
-        print("info", "(dropped)\n");
     } else if (e.key === "ArrowUp" && !input.value.slice(0, input.selectionStart).includes("\n") && walk > 0) {
         e.preventDefault();
         input.value = con.history[--walk];
@@ -158,9 +193,11 @@ file.addEventListener("change", async () => {
     if (file.files[0])
         con.setProgram(await file.files[0].text());
     file.value = "";
+    show();
     input.focus();
 });
 screen.addEventListener("click", () => { if (!getSelection().toString()) input.focus(); });
+show();
 input.focus();
 </script>
 </body>

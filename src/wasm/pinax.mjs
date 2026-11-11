@@ -22,6 +22,11 @@
 // with more. Tool output (`get_order`, `stack`) is written on stream 1. reset() starts the
 // session again from nothing; clear() empties its stack. The module holds one state: run()
 // ends a session, which starts again from nothing at its next eval().
+//
+// blocks(text) reads a text without running it: { ok, open, depth, closed }, `open` the
+// definitions and blocks still open at its end, the outermost first ("word sq", "loop", "if"),
+// `depth` how many; `closed` is 1 when the text's last token is the `end` of its outermost one, 2
+// when that one was a `do` block. ok is false for text that is not Pinax (a string not closed).
 // MIT (see ../../LICENSE).
 
 const SYNTAX = 0x202, TYPE = 0x203;
@@ -156,5 +161,17 @@ export async function createPinax(bytes, { write = () => {}, blockBytes = 16 << 
         return { eval: evaluate, reset, clear: () => mine === opened && x.pnx_wasm_eval_clear(), stack };
     }
 
-    return { run, session, close: () => x.pnx_wasm_close() };
+    // the definitions and blocks open at the end of a text, the outermost first ("word sq", "loop");
+    // closed: 1 when its last token is the end of its outermost one, 2 when that was a do block
+    function blocks(source) {
+        const text = encoder.encode(source);
+        const at = place(text);
+        const n = at ? x.pnx_wasm_blocks(at, text.length) : -1;
+        if (n < 0)
+            return { ok: false, open: [], closed: 0 };
+        const said = decoder.decode(view(x.pnx_wasm_blocks_text(), x.pnx_wasm_blocks_length()));
+        return { ok: true, open: said.split("\n").filter((s) => s !== ""), depth: n, closed: x.pnx_wasm_blocks_closed() };
+    }
+
+    return { run, session, blocks, close: () => x.pnx_wasm_close() };
 }
