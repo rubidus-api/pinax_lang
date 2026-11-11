@@ -156,6 +156,9 @@ apart` 의 네 번째 크기다. 양보하거나 기다리지 않고 그것을 �
 `{ ok: true }`, 아니면 `{ ok: false, error }` 다. `write(흐름, 글)` 은 `io.print` 와 `io.println` 이 찍는 것을 흐름 1
 로, `io.eprint` 와 적재 오류, 결함의 줄과 지역 변수를 흐름 2 로 받는다. 글의 꼴은 `pnx` 와 같다.
 
+`./nob wasm` 은 `build/dist/pinax-playground.html` 도 쓴다. 모듈과 `pinax.mjs` 를 안에 담은 페이지 하나라서, 서버 없이
+디스크에서 바로 열어 소스를 쓰고 돌려 볼 수 있다. 돌릴 때마다 새 상태에서 시작한다.
+
 이 판의 웹어셈블리 호스트가 등록하는 모듈은 `io` 하나다. `io.read_line` 은 늘 `not_found` 로 실패한다. `file`,
 `clock`, `random`, `env` 와 `extern` 은 없다. 핵의 모듈(`str`, `json`, `csv`, `rex` 따위)과 작업은 그대로 돈다.
 

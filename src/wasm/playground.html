@@ -1,0 +1,58 @@
+<!DOCTYPE html>
+<!-- playground.html - the page ./nob wasm fills in as build/dist/pinax-playground.html: one file
+     that runs Pinax when opened from disk, with pinax.wasm (base64) and pinax.mjs inside it.
+     The two marker lines below are replaced; nothing else is changed. MIT (see ../../LICENSE). -->
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Pinax playground</title>
+<style>
+  body { font-family: system-ui, sans-serif; margin: 2rem; max-width: 60rem; }
+  textarea { width: 100%; height: 18rem; font-family: ui-monospace, monospace; font-size: 14px; }
+  pre { background: #f4f4f4; padding: 1rem; min-height: 6rem; white-space: pre-wrap; }
+  .err { color: #b00020; }
+</style>
+</head>
+<body>
+<h1>Pinax playground</h1>
+<textarea id="src" spellcheck="false">set_order (io, str)
+"pinax" upper println
+word sq (n int gives int) n n mul end
+cat ("7 squared is ", 7 sq) println
+</textarea>
+<p><button id="run">Run (Ctrl+Enter)</button> <span id="status">loading</span></p>
+<pre id="out"></pre>
+<p><small>Each run starts from a fresh state. The host module is <code>io</code> alone; <code>io.read_line</code>
+always fails.</small></p>
+<script id="wasm" type="application/octet-stream">
+@PINAX_WASM_BASE64@
+</script>
+<script type="module">
+// @PINAX_MJS@
+const out = document.getElementById("out");
+const status = document.getElementById("status");
+const bytes = Uint8Array.from(atob(document.getElementById("wasm").textContent.trim()), (c) => c.charCodeAt(0));
+const pinax = await createPinax(bytes, {
+    write: (stream, text) => {
+        const span = document.createElement("span");
+        if (stream === 2)
+            span.className = "err";
+        span.textContent = text;
+        out.appendChild(span);
+    },
+});
+function run() {
+    out.textContent = "";
+    const t = performance.now();
+    const { ok, error } = pinax.run(document.getElementById("src").value, "main");
+    status.textContent = (ok ? "ok" : "failed: " + error) + ` (${(performance.now() - t).toFixed(1)} ms)`;
+}
+document.getElementById("run").onclick = run;
+document.getElementById("src").addEventListener("keydown", (e) => {
+    if (e.key === "Enter" && e.ctrlKey)
+        run();
+});
+status.textContent = "ready";
+</script>
+</body>
+</html>

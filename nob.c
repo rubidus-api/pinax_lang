@@ -28,6 +28,7 @@
 #endif
 
 #include <stdbool.h>
+#include <stdint.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -517,6 +518,84 @@ static int cmd_freestanding(void) {
     return 0;
 }
 
+// The whole file at `path`, 0-terminated, in memory the caller frees; NULL when it cannot be read.
+static char *slurp(const char *path, size_t *length) {
+    FILE *f = fopen(path, "rb");
+    if (!f)
+        return NULL;
+    char  *text = NULL;
+    size_t n = 0, cap = 0;
+    for (size_t got;;) {
+        if (n + 65536 + 1 > cap) {
+            char *bigger = realloc(text, cap = (n + 65536 + 1) * 2);
+            if (!bigger) {
+                free(text);
+                fclose(f);
+                return NULL;
+            }
+            text = bigger;
+        }
+        if ((got = fread(text + n, 1, 65536, f)) == 0)
+            break;
+        n += got;
+    }
+    fclose(f);
+    text[n] = '\0';
+    *length = n;
+    return text;
+}
+
+// build/dist/pinax-playground.html: src/wasm/playground.html with pinax.wasm in base64 at the line
+// @PINAX_WASM_BASE64@ and pinax.mjs, its `export` taken off, at the line // @PINAX_MJS@. One file
+// that runs Pinax opened from disk, with no server (the page cannot fetch beside itself there).
+static int write_playground(void) {
+    size_t page_n, mjs_n, wasm_n;
+    char  *page = slurp("src/wasm/playground.html", &page_n);
+    char  *mjs = slurp("src/wasm/pinax.mjs", &mjs_n);
+    char  *wasm = slurp("build/wasm/pinax.wasm", &wasm_n);
+    FILE  *out = NULL;
+    int    bad = 1;
+    const char *const at_wasm = "@PINAX_WASM_BASE64@\n", *const at_mjs = "// @PINAX_MJS@\n";
+    char *w = page ? strstr(page, at_wasm) : NULL, *m = w ? strstr(w, at_mjs) : NULL;
+    if (!m || !mjs || !wasm || strstr(mjs, "</script") || mkdirs("build/dist") ||
+        !(out = fopen("build/dist/pinax-playground.html", "wb"))) {
+        fprintf(stderr, "nob: cannot write build/dist/pinax-playground.html\n");
+        goto done;
+    }
+    fwrite(page, 1, (size_t)(w - page), out);
+    static const char digits[] = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
+    const unsigned char *b = (const unsigned char *)wasm;
+    for (size_t i = 0; i < wasm_n; i += 3) {
+        const uint32_t v = (uint32_t)b[i] << 16 | (i + 1 < wasm_n ? (uint32_t)b[i + 1] << 8 : 0) |
+                           (i + 2 < wasm_n ? b[i + 2] : 0);
+        fputc(digits[v >> 18 & 63], out);
+        fputc(digits[v >> 12 & 63], out);
+        fputc(i + 1 < wasm_n ? digits[v >> 6 & 63] : '=', out);
+        fputc(i + 2 < wasm_n ? digits[v & 63] : '=', out);
+        if ((i / 3 + 1) % 19 == 0) // lines of 76
+            fputc('\n', out);
+    }
+    fputc('\n', out);
+    const char *after_w = w + strlen(at_wasm);
+    fwrite(after_w, 1, (size_t)(m - after_w), out);
+    for (const char *line = mjs; *line;) { // the module's text, its `export` taken off
+        const char *end = strchr(line, '\n');
+        end = end ? end + 1 : line + strlen(line);
+        if (strncmp(line, "export ", 7) == 0)
+            line += 7;
+        fwrite(line, 1, (size_t)(end - line), out);
+        line = end;
+    }
+    const char *after_m = m + strlen(at_mjs);
+    fwrite(after_m, 1, page_n - (size_t)(after_m - page), out);
+    bad = ferror(out);
+done:
+    if (out && fclose(out))
+        bad = 1;
+    free(page), free(mjs), free(wasm);
+    return bad;
+}
+
 // The freestanding part as a WebAssembly module, with the glue of src/wasm/: no C library, the
 // module io printing through an import, exports that src/wasm/pinax.mjs drives (P3).
 static int cmd_wasm(void) {
@@ -545,7 +624,9 @@ static int cmd_wasm(void) {
              cc, objs);
     if (run(cmd))
         return 1;
-    printf("nob: wrote build/wasm/pinax.wasm and build/wasm/pinax.mjs\n");
+    if (write_playground())
+        return 1;
+    printf("nob: wrote build/wasm/pinax.wasm, build/wasm/pinax.mjs and build/dist/pinax-playground.html\n");
     return 0;
 }
 

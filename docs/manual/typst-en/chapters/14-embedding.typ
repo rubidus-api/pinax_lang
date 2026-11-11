@@ -166,6 +166,9 @@ runs the code outside definitions. It gives `{ ok: true }` on success and `{ ok:
 `write(stream, text)` receives what `io.print` and `io.println` print on stream 1, and `io.eprint`, load errors and a
 fault's line and locals on stream 2, in the same form as `pnx`.
 
+`./nob wasm` also writes `build/dist/pinax-playground.html`, one page with the module and `pinax.mjs` inside it. It
+opens from disk with no server: write a source and run it. Each run starts from a fresh state.
+
 In this edition the WebAssembly host registers one module, `io`; `io.read_line` always fails with `not_found`. There is
 no `file`, `clock`, `random`, `env` or `extern`. The modules of the core (`str`, `json`, `csv`, `rex` and the rest) and
 tasks run as everywhere.
