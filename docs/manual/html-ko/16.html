@@ -40,7 +40,59 @@ cube
 125
 125 "PINAX"
 error: line 1: div_zero
-</code></pre></div><p><code>1 0 div</code> 줄은 결함으로 끝나 스택을 그대로 두었다. 마지막 줄 <code>cube</code> 는 스택 맨 위가 <code>str</code> 이라 거절되었다. 거절의 메시지는 표준 오류로 가므로 위의 출력에는 없다.</p><p>낱말이나 전역을 선언하는 줄은 그것이 더하는 만큼만 프로그램에 덧붙여지므로, 긴 대화에서도 줄 하나의 적재는 그 줄의 길이만큼 걸리고, 선언한 만큼 메모리 블록이 찬다. 값만 계산하는 줄은 블록을 쓰지 않는다. 블록의 4 분의 3 이 차면 <code>pnx</code> 가 표준 오류로 한 번 알린다. 큰 전역을 많이 선언하는 대화는 <code>PNX_BLOCK_KB</code> 로 블록을 키워 시작한다(기본 16384, 곧 16 MiB).</p><p>줄마다 스택에 무엇이 있는지 따라가면 이렇다. 다음 줄은 그 스택에서 시작한다.</p><table><thead><tr><th><strong>토큰</strong></th><th><strong>그 뒤의 스택</strong></th><th><strong>일어난 일</strong></th></tr></thead><tbody><tr><td><code>2 3</code></td><td><code>2 3</code></td><td>값 둘이 스택에 남는다.</td></tr><tr><td><code>add</code></td><td><code>5</code></td><td>다음 줄이 그것을 가져간다.</td></tr><tr><td><code>word cube … end</code></td><td><code>5</code></td><td>정의는 스택을 그대로 둔다.</td></tr><tr><td><code>cube</code></td><td><code>125</code></td><td>앞 줄들의 정의와 값을 쓴다.</td></tr><tr><td><code>"pinax" str.upper</code></td><td><code>125 "PINAX"</code></td><td><code>str</code> 도 255 바이트까지 남는다.</td></tr><tr><td><code>1 0 div</code></td><td><code>125 "PINAX"</code></td><td>결함으로 끝난 줄은 스택을 그대로 둔다.</td></tr><tr><td><code>cube</code></td><td><code>125 "PINAX"</code></td><td>거절된다: 맨 위가 <code>int</code> 가 아니라 <code>str</code> 이다.</td></tr></tbody></table><h3>15.3 스택 보기와 정리</h3><p><code>pnx see</code> 는 정의의 줄마다 그 줄이 끝난 자리의 스택을 보인다. 스택이 머릿속과 다를 때 쓴다.</p><div class="example see"><p class="ex-file"><code>15-see.pnx</code></p><pre><code data-lang="pinax"><span style="color: #d73948">word</span> mean (a <span style="color: #d73948">int</span>, b <span style="color: #d73948">int</span>, c <span style="color: #d73948">int</span> <span style="color: #d73948">gives</span> <span style="color: #d73948">int</span>)
+</code></pre></div><p><code>1 0 div</code> 줄은 결함으로 끝나 스택을 그대로 두었다. 마지막 줄 <code>cube</code> 는 스택 맨 위가 <code>str</code> 이라 거절되었다. 거절의 메시지는 표준 오류로 가므로 위의 출력에는 없다.</p><p>낱말이나 전역을 선언하는 줄은 그것이 더하는 만큼만 프로그램에 덧붙여지므로, 긴 대화에서도 줄 하나의 적재는 그 줄의 길이만큼 걸리고, 선언한 만큼 메모리 블록이 찬다. 값만 계산하는 줄은 블록을 쓰지 않는다. 블록의 4 분의 3 이 차면 <code>pnx</code> 가 표준 오류로 한 번 알린다. 큰 전역을 많이 선언하는 대화는 <code>PNX_BLOCK_KB</code> 로 블록을 키워 시작한다(기본 16384, 곧 16 MiB).</p><p>줄마다 스택에 무엇이 있는지 따라가면 이렇다. 다음 줄은 그 스택에서 시작한다.</p><table><thead><tr><th><strong>토큰</strong></th><th><strong>그 뒤의 스택</strong></th><th><strong>일어난 일</strong></th></tr></thead><tbody><tr><td><code>2 3</code></td><td><code>2 3</code></td><td>값 둘이 스택에 남는다.</td></tr><tr><td><code>add</code></td><td><code>5</code></td><td>다음 줄이 그것을 가져간다.</td></tr><tr><td><code>word cube … end</code></td><td><code>5</code></td><td>정의는 스택을 그대로 둔다.</td></tr><tr><td><code>cube</code></td><td><code>125</code></td><td>앞 줄들의 정의와 값을 쓴다.</td></tr><tr><td><code>"pinax" str.upper</code></td><td><code>125 "PINAX"</code></td><td><code>str</code> 도 255 바이트까지 남는다.</td></tr><tr><td><code>1 0 div</code></td><td><code>125 "PINAX"</code></td><td>결함으로 끝난 줄은 스택을 그대로 둔다.</td></tr><tr><td><code>cube</code></td><td><code>125 "PINAX"</code></td><td>거절된다: 맨 위가 <code>int</code> 가 아니라 <code>str</code> 이다.</td></tr></tbody></table><p>낱말은 언제든 다시 정의할 수 있다. 그 이름으로 <code>word</code> 를 한 번 더 쓰면 된다. 서명이 같으면 그 낱말을 부르는 모든 낱말이 새것을 부르므로, 고친 것이 모든 호출자에 닿는다. 서명이 다르면 새 낱말이 이름을 가져가고, 그 전에 컴파일된 낱말들은 Forth 처럼 옛 몸을 계속 부른다. <code>pnx repl</code> 이 어느 낱말들인지 알린다.</p><div class="example repl"><p class="ex-file"><code>15-redefine.pnx</code></p><pre><code data-lang="pinax"><span style="color: #d73948">word</span> sq (n <span style="color: #d73948">int</span> <span style="color: #d73948">gives</span> <span style="color: #d73948">int</span>) n n mul <span style="color: #d73948">end</span>
+<span style="color: #d73948">word</span> quad (n <span style="color: #d73948">int</span> <span style="color: #d73948">gives</span> <span style="color: #d73948">int</span>) n sq sq <span style="color: #d73948">end</span>
+<span style="color: #b60157">3</span> quad
+<span style="color: #d73948">word</span> sq (n <span style="color: #d73948">int</span> <span style="color: #d73948">gives</span> <span style="color: #d73948">int</span>) n n add <span style="color: #d73948">end</span>
+clear <span style="color: #b60157">3</span> quad
+<span style="color: #d73948">word</span> sq (a <span style="color: #d73948">int</span>, b <span style="color: #d73948">int</span> <span style="color: #d73948">gives</span> <span style="color: #d73948">int</span>) a b mul <span style="color: #d73948">end</span>
+clear <span style="color: #b60157">3</span> quad
+<span style="color: #b60157">4</span> sq
+</code></pre><p class="ex-label">대화</p><pre><code data-lang="text">$ pnx repl
+81
+81
+12
+1 word still calls the old sq: quad
+12
+12
+48
+</code></pre></div><p>첫 번째 재정의 뒤에 <code>quad</code> 는 두 번 두 배를 한다(12). 두 번째 뒤에 <code>sq</code> 는 두 값을 곱하고, <code>quad</code> 는 여전히 옛 <code>sq</code> 를 돈다. 파일의 낱말은 파일에서 고치고 다시 적재한다.</p><p>문장은 쉼표나 점으로 끝낼 수 있다. 쉼표는 아무것도 기다리지 않는다. 점은 장벽이다: 앞의 문장들이 시작한 일이 거기서 끝나므로, 버퍼에 붙들린 출력도 그때 나간다. 둘 다 꼭 써야 하는 것은 아니다. 프롬프트에서 줄의 끝과 프로그램 코드의 끝은 이미 점이다.</p><div class="example run"><p class="ex-file"><code>15-dot.pnx</code></p><pre><code data-lang="pinax"><span style="color: #d73948">use</span> io
+<span style="color: #d73948">word</span> countdown (n <span style="color: #d73948">int</span>)
+  <span style="color: #b60157">0</span> n range <span style="color: #d73948">do</span> (i <span style="color: #d73948">int</span>) <span style="color: #d73948">cat</span> (n i sub, <span style="color: #198810">" "</span>) io.print , <span style="color: #d73948">end</span> each
+  <span style="color: #198810">"go"</span> io.println .
+<span style="color: #d73948">end</span>
+<span style="color: #b60157">3</span> countdown
+</code></pre><p class="ex-label">출력</p><pre><code data-lang="text">$ pnx 15-dot.pnx
+3 2 1 go
+</code></pre></div><p>bash 로 치면 쉼표는 <code>&amp;</code>, 점은 <code>wait</code> 와 비슷하다. 앞의 것이 보이거나 일어난 뒤에 넘어가야 하는 자리에 점을 쓴다: 오래 걸리는 계산 앞, 진행을 알리는 줄 뒤.</p><p><code>pnx see --effects</code> 는 아무것도 돌리지 않고, 파일의 낱말마다 제 스택과 지역 변수 밖에서 할 수 있는 일을 알려 준다: 읽고 쓰는 전역, 닿는 호스트 모듈, 양보하거나 실패할 수 있는지. <code>none</code> 인 낱말은 같은 입력에 같은 결과를 주고 다른 것에 닿지 않는다.</p><div class="example see-effects"><p class="ex-file"><code>15-effects.pnx</code></p><pre><code data-lang="pinax"><span style="color: #d73948">use</span> io
+<span style="color: #d73948">use</span> <span style="color: #d73948">file</span>
+<span style="color: #d73948">global</span> hits <span style="color: #d73948">int</span>
+<span style="color: #d73948">word</span> double (n <span style="color: #d73948">int</span> <span style="color: #d73948">gives</span> <span style="color: #d73948">int</span>) n <span style="color: #b60157">2</span> mul <span style="color: #d73948">end</span>
+<span style="color: #d73948">word</span> tally (n <span style="color: #d73948">int</span>) hits n add set hits <span style="color: #d73948">end</span>
+<span style="color: #d73948">word</span> save (path <span style="color: #d73948">str</span> <span style="color: #d73948">or</span> <span style="color: #d73948">fail</span>)
+  path <span style="color: #d73948">file</span>.open_write <span style="color: #d73948">or_fail</span> <span style="color: #d73948">to</span> f
+  defer f <span style="color: #d73948">file</span>.close <span style="color: #d73948">end</span>
+  <span style="color: #d73948">cat</span> (<span style="color: #198810">"hits "</span>, hits) f <span style="color: #d73948">file</span>.write <span style="color: #d73948">or_fail</span>
+<span style="color: #d73948">end</span>
+<span style="color: #d73948">word</span> say () <span style="color: #d73948">cat</span> (<span style="color: #198810">"hits "</span>, hits double) io.println <span style="color: #d73948">end</span>
+</code></pre><p class="ex-label">낱말마다 효과</p><pre><code data-lang="text">$ pnx see --effects 15-effects.pnx
+double: none
+tally: reads hits; writes hits
+save: reads hits; file reads and writes; may fail
+say: reads hits; io writes
+</code></pre></div><h3>15.3 셸 스크립트</h3><p>모듈 <code>sh</code> 는 시스템 셸로 명령을 돌리고, 찾는 순서를 쓰면 그 낱말과 <code>io</code> 의 낱말을 맨 이름으로 쓸 수 있다. <code>#!/usr/bin/env pnx</code> 로 시작하는 파일은 명령처럼 돈다.</p><div class="example run"><p class="ex-file"><code>15-shell.pnx</code></p><pre><code data-lang="pinax">search (io, sh)
+<span style="color: #d73948">word</span> main (<span style="color: #d73948">or</span> <span style="color: #d73948">fail</span>)
+  <span style="color: #198810">"echo first"</span> run <span style="color: #d73948">or_fail</span> drop
+  <span style="color: #d73948">cat</span> (<span style="color: #198810">"the shell says: "</span>, <span style="color: #198810">"echo hello"</span> output <span style="color: #d73948">or_fail</span>) print
+  <span style="color: #198810">"exit 2"</span> run <span style="color: #d73948">or_fail</span> <span style="color: #d73948">to</span> s
+  <span style="color: #d73948">cat</span> (<span style="color: #198810">"exit 2 gave status "</span>, s) println
+<span style="color: #d73948">end</span>
+main <span style="color: #d73948">or_else</span> (e) <span style="color: #d73948">cat</span> (<span style="color: #198810">"failed: "</span>, e err_text) println <span style="color: #d73948">end</span>
+</code></pre><p class="ex-label">출력</p><pre><code data-lang="text">$ pnx 15-shell.pnx
+first
+the shell says: hello
+exit 2 gave status 2
+</code></pre></div><p>명령의 상태는 실패가 아니라 값이다: <code>"exit 2" run</code> 은 2 를 준다. 셸을 띄우지 못할 때만 실패한다. 자료를 명령에 넣을 때는 먼저 따옴표로 싼다: <code>cat ("ls ", name sh.quote) run</code>. <code>sh.open_read</code> 와 <code>sh.open_write</code> 는 관을 <code>file</code> 로 주고, <code>file</code> 의 낱말로 읽고 쓴다. 닫으면 명령이 끝나기를 기다리고, 그때 <code>sh.status</code> 가 어떻게 끝났는지 알려 준다. <code>sh.exit</code> 는 프로그램을 제 상태로 끝낸다. Pinax 를 넣어 쓰는 호스트는 <code>sh</code> 를 등록할 때만 그것을 가진다(표준 17.5).</p><h3>15.4 스택 보기와 정리</h3><p><code>pnx see</code> 는 정의의 줄마다 그 줄이 끝난 자리의 스택을 보인다. 스택이 머릿속과 다를 때 쓴다.</p><div class="example see"><p class="ex-file"><code>15-see.pnx</code></p><pre><code data-lang="pinax"><span style="color: #d73948">word</span> mean (a <span style="color: #d73948">int</span>, b <span style="color: #d73948">int</span>, c <span style="color: #d73948">int</span> <span style="color: #d73948">gives</span> <span style="color: #d73948">int</span>)
   a b add
   c add
   <span style="color: #b60157">3</span> div

@@ -48,7 +48,13 @@ hits after reset 0
 <span style="color: #b60157">12</span> money.of_won <span style="color: #b60157">3</span> add drop
 </code></pre><p class="ex-label">Refused</p><pre><code data-lang="text">$ pnx 10-mixed.pnx
 10-mixed.pnx:2:19: a declared type is added to and subtracted from its own type, and multiplied, divided or taken modulo by an int; for other arithmetic take raw
-</code></pre></div></div><h3>10.3 Data files</h3><p>A host can read a source by <strong>data load</strong>. A data load accepts declarations and values only, and refuses word definitions, calls and control. So reading an untrusted settings file cannot run any code.</p><div class="example embed"><p class="ex-file"><code>10-data.c</code></p><pre><code data-lang="c"><span style="color: #d73948">#include</span> <span style="color: #198810">"</span><span style="color: #198810">pinax.h</span><span style="color: #198810">"</span>
+</code></pre></div></div><h3>10.3 Bare names from modules</h3><p>A script that calls the same modules all the time, a shell script above all, can name them in a search order. Then their words are written bare.</p><div class="example run"><p class="ex-file"><code>10-search.pnx</code></p><pre><code data-lang="pinax">search (io, <span style="color: #d73948">str</span>)
+<span style="color: #198810">"pinax"</span> upper println
+<span style="color: #198810">"a,b,c"</span> <span style="color: #198810">","</span> <span style="color: #198810">"+"</span> replace println
+</code></pre><p class="ex-label">Output</p><pre><code data-lang="text">$ pnx 10-search.pnx
+PINAX
+a+b+c
+</code></pre></div><p>The order is only a last resort. A bare name is first a local, then a name of the source, then a core word; only then are the modules of the order asked, left to right. So <code>len</code> stays the core word even with <code>str</code> in the order, and the <code>str</code> word is written <code>str.len</code>. <code>search ()</code> empties the order again. A path works with or without it.</p><h3>10.4 Data files</h3><p>A host can read a source by <strong>data load</strong>. A data load accepts declarations and values only, and refuses word definitions, calls and control. So reading an untrusted settings file cannot run any code.</p><div class="example embed"><p class="ex-file"><code>10-data.c</code></p><pre><code data-lang="c"><span style="color: #d73948">#include</span> <span style="color: #198810">"</span><span style="color: #198810">pinax.h</span><span style="color: #198810">"</span>
 <span style="color: #d73948">#include</span> <span style="color: #198810">&lt;</span><span style="color: #198810">stdio.h</span><span style="color: #198810">&gt;</span>
 <span style="color: #d73948">#include</span> <span style="color: #198810">&lt;</span><span style="color: #198810">string.h</span><span style="color: #198810">&gt;</span>
 
@@ -81,7 +87,7 @@ hits after reset 0
 </code></pre><p class="ex-label">Output</p><pre><code data-lang="text">$ ./10-data
 port: 8080
 refused: a data source defines no words and uses no modules
-</code></pre></div><p><code>pnx</code> does not do data loads; they are the host’s business (chapter 14).</p><h3>10.4 Modules the host lends</h3><p><code>io</code> <code>file</code> <code>clock</code> <code>random</code> <code>env</code> are not standard modules but <strong>host modules</strong>: they are not part of the language, and exist only when the host registers them (chapter 14). <code>pnx</code> registers all five. So the host decides the ways to files, the clock and the environment — a script that is not trusted is given no <code>file</code>.</p><div class="example run"><p class="ex-file"><code>10-host-modules.pnx</code></p><pre><code data-lang="pinax"><span style="color: #74747c">rem run: args alpha beta</span>
+</code></pre></div><p><code>pnx</code> does not do data loads; they are the host’s business (chapter 14).</p><h3>10.5 Modules the host lends</h3><p><code>io</code> <code>file</code> <code>clock</code> <code>random</code> <code>env</code> are not standard modules but <strong>host modules</strong>: they are not part of the language, and exist only when the host registers them (chapter 14). <code>pnx</code> registers all five. So the host decides the ways to files, the clock and the environment — a script that is not trusted is given no <code>file</code>.</p><div class="example run"><p class="ex-file"><code>10-host-modules.pnx</code></p><pre><code data-lang="pinax"><span style="color: #74747c">rem run: args alpha beta</span>
 <span style="color: #d73948">use</span> io
 <span style="color: #d73948">use</span> <span style="color: #d73948">str</span>
 <span style="color: #d73948">use</span> env

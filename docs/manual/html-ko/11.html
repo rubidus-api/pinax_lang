@@ -48,7 +48,13 @@ hits after reset 0
 <span style="color: #b60157">12</span> money.of_won <span style="color: #b60157">3</span> add drop
 </code></pre><p class="ex-label">거절</p><pre><code data-lang="text">$ pnx 10-mixed.pnx
 10-mixed.pnx:2:19: a declared type is added to and subtracted from its own type, and multiplied, divided or taken modulo by an int; for other arithmetic take raw
-</code></pre></div></div><h3>10.3 자료 파일</h3><p>호스트는 소스를 <strong>자료 적재</strong>로 읽을 수 있다. 자료 적재는 선언과 값만 받고, 낱말 정의와 부르기, 제어를 모두 거절한다. 그래서 믿지 못하는 설정 파일을 읽어도 그 파일이 코드를 돌릴 수 없다.</p><div class="example embed"><p class="ex-file"><code>10-data.c</code></p><pre><code data-lang="c"><span style="color: #d73948">#include</span> <span style="color: #198810">"</span><span style="color: #198810">pinax.h</span><span style="color: #198810">"</span>
+</code></pre></div></div><h3>10.3 모듈의 맨 이름</h3><p>같은 모듈을 줄곧 부르는 스크립트, 무엇보다 셸 스크립트는 찾는 순서에 그 모듈들을 이름 붙일 수 있다. 그러면 그 모듈의 낱말을 맨 이름으로 쓴다.</p><div class="example run"><p class="ex-file"><code>10-search.pnx</code></p><pre><code data-lang="pinax">search (io, <span style="color: #d73948">str</span>)
+<span style="color: #198810">"pinax"</span> upper println
+<span style="color: #198810">"a,b,c"</span> <span style="color: #198810">","</span> <span style="color: #198810">"+"</span> replace println
+</code></pre><p class="ex-label">출력</p><pre><code data-lang="text">$ pnx 10-search.pnx
+PINAX
+a+b+c
+</code></pre></div><p>순서는 마지막에 쓰인다. 맨 이름은 먼저 지역 변수, 다음은 소스의 이름, 다음은 핵 낱말이다. 그다음에야 순서의 모듈을 왼쪽부터 찾는다. 그래서 <code>str</code> 이 순서에 있어도 <code>len</code> 은 핵 낱말이고, <code>str</code> 의 낱말은 <code>str.len</code> 으로 쓴다. <code>search ()</code> 는 순서를 다시 비운다. 경로는 순서가 있든 없든 쓸 수 있다.</p><h3>10.4 자료 파일</h3><p>호스트는 소스를 <strong>자료 적재</strong>로 읽을 수 있다. 자료 적재는 선언과 값만 받고, 낱말 정의와 부르기, 제어를 모두 거절한다. 그래서 믿지 못하는 설정 파일을 읽어도 그 파일이 코드를 돌릴 수 없다.</p><div class="example embed"><p class="ex-file"><code>10-data.c</code></p><pre><code data-lang="c"><span style="color: #d73948">#include</span> <span style="color: #198810">"</span><span style="color: #198810">pinax.h</span><span style="color: #198810">"</span>
 <span style="color: #d73948">#include</span> <span style="color: #198810">&lt;</span><span style="color: #198810">stdio.h</span><span style="color: #198810">&gt;</span>
 <span style="color: #d73948">#include</span> <span style="color: #198810">&lt;</span><span style="color: #198810">string.h</span><span style="color: #198810">&gt;</span>
 
@@ -81,7 +87,7 @@ hits after reset 0
 </code></pre><p class="ex-label">출력</p><pre><code data-lang="text">$ ./10-data
 port: 8080
 refused: a data source defines no words and uses no modules
-</code></pre></div><p><code>pnx</code> 는 자료 적재를 하지 않는다. 자료 적재는 호스트의 일이다(14장).</p><h3>10.4 호스트가 빌려주는 모듈</h3><p><code>io</code> <code>file</code> <code>clock</code> <code>random</code> <code>env</code> 는 표준 모듈이 아니라 <strong>호스트 모듈</strong>이다: 언어에 들어 있지 않고, 호스트가 등록할 때만 있다(14장). <code>pnx</code> 는 다섯을 모두 등록한다. 그래서 파일과 시계와 환경에 닿는 길은 호스트가 정한다 — 믿지 못하는 스크립트에는 <code>file</code> 을 주지 않으면 된다.</p><div class="example run"><p class="ex-file"><code>10-host-modules.pnx</code></p><pre><code data-lang="pinax"><span style="color: #74747c">rem run: args alpha beta</span>
+</code></pre></div><p><code>pnx</code> 는 자료 적재를 하지 않는다. 자료 적재는 호스트의 일이다(14장).</p><h3>10.5 호스트가 빌려주는 모듈</h3><p><code>io</code> <code>file</code> <code>clock</code> <code>random</code> <code>env</code> 는 표준 모듈이 아니라 <strong>호스트 모듈</strong>이다: 언어에 들어 있지 않고, 호스트가 등록할 때만 있다(14장). <code>pnx</code> 는 다섯을 모두 등록한다. 그래서 파일과 시계와 환경에 닿는 길은 호스트가 정한다 — 믿지 못하는 스크립트에는 <code>file</code> 을 주지 않으면 된다.</p><div class="example run"><p class="ex-file"><code>10-host-modules.pnx</code></p><pre><code data-lang="pinax"><span style="color: #74747c">rem run: args alpha beta</span>
 <span style="color: #d73948">use</span> io
 <span style="color: #d73948">use</span> <span style="color: #d73948">str</span>
 <span style="color: #d73948">use</span> env
