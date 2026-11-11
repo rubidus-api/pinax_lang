@@ -26,21 +26,35 @@
 const DECLARATIONS = new Set(["word", "const", "global", "array", "list", "pool", "queue", "buffer", "tasks",
     "record", "type", "extern", "forward", "index", "bound", "shared", "test", "use", "set_order"]);
 const PROMPT = "pinax> ", MORE = "  ...> ";
-const HELP = `Pinax code runs when it is whole: it ends with "," or ".", or with the end of its block.
-A loop or a block runs once, when its end is typed. A statement that declares something
-(word, const, global, use, set_order, ...) is added to the program.
-  :list [N[-M]]     the program with its line numbers
-  :edit N           line N into the prompt; Enter puts it back and runs the program again
-  :edit             the whole program in an editor (F2; Ctrl+S saves and runs it, Esc leaves)
-  :insert N         new lines above line N (0: at the end); an empty line ends, and the program runs
-  :delete N[-M]     removes lines N to M (:del)
-  :run              RESETS: empties the stack and forgets every definition, then runs the program
-                    from line 1 (F5). The program's lines stay.
-  :new              no program, and a fresh state
-  :clear            empties the stack only
-  :save, :load      the program as a .pnx file
-Keys: Up and Down walk the history, Esc drops the lines gathered, Ctrl+L clears the screen,
-Shift+Enter starts a new line without entering.`;
+// what :help says and the page's guide shows: one list for both
+export const GUIDE = {
+    rules: [
+        'Pinax code runs when it is whole: it ends with "," or ".", or with the end of its block.',
+        "A loop or a block runs once, when its end is typed; the status line shows the blocks open.",
+        "A statement that declares something (word, const, global, use, set_order, ...) is added to the program.",
+    ],
+    commands: [
+        [":list [N[-M]]", "the program with its line numbers"],
+        [":edit N", "line N into the prompt; Enter puts it back and runs the program again"],
+        [":edit", "the whole program in an editor (F2; Ctrl+S saves and runs it, Esc leaves)"],
+        [":insert N", "new lines above line N (0: at the end); an empty line ends, and the program runs (:ins)"],
+        [":delete N[-M]", "removes lines N to M (:del)"],
+        [":run", "RESETS: empties the stack and forgets every definition, then runs the program from line 1 (F5); the program's lines stay"],
+        [":new", "no program, and a fresh state"],
+        [":clear", "empties the stack only"],
+        [":save, :load", "the program as a .pnx file"],
+        [":help", "this list"],
+    ],
+    keys: [
+        ["Enter", "enters the line"], ["Shift+Enter", "a new line without entering"],
+        ["Up, Down", "walk the history"], ["Esc", "drops the lines gathered, or ends :edit N and :insert N"],
+        ["F5", ":run"], ["F2", ":edit"], ["F1", "shows or hides this guide"], ["Ctrl+L", "clears the screen"],
+    ],
+};
+const width = Math.max(...GUIDE.commands.map(([c]) => c.length)) + 2;
+const HELP = [...GUIDE.rules,
+    ...GUIDE.commands.map(([c, what]) => `  ${c.padEnd(width)}${what}`),
+    "Keys:", ...GUIDE.keys.map(([k, what]) => `  ${k.padEnd(width)}${what}`)].join("\n");
 
 // the declaration a text begins with, as "word sq", "use io"; "" for set_order; null for none
 function declared(text) {

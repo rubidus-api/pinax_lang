@@ -181,7 +181,8 @@ GW-BASIC keeps one, and a name declared again takes the place of its lines. `:li
 numbers. `:edit N` puts line N in the prompt, `:insert N` adds lines above line N (0: at the end) until an empty line,
 `:delete N` (`:del`, also `N-M`) removes lines, and `:edit` (F2) opens the whole program in an editor; after each the
 program runs again. `:run` (F5) is a reset: it empties the stack, forgets every definition and runs the program from
-line 1, the lines left as they are. `:help` tells the rest; the page links to this manual.
+line 1, the lines left as they are. `:help`, and the guide beside the terminal (F1), list the commands and keys; the page links to this manual. Each release
+carries the page as `pinax-playground.html`.
 
 In this edition the WebAssembly host registers one module, `io`; `io.read_line` always fails with `not_found`. There is
 no `file`, `clock`, `random`, `env` or `extern`. The modules of the core (`str`, `json`, `csv`, `rex` and the rest) and
