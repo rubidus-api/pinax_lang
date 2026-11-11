@@ -156,8 +156,14 @@ apart` 의 네 번째 크기다. 양보하거나 기다리지 않고 그것을 �
 `{ ok: true }`, 아니면 `{ ok: false, error }` 다. `write(흐름, 글)` 은 `io.print` 와 `io.println` 이 찍는 것을 흐름 1
 로, `io.eprint` 와 적재 오류, 결함의 줄과 지역 변수를 흐름 2 로 받는다. 글의 꼴은 `pnx` 와 같다.
 
-`./nob wasm` 은 `build/dist/pinax-playground.html` 도 쓴다. 모듈과 `pinax.mjs` 를 안에 담은 페이지 하나라서, 서버 없이
-디스크에서 바로 열어 소스를 쓰고 돌려 볼 수 있다. 돌릴 때마다 새 상태에서 시작한다.
+`pinax.mjs` 의 `session()` 은 `pnx repl` 과 같은 세션을 준다. 그 `eval(글)` 은 글을 세션의 한 줄로 돌리고
+`{ ok, error, unfinished, stack }` 을 돌려준다. `stack` 은 남은 값들이다. 정의나 블록 안에서 끝난 글은 `unfinished` 이고
+아무것도 바꾸지 않는다: 더 붙여 다시 준다. `reset()` 은 세션을 처음부터 다시 시작하고, `clear()` 는 스택을 비운다.
+
+`./nob wasm` 은 `build/dist/pinax-playground.html` 도 쓴다. 모듈을 안에 담은 페이지 하나라서 서버 없이 디스크에서 바로
+연다. 페이지는 터미널이다. 코드는 `,` 나 `.` 로 끝날 때 돌고, 스택은 문장마다 보인다. 무엇을 선언하는 문장(`word`,
+`const`, `use`, `set_order` 따위)은 GW-BASIC 의 프로그램처럼 항목으로 남는다. `:list` 는 항목을 보이고, `:edit N` 과
+`:edit`(F2)는 고치고, `:run`(F5)은 코드를 그대로 두고 새 상태에서 프로그램을 처음부터 돌린다. `:help` 가 나머지를 알린다.
 
 이 판의 웹어셈블리 호스트가 등록하는 모듈은 `io` 하나다. `io.read_line` 은 늘 `not_found` 로 실패한다. `file`,
 `clock`, `random`, `env` 와 `extern` 은 없다. 핵의 모듈(`str`, `json`, `csv`, `rex` 따위)과 작업은 그대로 돈다.

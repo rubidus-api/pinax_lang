@@ -219,15 +219,47 @@ WASM_EXPORT("pnx_wasm_error_length") size_t pnx_wasm_error_length(void) {
     return state ? pinax_error_text(state).len : 0;
 }
 
-// After a load that ended with a fault: local `index` of the word it happened in, as 32-bit words
+// After a load or a line that ended with a fault: local `index` of the word it happened in, as 32-bit words
 // at the returned place: kind, the integer (low, high), then place and length of the name, the
 // type and the str bytes or the error's name. 0 past the last (pinax_fault_local).
+static const uint32_t *packed(pinax_str name, const pinax_value *value);
+
 WASM_EXPORT("pnx_wasm_fault_local") const uint32_t *pnx_wasm_fault_local(uint32_t index) {
-    static uint32_t out[9];
     pinax_str   name;
     pinax_value v;
     if (!state || pinax_fault_local(state, index, &name, &v) != PINAX_OK)
         return NULL;
+    return packed(name, &v);
+}
+
+// A session (pinax_eval): the text the page wrote at pnx_wasm_text() runs as one line of it.
+// Returns a pinax_err; PINAX_ERR_SYNTAX with an error text that begins "unfinished:" when the
+// text ends inside a definition or a block.
+WASM_EXPORT("pnx_wasm_eval") int32_t pnx_wasm_eval(const unsigned char *text, size_t length) {
+    if (!state)
+        return PINAX_ERR_STATE;
+    return pinax_eval(state, (pinax_str){text, length});
+}
+
+// The session stack: pnx_wasm_eval_count() values, the deepest at index 0, each in the form of
+// pnx_wasm_fault_local (no name).
+WASM_EXPORT("pnx_wasm_eval_count") uint32_t pnx_wasm_eval_count(void) {
+    return state ? pinax_eval_count(state) : 0;
+}
+WASM_EXPORT("pnx_wasm_eval_value") const uint32_t *pnx_wasm_eval_value(uint32_t index) {
+    pinax_value v;
+    if (!state || pinax_eval_value(state, index, &v) != PINAX_OK)
+        return NULL;
+    return packed((pinax_str){NULL, 0}, &v);
+}
+WASM_EXPORT("pnx_wasm_eval_clear") void pnx_wasm_eval_clear(void) {
+    if (state)
+        pinax_eval_clear(state);
+}
+
+static const uint32_t *packed(pinax_str name, const pinax_value *value) {
+    static uint32_t out[9];
+    const pinax_value v = *value;
     const uint64_t i = (uint64_t)v.i;
     out[0] = v.kind;
     out[1] = (uint32_t)i;

@@ -545,40 +545,10 @@ static char *slurp(const char *path, size_t *length) {
     return text;
 }
 
-// build/dist/pinax-playground.html: src/wasm/playground.html with pinax.wasm in base64 at the line
-// @PINAX_WASM_BASE64@ and pinax.mjs, its `export` taken off, at the line // @PINAX_MJS@. One file
-// that runs Pinax opened from disk, with no server (the page cannot fetch beside itself there).
-static int write_playground(void) {
-    size_t page_n, mjs_n, wasm_n;
-    char  *page = slurp("src/wasm/playground.html", &page_n);
-    char  *mjs = slurp("src/wasm/pinax.mjs", &mjs_n);
-    char  *wasm = slurp("build/wasm/pinax.wasm", &wasm_n);
-    FILE  *out = NULL;
-    int    bad = 1;
-    const char *const at_wasm = "@PINAX_WASM_BASE64@\n", *const at_mjs = "// @PINAX_MJS@\n";
-    char *w = page ? strstr(page, at_wasm) : NULL, *m = w ? strstr(w, at_mjs) : NULL;
-    if (!m || !mjs || !wasm || strstr(mjs, "</script") || mkdirs("build/dist") ||
-        !(out = fopen("build/dist/pinax-playground.html", "wb"))) {
-        fprintf(stderr, "nob: cannot write build/dist/pinax-playground.html\n");
-        goto done;
-    }
-    fwrite(page, 1, (size_t)(w - page), out);
-    static const char digits[] = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
-    const unsigned char *b = (const unsigned char *)wasm;
-    for (size_t i = 0; i < wasm_n; i += 3) {
-        const uint32_t v = (uint32_t)b[i] << 16 | (i + 1 < wasm_n ? (uint32_t)b[i + 1] << 8 : 0) |
-                           (i + 2 < wasm_n ? b[i + 2] : 0);
-        fputc(digits[v >> 18 & 63], out);
-        fputc(digits[v >> 12 & 63], out);
-        fputc(i + 1 < wasm_n ? digits[v >> 6 & 63] : '=', out);
-        fputc(i + 2 < wasm_n ? digits[v & 63] : '=', out);
-        if ((i / 3 + 1) % 19 == 0) // lines of 76
-            fputc('\n', out);
-    }
-    fputc('\n', out);
-    const char *after_w = w + strlen(at_wasm);
-    fwrite(after_w, 1, (size_t)(m - after_w), out);
-    for (const char *line = mjs; *line;) { // the module's text, its `export` taken off
+// A JavaScript module's text with each line's leading `export ` taken off, so that it can stand
+// inside a page's script (the page and the module become one script).
+static void put_module(FILE *out, const char *text) {
+    for (const char *line = text; *line;) {
         const char *end = strchr(line, '\n');
         end = end ? end + 1 : line + strlen(line);
         if (strncmp(line, "export ", 7) == 0)
@@ -586,13 +556,59 @@ static int write_playground(void) {
         fwrite(line, 1, (size_t)(end - line), out);
         line = end;
     }
-    const char *after_m = m + strlen(at_mjs);
-    fwrite(after_m, 1, page_n - (size_t)(after_m - page), out);
+}
+
+// build/dist/pinax-playground.html: src/wasm/playground.html with, at its marker lines, pinax.wasm
+// in base64 (@PINAX_WASM_BASE64@), pinax.mjs (// @PINAX_MJS@) and console.mjs (// @PINAX_CONSOLE@),
+// in that order. One file that runs Pinax opened from disk, with no server (the page cannot fetch
+// beside itself there).
+static int write_playground(void) {
+    size_t page_n, mjs_n, con_n, wasm_n;
+    char  *page = slurp("src/wasm/playground.html", &page_n);
+    char  *mjs = slurp("src/wasm/pinax.mjs", &mjs_n);
+    char  *con = slurp("src/wasm/console.mjs", &con_n);
+    char  *wasm = slurp("build/wasm/pinax.wasm", &wasm_n);
+    FILE  *out = NULL;
+    int    bad = 1;
+    static const char *const marks[] = {"@PINAX_WASM_BASE64@\n", "// @PINAX_MJS@\n", "// @PINAX_CONSOLE@\n"};
+    char *at[3] = {NULL, NULL, NULL};
+    for (int k = 0; k < 3 && page; ++k)
+        at[k] = strstr(k ? at[k - 1] : page, marks[k]);
+    if (!at[2] || !mjs || !con || !wasm || strstr(mjs, "</script") || strstr(con, "</script") ||
+        mkdirs("build/dist") || !(out = fopen("build/dist/pinax-playground.html", "wb"))) {
+        fprintf(stderr, "nob: cannot write build/dist/pinax-playground.html\n");
+        goto done;
+    }
+    const char *from = page;
+    for (int k = 0; k < 3; ++k) {
+        fwrite(from, 1, (size_t)(at[k] - from), out);
+        from = at[k] + strlen(marks[k]);
+        if (k == 1)
+            put_module(out, mjs);
+        else if (k == 2)
+            put_module(out, con);
+        else {
+            static const char digits[] = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
+            const unsigned char *b = (const unsigned char *)wasm;
+            for (size_t i = 0; i < wasm_n; i += 3) {
+                const uint32_t v = (uint32_t)b[i] << 16 | (i + 1 < wasm_n ? (uint32_t)b[i + 1] << 8 : 0) |
+                                   (i + 2 < wasm_n ? b[i + 2] : 0);
+                fputc(digits[v >> 18 & 63], out);
+                fputc(digits[v >> 12 & 63], out);
+                fputc(i + 1 < wasm_n ? digits[v >> 6 & 63] : '=', out);
+                fputc(i + 2 < wasm_n ? digits[v & 63] : '=', out);
+                if ((i / 3 + 1) % 19 == 0) // lines of 76
+                    fputc('\n', out);
+            }
+            fputc('\n', out);
+        }
+    }
+    fwrite(from, 1, page_n - (size_t)(from - page), out);
     bad = ferror(out);
 done:
     if (out && fclose(out))
         bad = 1;
-    free(page), free(mjs), free(wasm);
+    free(page), free(mjs), free(con), free(wasm);
     return bad;
 }
 

@@ -1,58 +1,167 @@
 <!DOCTYPE html>
 <!-- playground.html - the page ./nob wasm fills in as build/dist/pinax-playground.html: one file
-     that runs Pinax when opened from disk, with pinax.wasm (base64) and pinax.mjs inside it.
-     The two marker lines below are replaced; nothing else is changed. MIT (see ../../LICENSE). -->
+     that runs Pinax when opened from disk, with pinax.wasm (base64), pinax.mjs and console.mjs
+     inside it. The three marker lines below are replaced; nothing else is changed. The terminal's
+     logic is console.mjs; this page draws it and gives it keys. MIT (see ../../LICENSE). -->
 <html lang="en">
 <head>
 <meta charset="utf-8">
-<title>Pinax playground</title>
+<title>Pinax</title>
 <style>
-  body { font-family: system-ui, sans-serif; margin: 2rem; max-width: 60rem; }
-  textarea { width: 100%; height: 18rem; font-family: ui-monospace, monospace; font-size: 14px; }
-  pre { background: #f4f4f4; padding: 1rem; min-height: 6rem; white-space: pre-wrap; }
-  .err { color: #b00020; }
+  html, body { height: 100%; margin: 0; background: #101418; color: #d8dee4; }
+  body { font: 15px/1.45 ui-monospace, "Cascadia Mono", Menlo, Consolas, monospace; }
+  #screen { height: 100%; overflow-y: auto; padding: 12px 16px; box-sizing: border-box; }
+  #log { white-space: pre-wrap; word-break: break-word; }
+  .echo { color: #9fb3c8; } .out { color: #e6edf3; } .err { color: #ff7b72; }
+  .stack { color: #7ee787; } .info { color: #d2a8ff; }
+  #line { display: flex; align-items: flex-start; }
+  #prompt { white-space: pre; color: #9fb3c8; }
+  #input { flex: 1; background: transparent; color: #e6edf3; border: 0; outline: 0; resize: none; padding: 0;
+           font: inherit; line-height: inherit; overflow: hidden; height: 1.45em; caret-color: #7ee787; }
+  #editor { position: fixed; inset: 0; display: none; flex-direction: column; background: #0b0f13; }
+  #editor.open { display: flex; }
+  #editor header { padding: 6px 16px; color: #d2a8ff; border-bottom: 1px solid #30363d; }
+  #code { flex: 1; background: #0b0f13; color: #e6edf3; border: 0; outline: 0; resize: none; padding: 12px 16px;
+          font: inherit; line-height: inherit; tab-size: 4; }
 </style>
 </head>
 <body>
-<h1>Pinax playground</h1>
-<textarea id="src" spellcheck="false">set_order (io, str)
-"pinax" upper println
-word sq (n int gives int) n n mul end
-cat ("7 squared is ", 7 sq) println
-</textarea>
-<p><button id="run">Run (Ctrl+Enter)</button> <span id="status">loading</span></p>
-<pre id="out"></pre>
-<p><small>Each run starts from a fresh state. The host module is <code>io</code> alone; <code>io.read_line</code>
-always fails.</small></p>
+<div id="screen">
+<div id="log"><span class="info">Pinax. Code runs when it ends with "," or "."  :help lists the commands.
+</span></div>
+<div id="line"><span id="prompt">pinax> </span><textarea id="input" rows="1" spellcheck="false" autofocus></textarea></div>
+</div>
+<div id="editor"><header>The program. Ctrl+S (or F2) saves it and runs it again; Esc leaves it unchanged.</header>
+<textarea id="code" spellcheck="false"></textarea></div>
+<input id="file" type="file" accept=".pnx,.txt" hidden>
 <script id="wasm" type="application/octet-stream">
 @PINAX_WASM_BASE64@
 </script>
 <script type="module">
 // @PINAX_MJS@
-const out = document.getElementById("out");
-const status = document.getElementById("status");
-const bytes = Uint8Array.from(atob(document.getElementById("wasm").textContent.trim()), (c) => c.charCodeAt(0));
-const pinax = await createPinax(bytes, {
-    write: (stream, text) => {
-        const span = document.createElement("span");
-        if (stream === 2)
-            span.className = "err";
-        span.textContent = text;
-        out.appendChild(span);
-    },
-});
-function run() {
-    out.textContent = "";
-    const t = performance.now();
-    const { ok, error } = pinax.run(document.getElementById("src").value, "main");
-    status.textContent = (ok ? "ok" : "failed: " + error) + ` (${(performance.now() - t).toFixed(1)} ms)`;
+// @PINAX_CONSOLE@
+const $ = (id) => document.getElementById(id);
+const log = $("log"), input = $("input"), prompt = $("prompt"), screen = $("screen");
+const editor = $("editor"), code = $("code"), file = $("file");
+function print(kind, text) {
+    const span = document.createElement("span");
+    span.className = kind;
+    span.textContent = text;
+    log.appendChild(span);
+    screen.scrollTop = screen.scrollHeight;
 }
-document.getElementById("run").onclick = run;
-document.getElementById("src").addEventListener("keydown", (e) => {
-    if (e.key === "Enter" && e.ctrlKey)
-        run();
+let store = null;
+try {
+    const key = "pinax-playground-program";
+    localStorage.getItem(key);
+    store = { get: () => localStorage.getItem(key), set: (t) => localStorage.setItem(key, t) };
+} catch (e) { /* no local storage: the program lasts as long as the page */ }
+const bytes = Uint8Array.from(atob($("wasm").textContent.trim()), (c) => c.charCodeAt(0));
+const con = await createConsole({ createPinax, bytes, print, store });
+
+const fit = () => { input.style.height = "auto"; input.style.height = input.scrollHeight + "px"; };
+function act(r) {
+    prompt.textContent = r.prompt ?? con.prompt();
+    if (r.fill !== undefined) {
+        input.value = r.fill;
+        fit();
+    }
+    if (r.editor !== undefined)
+        openEditor(r.editor);
+    if (r.download !== undefined) {
+        const a = document.createElement("a");
+        a.href = URL.createObjectURL(new Blob([r.download], { type: "text/plain" }));
+        a.download = "program.pnx";
+        a.click();
+        URL.revokeObjectURL(a.href);
+    }
+    if (r.upload)
+        file.click();
+}
+function submit() {
+    const lines = input.value.split("\n");
+    input.value = "";
+    fit();
+    let r = {};
+    for (const line of lines) {
+        r = con.enter(line);
+        act({ ...r, fill: undefined, editor: undefined });
+        if (r.fill !== undefined || r.editor !== undefined || r.download !== undefined || r.upload)
+            break;
+    }
+    if (r.fill !== undefined || r.editor !== undefined)
+        act(r);
+    walk = con.history.length;
+}
+function openEditor(text) {
+    code.value = text;
+    editor.classList.add("open");
+    code.focus();
+}
+function closeEditor(save) {
+    editor.classList.remove("open");
+    if (save)
+        con.setProgram(code.value);
+    input.focus();
+}
+let walk = 0; // where Up and Down are in the history
+input.addEventListener("input", fit);
+input.addEventListener("keydown", (e) => {
+    if (e.key === "Enter" && !e.shiftKey) {
+        e.preventDefault();
+        submit();
+    } else if (e.key === "Escape") {
+        input.value = "";
+        fit();
+        act(con.cancel());
+        print("info", "(dropped)\n");
+    } else if (e.key === "ArrowUp" && !input.value.slice(0, input.selectionStart).includes("\n") && walk > 0) {
+        e.preventDefault();
+        input.value = con.history[--walk];
+        fit();
+    } else if (e.key === "ArrowDown" && !input.value.slice(input.selectionEnd).includes("\n") &&
+               walk < con.history.length) {
+        e.preventDefault();
+        input.value = ++walk < con.history.length ? con.history[walk] : "";
+        fit();
+    }
 });
-status.textContent = "ready";
+document.addEventListener("keydown", (e) => {
+    const open = editor.classList.contains("open");
+    if (e.key === "F5") {
+        e.preventDefault();
+        if (open)
+            closeEditor(true);
+        else
+            act(con.enter(":run"));
+    } else if (e.key === "F2" || (open && e.key === "s" && (e.ctrlKey || e.metaKey))) {
+        e.preventDefault();
+        if (open)
+            closeEditor(true);
+        else
+            act(con.enter(":edit"));
+    } else if (open && e.key === "Escape") {
+        e.preventDefault();
+        closeEditor(false);
+    } else if (!open && e.key === "l" && e.ctrlKey) {
+        e.preventDefault();
+        log.textContent = "";
+    }
+});
+code.addEventListener("keydown", (e) => { // Tab writes spaces in the editor
+    if (e.key === "Tab") {
+        e.preventDefault();
+        code.setRangeText("    ", code.selectionStart, code.selectionEnd, "end");
+    }
+});
+file.addEventListener("change", async () => {
+    if (file.files[0])
+        con.setProgram(await file.files[0].text());
+    file.value = "";
+    input.focus();
+});
+screen.addEventListener("click", () => { if (!getSelection().toString()) input.focus(); });
+input.focus();
 </script>
 </body>
 </html>

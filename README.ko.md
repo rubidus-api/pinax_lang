@@ -48,7 +48,7 @@ cc -std=c23 -o nob nob.c
 ./nob build          # build/native/libpinax.a, libpinax_host.a, 명령 pnx
 ./nob dist           # build/dist/pinax.h 와 pinax.c: 핵 전체를 두 파일로
 ./nob wasm           # build/wasm/pinax.wasm 과 pinax.mjs: 브라우저와 node 용(clang, wasm-ld),
-                     # 그리고 build/dist/pinax-playground.html: 디스크에서 바로 열어 Pinax 를 돌리는 페이지 하나
+                     # 그리고 build/dist/pinax-playground.html: 디스크에서 바로 여는 Pinax 터미널 페이지
 ```
 
 첫 스크립트 `hello.pnx` 입니다. 인자를 먼저 쓰고 그것을 받는 낱말을 뒤에 씁니다. 리터럴 밖의

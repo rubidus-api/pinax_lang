@@ -166,8 +166,16 @@ runs the code outside definitions. It gives `{ ok: true }` on success and `{ ok:
 `write(stream, text)` receives what `io.print` and `io.println` print on stream 1, and `io.eprint`, load errors and a
 fault's line and locals on stream 2, in the same form as `pnx`.
 
-`./nob wasm` also writes `build/dist/pinax-playground.html`, one page with the module and `pinax.mjs` inside it. It
-opens from disk with no server: write a source and run it. Each run starts from a fresh state.
+`session()` of `pinax.mjs` gives a session as `pnx repl` has. Its `eval(text)` runs the text as one line of the
+session and gives `{ ok, error, unfinished, stack }`, `stack` the values left. A text that ends inside a definition or
+a block is `unfinished` and changes nothing: give it again with more. `reset()` starts the session again from nothing,
+and `clear()` empties its stack.
+
+`./nob wasm` also writes `build/dist/pinax-playground.html`, one page with the module inside it, which opens from disk
+with no server. The page is a terminal. Code runs when it ends with `,` or `.`, and the stack shows after each
+statement. A statement that declares something (`word`, `const`, `use`, `set_order` and the rest) is kept as an entry
+of a program, as GW-BASIC keeps one. `:list` shows the entries, `:edit N` and `:edit` (F2) change them, and `:run` (F5)
+runs the program from its start in a fresh state, the code left as it is. `:help` tells the rest.
 
 In this edition the WebAssembly host registers one module, `io`; `io.read_line` always fails with `not_found`. There is
 no `file`, `clock`, `random`, `env` or `extern`. The modules of the core (`str`, `json`, `csv`, `rex` and the rest) and
