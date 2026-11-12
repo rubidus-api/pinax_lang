@@ -1873,7 +1873,7 @@ static const struct builtin {
 static uint8_t standard_module(name n) {
     return name_is(n, "str") ? 1 : name_is(n, "fmt") ? 2 : name_is(n, "hash") ? 3 : name_is(n, "encode") ? 4
          : name_is(n, "bytes") ? 5 : name_is(n, "ptn") ? 6 : name_is(n, "rex") ? 7 : name_is(n, "json") ? 8
-         : name_is(n, "csv") ? 9 : 0;
+         : name_is(n, "csv") ? 9 : name_is(n, "sheet") ? 10 : 0;
 }
 
 static const struct builtin *find_builtin(name n, uint8_t module) {
@@ -5349,6 +5349,107 @@ static bool csv_word(comp *c, name n) {
     return settle(c, f->depth - 1) && push(c, (entry){.type = TY_STEM, .kind = E_SLOT, .op = STEM_CSV}) && advance(c);
 }
 
+// ---- sheet (RFC-0042) ---------------------------------------------------------------------
+
+static const pnx_shword *sheet_find(name n) {
+    for (uint32_t k = 0; k < PNX_SHW_COUNT; ++k) {
+        if (name_is(n, pnx_shwords[k].name))
+            return &pnx_shwords[k];
+    }
+    return NULL;
+}
+static bool sheet_const(name n, int64_t *value) {
+    static const struct {
+        const char *name;
+        int64_t     value;
+    } consts[] = {{"eq", 0},      {"ne", 1},     {"lt", 2},     {"le", 3},      {"gt", 4},       {"ge", 5},
+                  {"k_empty", 0}, {"k_int", 1},  {"k_bool", 2}, {"k_dec", 3},   {"k_str", 4}};
+    for (size_t k = 0; k < sizeof consts / sizeof consts[0]; ++k) {
+        if (name_is(n, consts[k].name)) {
+            *value = consts[k].value;
+            return true;
+        }
+    }
+    return false;
+}
+
+static bool sheet_word(comp *c, name n) {
+    fn *f = c->f;
+    int64_t constant;
+    if (sheet_const(n, &constant))
+        return push(c, (entry){.type = TY_INT, .kind = E_CONST, .value = constant}) && advance(c);
+    const pnx_shword *sw = sheet_find(n);
+    if (!sw)
+        return error(c, PINAX_ERR_NOT_FOUND, "the module has no word of this name");
+    const globalsym *g;
+    uint32_t         gi;
+    if (!need_coll(c, &g, &gi))
+        return false;
+    if (g->kind != GK_BUFFER)
+        return type_error(c, "the words of sheet take a buffer last: v row column grid sheet.put_int");
+    const uint32_t k_in = (uint32_t)pnx_shlen(sw->in);
+    if (!need(c, k_in))
+        return false;
+    uint32_t scale = 0;
+    bool     have_scale = false;
+    for (uint32_t k = 0; k < k_in; ++k) { // the types, deepest first
+        const entry *e = &f->stack[f->depth - k_in + k];
+        const char   t = sw->in[k];
+        const bool   ok = t == 'i' ? e->type == TY_INT : t == 'b' ? e->type == TY_BOOL : t == 's' ? e->type == TY_STR
+                          : t == 'd' ? is_dec(e->type) : (e->type == TY_INT && e->kind == E_CONST && e->value >= 0 && e->value <= 18);
+        if (!ok)
+            return type_error(c, t == 'n' ? "the digits after the point are a constant 0 to 18: row column 2 grid sheet.dec"
+                                          : "this word of sheet takes int for row, column and number, str for text, bool for put_bool, dec(N) for put_dec");
+        if (t == 'd') {
+            scale = e->type - TY_DEC;
+            have_scale = true;
+        } else if (t == 'n') {
+            scale = (uint32_t)e->value;
+            have_scale = true;
+        }
+    }
+    for (uint32_t k = 0; k < k_in; ++k) {
+        if (!settle(c, f->depth - k_in + k))
+            return false;
+    }
+    f->depth -= k_in;
+    if (!settle_all(c))
+        return false;
+    uint32_t ni, ri;
+    bool     si, sr;
+    pnx_sheet_regs(sw, &ni, &ri, &si, &sr);
+    const uint32_t a = top_slot(c, BANK_I, (ni > ri ? ni : ri) ? (ni > ri ? ni : ri) : 1u);
+    const uint32_t b = top_slot(c, BANK_S, 1);
+    if (pnx_shhas(sw->in, 'd') && !load_int(c, a + ni - 1, scale))
+        return false;
+    const bool fails = pnx_shhas(sw->flags, 'F'), ro = pnx_shhas(sw->flags, 'R');
+    const uint32_t op = fails ? (ro ? PNX_SHEETRF : PNX_SHEETF) : (ro ? PNX_SHEETR : PNX_SHEET);
+    const uint32_t sub = (uint32_t)(sw - pnx_shwords);
+    uint32_t       global = gi;
+    if (global >= REF_GLOBAL) { // a collection a reference names (RFC-0018)
+        if ((!ro && !read_only(c, global)) || !select_ref(c, global - REF_GLOBAL))
+            return false;
+        global = PNX_GSELECTED;
+    }
+    if (emit(c, PNX_ABC(op, a, b, sub)) == NONE || emit(c, global) == NONE)
+        return false;
+    f->def_at = NONE;
+    (void)have_scale;
+    const char o = sw->out[0];
+    const tid  out = o == 'i' ? TY_INT : o == 'b' ? TY_BOOL : o == 's' ? TY_STR : o == 'D' ? (tid)(TY_DEC + scale) : TY_NONE;
+    if (fails) {
+        sig s = {0};
+        if (out != TY_NONE) {
+            s.n_out = 1;
+            s.out[0] = out;
+        }
+        s.fails = true;
+        const uint32_t base[2] = {0, 0}, in[2] = {0, 0};
+        return advance(c) && guard(c, &s, base, in, false);
+    }
+    return (out == TY_NONE || push_slot(c, out)) && advance(c);
+}
+
 // The words of the module bytes (RFC-0009 section 4.4): put_T and get_T for T in u8 u16 u32 u64
 // i8 i16 i32 i64 (with _be for big-endian, two bytes and more), varint and str (a varint length
 // and the bytes). put: (v, buf or fail); get: (s str gives v, rest str or fail).
@@ -6855,6 +6956,8 @@ static bool module_has(comp *c, name real, name n) {
         if (name_is(n, names[k]))
             return true;
     }
+    if (standard == 10)
+        return sheet_find(n) != NULL || sheet_const(n, &(int64_t){0});
     if (standard == 5)
         return name_is(n, "pack") || name_is(n, "unpack") || name_is(n, "packed_size") ||
                (n.length > 4 && (__builtin_memcmp(n.text, "get_", 4) == 0 || __builtin_memcmp(n.text, "put_", 4) == 0));
@@ -6894,6 +6997,11 @@ static bool path_word(comp *c, name module, name n) {
         if (c->data_only)
             return syntax(c, "a data source calls no words; only literals, const names and stores");
         return standard == 8 ? json_word(c, n) : csv_word(c, n);
+    }
+    if (standard == 10) { // sheet
+        if (c->data_only)
+            return syntax(c, "a data source calls no words; only literals, const names and stores");
+        return sheet_word(c, n);
     }
     if (standard == 5) { // bytes: the name says the width
         if (c->data_only)

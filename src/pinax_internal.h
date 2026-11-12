@@ -51,6 +51,115 @@ size_t   pnx_rex_work(const uint8_t *prog, uint32_t len);
 int      pnx_rex_search(const uint8_t *prog, uint32_t plen, const uint8_t *s, uint32_t len, uint32_t from, uint32_t *found,
                         void *work, uint64_t *steps);
 
+// The module `sheet` (pinax_sheet.c, RFC-0042): a table of rows and columns in one buffer. `b` is the
+// buffer's bytes and `cap` its capacity; every function checks that the bytes still hold a sheet.
+typedef enum { PNX_SH_OK, PNX_SH_FULL, PNX_SH_RANGE, PNX_SH_KIND, PNX_SH_NONE, PNX_SH_BAD, PNX_SH_OVERFLOW } pnx_sheet_result;
+pnx_sheet_result pnx_sheet_init(uint8_t *b, uint32_t cap, uint32_t rmax, uint32_t cols);
+uint32_t pnx_sheet_rows(uint8_t *b, uint32_t cap);
+uint32_t pnx_sheet_cols(uint8_t *b, uint32_t cap);
+uint32_t pnx_sheet_rows_max(uint8_t *b, uint32_t cap);
+pnx_sheet_result pnx_sheet_add_row(uint8_t *b, uint32_t cap, uint32_t *row);
+pnx_sheet_result pnx_sheet_truncate_rows(uint8_t *b, uint32_t cap, uint32_t n);
+pnx_sheet_result pnx_sheet_clear(uint8_t *b, uint32_t cap);
+pnx_sheet_result pnx_sheet_widen(uint8_t *b, uint32_t cap, uint32_t cols);
+pnx_sheet_result pnx_sheet_put_int(uint8_t *b, uint32_t cap, int64_t v, int64_t r, int64_t c);
+pnx_sheet_result pnx_sheet_put_bool(uint8_t *b, uint32_t cap, int64_t v, int64_t r, int64_t c);
+pnx_sheet_result pnx_sheet_put_dec(uint8_t *b, uint32_t cap, int64_t v, uint32_t scale, int64_t r, int64_t c);
+pnx_sheet_result pnx_sheet_put_str(uint8_t *b, uint32_t cap, const uint8_t *s, uint32_t n, int64_t r, int64_t c);
+pnx_sheet_result pnx_sheet_clear_cell(uint8_t *b, uint32_t cap, int64_t r, int64_t c);
+pnx_sheet_result pnx_sheet_copy_cell(uint8_t *b, uint32_t cap, int64_t r1, int64_t c1, int64_t r2, int64_t c2);
+pnx_sheet_result pnx_sheet_kind(uint8_t *b, uint32_t cap, int64_t r, int64_t c, int64_t *kind);
+pnx_sheet_result pnx_sheet_get_int(uint8_t *b, uint32_t cap, int64_t r, int64_t c, int64_t *v);
+pnx_sheet_result pnx_sheet_get_bool(uint8_t *b, uint32_t cap, int64_t r, int64_t c, int64_t *v);
+pnx_sheet_result pnx_sheet_get_dec(uint8_t *b, uint32_t cap, int64_t r, int64_t c, uint32_t scale, int64_t *v);
+pnx_sheet_result pnx_sheet_get_str(uint8_t *b, uint32_t cap, int64_t r, int64_t c, uint32_t *off, uint32_t *len);
+pnx_sheet_result pnx_sheet_find_int(uint8_t *b, uint32_t cap, bool across, int64_t key, int64_t line, int64_t from, int64_t *found);
+pnx_sheet_result pnx_sheet_find_str(uint8_t *b, uint32_t cap, bool across, const uint8_t *s, uint32_t n, int64_t line, int64_t from,
+                                    int64_t *found);
+uint32_t         pnx_sheet_sel_len(uint8_t *b, uint32_t cap);
+pnx_sheet_result pnx_sheet_sel_row(uint8_t *b, uint32_t cap, int64_t k, int64_t *row);
+pnx_sheet_result pnx_sheet_select_all(uint8_t *b, uint32_t cap);
+pnx_sheet_result pnx_sheet_narrow(uint8_t *b, uint32_t cap, bool text, int64_t col, int64_t op, int64_t ikey, const uint8_t *s, uint32_t n);
+pnx_sheet_result pnx_sheet_where(uint8_t *b, uint32_t cap, bool text, int64_t col, int64_t op, int64_t ikey, const uint8_t *s, uint32_t n);
+pnx_sheet_result pnx_sheet_total(uint8_t *b, uint32_t cap, int what, int over, int64_t line, int64_t *out, uint64_t *scanned);
+pnx_sheet_result pnx_sheet_order_by(uint8_t *b, uint32_t cap, int64_t col, bool desc, uint64_t *scanned);
+pnx_sheet_result pnx_sheet_compact(uint8_t *b, uint32_t cap);
+
+
+// The words of `sheet` (RFC-0042): id, name, what they take (in stack order: i int, b bool, s str, d a dec(N)
+// whose scale the compiler appends, n a constant scale), what they give (i, b, s, D a dec(N) of the scale n),
+// and flags: F can fail, R reads the sheet only. The ints go in the registers from A in the order written, the
+// str in register B; the result takes A (or B).
+#define PNX_SHEET_WORDS(X)                                                                          \
+    X(INIT, "init", "ii", "", "F") X(ROWS, "rows", "", "i", "R") X(COLS, "cols", "", "i", "R")      \
+    X(ROWS_MAX, "rows_max", "", "i", "R") X(ADD_ROW, "add_row", "", "i", "F")                       \
+    X(TRUNCATE_ROWS, "truncate_rows", "i", "", "") X(WIDEN, "widen", "i", "", "F")                  \
+    X(CLEAR, "clear", "", "", "") X(COMPACT, "compact", "", "", "")                                 \
+    X(PUT_INT, "put_int", "iii", "", "F") X(PUT_BOOL, "put_bool", "bii", "", "F")                   \
+    X(PUT_DEC, "put_dec", "dii", "", "F") X(PUT_STR, "put_str", "sii", "", "F")                     \
+    X(CLEAR_CELL, "clear_cell", "ii", "", "") X(COPY_CELL, "copy_cell", "iiii", "", "")             \
+    X(KIND, "kind", "ii", "i", "R") X(IS_EMPTY, "is_empty", "ii", "b", "R")                         \
+    X(GET_INT, "int", "ii", "i", "FR") X(GET_BOOL, "bool", "ii", "b", "FR")                         \
+    X(GET_DEC, "dec", "iin", "D", "FR") X(GET_STR, "str", "ii", "s", "FR")                          \
+    X(FIND_ROW_INT, "find_row_int", "ii", "i", "FR") X(FIND_ROW_STR, "find_row_str", "si", "i", "FR") \
+    X(FIND_COL_INT, "find_col_int", "ii", "i", "FR") X(FIND_COL_STR, "find_col_str", "si", "i", "FR") \
+    X(FIND_ROW_FROM_INT, "find_row_from_int", "iii", "i", "FR")                                     \
+    X(FIND_ROW_FROM_STR, "find_row_from_str", "sii", "i", "FR")                                     \
+    X(FIND_COL_FROM_INT, "find_col_from_int", "iii", "i", "FR")                                     \
+    X(FIND_COL_FROM_STR, "find_col_from_str", "sii", "i", "FR")                                     \
+    X(WHERE_INT, "where_int", "iii", "", "") X(WHERE_STR, "where_str", "iis", "", "")               \
+    X(NARROW_INT, "narrow_int", "iii", "", "") X(NARROW_STR, "narrow_str", "iis", "", "")           \
+    X(SELECT_ALL, "select_all", "", "", "") X(SEL_LEN, "sel_len", "", "i", "R")                     \
+    X(SEL_ROW, "sel_row", "i", "i", "R")                                                            \
+    X(SUM_COL, "sum_col", "i", "i", "R") X(MIN_COL, "min_col", "i", "i", "FR")                      \
+    X(MAX_COL, "max_col", "i", "i", "FR") X(COUNT_COL, "count_col", "i", "i", "R")                  \
+    X(SUM_ROW, "sum_row", "i", "i", "R") X(MIN_ROW, "min_row", "i", "i", "FR")                      \
+    X(MAX_ROW, "max_row", "i", "i", "FR") X(COUNT_ROW, "count_row", "i", "i", "R")                  \
+    X(SUM_SEL, "sum_sel", "i", "i", "R") X(MIN_SEL, "min_sel", "i", "i", "FR")                      \
+    X(MAX_SEL, "max_sel", "i", "i", "FR") X(COUNT_SEL, "count_sel", "i", "i", "R")                  \
+    X(ORDER_BY, "order_by", "i", "", "F") X(ORDER_BY_DESC, "order_by_desc", "i", "", "F")
+
+enum {
+#define X(id, name, in, out, flags) PNX_SHW_##id,
+    PNX_SHEET_WORDS(X)
+#undef X
+    PNX_SHW_COUNT
+};
+typedef struct {
+    const char *name, *in, *out, *flags;
+} pnx_shword;
+static const pnx_shword pnx_shwords[PNX_SHW_COUNT] = {
+#define X(id, name, in, out, flags) [PNX_SHW_##id] = {name, in, out, flags},
+    PNX_SHEET_WORDS(X)
+#undef X
+};
+static inline bool pnx_shhas(const char *s, char c) {
+    for (; *s; ++s)
+        if (*s == c)
+            return true;
+    return false;
+}
+static inline uint32_t pnx_shlen(const char *s) {
+    uint32_t n = 0;
+    while (s[n])
+        ++n;
+    return n;
+}
+// Registers a word of sheet reads and writes: ints from A, a str at B.
+static inline void pnx_sheet_regs(const pnx_shword *w, uint32_t *int_in, uint32_t *int_out, bool *str_in, bool *str_out) {
+    uint32_t ni = 0;
+    *str_in = false;
+    for (const char *p = w->in; *p; ++p) {
+        if (*p == 's')
+            *str_in = true;
+        else
+            ni += *p == 'd' ? 2u : 1u; // a dec value and its scale
+    }
+    *int_in = ni;
+    *int_out = (w->out[0] == 'i' || w->out[0] == 'b' || w->out[0] == 'D') ? 1u : 0u;
+    *str_out = w->out[0] == 's';
+}
+
 // The text formats of json and csv (pinax_json.c), read a token or a field at a time.
 enum {
     PNX_JSON_OBJECT = 1, PNX_JSON_OBJECT_END, PNX_JSON_ARRAY, PNX_JSON_ARRAY_END, PNX_JSON_KEY, PNX_JSON_STRING,
@@ -141,7 +250,7 @@ static inline bool pnx_writes_global(uint32_t op) {
     case PNX_BPUT: case PNX_BPUTS: case PNX_BPUTW: case PNX_BPUTSW: case PNX_BCAT: case PNX_BCATI: case PNX_BENC:
     case PNX_BENCW: case PNX_BTRUNC: case PNX_JPUTI: case PNX_JPUTIW: case PNX_JPUTS: case PNX_JPUTSW: case PNX_CPUTS:
     case PNX_CPUTSW: case PNX_CPUTI: case PNX_CPUTIW: case PNX_LCOPYR: case PNX_QPUT: case PNX_QTAKE: case PNX_QWTAKE:
-    case PNX_QWPUT: case PNX_PALLOC: case PNX_PFREE: case PNX_SORT: case PNX_SORTBY: return true;
+    case PNX_QWPUT: case PNX_PALLOC: case PNX_PFREE: case PNX_SORT: case PNX_SORTBY: case PNX_SHEET: case PNX_SHEETF: return true;
     default: return false;
     }
 }

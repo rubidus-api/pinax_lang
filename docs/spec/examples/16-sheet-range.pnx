@@ -1,0 +1,9 @@
+rem fault
+use sheet
+buffer grid 4096
+word main (or fail)
+  3 2 grid sheet.init or_fail
+  grid sheet.add_row or_fail drop
+  5 1 7 grid sheet.put_int or_fail     rem row 1 does not exist: only one row was added
+end
+main or_else end

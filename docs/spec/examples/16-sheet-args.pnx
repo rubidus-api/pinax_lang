@@ -1,0 +1,4 @@
+rem refused
+use sheet
+buffer grid 4096
+word f (or fail) "five" 0 0 grid sheet.put_int or_fail end

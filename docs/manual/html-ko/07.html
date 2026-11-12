@@ -131,4 +131,33 @@ evening: 3 readings, highest 21
 morning count_them
 </code></pre><p class="ex-label">거절</p><pre><code data-lang="text">$ pnx 06-coll-param-row.pnx
 06-coll-param-row.pnx:6:9: this parameter takes one row of a table; a parameter that takes the whole table is written list RECORD or array RECORD
-</code></pre></div></div><div class="box qa"><p class="box-title">문답</p><p><strong>물음. 목록을 비우거나 줄이려면?</strong></p><p>답. <code>목록 clear</code> 는 길이를 0 으로, <code>n 목록 truncate</code> 는 길이를 <code>n</code> 으로 줄인다. 칸의 값은 그대로 있지만 길이 밖이라 보이지 않는다. 배열은 늘 가득 차 있으므로 비울 수 없고, 칸마다 <code>set</code> 으로 넣는다.</p></div><div class="box summary"><p class="box-title">정리</p><ul><li>낱말은 모음을 <code>list T</code>, <code>array T</code>, <code>queue T</code>, <code>buffer</code> 로 받는다(9.9).</li><li>모음의 용량은 선언이 정한다. 돌면서 자라는 저장소는 없다(표준 8.1).</li><li>배열은 늘 가득 차 있고, 목록은 길이가 자란다. 범위 밖 번호는 결함이다(8.4, 8.5).</li><li><code>push</code> <code>pop</code> <code>put</code> <code>take</code> 는 실패할 수 있다: 차면 <code>full</code>, 비면 <code>range</code>(8.5, 8.6).</li><li>배열과 목록만 줄기다(10.6).</li><li><code>map_into</code> <code>filter_into</code> 는 주어진 목적지에 담는다(10.6).</li></ul></div></main><nav class="bottom"><a href="index.html">처음</a> · <a href="06.html">앞</a> · <a href="08.html">다음</a> · <a href="../html-en/07.html">English</a></nav></body></html>
+</code></pre></div></div><div class="box qa"><p class="box-title">문답</p><p><strong>물음. 목록을 비우거나 줄이려면?</strong></p><p>답. <code>목록 clear</code> 는 길이를 0 으로, <code>n 목록 truncate</code> 는 길이를 <code>n</code> 으로 줄인다. 칸의 값은 그대로 있지만 길이 밖이라 보이지 않는다. 배열은 늘 가득 차 있으므로 비울 수 없고, 칸마다 <code>set</code> 으로 넣는다.</p></div><h3>6.6 줄과 열의 표</h3><p>숫자 옆 칸에 글이 오는, 스프레드시트 같은 줄과 열의 표가 필요하면 모듈 <code>sheet</code> 가 버퍼 안에 둔다. 자료형이 아니라 라이브러리다. 버퍼는 <code>init</code> 으로(줄은 이만큼까지, 열은 꼭 이만큼) 표가 되고, 줄은 하나씩 더하며, <code>sheet</code> 의 모든 낱말은 버퍼를 맨 끝에 받는다. 칸은 그 종류의 낱말(<code>int</code>, <code>str</code>, <code>bool</code>, <code>dec</code>)로 나온다. 같은 글과 큰 수는 몇 칸이 쥐든 하나만 둔다.</p><p>찾기와 고르기는 <strong></strong>선택<strong></strong>, 지금까지 고른 줄에 일한다. <code>where_str</code> 와 <code>where_int</code> 가 모든 줄에서 시작하고, <code>narrow_int</code> 와 <code>narrow_str</code> 은 고른 줄 가운데 아직 맞는 줄만 남긴다. 이런 낱말을 늘어놓은 것이 파이프이고, 남은 것은 <code>order_by</code>, <code>sum_sel</code>, <code>sel_row</code> 가 읽는다.</p><div class="example run"><p class="ex-file"><code>06-sheet.pnx</code></p><pre><code data-lang="pinax"><span style="color: #d73948">use</span> io
+<span style="color: #d73948">use</span> sheet
+<span style="color: #d73948">buffer</span> grid <span style="color: #b60157">8192</span>
+<span style="color: #d73948">word</span> load (<span style="color: #d73948">or</span> <span style="color: #d73948">fail</span>)
+  <span style="color: #b60157">6</span> <span style="color: #b60157">3</span> grid sheet.init <span style="color: #d73948">or_fail</span>
+  <span style="color: #b60157">3</span> <span style="color: #d73948">do</span> grid sheet.add_row <span style="color: #d73948">or_fail</span> drop <span style="color: #d73948">end</span> times
+  <span style="color: #198810">"apple"</span> <span style="color: #b60157">0</span> <span style="color: #b60157">0</span> grid sheet.put_str <span style="color: #d73948">or_fail</span>  <span style="color: #b60157">3</span> <span style="color: #b60157">0</span> <span style="color: #b60157">1</span> grid sheet.put_int <span style="color: #d73948">or_fail</span>
+  <span style="color: #198810">"pear"</span> <span style="color: #b60157">1</span> <span style="color: #b60157">0</span> grid sheet.put_str <span style="color: #d73948">or_fail</span>   <span style="color: #b60157">5</span> <span style="color: #b60157">1</span> <span style="color: #b60157">1</span> grid sheet.put_int <span style="color: #d73948">or_fail</span>
+  <span style="color: #198810">"pear"</span> <span style="color: #b60157">2</span> <span style="color: #b60157">0</span> grid sheet.put_str <span style="color: #d73948">or_fail</span>   <span style="color: #b60157">7</span> <span style="color: #b60157">2</span> <span style="color: #b60157">1</span> grid sheet.put_int <span style="color: #d73948">or_fail</span>
+<span style="color: #d73948">end</span>
+<span style="color: #d73948">word</span> show (title <span style="color: #d73948">str</span>) <span style="color: #d73948">cat</span> (title, <span style="color: #198810">":"</span>) io.print
+  <span style="color: #b60157">0</span> grid sheet.sel_len range <span style="color: #d73948">do</span> (k <span style="color: #d73948">int</span>) <span style="color: #d73948">cat</span> (<span style="color: #198810">" "</span>, k grid sheet.sel_row) io.print <span style="color: #d73948">end</span> each
+  <span style="color: #198810">""</span> io.println
+<span style="color: #d73948">end</span>
+<span style="color: #d73948">word</span> main (<span style="color: #d73948">or</span> <span style="color: #d73948">fail</span>)
+  load <span style="color: #d73948">or_fail</span>
+  <span style="color: #b60157">0</span> sheet.eq <span style="color: #198810">"pear"</span> grid sheet.where_str     <span style="color: #74747c">rem rows whose column 0 is pear</span>
+  <span style="color: #198810">"pears"</span> show
+  <span style="color: #b60157">1</span> sheet.gt <span style="color: #b60157">5</span> grid sheet.narrow_int         <span style="color: #74747c">rem of those, column 1 above 5</span>
+  <span style="color: #198810">"dear pears"</span> show
+  grid sheet.select_all
+  <span style="color: #b60157">1</span> grid sheet.order_by_desc <span style="color: #d73948">or_fail</span>         <span style="color: #74747c">rem all rows, dearest first</span>
+  <span style="color: #198810">"by price"</span> show
+<span style="color: #d73948">end</span>
+main <span style="color: #d73948">or_else</span> (e) e err_text io.println <span style="color: #d73948">end</span>
+</code></pre><p class="ex-label">출력</p><pre><code data-lang="text">$ pnx 06-sheet.pnx
+pears: 1 2
+dear pears: 2
+by price: 2 1 0
+</code></pre></div><p>열은 자라지 않는다. <code>widen</code> 이 같은 버퍼 안에서 열의 수를 바꿔 표를 다시 만든다. 낱말이 바라는 것과 다른 종류의 칸은 <code>err.format</code> 으로 실패한다. 그럴 수 있으면 <code>kind</code> 로 먼저 묻는다.</p><div class="box summary"><p class="box-title">정리</p><ul><li>낱말은 모음을 <code>list T</code>, <code>array T</code>, <code>queue T</code>, <code>buffer</code> 로 받는다(9.9).</li><li>모음의 용량은 선언이 정한다. 돌면서 자라는 저장소는 없다(표준 8.1).</li><li>배열은 늘 가득 차 있고, 목록은 길이가 자란다. 범위 밖 번호는 결함이다(8.4, 8.5).</li><li><code>push</code> <code>pop</code> <code>put</code> <code>take</code> 는 실패할 수 있다: 차면 <code>full</code>, 비면 <code>range</code>(8.5, 8.6).</li><li>배열과 목록만 줄기다(10.6).</li><li><code>map_into</code> <code>filter_into</code> 는 주어진 목적지에 담는다(10.6).</li><li><code>sheet</code> 는 버퍼 안에 아무 종류의 칸의 줄과 열을 둔다. 줄은 자라고 열은 <code>init</code> 이 정한다(표준 16.10).</li></ul></div></main><nav class="bottom"><a href="index.html">처음</a> · <a href="06.html">앞</a> · <a href="08.html">다음</a> · <a href="../html-en/07.html">English</a></nav></body></html>

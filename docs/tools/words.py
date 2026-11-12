@@ -14,7 +14,7 @@ import glob, json, os, re, sys
 ROOT = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "..")
 CLAUSES = os.path.join(ROOT, "docs", "spec", "typst-en", "clauses")
 OUT = os.path.join(ROOT, "src", "wasm", "words.mjs")
-PAGE_MODULES = {"", "str", "fmt", "hash", "encode", "bytes", "ptn", "rex", "json", "csv", "io"}
+PAGE_MODULES = {"", "str", "fmt", "hash", "encode", "bytes", "ptn", "rex", "json", "csv", "sheet", "io"}
 
 
 def cells(body):

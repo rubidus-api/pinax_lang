@@ -192,6 +192,10 @@ PNX_INLINE int pnx_tail_word(pinax_state *st, const pnx_wordrec *callee, uint32_
     X(RUNG, IXHASS) \
     X(RUNF, IXPUTO) \
     X(RUNF2, POOLNX) \
+    X(RUN2, SHEET) \
+    X(RUNF2, SHEETF) \
+    X(RUN2, SHEETR) \
+    X(RUNF2, SHEETRF) \
     X(RUN2, SREPL) \
     X(RUNF, QPUT) \
     X(RUNF, QTAKE) \
@@ -1201,6 +1205,123 @@ PNX_OP(PALIVE) {
     R[OP_A(w)] = pnx_row_of(&st->globals[PNX_GX(st, x)], R[OP_B(w)], &row) == PNX_R_OK;
     return PNX_R_OK;
 }
+
+
+// ---- the module sheet (RFC-0042) -----------------------------------------------------------
+// One instruction for every word: C says which, A the first int register, B the str register, the
+// second word the buffer. A failure ends with PNX_R_FAILED and the number in st->fail; a mistake of the
+// program (a row or column outside the sheet, a buffer that is no sheet) is a fault.
+PNX_INLINE int pnx_sheet_status(pinax_state *st, pnx_sheet_result e) {
+    switch (e) {
+    case PNX_SH_OK: return PNX_R_OK;
+    case PNX_SH_FULL: st->fail = PINAX_ERR_FULL; return PNX_R_FAILED;
+    case PNX_SH_KIND: st->fail = PINAX_ERR_FORMAT; return PNX_R_FAILED;
+    case PNX_SH_NONE: st->fail = PINAX_ERR_NOT_FOUND; return PNX_R_FAILED;
+    case PNX_SH_OVERFLOW: return PINAX_ERR_OVERFLOW;
+    default: return PINAX_ERR_RANGE;
+    }
+}
+
+PNX_INLINE int pnx_sheet_exec(pinax_state *st, int64_t *R, pnx_scell *S, uint32_t w, uint32_t x) {
+    const pnx_global *g = &st->globals[PNX_GX(st, x)];
+    uint8_t         *b = g->ptr + 8;
+    const uint32_t   cap = g->capacity;
+    int64_t *const   r = R + OP_A(w);
+    pnx_scell       *s = S + OP_B(w);
+    const uint8_t   *sb = NULL;
+    uint32_t         sn = 0;
+    int64_t          out = 0;
+    uint64_t         scanned = 0;
+    pnx_sheet_result e = PNX_SH_OK;
+    const pnx_shword *word = &pnx_shwords[OP_C(w)];
+    if (pnx_shhas(word->in, 's')) {
+        sb = pnx_view_bytes(st, *s);
+        sn = s->length;
+        st->charge += sn;
+    }
+    switch (OP_C(w)) {
+    case PNX_SHW_INIT:
+        e = pnx_sheet_init(b, cap, (uint32_t)r[0] == r[0] && r[0] > 0 ? (uint32_t)r[0] : 0, (uint32_t)r[1] == r[1] && r[1] > 0 ? (uint32_t)r[1] : 0);
+        if (e == PNX_SH_OK) {
+            const uint64_t all = cap;
+            __builtin_memcpy(g->ptr, &all, 8); // the buffer reads as full: nothing appends over a sheet
+        }
+        st->charge += cap / 64;
+        break;
+    case PNX_SHW_ROWS: r[0] = pnx_sheet_rows(b, cap); break;
+    case PNX_SHW_COLS: r[0] = pnx_sheet_cols(b, cap); break;
+    case PNX_SHW_ROWS_MAX: r[0] = pnx_sheet_rows_max(b, cap); break;
+    case PNX_SHW_ADD_ROW: {
+        uint32_t row = 0;
+        e = pnx_sheet_add_row(b, cap, &row);
+        r[0] = row;
+        break;
+    }
+    case PNX_SHW_TRUNCATE_ROWS: e = r[0] < 0 || r[0] > UINT32_MAX ? PNX_SH_RANGE : pnx_sheet_truncate_rows(b, cap, (uint32_t)r[0]); st->charge += pnx_sheet_rows(b, cap); break;
+    case PNX_SHW_WIDEN: e = r[0] < 0 || r[0] > UINT32_MAX ? PNX_SH_RANGE : pnx_sheet_widen(b, cap, (uint32_t)r[0]); st->charge += (uint64_t)pnx_sheet_rows(b, cap) * pnx_sheet_cols(b, cap); break;
+    case PNX_SHW_CLEAR: e = pnx_sheet_clear(b, cap); break;
+    case PNX_SHW_COMPACT: e = pnx_sheet_compact(b, cap); st->charge += cap / 64; break;
+    case PNX_SHW_PUT_INT: e = pnx_sheet_put_int(b, cap, r[0], r[1], r[2]); break;
+    case PNX_SHW_PUT_BOOL: e = pnx_sheet_put_bool(b, cap, r[0], r[1], r[2]); break;
+    case PNX_SHW_PUT_DEC: e = pnx_sheet_put_dec(b, cap, r[0], (uint32_t)r[3], r[1], r[2]); break;
+    case PNX_SHW_PUT_STR: e = pnx_sheet_put_str(b, cap, sb, sn, r[0], r[1]); break;
+    case PNX_SHW_CLEAR_CELL: e = pnx_sheet_clear_cell(b, cap, r[0], r[1]); break;
+    case PNX_SHW_COPY_CELL: e = pnx_sheet_copy_cell(b, cap, r[0], r[1], r[2], r[3]); break;
+    case PNX_SHW_KIND: e = pnx_sheet_kind(b, cap, r[0], r[1], &out); r[0] = out; break;
+    case PNX_SHW_IS_EMPTY: e = pnx_sheet_kind(b, cap, r[0], r[1], &out); r[0] = out == 0; break;
+    case PNX_SHW_GET_INT: e = pnx_sheet_get_int(b, cap, r[0], r[1], &out); r[0] = out; break;
+    case PNX_SHW_GET_BOOL: e = pnx_sheet_get_bool(b, cap, r[0], r[1], &out); r[0] = out; break;
+    case PNX_SHW_GET_DEC:
+        e = r[2] < 0 || r[2] > 18 ? PNX_SH_RANGE : pnx_sheet_get_dec(b, cap, r[0], r[1], (uint32_t)r[2], &out);
+        r[0] = out;
+        break;
+    case PNX_SHW_GET_STR: {
+        uint32_t off = 0, len = 0;
+        e = pnx_sheet_get_str(b, cap, r[0], r[1], &off, &len);
+        if (e == PNX_SH_OK)
+            *s = len ? (pnx_scell){PNX_SEG_GLOBAL, len, (uint64_t)(b + off - st->segment[PNX_SEG_GLOBAL])}
+                     : (pnx_scell){PNX_SEG_EMPTY, 0, 0};
+        break;
+    }
+    case PNX_SHW_FIND_ROW_INT: e = pnx_sheet_find_int(b, cap, false, r[0], r[1], 0, &out); r[0] = out; goto scan;
+    case PNX_SHW_FIND_COL_INT: e = pnx_sheet_find_int(b, cap, true, r[0], r[1], 0, &out); r[0] = out; goto scan;
+    case PNX_SHW_FIND_ROW_FROM_INT: e = pnx_sheet_find_int(b, cap, false, r[0], r[1], r[2], &out); r[0] = out; goto scan;
+    case PNX_SHW_FIND_COL_FROM_INT: e = pnx_sheet_find_int(b, cap, true, r[0], r[1], r[2], &out); r[0] = out; goto scan;
+    case PNX_SHW_FIND_ROW_STR: e = pnx_sheet_find_str(b, cap, false, sb, sn, r[0], 0, &out); r[0] = out; goto scan;
+    case PNX_SHW_FIND_COL_STR: e = pnx_sheet_find_str(b, cap, true, sb, sn, r[0], 0, &out); r[0] = out; goto scan;
+    case PNX_SHW_FIND_ROW_FROM_STR: e = pnx_sheet_find_str(b, cap, false, sb, sn, r[0], r[1], &out); r[0] = out; goto scan;
+    case PNX_SHW_FIND_COL_FROM_STR: e = pnx_sheet_find_str(b, cap, true, sb, sn, r[0], r[1], &out); r[0] = out; goto scan;
+    case PNX_SHW_WHERE_INT: e = pnx_sheet_where(b, cap, false, r[0], r[1], r[2], NULL, 0); goto scan;
+    case PNX_SHW_WHERE_STR: e = pnx_sheet_where(b, cap, true, r[0], r[1], 0, sb, sn); goto scan;
+    case PNX_SHW_NARROW_INT: e = pnx_sheet_narrow(b, cap, false, r[0], r[1], r[2], NULL, 0); goto scan;
+    case PNX_SHW_NARROW_STR: e = pnx_sheet_narrow(b, cap, true, r[0], r[1], 0, sb, sn); goto scan;
+    scan:
+        st->charge += pnx_sheet_rows(b, cap);
+        break;
+    case PNX_SHW_SELECT_ALL: e = pnx_sheet_select_all(b, cap); break;
+    case PNX_SHW_SEL_LEN: r[0] = pnx_sheet_sel_len(b, cap); break;
+    case PNX_SHW_SEL_ROW: e = pnx_sheet_sel_row(b, cap, r[0], &out); r[0] = out; break;
+    case PNX_SHW_SUM_COL: case PNX_SHW_MIN_COL: case PNX_SHW_MAX_COL: case PNX_SHW_COUNT_COL:
+    case PNX_SHW_SUM_ROW: case PNX_SHW_MIN_ROW: case PNX_SHW_MAX_ROW: case PNX_SHW_COUNT_ROW:
+    case PNX_SHW_SUM_SEL: case PNX_SHW_MIN_SEL: case PNX_SHW_MAX_SEL: case PNX_SHW_COUNT_SEL: {
+        const uint32_t k = OP_C(w) - PNX_SHW_SUM_COL;
+        e = pnx_sheet_total(b, cap, (int)(k % 4), (int)(k / 4), r[0], &out, &scanned);
+        r[0] = out;
+        st->charge += scanned;
+        break;
+    }
+    case PNX_SHW_ORDER_BY: case PNX_SHW_ORDER_BY_DESC:
+        e = pnx_sheet_order_by(b, cap, r[0], OP_C(w) == PNX_SHW_ORDER_BY_DESC, &scanned);
+        st->charge += scanned;
+        break;
+    default: return PINAX_ERR_STATE;
+    }
+    return pnx_sheet_status(st, e);
+}
+PNX_OP(SHEET) { return pnx_sheet_exec(st, R, S, w, x); }
+PNX_OP(SHEETF) { return pnx_sheet_exec(st, R, S, w, x); }
+PNX_OP(SHEETR) { return pnx_sheet_exec(st, R, S, w, x); }
+PNX_OP(SHEETRF) { return pnx_sheet_exec(st, R, S, w, x); }
 
 PNX_OP(POOLNX) { // the next live row from slot R[A] on; PNX_R_FAILED when none is left
     const pnx_global *g = &st->globals[PNX_GX(st, x)];
