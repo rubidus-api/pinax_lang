@@ -31,12 +31,13 @@
   .echo { color: #9fb3c8; } .out { color: #e6edf3; } .err { color: #ff7b72; }
   .stack { color: #7ee787; } .info { color: #d2a8ff; }
   #line { display: flex; align-items: flex-start; position: relative; }
-  #hint { position: absolute; left: 0; bottom: 100%; display: none; max-width: 100%; box-sizing: border-box;
+  .hint { position: absolute; left: 0; bottom: 100%; display: none; max-width: 100%; box-sizing: border-box;
           background: #161b22; border: 1px solid #30363d; padding: 4px 0; font-size: 13px; z-index: 2; }
-  #hint.open { display: block; }
-  #hint .item { padding: 1px 10px; white-space: pre; } #hint .item.on { background: #1f6feb55; }
-  #hint .item b { color: #79c0ff; font-weight: normal; } #hint .item i { color: #8b949e; font-style: normal; }
-  #hint .detail { padding: 4px 10px 2px; margin-top: 3px; border-top: 1px solid #30363d; color: #8b949e;
+  .hint.open { display: block; }
+  #editor .hint { left: 16px; bottom: 10px; }
+  .hint .item { padding: 1px 10px; white-space: pre; } #hint .item.on { background: #1f6feb55; }
+  .hint .item b { color: #79c0ff; font-weight: normal; } #hint .item i { color: #8b949e; font-style: normal; }
+  .hint .detail { padding: 4px 10px 2px; margin-top: 3px; border-top: 1px solid #30363d; color: #8b949e;
                   white-space: pre-wrap; max-width: 60em; }
   #prompt { white-space: pre; color: #9fb3c8; }
   #input { flex: 1; background: transparent; color: #e6edf3; border: 0; outline: 0; resize: none; padding: 0;
@@ -57,13 +58,13 @@
 <div id="log"><span class="info">Pinax. Code runs when it is whole: it ends with "," or ".", and a loop or a block runs at its end.
 :help lists the commands; :list shows the program with its line numbers.
 </span></div>
-<div id="line"><div id="hint"></div><span id="prompt">pinax> </span><textarea id="input" rows="1" spellcheck="false" autofocus></textarea></div>
+<div id="line"><div id="hint" class="hint"></div><span id="prompt">pinax> </span><textarea id="input" rows="1" spellcheck="false" autofocus></textarea></div>
 </div>
 <aside id="guide"></aside>
 </div>
 <div id="status">ready</div>
 <div id="editor"><header>The program. Ctrl+S (or F2) saves it and runs it again from a fresh state; Esc leaves it unchanged.</header>
-<textarea id="code" spellcheck="false"></textarea></div>
+<textarea id="code" spellcheck="false"></textarea><div id="hint2" class="hint"></div></div>
 <input id="file" type="file" accept=".pnx,.txt" hidden>
 <script id="wasm" type="application/octet-stream">
 AGFzbQEAAAABogInYAJ/fwF/YAV/f39/fwBgAX8AYAR/f39/AX9gAn9/AGADf39/AX9gAX8Bf2AF
@@ -10811,7 +10812,8 @@ const WORDS = [
 // The word being typed is the run of letters, digits, "_" and "." that ends at the cursor. With a
 // "." in it, the part before is a module and only its words are offered; otherwise the words of the
 // core and of every module whose name begins so, the core first. A word of a module is inserted
-// with its module ("str.trim"), which is right whatever set_order says. null when nothing fits.
+// with its module ("str.trim"), which is right whatever set_order says. A word of the program
+// (a fifth member, true) comes first. null when nothing fits.
 // MIT (see ../../LICENSE).
 
 function complete(words, text, cursor, limit = 8) {
@@ -10823,14 +10825,14 @@ function complete(words, text, cursor, limit = 8) {
     const module = dot >= 0 ? typed.slice(0, dot) : null;
     const stem = dot >= 0 ? typed.slice(dot + 1) : typed;
     const items = [];
-    for (const [mod, word, signature, meaning] of words) {
+    for (const [mod, word, signature, meaning, mine] of words) {
         if (module !== null ? mod !== module : !word.startsWith(stem))
             continue;
         if (module !== null && !word.startsWith(stem))
             continue;
         const label = mod === "" ? word : `${mod}.${word}`;
         items.push({ label, insert: label, module: mod, word, signature, meaning,
-                     rank: (word === stem ? 0 : 2) + (mod === "" ? 0 : 1) });
+                     rank: (mine ? -2 : 0) + (word === stem ? 0 : 2) + (mod === "" ? 0 : 1) });
     }
     if (module === null)
         for (const mod of new Set(words.map((w) => w[0])))
@@ -10891,7 +10893,8 @@ const GUIDE = {
     ],
     keys: [
         ["Enter", "enters the line"], ["Shift+Enter", "a new line without entering"],
-        ["Tab", "completes a word: its module, signature and meaning show above the prompt (Up, Down choose)"],
+        ["Tab", "writes the word offered; words are offered as you type, in the prompt and in the editor"],
+        ["Alt+1 to Alt+9", "write the nth word offered"], ["Alt+Up, Alt+Down", "choose among the words (Alt+Down offers them)"],
         ["Up, Down", "walk the history"], ["Esc", "drops the lines gathered, or ends :edit N and :insert N"],
         ["F5", ":run"], ["F2", ":edit"], ["F1", "shows or hides this guide"], ["Ctrl+L", "clears the screen"],
     ],
@@ -10900,6 +10903,22 @@ const width = Math.max(...GUIDE.commands.map(([c]) => c.length)) + 2;
 const HELP = [...GUIDE.rules,
     ...GUIDE.commands.map(([c, what]) => `  ${c.padEnd(width)}${what}`),
     "Keys:", ...GUIDE.keys.map(([k, what]) => `  ${k.padEnd(width)}${what}`)].join("\n");
+
+// a call to try for a word just defined, from its signature "(n int, s str gives r int)": a value of each
+// parameter's type, then the name, and a dot to run it; null when a type has no sample here
+const SAMPLES = { int: "0", bool: "false", str: '""' };
+function sampleCall(name, signature) {
+    const params = (signature ?? "()").replace(/^\(|\)$/g, "").split(/\bgives\b/)[0].split(",").map((p) => p.trim()).filter(Boolean);
+    const values = params.map((p) => SAMPLES[p.split(/\s+/).pop()]);
+    return values.includes(undefined) ? null : [...values, name].join(" ") + ".";
+}
+// the words a program declares, for completion: [module "", word, signature, meaning, true]
+function userWords(program) {
+    const out = new Map();
+    for (const m of program.matchAll(/^[ \t]*(?:export[ \t]+|redefine[ \t]+)?word[ \t]+([A-Za-z_][A-Za-z_0-9]*)[ \t]*(\([^)]*\))?/gm))
+        out.set(m[1], ["", m[1], m[2] ?? "()", "defined in this session", true]);
+    return [...out.values()];
+}
 
 // the declaration a text begins with, as "word sq", "use io"; "" for set_order; null for none
 function declared(text) {
@@ -11141,6 +11160,11 @@ async function createConsole({ createPinax, bytes, print, store = null }) {
             if (head)
                 print("info", `word ${head[1]} ${head[2] ?? "()"} compiled; nothing ran. It runs when it is called: ` +
                     "its arguments first, then its name\n");
+            const call = head && sampleCall(head[1], head[2]);
+            if (call) {
+                print("info", "(a call to try is in the prompt: change its values, Enter runs it)\n");
+                return { prompt: prompt(), fill: call };
+            }
         }
         return { prompt: prompt() };
     }
@@ -11217,7 +11241,7 @@ async function createConsole({ createPinax, bytes, print, store = null }) {
         print("info", `the program of the last visit: ${plural(lines.length, "line")} (:list)\n`);
         runProgram();
     }
-    return { enter, cancel, setProgram, status, history, prompt, mode: () => mode?.kind ?? null, program: () => lines.slice() };
+    return { enter, cancel, setProgram, status, history, prompt, mode: () => mode?.kind ?? null, program: () => lines.slice(), words: () => userWords(lines.join("\n")) };
 }
 const $ = (id) => document.getElementById(id);
 const log = $("log"), input = $("input"), prompt = $("prompt"), screen = $("screen");
@@ -11338,68 +11362,99 @@ function closeEditor(save) {
     input.focus();
     show();
 }
-// completion: the words that fit what is typed, with their signature and meaning (WORDS from the standard)
-const hint = $("hint");
-let offered = null, chosen = 0;
-function offer(force) {
-    const at = input.selectionStart;
-    const word = /[A-Za-z_][A-Za-z_0-9.]*$/.exec(input.value.slice(0, at))?.[0] ?? "";
-    offered = input.value.trimStart().startsWith(":") || (!force && word.length < 2 && !word.includes(".")) ? null
-        : complete(WORDS, input.value, at);
-    chosen = 0;
-    drawHint();
-}
-function drawHint() {
-    hint.classList.toggle("open", !!offered);
-    if (!offered)
-        return;
-    hint.textContent = "";
-    offered.items.forEach((it, k) => {
-        const row = document.createElement("div");
-        row.className = "item" + (k === chosen ? " on" : "");
-        const name = document.createElement("b");
-        name.textContent = it.label;
-        const sig = document.createElement("i");
-        sig.textContent = it.signature ? "  " + it.signature : "";
-        row.appendChild(name);
-        row.appendChild(sig);
-        hint.appendChild(row);
-    });
-    const it = offered.items[chosen];
-    const detail = document.createElement("div");
-    detail.className = "detail";
-    detail.textContent = [it.signature && `${it.label} ${it.signature}`, it.meaning].filter(Boolean).join("\n");
-    hint.appendChild(detail);
-}
-function accept() {
-    const it = offered.items[chosen];
-    input.setRangeText(it.insert, offered.from, offered.to, "end");
-    offered = null;
-    drawHint();
-    fit();
-    show();
-    if (it.insert.endsWith("."))
-        offer(true);
-}
-let walk = 0; // where Up and Down are in the history
-input.addEventListener("input", () => { fit(); show(); offer(false); });
-input.addEventListener("blur", () => { offered = null; drawHint(); });
-input.addEventListener("keydown", (e) => {
-    if (offered && (e.key === "ArrowUp" || e.key === "ArrowDown")) {
-        e.preventDefault();
-        const n = offered.items.length;
-        chosen = (chosen + (e.key === "ArrowDown" ? 1 : n - 1)) % n;
-        drawHint();
-    } else if (e.key === "Tab" && !e.shiftKey) {
-        e.preventDefault();
+// completion: the words that fit what is typed, with their signature and meaning (WORDS from the standard).
+// It uses keys a typist does not need: Alt+Up and Alt+Down choose (Alt+Down also opens it), Alt+1 to Alt+9 write the
+// nth word, Tab writes the chosen one, Esc closes it. Plain arrows, Enter and the space keep their work.
+function completer(field, box, wordsOf, { skip = () => false, tabOpens = false, changed = () => {} } = {}) {
+    let offered = null, chosen = 0;
+    function draw() {
+        box.classList.toggle("open", !!offered);
         if (!offered)
-            offer(true);
-        if (offered)
-            accept();
-    } else if (e.key === "Escape" && offered) {
-        e.preventDefault();
+            return;
+        box.textContent = "";
+        offered.items.forEach((it, k) => {
+            const row = document.createElement("div");
+            row.className = "item" + (k === chosen ? " on" : "");
+            const name = document.createElement("b");
+            name.textContent = (k < 9 ? `${k + 1} ` : "  ") + it.label;
+            const sig = document.createElement("i");
+            sig.textContent = it.signature ? "  " + it.signature : "";
+            row.appendChild(name);
+            row.appendChild(sig);
+            box.appendChild(row);
+        });
+        const it = offered.items[chosen];
+        const detail = document.createElement("div");
+        detail.className = "detail";
+        detail.textContent = [it.signature && `${it.label} ${it.signature}`, it.meaning, "Alt+1..9 writes that word, Alt+Up/Down chooses, Tab writes, Esc closes"]
+            .filter(Boolean).join("\n");
+        box.appendChild(detail);
+    }
+    function offer(force) {
+        const at = field.selectionStart;
+        const word = /[A-Za-z_][A-Za-z_0-9.]*$/.exec(field.value.slice(0, at))?.[0] ?? "";
+        offered = skip() || (!force && word.length < 2 && !word.includes(".")) ? null : complete(wordsOf(), field.value, at);
+        chosen = 0;
+        draw();
+    }
+    function accept() {
+        const it = offered.items[chosen];
+        field.setRangeText(it.insert, offered.from, offered.to, "end");
         offered = null;
-        drawHint();
+        draw();
+        changed();
+        if (it.insert.endsWith("."))
+            offer(true);
+    }
+    // true when the key was completion's
+    function key(e) {
+        const digit = /^Digit([1-9])$/.exec(e.code ?? "");
+        if (e.altKey && (e.key === "ArrowUp" || e.key === "ArrowDown")) {
+            e.preventDefault();
+            if (!offered)
+                offer(true);
+            else
+                chosen = (chosen + (e.key === "ArrowDown" ? 1 : offered.items.length - 1)) % offered.items.length;
+            draw();
+            return true;
+        }
+        if (e.altKey && digit && offered) {
+            e.preventDefault();
+            if (offered.items[digit[1] - 1]) {
+                chosen = digit[1] - 1;
+                accept();
+            }
+            return true;
+        }
+        if (e.key === "Tab" && !e.shiftKey && !e.altKey && !e.ctrlKey && !e.metaKey) {
+            if (!offered && tabOpens)
+                offer(true);
+            if (!offered)
+                return false;
+            e.preventDefault();
+            accept();
+            return true;
+        }
+        if (e.key === "Escape" && offered) {
+            e.preventDefault();
+            offered = null;
+            draw();
+            return true;
+        }
+        return false;
+    }
+    field.addEventListener("blur", () => { offered = null; draw(); });
+    return { key, offer };
+}
+const promptC = completer(input, $("hint"), () => [...con.words(), ...WORDS],
+    { skip: () => input.value.trimStart().startsWith(":"), tabOpens: true, changed: () => { fit(); show(); } });
+const editorC = completer(code, $("hint2"), () => [...userWords(code.value), ...WORDS]);
+code.addEventListener("input", () => editorC.offer(false));
+let walk = 0; // where Up and Down are in the history
+input.addEventListener("input", () => { fit(); show(); promptC.offer(false); });
+input.addEventListener("keydown", (e) => {
+    if (promptC.key(e)) {
+        return;
     } else if (e.key === "Enter" && !e.shiftKey) {
         e.preventDefault();
         submit();
@@ -11440,7 +11495,7 @@ document.addEventListener("keydown", (e) => {
             closeEditor(true);
         else
             act(con.enter(":edit"));
-    } else if (open && e.key === "Escape") {
+    } else if (open && e.key === "Escape" && !e.defaultPrevented) { // Esc that closed the completion is not this one
         e.preventDefault();
         closeEditor(false);
     } else if (!open && e.key === "l" && e.ctrlKey) {
@@ -11448,7 +11503,9 @@ document.addEventListener("keydown", (e) => {
         log.textContent = "";
     }
 });
-code.addEventListener("keydown", (e) => { // Tab writes spaces in the editor
+code.addEventListener("keydown", (e) => { // Tab writes the word offered, else spaces
+    if (editorC.key(e))
+        return;
     if (e.key === "Tab") {
         e.preventDefault();
         code.setRangeText("    ", code.selectionStart, code.selectionEnd, "end");

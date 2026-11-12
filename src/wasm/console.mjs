@@ -47,7 +47,8 @@ export const GUIDE = {
     ],
     keys: [
         ["Enter", "enters the line"], ["Shift+Enter", "a new line without entering"],
-        ["Tab", "completes a word: its module, signature and meaning show above the prompt (Up, Down choose)"],
+        ["Tab", "writes the word offered; words are offered as you type, in the prompt and in the editor"],
+        ["Alt+1 to Alt+9", "write the nth word offered"], ["Alt+Up, Alt+Down", "choose among the words (Alt+Down offers them)"],
         ["Up, Down", "walk the history"], ["Esc", "drops the lines gathered, or ends :edit N and :insert N"],
         ["F5", ":run"], ["F2", ":edit"], ["F1", "shows or hides this guide"], ["Ctrl+L", "clears the screen"],
     ],
@@ -56,6 +57,22 @@ const width = Math.max(...GUIDE.commands.map(([c]) => c.length)) + 2;
 const HELP = [...GUIDE.rules,
     ...GUIDE.commands.map(([c, what]) => `  ${c.padEnd(width)}${what}`),
     "Keys:", ...GUIDE.keys.map(([k, what]) => `  ${k.padEnd(width)}${what}`)].join("\n");
+
+// a call to try for a word just defined, from its signature "(n int, s str gives r int)": a value of each
+// parameter's type, then the name, and a dot to run it; null when a type has no sample here
+const SAMPLES = { int: "0", bool: "false", str: '""' };
+export function sampleCall(name, signature) {
+    const params = (signature ?? "()").replace(/^\(|\)$/g, "").split(/\bgives\b/)[0].split(",").map((p) => p.trim()).filter(Boolean);
+    const values = params.map((p) => SAMPLES[p.split(/\s+/).pop()]);
+    return values.includes(undefined) ? null : [...values, name].join(" ") + ".";
+}
+// the words a program declares, for completion: [module "", word, signature, meaning, true]
+export function userWords(program) {
+    const out = new Map();
+    for (const m of program.matchAll(/^[ \t]*(?:export[ \t]+|redefine[ \t]+)?word[ \t]+([A-Za-z_][A-Za-z_0-9]*)[ \t]*(\([^)]*\))?/gm))
+        out.set(m[1], ["", m[1], m[2] ?? "()", "defined in this session", true]);
+    return [...out.values()];
+}
 
 // the declaration a text begins with, as "word sq", "use io"; "" for set_order; null for none
 function declared(text) {
@@ -297,6 +314,11 @@ export async function createConsole({ createPinax, bytes, print, store = null })
             if (head)
                 print("info", `word ${head[1]} ${head[2] ?? "()"} compiled; nothing ran. It runs when it is called: ` +
                     "its arguments first, then its name\n");
+            const call = head && sampleCall(head[1], head[2]);
+            if (call) {
+                print("info", "(a call to try is in the prompt: change its values, Enter runs it)\n");
+                return { prompt: prompt(), fill: call };
+            }
         }
         return { prompt: prompt() };
     }
@@ -373,5 +395,5 @@ export async function createConsole({ createPinax, bytes, print, store = null })
         print("info", `the program of the last visit: ${plural(lines.length, "line")} (:list)\n`);
         runProgram();
     }
-    return { enter, cancel, setProgram, status, history, prompt, mode: () => mode?.kind ?? null, program: () => lines.slice() };
+    return { enter, cancel, setProgram, status, history, prompt, mode: () => mode?.kind ?? null, program: () => lines.slice(), words: () => userWords(lines.join("\n")) };
 }

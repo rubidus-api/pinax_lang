@@ -31,12 +31,13 @@
   .echo { color: #9fb3c8; } .out { color: #e6edf3; } .err { color: #ff7b72; }
   .stack { color: #7ee787; } .info { color: #d2a8ff; }
   #line { display: flex; align-items: flex-start; position: relative; }
-  #hint { position: absolute; left: 0; bottom: 100%; display: none; max-width: 100%; box-sizing: border-box;
+  .hint { position: absolute; left: 0; bottom: 100%; display: none; max-width: 100%; box-sizing: border-box;
           background: #161b22; border: 1px solid #30363d; padding: 4px 0; font-size: 13px; z-index: 2; }
-  #hint.open { display: block; }
-  #hint .item { padding: 1px 10px; white-space: pre; } #hint .item.on { background: #1f6feb55; }
-  #hint .item b { color: #79c0ff; font-weight: normal; } #hint .item i { color: #8b949e; font-style: normal; }
-  #hint .detail { padding: 4px 10px 2px; margin-top: 3px; border-top: 1px solid #30363d; color: #8b949e;
+  .hint.open { display: block; }
+  #editor .hint { left: 16px; bottom: 10px; }
+  .hint .item { padding: 1px 10px; white-space: pre; } #hint .item.on { background: #1f6feb55; }
+  .hint .item b { color: #79c0ff; font-weight: normal; } #hint .item i { color: #8b949e; font-style: normal; }
+  .hint .detail { padding: 4px 10px 2px; margin-top: 3px; border-top: 1px solid #30363d; color: #8b949e;
                   white-space: pre-wrap; max-width: 60em; }
   #prompt { white-space: pre; color: #9fb3c8; }
   #input { flex: 1; background: transparent; color: #e6edf3; border: 0; outline: 0; resize: none; padding: 0;
@@ -57,13 +58,13 @@
 <div id="log"><span class="info">Pinax. Code runs when it is whole: it ends with "," or ".", and a loop or a block runs at its end.
 :help lists the commands; :list shows the program with its line numbers.
 </span></div>
-<div id="line"><div id="hint"></div><span id="prompt">pinax> </span><textarea id="input" rows="1" spellcheck="false" autofocus></textarea></div>
+<div id="line"><div id="hint" class="hint"></div><span id="prompt">pinax> </span><textarea id="input" rows="1" spellcheck="false" autofocus></textarea></div>
 </div>
 <aside id="guide"></aside>
 </div>
 <div id="status">ready</div>
 <div id="editor"><header>The program. Ctrl+S (or F2) saves it and runs it again from a fresh state; Esc leaves it unchanged.</header>
-<textarea id="code" spellcheck="false"></textarea></div>
+<textarea id="code" spellcheck="false"></textarea><div id="hint2" class="hint"></div></div>
 <input id="file" type="file" accept=".pnx,.txt" hidden>
 <script id="wasm" type="application/octet-stream">
 @PINAX_WASM_BASE64@
@@ -190,68 +191,99 @@ function closeEditor(save) {
     input.focus();
     show();
 }
-// completion: the words that fit what is typed, with their signature and meaning (WORDS from the standard)
-const hint = $("hint");
-let offered = null, chosen = 0;
-function offer(force) {
-    const at = input.selectionStart;
-    const word = /[A-Za-z_][A-Za-z_0-9.]*$/.exec(input.value.slice(0, at))?.[0] ?? "";
-    offered = input.value.trimStart().startsWith(":") || (!force && word.length < 2 && !word.includes(".")) ? null
-        : complete(WORDS, input.value, at);
-    chosen = 0;
-    drawHint();
-}
-function drawHint() {
-    hint.classList.toggle("open", !!offered);
-    if (!offered)
-        return;
-    hint.textContent = "";
-    offered.items.forEach((it, k) => {
-        const row = document.createElement("div");
-        row.className = "item" + (k === chosen ? " on" : "");
-        const name = document.createElement("b");
-        name.textContent = it.label;
-        const sig = document.createElement("i");
-        sig.textContent = it.signature ? "  " + it.signature : "";
-        row.appendChild(name);
-        row.appendChild(sig);
-        hint.appendChild(row);
-    });
-    const it = offered.items[chosen];
-    const detail = document.createElement("div");
-    detail.className = "detail";
-    detail.textContent = [it.signature && `${it.label} ${it.signature}`, it.meaning].filter(Boolean).join("\n");
-    hint.appendChild(detail);
-}
-function accept() {
-    const it = offered.items[chosen];
-    input.setRangeText(it.insert, offered.from, offered.to, "end");
-    offered = null;
-    drawHint();
-    fit();
-    show();
-    if (it.insert.endsWith("."))
-        offer(true);
-}
-let walk = 0; // where Up and Down are in the history
-input.addEventListener("input", () => { fit(); show(); offer(false); });
-input.addEventListener("blur", () => { offered = null; drawHint(); });
-input.addEventListener("keydown", (e) => {
-    if (offered && (e.key === "ArrowUp" || e.key === "ArrowDown")) {
-        e.preventDefault();
-        const n = offered.items.length;
-        chosen = (chosen + (e.key === "ArrowDown" ? 1 : n - 1)) % n;
-        drawHint();
-    } else if (e.key === "Tab" && !e.shiftKey) {
-        e.preventDefault();
+// completion: the words that fit what is typed, with their signature and meaning (WORDS from the standard).
+// It uses keys a typist does not need: Alt+Up and Alt+Down choose (Alt+Down also opens it), Alt+1 to Alt+9 write the
+// nth word, Tab writes the chosen one, Esc closes it. Plain arrows, Enter and the space keep their work.
+function completer(field, box, wordsOf, { skip = () => false, tabOpens = false, changed = () => {} } = {}) {
+    let offered = null, chosen = 0;
+    function draw() {
+        box.classList.toggle("open", !!offered);
         if (!offered)
-            offer(true);
-        if (offered)
-            accept();
-    } else if (e.key === "Escape" && offered) {
-        e.preventDefault();
+            return;
+        box.textContent = "";
+        offered.items.forEach((it, k) => {
+            const row = document.createElement("div");
+            row.className = "item" + (k === chosen ? " on" : "");
+            const name = document.createElement("b");
+            name.textContent = (k < 9 ? `${k + 1} ` : "  ") + it.label;
+            const sig = document.createElement("i");
+            sig.textContent = it.signature ? "  " + it.signature : "";
+            row.appendChild(name);
+            row.appendChild(sig);
+            box.appendChild(row);
+        });
+        const it = offered.items[chosen];
+        const detail = document.createElement("div");
+        detail.className = "detail";
+        detail.textContent = [it.signature && `${it.label} ${it.signature}`, it.meaning, "Alt+1..9 writes that word, Alt+Up/Down chooses, Tab writes, Esc closes"]
+            .filter(Boolean).join("\n");
+        box.appendChild(detail);
+    }
+    function offer(force) {
+        const at = field.selectionStart;
+        const word = /[A-Za-z_][A-Za-z_0-9.]*$/.exec(field.value.slice(0, at))?.[0] ?? "";
+        offered = skip() || (!force && word.length < 2 && !word.includes(".")) ? null : complete(wordsOf(), field.value, at);
+        chosen = 0;
+        draw();
+    }
+    function accept() {
+        const it = offered.items[chosen];
+        field.setRangeText(it.insert, offered.from, offered.to, "end");
         offered = null;
-        drawHint();
+        draw();
+        changed();
+        if (it.insert.endsWith("."))
+            offer(true);
+    }
+    // true when the key was completion's
+    function key(e) {
+        const digit = /^Digit([1-9])$/.exec(e.code ?? "");
+        if (e.altKey && (e.key === "ArrowUp" || e.key === "ArrowDown")) {
+            e.preventDefault();
+            if (!offered)
+                offer(true);
+            else
+                chosen = (chosen + (e.key === "ArrowDown" ? 1 : offered.items.length - 1)) % offered.items.length;
+            draw();
+            return true;
+        }
+        if (e.altKey && digit && offered) {
+            e.preventDefault();
+            if (offered.items[digit[1] - 1]) {
+                chosen = digit[1] - 1;
+                accept();
+            }
+            return true;
+        }
+        if (e.key === "Tab" && !e.shiftKey && !e.altKey && !e.ctrlKey && !e.metaKey) {
+            if (!offered && tabOpens)
+                offer(true);
+            if (!offered)
+                return false;
+            e.preventDefault();
+            accept();
+            return true;
+        }
+        if (e.key === "Escape" && offered) {
+            e.preventDefault();
+            offered = null;
+            draw();
+            return true;
+        }
+        return false;
+    }
+    field.addEventListener("blur", () => { offered = null; draw(); });
+    return { key, offer };
+}
+const promptC = completer(input, $("hint"), () => [...con.words(), ...WORDS],
+    { skip: () => input.value.trimStart().startsWith(":"), tabOpens: true, changed: () => { fit(); show(); } });
+const editorC = completer(code, $("hint2"), () => [...userWords(code.value), ...WORDS]);
+code.addEventListener("input", () => editorC.offer(false));
+let walk = 0; // where Up and Down are in the history
+input.addEventListener("input", () => { fit(); show(); promptC.offer(false); });
+input.addEventListener("keydown", (e) => {
+    if (promptC.key(e)) {
+        return;
     } else if (e.key === "Enter" && !e.shiftKey) {
         e.preventDefault();
         submit();
@@ -292,7 +324,7 @@ document.addEventListener("keydown", (e) => {
             closeEditor(true);
         else
             act(con.enter(":edit"));
-    } else if (open && e.key === "Escape") {
+    } else if (open && e.key === "Escape" && !e.defaultPrevented) { // Esc that closed the completion is not this one
         e.preventDefault();
         closeEditor(false);
     } else if (!open && e.key === "l" && e.ctrlKey) {
@@ -300,7 +332,9 @@ document.addEventListener("keydown", (e) => {
         log.textContent = "";
     }
 });
-code.addEventListener("keydown", (e) => { // Tab writes spaces in the editor
+code.addEventListener("keydown", (e) => { // Tab writes the word offered, else spaces
+    if (editorC.key(e))
+        return;
     if (e.key === "Tab") {
         e.preventDefault();
         code.setRangeText("    ", code.selectionStart, code.selectionEnd, "end");

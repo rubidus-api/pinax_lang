@@ -183,7 +183,11 @@ numbers. `:edit N` puts line N in the prompt, `:insert N` adds lines above line 
 program runs again. `:run` (F5) is a reset: it empties the stack, forgets every definition and runs the program from
 line 1, the lines left as they are. Inside a word, nothing runs line by line: at each `,` or `.` the lines so far are only compiled, and a mistake is told at
 its line, with that line back in the prompt to be corrected. A word runs when it is called, its arguments first and then
-its name. Tab completes a word, and shows its module, signature and meaning (taken from the standard) above the prompt.
+its name. Words are offered as you type, in the prompt and in the editor (F2), with their module, signature and meaning (taken from the
+standard) above the line. Only keys a typist does not need work the offer: Alt+Up and Alt+Down choose (Alt+Down also offers),
+Alt+1 to Alt+9 write the nth word, Tab writes the chosen one (in the editor Tab writes four spaces when nothing is offered), Esc closes it.
+The words of the program come first among the candidates, with their signatures. A word just compiled puts a call to try into the
+prompt (a sample value for each parameter, then the name and a dot); change the values and Enter runs it.
 `:help`, and the guide beside the terminal (F1), list the commands and keys; the page links to this manual. Each release
 carries the page as `pinax-playground.html`.
 
