@@ -7,7 +7,7 @@
 
 #include <stdbool.h>
 
-#define PNX_MAX_HOSTS 64
+#define PNX_MAX_HOSTS 96
 // Register slots a task gets for every level of its call depth.
 #define PNX_TASK_INTS 16
 #define PNX_TASK_STRS 4

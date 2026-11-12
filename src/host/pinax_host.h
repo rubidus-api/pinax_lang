@@ -16,6 +16,7 @@
  *   not_found, and with full when the buffer has no room for the line or the file.
  *   clock   now_ms monotonic_ns (gives int)        sleep (ms int)
  *   random  random (gives int)   random_below (n int gives int)   seed (n int)
+ *   sqlite  (RFC-0043) see pinax_host_register_sqlite below
  *   env     arg_count (gives int)   arg (i int gives s str or fail)   getenv (name str gives s str or fail)
  */
 #ifndef PINAX_HOST_H
@@ -33,6 +34,16 @@ extern "C" {
 pinax_err pinax_host_register(pinax_state *state, const char *module);
 /* Registers the first five (not "sh"), and pinax_host_barrier as the state's barrier. */
 pinax_err pinax_host_register_all(pinax_state *state);
+/* The module "sqlite" (RFC-0043): SQLite as words, in a part of this library of its own. It is
+ * not registered by pinax_host_register_all, and there is no name for it in pinax_host_register:
+ * a host that never calls this function does not link SQLite. A script that may use it may read and
+ * write any database file the process can open (also by ATTACH): register it as you would "file".
+ * (pnx built with PNX_SQLITE=0 has no sqlite: ./nob reads that variable.) */
+pinax_err pinax_host_register_sqlite(pinax_state *state);
+/* Process-wide memory limits of SQLite in bytes: a soft one (caches shrink) and a hard one (an
+ * allocation past it fails as err.full). 0 is no limit; a negative value leaves it as it is.
+ * Defaults 64 MiB and 256 MiB. May be called before or after registering. */
+void pinax_host_sqlite_limits(int64_t soft_bytes, int64_t hard_bytes);
 /* What a dot that ends a statement finishes for these modules (pinax_on_barrier): the output
  * they hold back is written. `user` is not used. */
 void pinax_host_barrier(void *user);

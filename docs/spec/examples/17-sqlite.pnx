@@ -1,0 +1,26 @@
+rem run
+use io
+use sqlite
+word main (or fail)
+  ":memory:" sqlite.open or_fail to db
+  defer db sqlite.close end
+  "create table fruit (name text primary key, price int)" db sqlite.exec or_fail
+  "insert into fruit values (?, ?)" db sqlite.prepare or_fail to ins
+  defer ins sqlite.finalize end
+  "apple" 0 ins sqlite.bind_str or_fail
+  3 1 ins sqlite.bind_int or_fail
+  ins sqlite.step or_fail drop
+  ins sqlite.reset or_fail
+  "pear" 0 ins sqlite.bind_str or_fail
+  5 1 ins sqlite.bind_int or_fail
+  ins sqlite.step or_fail drop
+  "select name, price from fruit order by price desc" db sqlite.prepare or_fail to q
+  defer q sqlite.finalize end
+  loop
+    q sqlite.step or_fail
+    while
+    cat (0 q sqlite.col_str or_fail, " ", 1 q sqlite.col_int or_fail) io.println
+  end
+  cat ("rows ", "select count(*) from fruit" db sqlite.scalar_int or_fail) io.println
+end
+main or_else (e) cat ("failed: ", e err_text, " ", sqlite.last_error) io.println end

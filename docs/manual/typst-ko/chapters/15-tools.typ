@@ -84,6 +84,30 @@ bash 로 치면 쉼표는 `&`, 점은 `wait` 와 비슷하다. 앞의 것이 보
 낱말로 읽고 쓴다. 닫으면 명령이 끝나기를 기다리고, 그때 `sh.status` 가 어떻게 끝났는지 알려 준다. `sh.exit` 는 프로그램을
 제 상태로 끝낸다. Pinax 를 넣어 쓰는 호스트는 `sh` 를 등록할 때만 그것을 가진다(표준 17.5).
 
+== 데이터베이스: `sqlite`
+
+모듈 `sqlite` 는 `pnx` 에 들어 있는 SQLite 다. `sqlite.open` 은 연결을 주고(`":memory:"` 는 메모리 안의 것),
+`sqlite.prepare` 는 문장을 주며, 둘 다 `owned` 라서 파일처럼 `defer` 로 닫는다. 값은 문장의 글에 넣지 않는다. 문장의 한
+자리에 묶는다. 자리는 Pinax 의 모든 것처럼 0 부터 센다.
+
+#ex("manual", "15-sqlite.pnx")
+
+묶고, `false` 가 나올 때까지 `step` 하고, `col_int`, `col_str` 따위로 줄을 읽고, 문장을 다시 쓰려면 `reset` 한다. 읽기는
+엄격하다: 다른 종류의 열은 `err.format` 으로 실패하고, 먼저 `col_kind` 나 `col_is_null` 로 물을 수 있다. SQLite 의 거절은 몇
+가지 코드다(해석되지 않는 문장은 `err.format`, 줄 없음은 `err.not_found`, 제약이나 잠금은 `err.failed`).
+`sqlite.last_code` 가 어느 것인지 알려 주고 `sqlite.last_error` 가 글로 말해 준다. 거래는 SQL(`begin`, `commit`)이고,
+`sqlite.in_transaction` 이 열려 있는지 묻는다. 거래가 열린 채 닫힌 연결은 그것을 되돌린다.
+
+질의의 결과로 `sheet` 를 채울 수 있다. 두 모듈은 서로를 모른다. 프로그램의 몇 낱말, 여기서는 `fetch` 가 둘을 잇는다.
+
+#ex("manual", "15-sqlite-sheet.pnx")
+
+#qa[웹 페이지에서도 SQLite 가 되는가?][아니다. `sqlite` 는 파일을 여는 호스트 모듈이고 페이지에는 파일이 없다. `pnx` 에는 있고,
+Pinax 를 넣어 쓰는 호스트는 `pinax_host_register_sqlite` 로 등록할 때만 링크한다(표준 17.6).]
+
+#qa[왜 실수를 위한 낱말이 없는가?][이 판에는 float 형이 없다. 실수 열은 `col_str` 로 글로 읽어 `str.to_dec` 로 옮기고, 돈은
+가장 작은 단위의 정수로 묶는다.]
+
 == 스택 보기와 정리
 
 `pnx see` 는 정의의 줄마다 그 줄이 끝난 자리의 스택을 보인다. 스택이 머릿속과 다를 때 쓴다.

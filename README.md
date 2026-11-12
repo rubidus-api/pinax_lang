@@ -43,6 +43,8 @@ extension a catalogue. The language keeps its data flat.
 
 Pure C23. The only dependency is a vendored copy of
 [proven_c_lib](https://github.com/rubidus-api/proven_c_lib) (MIT) under `vendor/proven/`.
+The command `pnx` and the host library also carry [SQLite](https://www.sqlite.org/) (public domain) under
+`vendor/sqlite/`, as the host module `sqlite`; the core, the one-file `pinax.c` and the web page do not.
 
 Build with any C23 compiler:
 

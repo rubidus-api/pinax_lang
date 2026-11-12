@@ -741,6 +741,14 @@ static int run(int argc, char **argv) {
         err = pinax_host_register_all(state);
     if (err == PINAX_OK) // a command line tool runs commands (RFC-0040 part B)
         err = pinax_host_register(state, "sh");
+#if !defined(PNX_NO_SQLITE) // a command line tool opens databases (RFC-0043)
+    if (err == PINAX_OK) {
+        const char *mb = getenv("PNX_SQLITE_HEAP_MB"); // the hard limit; the soft one is a quarter of it
+        if (mb && atol(mb) > 0)
+            pinax_host_sqlite_limits((int64_t)atol(mb) * (1 << 20) / 4, (int64_t)atol(mb) * (1 << 20));
+        err = pinax_host_register_sqlite(state);
+    }
+#endif
     if (err == PINAX_OK && n_libs)
         pinax_set_resolver(state, resolve, NULL);
     if (err != PINAX_OK) {

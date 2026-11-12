@@ -92,7 +92,80 @@ main <span style="color: #d73948">or_else</span> (e) <span style="color: #d73948
 first
 the shell says: hello
 exit 2 gave status 2
-</code></pre></div><p>명령의 상태는 실패가 아니라 값이다: <code>"exit 2" run</code> 은 2 를 준다. 셸을 띄우지 못할 때만 실패한다. 자료를 명령에 넣을 때는 먼저 따옴표로 싼다: <code>cat ("ls ", name sh.quote) run</code>. <code>sh.open_read</code> 와 <code>sh.open_write</code> 는 관을 <code>file</code> 로 주고, <code>file</code> 의 낱말로 읽고 쓴다. 닫으면 명령이 끝나기를 기다리고, 그때 <code>sh.status</code> 가 어떻게 끝났는지 알려 준다. <code>sh.exit</code> 는 프로그램을 제 상태로 끝낸다. Pinax 를 넣어 쓰는 호스트는 <code>sh</code> 를 등록할 때만 그것을 가진다(표준 17.5).</p><h3>15.4 스택 보기와 정리</h3><p><code>pnx see</code> 는 정의의 줄마다 그 줄이 끝난 자리의 스택을 보인다. 스택이 머릿속과 다를 때 쓴다.</p><div class="example see"><p class="ex-file"><code>15-see.pnx</code></p><pre><code data-lang="pinax"><span style="color: #d73948">word</span> mean (a <span style="color: #d73948">int</span>, b <span style="color: #d73948">int</span>, c <span style="color: #d73948">int</span> <span style="color: #d73948">gives</span> <span style="color: #d73948">int</span>)
+</code></pre></div><p>명령의 상태는 실패가 아니라 값이다: <code>"exit 2" run</code> 은 2 를 준다. 셸을 띄우지 못할 때만 실패한다. 자료를 명령에 넣을 때는 먼저 따옴표로 싼다: <code>cat ("ls ", name sh.quote) run</code>. <code>sh.open_read</code> 와 <code>sh.open_write</code> 는 관을 <code>file</code> 로 주고, <code>file</code> 의 낱말로 읽고 쓴다. 닫으면 명령이 끝나기를 기다리고, 그때 <code>sh.status</code> 가 어떻게 끝났는지 알려 준다. <code>sh.exit</code> 는 프로그램을 제 상태로 끝낸다. Pinax 를 넣어 쓰는 호스트는 <code>sh</code> 를 등록할 때만 그것을 가진다(표준 17.5).</p><h3>15.4 데이터베이스: <code>sqlite</code></h3><p>모듈 <code>sqlite</code> 는 <code>pnx</code> 에 들어 있는 SQLite 다. <code>sqlite.open</code> 은 연결을 주고(<code>":memory:"</code> 는 메모리 안의 것), <code>sqlite.prepare</code> 는 문장을 주며, 둘 다 <code>owned</code> 라서 파일처럼 <code>defer</code> 로 닫는다. 값은 문장의 글에 넣지 않는다. 문장의 한 자리에 묶는다. 자리는 Pinax 의 모든 것처럼 0 부터 센다.</p><div class="example run"><p class="ex-file"><code>15-sqlite.pnx</code></p><pre><code data-lang="pinax"><span style="color: #d73948">use</span> io
+<span style="color: #d73948">use</span> sqlite
+<span style="color: #74747c">rem A transaction that is rolled back unless it reached its commit; values go through bind, never into the text.</span>
+<span style="color: #d73948">word</span> undo (db sqlite)
+  db sqlite.in_transaction <span style="color: #d73948">if</span> <span style="color: #198810">"rollback"</span> db sqlite.exec <span style="color: #d73948">or_else</span> (e) <span style="color: #d73948">end</span> <span style="color: #d73948">end</span>
+<span style="color: #d73948">end</span>
+<span style="color: #d73948">word</span> add_all (db sqlite <span style="color: #d73948">or</span> <span style="color: #d73948">fail</span>)
+  <span style="color: #198810">"begin"</span> db sqlite.exec <span style="color: #d73948">or_fail</span>
+  defer db undo <span style="color: #d73948">end</span>
+  <span style="color: #198810">"insert into stock values (:name, :n)"</span> db sqlite.prepare <span style="color: #d73948">or_fail</span> <span style="color: #d73948">to</span> ins
+  defer ins sqlite.finalize <span style="color: #d73948">end</span>
+  <span style="color: #198810">":name"</span> ins sqlite.bind_name <span style="color: #d73948">or_fail</span> <span style="color: #d73948">to</span> at_name
+  <span style="color: #198810">":n"</span> ins sqlite.bind_name <span style="color: #d73948">or_fail</span> <span style="color: #d73948">to</span> at_n
+  <span style="color: #198810">"apple"</span> at_name ins sqlite.bind_str <span style="color: #d73948">or_fail</span>
+  <span style="color: #b60157">3</span> at_n ins sqlite.bind_int <span style="color: #d73948">or_fail</span>
+  ins sqlite.step <span style="color: #d73948">or_fail</span> drop
+  ins sqlite.reset <span style="color: #d73948">or_fail</span>
+  <span style="color: #198810">"apple"</span> at_name ins sqlite.bind_str <span style="color: #d73948">or_fail</span>
+  <span style="color: #b60157">4</span> at_n ins sqlite.bind_int <span style="color: #d73948">or_fail</span>
+  ins sqlite.step <span style="color: #d73948">or_fail</span> drop
+  <span style="color: #198810">"commit"</span> db sqlite.exec <span style="color: #d73948">or_fail</span>
+<span style="color: #d73948">end</span>
+<span style="color: #d73948">word</span> main (<span style="color: #d73948">or</span> <span style="color: #d73948">fail</span>)
+  <span style="color: #198810">":memory:"</span> sqlite.open <span style="color: #d73948">or_fail</span> <span style="color: #d73948">to</span> db
+  defer db sqlite.close <span style="color: #d73948">end</span>
+  <span style="color: #198810">"create table stock (name text primary key, n int)"</span> db sqlite.exec <span style="color: #d73948">or_fail</span>
+  db add_all <span style="color: #d73948">or_else</span> (e) <span style="color: #d73948">cat</span> (<span style="color: #198810">"rolled back: "</span>, e err_text, <span style="color: #198810">" (code "</span>, sqlite.last_code, <span style="color: #198810">")"</span>) io.println <span style="color: #d73948">end</span>
+  <span style="color: #d73948">cat</span> (<span style="color: #198810">"rows "</span>, <span style="color: #198810">"select count(*) from stock"</span> db sqlite.scalar_int <span style="color: #d73948">or_fail</span>) io.println
+<span style="color: #d73948">end</span>
+main <span style="color: #d73948">or_else</span> (e) <span style="color: #d73948">cat</span> (<span style="color: #198810">"failed: "</span>, e err_text) io.println <span style="color: #d73948">end</span>
+</code></pre><p class="ex-label">출력</p><pre><code data-lang="text">$ pnx 15-sqlite.pnx
+rolled back: failed (code 1555)
+rows 0
+</code></pre></div><p>묶고, <code>false</code> 가 나올 때까지 <code>step</code> 하고, <code>col_int</code>, <code>col_str</code> 따위로 줄을 읽고, 문장을 다시 쓰려면 <code>reset</code> 한다. 읽기는 엄격하다: 다른 종류의 열은 <code>err.format</code> 으로 실패하고, 먼저 <code>col_kind</code> 나 <code>col_is_null</code> 로 물을 수 있다. SQLite 의 거절은 몇 가지 코드다(해석되지 않는 문장은 <code>err.format</code>, 줄 없음은 <code>err.not_found</code>, 제약이나 잠금은 <code>err.failed</code>). <code>sqlite.last_code</code> 가 어느 것인지 알려 주고 <code>sqlite.last_error</code> 가 글로 말해 준다. 거래는 SQL(<code>begin</code>, <code>commit</code>)이고, <code>sqlite.in_transaction</code> 이 열려 있는지 묻는다. 거래가 열린 채 닫힌 연결은 그것을 되돌린다.</p><p>질의의 결과로 <code>sheet</code> 를 채울 수 있다. 두 모듈은 서로를 모른다. 프로그램의 몇 낱말, 여기서는 <code>fetch</code> 가 둘을 잇는다.</p><div class="example run"><p class="ex-file"><code>15-sqlite-sheet.pnx</code></p><pre><code data-lang="pinax"><span style="color: #d73948">use</span> io
+<span style="color: #d73948">use</span> sqlite
+<span style="color: #d73948">use</span> sheet
+<span style="color: #74747c">rem The module sqlite and the module sheet do not know each other; a few words of the program join them.</span>
+<span style="color: #d73948">buffer</span> grid <span style="color: #b60157">65536</span>
+
+<span style="color: #74747c">rem the rows of a query become the rows of a sheet: a null stays empty, an integer and a text go in as they are</span>
+<span style="color: #d73948">word</span> fetch (q stmt, g <span style="color: #d73948">buffer</span> <span style="color: #d73948">gives</span> n <span style="color: #d73948">int</span> <span style="color: #d73948">or</span> <span style="color: #d73948">fail</span>)
+  <span style="color: #b60157">0</span> <span style="color: #d73948">to</span> n
+  <span style="color: #d73948">loop</span>
+    q sqlite.step <span style="color: #d73948">or_fail</span>
+    <span style="color: #d73948">while</span>
+    g sheet.add_row <span style="color: #d73948">or_fail</span> <span style="color: #d73948">to</span> r
+    <span style="color: #b60157">0</span> q sqlite.col_count range <span style="color: #d73948">do</span> (c <span style="color: #d73948">int</span>)
+      c q sqlite.col_kind <span style="color: #d73948">to</span> k
+      k sqlite.k_int eq <span style="color: #d73948">if</span> c q sqlite.col_int <span style="color: #d73948">or_fail</span> r c g sheet.put_int <span style="color: #d73948">or_fail</span> <span style="color: #d73948">end</span>
+      k sqlite.k_text eq <span style="color: #d73948">if</span> c q sqlite.col_str <span style="color: #d73948">or_fail</span> r c g sheet.put_str <span style="color: #d73948">or_fail</span> <span style="color: #d73948">end</span>
+    <span style="color: #d73948">end</span> each
+    n <span style="color: #b60157">1</span> add <span style="color: #d73948">to</span> n
+  <span style="color: #d73948">end</span>
+  n
+<span style="color: #d73948">end</span>
+<span style="color: #d73948">word</span> main (<span style="color: #d73948">or</span> <span style="color: #d73948">fail</span>)
+  <span style="color: #198810">":memory:"</span> sqlite.open <span style="color: #d73948">or_fail</span> <span style="color: #d73948">to</span> db
+  defer db sqlite.close <span style="color: #d73948">end</span>
+  <span style="color: #198810">"create table fruit (name text, price int)"</span> db sqlite.exec <span style="color: #d73948">or_fail</span>
+  <span style="color: #198810">"insert into fruit values ('apple', 3), ('pear', 5), ('fig', null)"</span> db sqlite.exec <span style="color: #d73948">or_fail</span>
+  <span style="color: #198810">"select name, price from fruit order by name"</span> db sqlite.prepare <span style="color: #d73948">or_fail</span> <span style="color: #d73948">to</span> q
+  defer q sqlite.finalize <span style="color: #d73948">end</span>
+  <span style="color: #b60157">64</span> <span style="color: #b60157">2</span> grid sheet.init <span style="color: #d73948">or_fail</span>
+  q grid fetch <span style="color: #d73948">or_fail</span> drop
+  <span style="color: #d73948">cat</span> (<span style="color: #198810">"rows "</span>, grid sheet.rows) io.println
+  <span style="color: #d73948">cat</span> (<span style="color: #198810">"fig: "</span>, <span style="color: #b60157">1</span> <span style="color: #b60157">0</span> grid sheet.str <span style="color: #d73948">or_fail</span>, <span style="color: #198810">", price empty: "</span>, <span style="color: #b60157">1</span> <span style="color: #b60157">1</span> grid sheet.is_empty) io.println
+  <span style="color: #d73948">cat</span> (<span style="color: #198810">"total "</span>, <span style="color: #b60157">1</span> grid sheet.sum_col) io.println
+<span style="color: #d73948">end</span>
+main <span style="color: #d73948">or_else</span> (e) <span style="color: #d73948">cat</span> (<span style="color: #198810">"failed: "</span>, e err_text) io.println <span style="color: #d73948">end</span>
+</code></pre><p class="ex-label">출력</p><pre><code data-lang="text">$ pnx 15-sqlite-sheet.pnx
+rows 3
+fig: fig, price empty: true
+total 8
+</code></pre></div><div class="box qa"><p class="box-title">문답</p><p><strong>물음. 웹 페이지에서도 SQLite 가 되는가?</strong></p><p>답. 아니다. <code>sqlite</code> 는 파일을 여는 호스트 모듈이고 페이지에는 파일이 없다. <code>pnx</code> 에는 있고, Pinax 를 넣어 쓰는 호스트는 <code>pinax_host_register_sqlite</code> 로 등록할 때만 링크한다(표준 17.6).</p></div><div class="box qa"><p class="box-title">문답</p><p><strong>물음. 왜 실수를 위한 낱말이 없는가?</strong></p><p>답. 이 판에는 float 형이 없다. 실수 열은 <code>col_str</code> 로 글로 읽어 <code>str.to_dec</code> 로 옮기고, 돈은 가장 작은 단위의 정수로 묶는다.</p></div><h3>15.5 스택 보기와 정리</h3><p><code>pnx see</code> 는 정의의 줄마다 그 줄이 끝난 자리의 스택을 보인다. 스택이 머릿속과 다를 때 쓴다.</p><div class="example see"><p class="ex-file"><code>15-see.pnx</code></p><pre><code data-lang="pinax"><span style="color: #d73948">word</span> mean (a <span style="color: #d73948">int</span>, b <span style="color: #d73948">int</span>, c <span style="color: #d73948">int</span> <span style="color: #d73948">gives</span> <span style="color: #d73948">int</span>)
   a b add
   c add
   <span style="color: #b60157">3</span> div

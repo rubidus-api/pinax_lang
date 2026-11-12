@@ -15,7 +15,7 @@ this implementation's values. Default capacities differ between processors (4 (5
   [steps of one `ptn` word], [2#super[24]], [2#super[24]],
   [C arguments of an `extern` function], [8], [8],
   [`str` arguments, results of a host word], [8, 4], [8, 4],
-  [host modules' words (per state)], [64], [64],
+  [host modules' words (per state)], [96], [96],
   [handle types], [16], [16],
   [digits after the point of `dec(N)` (7.5)], [18], [18],
   [globals of a state (every load together)], [1024], [3839],

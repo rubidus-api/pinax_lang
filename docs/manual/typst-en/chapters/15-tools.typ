@@ -90,6 +90,31 @@ into a command, quote it first: `cat ("ls ", name sh.quote) run`. `sh.open_read`
 ended. `sh.exit` ends the program with a status of its own. A host that embeds Pinax has `sh` only when it registers it
 (standard 17.5).
 
+== A database: `sqlite`
+
+The module `sqlite` is SQLite, built into `pnx`. `sqlite.open` gives a connection (`":memory:"` is one that lives in memory),
+`sqlite.prepare` a statement, and both are `owned`: close them with `defer`, as with a file. A value never goes into the
+text of a statement; it is bound to a place of it, counted from 0 as everything in Pinax is.
+
+#ex("manual", "15-sqlite.pnx")
+
+Bind, `step` until it gives `false`, read the row with `col_int`, `col_str` and the like, `reset` to use the statement
+again. A reader is strict: a column of another kind fails with `err.format`, and `col_kind` or `col_is_null` ask first. A
+refusal of SQLite is one of a few codes (`err.format` for a statement that does not parse, `err.not_found` for no row,
+`err.failed` for a constraint or a lock); `sqlite.last_code` tells which, `sqlite.last_error` says it in words. A
+transaction is SQL (`begin`, `commit`); `sqlite.in_transaction` asks whether one is open, and a connection closed with one
+open rolls it back.
+
+A query can fill a `sheet`. The two modules do not know each other; a few words of the program, here `fetch`, join them.
+
+#ex("manual", "15-sqlite-sheet.pnx")
+
+#qa[Does SQLite work in the web page?][No. `sqlite` is a host module that opens files, and the page has none. `pnx` has it;
+a host that embeds Pinax registers it with `pinax_host_register_sqlite` and links it only then (standard 17.6).]
+
+#qa[Why is there no word for a real?][This edition has no float type. Read a real column as a text with `col_str` and move
+it with `str.to_dec`; bind money as an integer in its smallest unit.]
+
 == Seeing the stack, and formatting
 
 `pnx see` shows, for each line of a definition, the stack where that line ends. Use it when the stack is not what you

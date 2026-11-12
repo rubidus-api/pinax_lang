@@ -32,12 +32,12 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <sys/stat.h>
 
 #if defined(_WIN32)
 #include <direct.h>
 #define make_dir(p) _mkdir(p)
 #else
-#include <sys/stat.h>
 #define make_dir(p) mkdir((p), 0777)
 #endif
 
@@ -81,6 +81,14 @@ static const char *const proven_threads[] = {"platform/proven_sys_thread.c"};
 // The standard host modules, the loop and its channels, and the command pnx (RFC-0015,
 // RFC-0020): hosted, built on pinax.h.
 static const char *const host_sources[] = {"src/host/pinax_host.c", "src/host/pinax_loop.c"};
+// SQLite (RFC-0043): the module and the vendored amalgamation are members of libpinax_host.a that
+// only a host which registers the module links. PNX_SQLITE=0 leaves both out (and pnx without it).
+static const char *const sqlite_module = "src/host/pinax_sqlite.c";
+static const char *const sqlite_amalgamation = "vendor/sqlite/sqlite3.c";
+static bool sqlite_wanted(void) {
+    const char *v = getenv("PNX_SQLITE");
+    return !(v && strcmp(v, "0") == 0);
+}
 static const char *const pnx_sources[] = {"src/host/pnx_main.c", "src/host/pnx_fmt.c"};
 
 static const char *const test_sources[] = {"tests/test_main.c"};
@@ -200,6 +208,42 @@ static int compile_set(const target_t *t, const char *flags, const char *root, c
     return 0;
 }
 
+// A file compiled with its own flags and kept: skipped while the object is newer than the source and
+// the compiler and flags are the ones written beside it. SQLite's amalgamation is 270000 lines.
+static int compile_cached(const target_t *t, const char *flags, const char *src, const char *obj) {
+    char stamp[1100], want[2048], have[2048] = "", cmd[4096];
+    snprintf(stamp, sizeof stamp, "%s.flags", obj);
+    snprintf(want, sizeof want, "%s %s\n", t->cc, flags);
+    FILE *f = fopen(stamp, "rb");
+    if (f) {
+        size_t n = fread(have, 1, sizeof have - 1, f);
+        have[n] = '\0';
+        fclose(f);
+    }
+    struct stat so, oo;
+    if (stat(src, &so) == 0 && stat(obj, &oo) == 0 && oo.st_mtime >= so.st_mtime && strcmp(have, want) == 0) {
+        printf("nob: kept %s\n", obj);
+        return 0;
+    }
+    snprintf(cmd, sizeof cmd, "%s %s -c %s -o %s", t->cc, flags, src, obj);
+    if (run(cmd))
+        return 1;
+    f = fopen(stamp, "wb");
+    if (f) {
+        fputs(want, f);
+        fclose(f);
+    }
+    return 0;
+}
+
+// sqlite3.c: not Pinax's flags (it is third-party code, not edited, not warned about), -O2 even in a
+// sanitizing build, and the options of RFC-0043 section 8. One object per target, for every variant.
+static const char *sqlite_flags(void) {
+    return "-O2 -w -std=gnu11 -DSQLITE_THREADSAFE=2 -DSQLITE_OMIT_LOAD_EXTENSION -DSQLITE_DQS=0 "
+           "-DSQLITE_OMIT_DEPRECATED -DSQLITE_OMIT_SHARED_CACHE -DSQLITE_DEFAULT_MEMSTATUS=1 -DSQLITE_USE_ALLOCA "
+           "-DSQLITE_DEFAULT_FOREIGN_KEYS=1 -DSQLITE_ENABLE_MATH_FUNCTIONS";
+}
+
 static int build_lib(const target_t *t, char *lib, size_t lib_cap, char *hosted_objs, size_t hosted_cap) {
     char dir[256], objdir[300];
     build_dir(dir, sizeof dir, t);
@@ -231,9 +275,23 @@ static int build_lib(const target_t *t, char *lib, size_t lib_cap, char *hosted_
     static char host_objs[4096], pnx_objs[4096];
     char host_lib[512], pnx[512];
     host_objs[0] = pnx_objs[0] = '\0';
+    static char host_flags[640], main_flags[700];
+    snprintf(host_flags, sizeof host_flags, "%s -Ivendor/sqlite", own_flags(t));
+    snprintf(main_flags, sizeof main_flags, "%s%s", pnx_flags(t), sqlite_wanted() ? " -Ivendor/sqlite" : " -DPNX_NO_SQLITE");
     if (compile_set(t, own_flags(t), "", host_sources, COUNT(host_sources), objdir, host_objs, sizeof host_objs) ||
-        compile_set(t, pnx_flags(t), "", pnx_sources, COUNT(pnx_sources), objdir, pnx_objs, sizeof pnx_objs))
+        compile_set(t, main_flags, "", pnx_sources, COUNT(pnx_sources), objdir, pnx_objs, sizeof pnx_objs))
         return 1;
+    if (sqlite_wanted()) {
+        char cache[300], obj[400];
+        snprintf(cache, sizeof cache, "build/%s-sqlite", t->name);
+        mkdirs(cache);
+        snprintf(obj, sizeof obj, "%s/sqlite3.o", cache);
+        if (compile_set(t, host_flags, "", &sqlite_module, 1, objdir, host_objs, sizeof host_objs) ||
+            compile_cached(t, sqlite_flags(), sqlite_amalgamation, obj))
+            return 1;
+        size_t len = strlen(host_objs);
+        snprintf(host_objs + len, sizeof host_objs - len, " %s", obj);
+    }
     if (compile_set(t, proven_flags(t), "vendor/proven/", proven_threads, COUNT(proven_threads), objdir, host_objs,
                     sizeof host_objs))
         return 1;
@@ -304,6 +362,10 @@ static int cmd_test(const target_t *t) {
         return 0;
     }
     snprintf(cmd, sizeof cmd, "./%s && ./%s", exe, loop_exe);
+    if (run(cmd))
+        return 1;
+    // RFC-0043: a host that does not register sqlite does not link it (the archive members stay out)
+    snprintf(cmd, sizeof cmd, "! nm %s | grep -q ' sqlite3_'", loop_exe);
     if (run(cmd))
         return 1;
     if (exists("tests/embed/host_min.c")) { // the embedding example: the public header and the library, nothing else
@@ -495,6 +557,8 @@ static int cmd_dist(const target_t *t) {
              "%s -std=c23 -Wall -Wextra -Werror -Ibuild/dist -x c -c - -o build/dist/native_check.o",
              t->cc);
     if (run(cmd))
+        return 1;
+    if (run("! grep -qi sqlite build/dist/pinax.c")) // RFC-0043: the one-file core knows nothing of sqlite
         return 1;
     printf("nob: wrote build/dist/pinax.h, build/dist/pinax.c and build/dist/pinax_native.h\n");
     return 0;
@@ -729,7 +793,7 @@ static int check_public(int *problems) {
     pclose(p);
     // Local paths must not appear in public files.
     // The pattern is split so that this file does not match its own scan.
-    p = popen("git ls-files -z | xargs -0 grep -lE '/(o)pt/data|/(h)ome/[a-z]|/(m)nt/[a-z]|/(U)sers/' 2>/dev/null", "r");
+    p = popen("git ls-files -z -- . ':(exclude)vendor/sqlite' | xargs -0 grep -lE '/(o)pt/data|/(h)ome/[a-z]|/(m)nt/[a-z]|/(U)sers/' 2>/dev/null", "r");
     if (p) {
         while (fgets(line, sizeof line, p)) {
             line[strcspn(line, "\n")] = '\0';

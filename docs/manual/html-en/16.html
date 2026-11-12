@@ -92,7 +92,80 @@ main <span style="color: #d73948">or_else</span> (e) <span style="color: #d73948
 first
 the shell says: hello
 exit 2 gave status 2
-</code></pre></div><p>A command’s status is a value, not a failure: <code>"exit 2" run</code> gives 2. Only a shell that cannot start fails. To put data into a command, quote it first: <code>cat ("ls ", name sh.quote) run</code>. <code>sh.open_read</code> and <code>sh.open_write</code> give a pipe as a <code>file</code>, read and written with the words of <code>file</code>; closing it waits for the command, and <code>sh.status</code> then tells how it ended. <code>sh.exit</code> ends the program with a status of its own. A host that embeds Pinax has <code>sh</code> only when it registers it (standard 17.5).</p><h3>15.4 Seeing the stack, and formatting</h3><p><code>pnx see</code> shows, for each line of a definition, the stack where that line ends. Use it when the stack is not what you think.</p><div class="example see"><p class="ex-file"><code>15-see.pnx</code></p><pre><code data-lang="pinax"><span style="color: #d73948">word</span> mean (a <span style="color: #d73948">int</span>, b <span style="color: #d73948">int</span>, c <span style="color: #d73948">int</span> <span style="color: #d73948">gives</span> <span style="color: #d73948">int</span>)
+</code></pre></div><p>A command’s status is a value, not a failure: <code>"exit 2" run</code> gives 2. Only a shell that cannot start fails. To put data into a command, quote it first: <code>cat ("ls ", name sh.quote) run</code>. <code>sh.open_read</code> and <code>sh.open_write</code> give a pipe as a <code>file</code>, read and written with the words of <code>file</code>; closing it waits for the command, and <code>sh.status</code> then tells how it ended. <code>sh.exit</code> ends the program with a status of its own. A host that embeds Pinax has <code>sh</code> only when it registers it (standard 17.5).</p><h3>15.4 A database: <code>sqlite</code></h3><p>The module <code>sqlite</code> is SQLite, built into <code>pnx</code>. <code>sqlite.open</code> gives a connection (<code>":memory:"</code> is one that lives in memory), <code>sqlite.prepare</code> a statement, and both are <code>owned</code>: close them with <code>defer</code>, as with a file. A value never goes into the text of a statement; it is bound to a place of it, counted from 0 as everything in Pinax is.</p><div class="example run"><p class="ex-file"><code>15-sqlite.pnx</code></p><pre><code data-lang="pinax"><span style="color: #d73948">use</span> io
+<span style="color: #d73948">use</span> sqlite
+<span style="color: #74747c">rem A transaction that is rolled back unless it reached its commit; values go through bind, never into the text.</span>
+<span style="color: #d73948">word</span> undo (db sqlite)
+  db sqlite.in_transaction <span style="color: #d73948">if</span> <span style="color: #198810">"rollback"</span> db sqlite.exec <span style="color: #d73948">or_else</span> (e) <span style="color: #d73948">end</span> <span style="color: #d73948">end</span>
+<span style="color: #d73948">end</span>
+<span style="color: #d73948">word</span> add_all (db sqlite <span style="color: #d73948">or</span> <span style="color: #d73948">fail</span>)
+  <span style="color: #198810">"begin"</span> db sqlite.exec <span style="color: #d73948">or_fail</span>
+  defer db undo <span style="color: #d73948">end</span>
+  <span style="color: #198810">"insert into stock values (:name, :n)"</span> db sqlite.prepare <span style="color: #d73948">or_fail</span> <span style="color: #d73948">to</span> ins
+  defer ins sqlite.finalize <span style="color: #d73948">end</span>
+  <span style="color: #198810">":name"</span> ins sqlite.bind_name <span style="color: #d73948">or_fail</span> <span style="color: #d73948">to</span> at_name
+  <span style="color: #198810">":n"</span> ins sqlite.bind_name <span style="color: #d73948">or_fail</span> <span style="color: #d73948">to</span> at_n
+  <span style="color: #198810">"apple"</span> at_name ins sqlite.bind_str <span style="color: #d73948">or_fail</span>
+  <span style="color: #b60157">3</span> at_n ins sqlite.bind_int <span style="color: #d73948">or_fail</span>
+  ins sqlite.step <span style="color: #d73948">or_fail</span> drop
+  ins sqlite.reset <span style="color: #d73948">or_fail</span>
+  <span style="color: #198810">"apple"</span> at_name ins sqlite.bind_str <span style="color: #d73948">or_fail</span>
+  <span style="color: #b60157">4</span> at_n ins sqlite.bind_int <span style="color: #d73948">or_fail</span>
+  ins sqlite.step <span style="color: #d73948">or_fail</span> drop
+  <span style="color: #198810">"commit"</span> db sqlite.exec <span style="color: #d73948">or_fail</span>
+<span style="color: #d73948">end</span>
+<span style="color: #d73948">word</span> main (<span style="color: #d73948">or</span> <span style="color: #d73948">fail</span>)
+  <span style="color: #198810">":memory:"</span> sqlite.open <span style="color: #d73948">or_fail</span> <span style="color: #d73948">to</span> db
+  defer db sqlite.close <span style="color: #d73948">end</span>
+  <span style="color: #198810">"create table stock (name text primary key, n int)"</span> db sqlite.exec <span style="color: #d73948">or_fail</span>
+  db add_all <span style="color: #d73948">or_else</span> (e) <span style="color: #d73948">cat</span> (<span style="color: #198810">"rolled back: "</span>, e err_text, <span style="color: #198810">" (code "</span>, sqlite.last_code, <span style="color: #198810">")"</span>) io.println <span style="color: #d73948">end</span>
+  <span style="color: #d73948">cat</span> (<span style="color: #198810">"rows "</span>, <span style="color: #198810">"select count(*) from stock"</span> db sqlite.scalar_int <span style="color: #d73948">or_fail</span>) io.println
+<span style="color: #d73948">end</span>
+main <span style="color: #d73948">or_else</span> (e) <span style="color: #d73948">cat</span> (<span style="color: #198810">"failed: "</span>, e err_text) io.println <span style="color: #d73948">end</span>
+</code></pre><p class="ex-label">Output</p><pre><code data-lang="text">$ pnx 15-sqlite.pnx
+rolled back: failed (code 1555)
+rows 0
+</code></pre></div><p>Bind, <code>step</code> until it gives <code>false</code>, read the row with <code>col_int</code>, <code>col_str</code> and the like, <code>reset</code> to use the statement again. A reader is strict: a column of another kind fails with <code>err.format</code>, and <code>col_kind</code> or <code>col_is_null</code> ask first. A refusal of SQLite is one of a few codes (<code>err.format</code> for a statement that does not parse, <code>err.not_found</code> for no row, <code>err.failed</code> for a constraint or a lock); <code>sqlite.last_code</code> tells which, <code>sqlite.last_error</code> says it in words. A transaction is SQL (<code>begin</code>, <code>commit</code>); <code>sqlite.in_transaction</code> asks whether one is open, and a connection closed with one open rolls it back.</p><p>A query can fill a <code>sheet</code>. The two modules do not know each other; a few words of the program, here <code>fetch</code>, join them.</p><div class="example run"><p class="ex-file"><code>15-sqlite-sheet.pnx</code></p><pre><code data-lang="pinax"><span style="color: #d73948">use</span> io
+<span style="color: #d73948">use</span> sqlite
+<span style="color: #d73948">use</span> sheet
+<span style="color: #74747c">rem The module sqlite and the module sheet do not know each other; a few words of the program join them.</span>
+<span style="color: #d73948">buffer</span> grid <span style="color: #b60157">65536</span>
+
+<span style="color: #74747c">rem the rows of a query become the rows of a sheet: a null stays empty, an integer and a text go in as they are</span>
+<span style="color: #d73948">word</span> fetch (q stmt, g <span style="color: #d73948">buffer</span> <span style="color: #d73948">gives</span> n <span style="color: #d73948">int</span> <span style="color: #d73948">or</span> <span style="color: #d73948">fail</span>)
+  <span style="color: #b60157">0</span> <span style="color: #d73948">to</span> n
+  <span style="color: #d73948">loop</span>
+    q sqlite.step <span style="color: #d73948">or_fail</span>
+    <span style="color: #d73948">while</span>
+    g sheet.add_row <span style="color: #d73948">or_fail</span> <span style="color: #d73948">to</span> r
+    <span style="color: #b60157">0</span> q sqlite.col_count range <span style="color: #d73948">do</span> (c <span style="color: #d73948">int</span>)
+      c q sqlite.col_kind <span style="color: #d73948">to</span> k
+      k sqlite.k_int eq <span style="color: #d73948">if</span> c q sqlite.col_int <span style="color: #d73948">or_fail</span> r c g sheet.put_int <span style="color: #d73948">or_fail</span> <span style="color: #d73948">end</span>
+      k sqlite.k_text eq <span style="color: #d73948">if</span> c q sqlite.col_str <span style="color: #d73948">or_fail</span> r c g sheet.put_str <span style="color: #d73948">or_fail</span> <span style="color: #d73948">end</span>
+    <span style="color: #d73948">end</span> each
+    n <span style="color: #b60157">1</span> add <span style="color: #d73948">to</span> n
+  <span style="color: #d73948">end</span>
+  n
+<span style="color: #d73948">end</span>
+<span style="color: #d73948">word</span> main (<span style="color: #d73948">or</span> <span style="color: #d73948">fail</span>)
+  <span style="color: #198810">":memory:"</span> sqlite.open <span style="color: #d73948">or_fail</span> <span style="color: #d73948">to</span> db
+  defer db sqlite.close <span style="color: #d73948">end</span>
+  <span style="color: #198810">"create table fruit (name text, price int)"</span> db sqlite.exec <span style="color: #d73948">or_fail</span>
+  <span style="color: #198810">"insert into fruit values ('apple', 3), ('pear', 5), ('fig', null)"</span> db sqlite.exec <span style="color: #d73948">or_fail</span>
+  <span style="color: #198810">"select name, price from fruit order by name"</span> db sqlite.prepare <span style="color: #d73948">or_fail</span> <span style="color: #d73948">to</span> q
+  defer q sqlite.finalize <span style="color: #d73948">end</span>
+  <span style="color: #b60157">64</span> <span style="color: #b60157">2</span> grid sheet.init <span style="color: #d73948">or_fail</span>
+  q grid fetch <span style="color: #d73948">or_fail</span> drop
+  <span style="color: #d73948">cat</span> (<span style="color: #198810">"rows "</span>, grid sheet.rows) io.println
+  <span style="color: #d73948">cat</span> (<span style="color: #198810">"fig: "</span>, <span style="color: #b60157">1</span> <span style="color: #b60157">0</span> grid sheet.str <span style="color: #d73948">or_fail</span>, <span style="color: #198810">", price empty: "</span>, <span style="color: #b60157">1</span> <span style="color: #b60157">1</span> grid sheet.is_empty) io.println
+  <span style="color: #d73948">cat</span> (<span style="color: #198810">"total "</span>, <span style="color: #b60157">1</span> grid sheet.sum_col) io.println
+<span style="color: #d73948">end</span>
+main <span style="color: #d73948">or_else</span> (e) <span style="color: #d73948">cat</span> (<span style="color: #198810">"failed: "</span>, e err_text) io.println <span style="color: #d73948">end</span>
+</code></pre><p class="ex-label">Output</p><pre><code data-lang="text">$ pnx 15-sqlite-sheet.pnx
+rows 3
+fig: fig, price empty: true
+total 8
+</code></pre></div><div class="box qa"><p class="box-title">Q&amp;A</p><p><strong>Q. Does SQLite work in the web page?</strong></p><p>A. No. <code>sqlite</code> is a host module that opens files, and the page has none. <code>pnx</code> has it; a host that embeds Pinax registers it with <code>pinax_host_register_sqlite</code> and links it only then (standard 17.6).</p></div><div class="box qa"><p class="box-title">Q&amp;A</p><p><strong>Q. Why is there no word for a real?</strong></p><p>A. This edition has no float type. Read a real column as a text with <code>col_str</code> and move it with <code>str.to_dec</code>; bind money as an integer in its smallest unit.</p></div><h3>15.5 Seeing the stack, and formatting</h3><p><code>pnx see</code> shows, for each line of a definition, the stack where that line ends. Use it when the stack is not what you think.</p><div class="example see"><p class="ex-file"><code>15-see.pnx</code></p><pre><code data-lang="pinax"><span style="color: #d73948">word</span> mean (a <span style="color: #d73948">int</span>, b <span style="color: #d73948">int</span>, c <span style="color: #d73948">int</span> <span style="color: #d73948">gives</span> <span style="color: #d73948">int</span>)
   a b add
   c add
   <span style="color: #b60157">3</span> div

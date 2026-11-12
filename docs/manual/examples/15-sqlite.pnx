@@ -1,0 +1,31 @@
+rem run
+use io
+use sqlite
+rem A transaction that is rolled back unless it reached its commit; values go through bind, never into the text.
+word undo (db sqlite)
+  db sqlite.in_transaction if "rollback" db sqlite.exec or_else (e) end end
+end
+word add_all (db sqlite or fail)
+  "begin" db sqlite.exec or_fail
+  defer db undo end
+  "insert into stock values (:name, :n)" db sqlite.prepare or_fail to ins
+  defer ins sqlite.finalize end
+  ":name" ins sqlite.bind_name or_fail to at_name
+  ":n" ins sqlite.bind_name or_fail to at_n
+  "apple" at_name ins sqlite.bind_str or_fail
+  3 at_n ins sqlite.bind_int or_fail
+  ins sqlite.step or_fail drop
+  ins sqlite.reset or_fail
+  "apple" at_name ins sqlite.bind_str or_fail
+  4 at_n ins sqlite.bind_int or_fail
+  ins sqlite.step or_fail drop
+  "commit" db sqlite.exec or_fail
+end
+word main (or fail)
+  ":memory:" sqlite.open or_fail to db
+  defer db sqlite.close end
+  "create table stock (name text primary key, n int)" db sqlite.exec or_fail
+  db add_all or_else (e) cat ("rolled back: ", e err_text, " (code ", sqlite.last_code, ")") io.println end
+  cat ("rows ", "select count(*) from stock" db sqlite.scalar_int or_fail) io.println
+end
+main or_else (e) cat ("failed: ", e err_text) io.println end

@@ -40,6 +40,8 @@ Pinax 는 호스트 프로그램 안에서 돌도록 만든 언어입니다. 호
 
 순수 C23 입니다. 의존하는 것은 `vendor/proven/` 에 벤더링한
 [proven_c_lib](https://github.com/rubidus-api/proven_c_lib)(MIT) 하나뿐입니다.
+`pnx` 와 호스트 라이브러리는 호스트 모듈 `sqlite` 를 위해 `vendor/sqlite/` 에 [SQLite](https://www.sqlite.org/)(퍼블릭 도메인)도
+담습니다. 코어, 한 파일 `pinax.c`, 웹 페이지에는 들어 있지 않습니다.
 
 C23 컴파일러로 짓습니다.
 
