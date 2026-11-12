@@ -31,10 +31,10 @@
   .echo { color: #9fb3c8; } .out { color: #e6edf3; } .err { color: #ff7b72; }
   .stack { color: #7ee787; } .info { color: #d2a8ff; }
   #line { display: flex; align-items: flex-start; position: relative; }
-  .hint { position: absolute; left: 0; bottom: 100%; display: none; max-width: 100%; box-sizing: border-box;
-          background: #161b22; border: 1px solid #30363d; padding: 4px 0; font-size: 13px; z-index: 2; }
+  .hint { position: absolute; left: 0; top: 100%; display: none; max-width: 100%; box-sizing: border-box;
+          background: #161b22; border: 1px solid #30363d; padding: 4px 0; font-size: 13px; z-index: 2; box-shadow: 0 6px 16px #010409; }
   .hint.open { display: block; }
-  #editor .hint { left: 16px; bottom: 10px; }
+  #editor .hint { left: 16px; top: auto; bottom: 10px; }
   .hint .item { padding: 1px 10px; white-space: pre; } #hint .item.on { background: #1f6feb55; }
   .hint .item b { color: #79c0ff; font-weight: normal; } #hint .item i { color: #8b949e; font-style: normal; }
   .hint .detail { padding: 4px 10px 2px; margin-top: 3px; border-top: 1px solid #30363d; color: #8b949e;
@@ -10827,6 +10827,10 @@ const MODULES = [
 // core and of every module whose name begins so, the core first. A word of a module is inserted
 // with its module ("str.trim"), which is right whatever set_order says. A word of the program
 // (a fifth member, true) comes first. null when nothing fits.
+//
+// Also: `:` at the start of a line lists the terminal's commands (commandsOf(GUIDE) makes the list); nearby() gives, for
+// an empty place (Alt+0), up to ten names the program declares (words, variables, parameters), the nearest to the
+// cursor and the most recently written first.
 // MIT (see ../../LICENSE).
 
 // After `use ` or inside the parentheses of `set_order`: { stem, taken } (the part of the name typed, and the modules
@@ -10834,23 +10838,92 @@ const MODULES = [
 function moduleContext(before) {
     const use = /(?:^|\n)[ \t]*use[ \t]+([A-Za-z_0-9]*)$/.exec(before);
     if (use)
-        return { stem: use[1], taken: [] };
+        return { kind: "use", stem: use[1], taken: [] };
     const order = /(?:^|[\s,.])set_order[ \t]*\(([^)]*?)([A-Za-z_0-9]*)$/.exec(before);
     if (order && /(^|,)\s*$/.test(order[1]))
-        return { stem: order[2], taken: order[1].split(",").map((t) => t.trim()).filter(Boolean) };
+        return { kind: "order", stem: order[2], taken: order[1].split(",").map((t) => t.trim()).filter(Boolean) };
     return null;
 }
 
-function complete(words, text, cursor, limit = 8, modules = []) {
+// the commands of the terminal, from its GUIDE: [{ name: ":list", usage: ":list [N[-M]]", what }]
+function commandsOf(guide) {
+    const out = new Map();
+    for (const [usage, what] of guide.commands)
+        for (const name of usage.match(/:[a-z_]+/g) ?? [])
+            if (!out.has(name))
+                out.set(name, { name, usage, what });
+    return [...out.values()];
+}
+// at the start of a line, `:` and the letters after it (the command name being typed): the stem, else null
+function commandContext(before) {
+    const m = /(?:^|\n)[ \t]*:([a-z_]*)$/.exec(before);
+    return m ? { stem: m[1] } : null;
+}
+
+// the names a text declares: Map name -> { kind, signature }; the parameters of a word count as variables
+function declaredNames(text) {
+    const out = new Map();
+    for (const m of text.matchAll(/^[ \t]*(?:export[ \t]+|redefine[ \t]+)?(word|const|global|array|list|pool|queue|buffer|tasks|record|type|index|bound|shared)[ \t]+([A-Za-z_][A-Za-z_0-9]*)[ \t]*(\([^)]*\))?/gm)) {
+        out.set(m[2], { kind: m[1] === "word" ? "word" : m[1] === "const" ? "constant" : "variable", signature: m[1] === "word" ? m[3] ?? "()" : "" });
+        if (m[1] === "word" && m[3])
+            for (const param of m[3].slice(1, -1).split("gives")[0].split(","))
+                if (/^\s*([A-Za-z_][A-Za-z_0-9]*)\s+\S/.test(param)) {
+                    const name = /^\s*([A-Za-z_][A-Za-z_0-9]*)/.exec(param)[1];
+                    if (!out.has(name))
+                        out.set(name, { kind: `parameter of ${m[2]}`, signature: "" });
+                }
+    }
+    return out;
+}
+
+// for an empty place: the names the program declares, nearest to the cursor and most recently written first
+// (what stands before the cursor, backwards; then `context`, an older text, backwards; then what follows the cursor),
+// ten at most. A name met nowhere comes last, in the order declared.
+function nearby(text, cursor, context = "", limit = 10) {
+    const declared = declaredNames(context + "\n" + text);
+    if (!declared.size)
+        return null;
+    const names = (t) => [...t.matchAll(/[A-Za-z_][A-Za-z_0-9]*/g)].map((m) => m[0]);
+    const order = [...names(text.slice(0, cursor)).reverse(), ...names(context).reverse(), ...names(text.slice(cursor))];
+    const seen = new Set();
+    const items = [];
+    for (const name of [...order, ...declared.keys()]) {
+        if (seen.has(name) || !declared.has(name))
+            continue;
+        seen.add(name);
+        const { kind, signature } = declared.get(name);
+        items.push({ label: name, insert: name, module: "", word: name, signature, meaning: kind });
+        if (items.length === limit)
+            break;
+    }
+    return { from: cursor, to: cursor, items };
+}
+
+function complete(words, text, cursor, limit = 8, modules = [], used = [], commands = []) {
     const before = text.slice(0, cursor);
+    const line = before.slice(before.lastIndexOf("\n") + 1);
+    if (commands.length && /^[ \t]*:/.test(line)) { // a command line: the name, and nothing after it
+        const c = commandContext(before);
+        const items = c ? commands.filter((k) => k.name.slice(1).startsWith(c.stem)).map((k) => ({
+            label: k.name, insert: k.name, module: "", word: "", signature: k.usage === k.name ? "" : k.usage, meaning: k.what })) : [];
+        return items.length && !(items.length === 1 && items[0].insert === ":" + c.stem)
+            ? { from: cursor - c.stem.length - 1, to: cursor, items } : null;
+    }
     const where = moduleContext(before);
     if (where) {
-        const items = modules.filter(([m]) => m.startsWith(where.stem) && !where.taken.includes(m)).map(([m, what]) => {
+        // `use` offers the modules not in use yet; set_order offers the modules in use, and get_order for the order as it is
+        const pool = where.kind === "use" ? modules.filter(([m]) => !used.includes(m))
+            : modules.filter(([m]) => used.includes(m));
+        const items = pool.filter(([m]) => m.startsWith(where.stem) && !where.taken.includes(m)).map(([m, what]) => {
             const names = words.filter((w) => w[0] === m).map((w) => w[1]);
             const list = names.length ? `; words: ${names.slice(0, 8).join(", ")}${names.length > 8 ? ", ..." : ""}` : "";
             return { label: m, insert: m, module: m, word: "", signature: "", meaning: `${what}${list}` };
         });
-        return items.length && !(items.length === 1 && items[0].insert === where.stem) ? { from: cursor - where.stem.length, to: cursor, items: items.slice(0, 12) } : null;
+        if (where.kind === "order" && "get_order".startsWith(where.stem) && !where.taken.includes("get_order"))
+            items.push({ label: "get_order", insert: "get_order", module: "", word: "get_order", signature: "",
+                         meaning: "the order as it is now: set_order (get_order, str) puts str behind it" });
+        return items.length && !(items.length === 1 && items[0].insert === where.stem)
+            ? { from: cursor - where.stem.length, to: cursor, items: items.slice(0, 12) } : null;
     }
     const typed = /[A-Za-z_][A-Za-z_0-9.]*$/.exec(before)?.[0];
     if (!typed || /^[0-9]/.test(typed))
@@ -10905,14 +10978,15 @@ function complete(words, text, cursor, limit = 8, modules = []) {
 
 const DECLARATIONS = new Set(["word", "const", "global", "array", "list", "pool", "queue", "buffer", "tasks",
     "record", "type", "extern", "forward", "index", "bound", "shared", "test", "use", "set_order"]);
-// a line that is a statement by itself, with nothing after it: the terminal puts the dot
-const ONE_LINERS = /^\s*(use\s+[A-Za-z_][A-Za-z_0-9]*(\s+as\s+[A-Za-z_][A-Za-z_0-9]*)?|set_order\s*\([^()]*\))\s*$/;
+// statements whose end is plain from their form: `use NAME [as NAME]`, `set_order (...)`, `get_order`. They take the
+// next name or one parenthesized list, so the terminal runs them when that is typed; a dot may be written, or not
+const SELF_ENDED = /^\s*(use\s+[A-Za-z_][A-Za-z_0-9]*(\s+as\s+[A-Za-z_][A-Za-z_0-9]*)?|set_order\s*\([^()]*\)|get_order)\s*$/;
 const PROMPT = "pinax> ", MORE = "  ...> ";
 // what :help says and the page's guide shows: one list for both
 const GUIDE = {
     rules: [
         'Pinax code runs when it is whole: it ends with "," or ".", or with the end of its block.',
-        'A line with only `use io` or `set_order (io, str)` needs no dot: the terminal puts it.',
+        "`use io`, `set_order (io, str)` and `get_order` need no dot: what they take is plain, so they run when typed.",
         "An empty line runs the text gathered, outside any block: the way out of a forgotten dot.",
         "A loop or a block runs once, when its end is typed; the status line shows the blocks open.",
         "A statement that declares something (word, const, global, use, set_order, ...) is added to the program.",
@@ -10926,6 +11000,8 @@ const GUIDE = {
         [":run", "RESETS: empties the stack and forgets every definition, then runs the program from line 1 (F5); the program's lines stay"],
         [":new", "no program, and a fresh state"],
         [":clear", "empties the stack only"],
+        [":words", "the words of the program, each with its signature"],
+        [":get_order", "the search order as it is, as the word get_order tells it"],
         [":save, :load", "the program as a .pnx file"],
         [":help", "this list"],
     ],
@@ -10949,6 +11025,10 @@ function sampleCall(name, signature) {
     const params = (signature ?? "()").replace(/^\(|\)$/g, "").split(/\bgives\b/)[0].split(",").map((p) => p.trim()).filter(Boolean);
     const values = params.map((p) => SAMPLES[p.split(/\s+/).pop()]);
     return values.includes(undefined) ? null : [...values, name].join(" ") + ".";
+}
+// the modules a text names with `use`, for completion
+function usedModules(text) {
+    return [...new Set([...text.matchAll(/^[ \t]*use[ \t]+([A-Za-z_][A-Za-z_0-9]*)/gm)].map((m) => m[1]))];
 }
 // the words a program declares, for completion: [module "", word, signature, meaning, true]
 function userWords(program) {
@@ -11115,6 +11195,20 @@ async function createConsole({ createPinax, bytes, print, store = null }) {
             session.clear();
             print("info", "the stack is empty\n");
             return {};
+        case "words": { // the words of the program, each with its signature
+            const mine = userWords(lines.join("\n"));
+            if (!mine.length)
+                print("info", "no word is defined yet\n");
+            else {
+                const wide = Math.max(...mine.map((w) => w[1].length));
+                print("info", mine.map((w) => `  ${w[1].padEnd(wide)}  ${w[2]}`).join("\n") + "\n");
+            }
+            return {};
+        }
+        case "get_order": { // what the word get_order tells, as a command
+            const r = session.eval("get_order");
+            return r.ok ? {} : {};
+        }
         case "save":
             return { download: lines.join("\n") + "\n" };
         case "load":
@@ -11197,12 +11291,9 @@ async function createConsole({ createPinax, bytes, print, store = null }) {
             }
             return { prompt: prompt() };
         }
-        // `use io` and `set_order (io, str)` alone on a line are whole statements: the terminal ends them, as a file does
-        if (gathered.length === 0 && ONE_LINERS.test(line))
-            line += ".";
         gathered.push(line);
         const text = gathered.join("\n");
-        if (!whole(text)) {
+        if (!whole(text) && !SELF_ENDED.test(text)) {
             if (ends(line.trimEnd()) && checkWord(text) === false) {
                 gathered.pop(); // the line with the mistake comes back to the prompt, to be corrected
                 return { prompt: prompt(), fill: line };
@@ -11302,7 +11393,7 @@ async function createConsole({ createPinax, bytes, print, store = null }) {
         print("info", `the program of the last visit: ${plural(lines.length, "line")} (:list)\n`);
         runProgram();
     }
-    return { enter, cancel, setProgram, status, history, prompt, mode: () => mode?.kind ?? null, program: () => lines.slice(), words: () => userWords(lines.join("\n")) };
+    return { enter, cancel, setProgram, status, history, prompt, mode: () => mode?.kind ?? null, program: () => lines.slice(), words: () => userWords(lines.join("\n")), used: () => usedModules(lines.join("\n")) };
 }
 const $ = (id) => document.getElementById(id);
 const log = $("log"), input = $("input"), prompt = $("prompt"), screen = $("screen");
@@ -11426,7 +11517,7 @@ function closeEditor(save) {
 // completion: the words that fit what is typed, with their signature and meaning (WORDS from the standard).
 // It uses keys a typist does not need: Alt+Up and Alt+Down choose (Alt+Down also opens it), Alt+1 to Alt+9 write the
 // nth word, Tab writes the chosen one, Esc closes it. Plain arrows, Enter and the space keep their work.
-function completer(field, box, wordsOf, { skip = () => false, tabOpens = false, changed = () => {} } = {}) {
+function completer(field, box, wordsOf, usedOf, contextOf, commands, { skip = () => false, tabOpens = false, changed = () => {} } = {}) {
     let offered = null, chosen = 0;
     function draw() {
         box.classList.toggle("open", !!offered);
@@ -11447,16 +11538,20 @@ function completer(field, box, wordsOf, { skip = () => false, tabOpens = false, 
         const it = offered.items[chosen];
         const detail = document.createElement("div");
         detail.className = "detail";
-        detail.textContent = [it.signature && `${it.label} ${it.signature}`, it.meaning, "Alt+1..9 writes that one, Alt+Up/Down chooses, Tab writes, Esc closes"]
+        detail.textContent = [it.signature && `${it.label} ${it.signature}`, it.meaning, "Alt+1..9 writes that one, Alt+Up/Down chooses, Alt+0 offers here, Tab writes, Esc closes"]
             .filter(Boolean).join("\n");
         box.appendChild(detail);
+        box.scrollIntoView?.({ block: "nearest" }); // the list pulls down: keep it in view
     }
     function offer(force) {
         const at = field.selectionStart;
         const word = /[A-Za-z_][A-Za-z_0-9.]*$/.exec(field.value.slice(0, at))?.[0] ?? "";
-        const listing = moduleContext(field.value.slice(0, at)); // after `use` and in set_order: the modules, at once
-        offered = skip() || (!force && !listing && word.length < 2 && !word.includes(".")) ? null
-            : complete(wordsOf(), field.value, at, 8, MODULES);
+        const before = field.value.slice(0, at);
+        const listing = moduleContext(before) || (commands.length && commandContext(before)); // listed at once, before any letter
+        offered = (!force && !listing && word.length < 2 && !word.includes(".")) ? null
+            : complete(wordsOf(), field.value, at, 8, MODULES, usedOf(), commands);
+        if (!offered && force && !word && !/^[ \t]*:/.test(before.slice(before.lastIndexOf("\n") + 1)))
+            offered = nearby(field.value, at, contextOf()); // an empty place: the names near and recent
         chosen = 0;
         draw();
     }
@@ -11479,6 +11574,11 @@ function completer(field, box, wordsOf, { skip = () => false, tabOpens = false, 
             else
                 chosen = (chosen + (e.key === "ArrowDown" ? 1 : offered.items.length - 1)) % offered.items.length;
             draw();
+            return true;
+        }
+        if (e.altKey && e.code === "Digit0") { // offer at this place: a word begun, else the names near
+            e.preventDefault();
+            offer(true);
             return true;
         }
         if (e.altKey && digit && offered) {
@@ -11509,9 +11609,10 @@ function completer(field, box, wordsOf, { skip = () => false, tabOpens = false, 
     field.addEventListener("blur", () => { offered = null; draw(); });
     return { key, offer };
 }
-const promptC = completer(input, $("hint"), () => [...con.words(), ...WORDS],
-    { skip: () => input.value.trimStart().startsWith(":"), tabOpens: true, changed: () => { fit(); show(); } });
-const editorC = completer(code, $("hint2"), () => [...userWords(code.value), ...WORDS]);
+const COMMANDS = commandsOf(GUIDE); // `:` at the start of a line lists them
+const promptC = completer(input, $("hint"), () => [...con.words(), ...WORDS], () => con.used(), () => [...con.program(), ...con.history].join("\n"), COMMANDS,
+    { tabOpens: true, changed: () => { fit(); show(); } });
+const editorC = completer(code, $("hint2"), () => [...userWords(code.value), ...WORDS], () => usedModules(code.value), () => "", []);
 code.addEventListener("input", () => editorC.offer(false));
 let walk = 0; // where Up and Down are in the history
 input.addEventListener("input", () => { fit(); show(); promptC.offer(false); });

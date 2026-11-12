@@ -25,14 +25,15 @@
 
 const DECLARATIONS = new Set(["word", "const", "global", "array", "list", "pool", "queue", "buffer", "tasks",
     "record", "type", "extern", "forward", "index", "bound", "shared", "test", "use", "set_order"]);
-// a line that is a statement by itself, with nothing after it: the terminal puts the dot
-const ONE_LINERS = /^\s*(use\s+[A-Za-z_][A-Za-z_0-9]*(\s+as\s+[A-Za-z_][A-Za-z_0-9]*)?|set_order\s*\([^()]*\))\s*$/;
+// statements whose end is plain from their form: `use NAME [as NAME]`, `set_order (...)`, `get_order`. They take the
+// next name or one parenthesized list, so the terminal runs them when that is typed; a dot may be written, or not
+const SELF_ENDED = /^\s*(use\s+[A-Za-z_][A-Za-z_0-9]*(\s+as\s+[A-Za-z_][A-Za-z_0-9]*)?|set_order\s*\([^()]*\)|get_order)\s*$/;
 const PROMPT = "pinax> ", MORE = "  ...> ";
 // what :help says and the page's guide shows: one list for both
 export const GUIDE = {
     rules: [
         'Pinax code runs when it is whole: it ends with "," or ".", or with the end of its block.',
-        'A line with only `use io` or `set_order (io, str)` needs no dot: the terminal puts it.',
+        "`use io`, `set_order (io, str)` and `get_order` need no dot: what they take is plain, so they run when typed.",
         "An empty line runs the text gathered, outside any block: the way out of a forgotten dot.",
         "A loop or a block runs once, when its end is typed; the status line shows the blocks open.",
         "A statement that declares something (word, const, global, use, set_order, ...) is added to the program.",
@@ -46,6 +47,8 @@ export const GUIDE = {
         [":run", "RESETS: empties the stack and forgets every definition, then runs the program from line 1 (F5); the program's lines stay"],
         [":new", "no program, and a fresh state"],
         [":clear", "empties the stack only"],
+        [":words", "the words of the program, each with its signature"],
+        [":get_order", "the search order as it is, as the word get_order tells it"],
         [":save, :load", "the program as a .pnx file"],
         [":help", "this list"],
     ],
@@ -69,6 +72,10 @@ export function sampleCall(name, signature) {
     const params = (signature ?? "()").replace(/^\(|\)$/g, "").split(/\bgives\b/)[0].split(",").map((p) => p.trim()).filter(Boolean);
     const values = params.map((p) => SAMPLES[p.split(/\s+/).pop()]);
     return values.includes(undefined) ? null : [...values, name].join(" ") + ".";
+}
+// the modules a text names with `use`, for completion
+export function usedModules(text) {
+    return [...new Set([...text.matchAll(/^[ \t]*use[ \t]+([A-Za-z_][A-Za-z_0-9]*)/gm)].map((m) => m[1]))];
 }
 // the words a program declares, for completion: [module "", word, signature, meaning, true]
 export function userWords(program) {
@@ -235,6 +242,20 @@ export async function createConsole({ createPinax, bytes, print, store = null })
             session.clear();
             print("info", "the stack is empty\n");
             return {};
+        case "words": { // the words of the program, each with its signature
+            const mine = userWords(lines.join("\n"));
+            if (!mine.length)
+                print("info", "no word is defined yet\n");
+            else {
+                const wide = Math.max(...mine.map((w) => w[1].length));
+                print("info", mine.map((w) => `  ${w[1].padEnd(wide)}  ${w[2]}`).join("\n") + "\n");
+            }
+            return {};
+        }
+        case "get_order": { // what the word get_order tells, as a command
+            const r = session.eval("get_order");
+            return r.ok ? {} : {};
+        }
         case "save":
             return { download: lines.join("\n") + "\n" };
         case "load":
@@ -317,12 +338,9 @@ export async function createConsole({ createPinax, bytes, print, store = null })
             }
             return { prompt: prompt() };
         }
-        // `use io` and `set_order (io, str)` alone on a line are whole statements: the terminal ends them, as a file does
-        if (gathered.length === 0 && ONE_LINERS.test(line))
-            line += ".";
         gathered.push(line);
         const text = gathered.join("\n");
-        if (!whole(text)) {
+        if (!whole(text) && !SELF_ENDED.test(text)) {
             if (ends(line.trimEnd()) && checkWord(text) === false) {
                 gathered.pop(); // the line with the mistake comes back to the prompt, to be corrected
                 return { prompt: prompt(), fill: line };
@@ -422,5 +440,5 @@ export async function createConsole({ createPinax, bytes, print, store = null })
         print("info", `the program of the last visit: ${plural(lines.length, "line")} (:list)\n`);
         runProgram();
     }
-    return { enter, cancel, setProgram, status, history, prompt, mode: () => mode?.kind ?? null, program: () => lines.slice(), words: () => userWords(lines.join("\n")) };
+    return { enter, cancel, setProgram, status, history, prompt, mode: () => mode?.kind ?? null, program: () => lines.slice(), words: () => userWords(lines.join("\n")), used: () => usedModules(lines.join("\n")) };
 }

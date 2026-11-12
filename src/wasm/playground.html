@@ -31,10 +31,10 @@
   .echo { color: #9fb3c8; } .out { color: #e6edf3; } .err { color: #ff7b72; }
   .stack { color: #7ee787; } .info { color: #d2a8ff; }
   #line { display: flex; align-items: flex-start; position: relative; }
-  .hint { position: absolute; left: 0; bottom: 100%; display: none; max-width: 100%; box-sizing: border-box;
-          background: #161b22; border: 1px solid #30363d; padding: 4px 0; font-size: 13px; z-index: 2; }
+  .hint { position: absolute; left: 0; top: 100%; display: none; max-width: 100%; box-sizing: border-box;
+          background: #161b22; border: 1px solid #30363d; padding: 4px 0; font-size: 13px; z-index: 2; box-shadow: 0 6px 16px #010409; }
   .hint.open { display: block; }
-  #editor .hint { left: 16px; bottom: 10px; }
+  #editor .hint { left: 16px; top: auto; bottom: 10px; }
   .hint .item { padding: 1px 10px; white-space: pre; } #hint .item.on { background: #1f6feb55; }
   .hint .item b { color: #79c0ff; font-weight: normal; } #hint .item i { color: #8b949e; font-style: normal; }
   .hint .detail { padding: 4px 10px 2px; margin-top: 3px; border-top: 1px solid #30363d; color: #8b949e;
@@ -194,7 +194,7 @@ function closeEditor(save) {
 // completion: the words that fit what is typed, with their signature and meaning (WORDS from the standard).
 // It uses keys a typist does not need: Alt+Up and Alt+Down choose (Alt+Down also opens it), Alt+1 to Alt+9 write the
 // nth word, Tab writes the chosen one, Esc closes it. Plain arrows, Enter and the space keep their work.
-function completer(field, box, wordsOf, { skip = () => false, tabOpens = false, changed = () => {} } = {}) {
+function completer(field, box, wordsOf, usedOf, contextOf, commands, { skip = () => false, tabOpens = false, changed = () => {} } = {}) {
     let offered = null, chosen = 0;
     function draw() {
         box.classList.toggle("open", !!offered);
@@ -215,16 +215,20 @@ function completer(field, box, wordsOf, { skip = () => false, tabOpens = false, 
         const it = offered.items[chosen];
         const detail = document.createElement("div");
         detail.className = "detail";
-        detail.textContent = [it.signature && `${it.label} ${it.signature}`, it.meaning, "Alt+1..9 writes that one, Alt+Up/Down chooses, Tab writes, Esc closes"]
+        detail.textContent = [it.signature && `${it.label} ${it.signature}`, it.meaning, "Alt+1..9 writes that one, Alt+Up/Down chooses, Alt+0 offers here, Tab writes, Esc closes"]
             .filter(Boolean).join("\n");
         box.appendChild(detail);
+        box.scrollIntoView?.({ block: "nearest" }); // the list pulls down: keep it in view
     }
     function offer(force) {
         const at = field.selectionStart;
         const word = /[A-Za-z_][A-Za-z_0-9.]*$/.exec(field.value.slice(0, at))?.[0] ?? "";
-        const listing = moduleContext(field.value.slice(0, at)); // after `use` and in set_order: the modules, at once
-        offered = skip() || (!force && !listing && word.length < 2 && !word.includes(".")) ? null
-            : complete(wordsOf(), field.value, at, 8, MODULES);
+        const before = field.value.slice(0, at);
+        const listing = moduleContext(before) || (commands.length && commandContext(before)); // listed at once, before any letter
+        offered = (!force && !listing && word.length < 2 && !word.includes(".")) ? null
+            : complete(wordsOf(), field.value, at, 8, MODULES, usedOf(), commands);
+        if (!offered && force && !word && !/^[ \t]*:/.test(before.slice(before.lastIndexOf("\n") + 1)))
+            offered = nearby(field.value, at, contextOf()); // an empty place: the names near and recent
         chosen = 0;
         draw();
     }
@@ -247,6 +251,11 @@ function completer(field, box, wordsOf, { skip = () => false, tabOpens = false, 
             else
                 chosen = (chosen + (e.key === "ArrowDown" ? 1 : offered.items.length - 1)) % offered.items.length;
             draw();
+            return true;
+        }
+        if (e.altKey && e.code === "Digit0") { // offer at this place: a word begun, else the names near
+            e.preventDefault();
+            offer(true);
             return true;
         }
         if (e.altKey && digit && offered) {
@@ -277,9 +286,10 @@ function completer(field, box, wordsOf, { skip = () => false, tabOpens = false, 
     field.addEventListener("blur", () => { offered = null; draw(); });
     return { key, offer };
 }
-const promptC = completer(input, $("hint"), () => [...con.words(), ...WORDS],
-    { skip: () => input.value.trimStart().startsWith(":"), tabOpens: true, changed: () => { fit(); show(); } });
-const editorC = completer(code, $("hint2"), () => [...userWords(code.value), ...WORDS]);
+const COMMANDS = commandsOf(GUIDE); // `:` at the start of a line lists them
+const promptC = completer(input, $("hint"), () => [...con.words(), ...WORDS], () => con.used(), () => [...con.program(), ...con.history].join("\n"), COMMANDS,
+    { tabOpens: true, changed: () => { fit(); show(); } });
+const editorC = completer(code, $("hint2"), () => [...userWords(code.value), ...WORDS], () => usedModules(code.value), () => "", []);
 code.addEventListener("input", () => editorC.offer(false));
 let walk = 0; // where Up and Down are in the history
 input.addEventListener("input", () => { fit(); show(); promptC.offer(false); });
