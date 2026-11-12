@@ -215,14 +215,16 @@ function completer(field, box, wordsOf, { skip = () => false, tabOpens = false, 
         const it = offered.items[chosen];
         const detail = document.createElement("div");
         detail.className = "detail";
-        detail.textContent = [it.signature && `${it.label} ${it.signature}`, it.meaning, "Alt+1..9 writes that word, Alt+Up/Down chooses, Tab writes, Esc closes"]
+        detail.textContent = [it.signature && `${it.label} ${it.signature}`, it.meaning, "Alt+1..9 writes that one, Alt+Up/Down chooses, Tab writes, Esc closes"]
             .filter(Boolean).join("\n");
         box.appendChild(detail);
     }
     function offer(force) {
         const at = field.selectionStart;
         const word = /[A-Za-z_][A-Za-z_0-9.]*$/.exec(field.value.slice(0, at))?.[0] ?? "";
-        offered = skip() || (!force && word.length < 2 && !word.includes(".")) ? null : complete(wordsOf(), field.value, at);
+        const listing = moduleContext(field.value.slice(0, at)); // after `use` and in set_order: the modules, at once
+        offered = skip() || (!force && !listing && word.length < 2 && !word.includes(".")) ? null
+            : complete(wordsOf(), field.value, at, 8, MODULES);
         chosen = 0;
         draw();
     }

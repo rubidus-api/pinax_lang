@@ -13,8 +13,29 @@
 // (a fifth member, true) comes first. null when nothing fits.
 // MIT (see ../../LICENSE).
 
-export function complete(words, text, cursor, limit = 8) {
+// After `use ` or inside the parentheses of `set_order`: { stem, taken } (the part of the name typed, and the modules
+// the list names already), else null. There the names offered are the modules, not words.
+export function moduleContext(before) {
+    const use = /(?:^|\n)[ \t]*use[ \t]+([A-Za-z_0-9]*)$/.exec(before);
+    if (use)
+        return { stem: use[1], taken: [] };
+    const order = /(?:^|[\s,.])set_order[ \t]*\(([^)]*?)([A-Za-z_0-9]*)$/.exec(before);
+    if (order && /(^|,)\s*$/.test(order[1]))
+        return { stem: order[2], taken: order[1].split(",").map((t) => t.trim()).filter(Boolean) };
+    return null;
+}
+
+export function complete(words, text, cursor, limit = 8, modules = []) {
     const before = text.slice(0, cursor);
+    const where = moduleContext(before);
+    if (where) {
+        const items = modules.filter(([m]) => m.startsWith(where.stem) && !where.taken.includes(m)).map(([m, what]) => {
+            const names = words.filter((w) => w[0] === m).map((w) => w[1]);
+            const list = names.length ? `; words: ${names.slice(0, 8).join(", ")}${names.length > 8 ? ", ..." : ""}` : "";
+            return { label: m, insert: m, module: m, word: "", signature: "", meaning: `${what}${list}` };
+        });
+        return items.length && !(items.length === 1 && items[0].insert === where.stem) ? { from: cursor - where.stem.length, to: cursor, items: items.slice(0, 12) } : null;
+    }
     const typed = /[A-Za-z_][A-Za-z_0-9.]*$/.exec(before)?.[0];
     if (!typed || /^[0-9]/.test(typed))
         return null;

@@ -147,3 +147,16 @@ export const WORDS = [
   ["io", "read_line", "(gives line str or fail)", "one line of standard input, without its line break; err.not_found at the end of input"],
   ["io", "read_line_into", "(buf buffer or fail)", "appends one line to a buffer"],
 ];
+// [module, what it is]: what `use` and set_order take
+export const MODULES = [
+  ["str", "strings"],
+  ["fmt", "numbers as text"],
+  ["hash", "hashes"],
+  ["encode", "bytes as text"],
+  ["bytes", "binary data"],
+  ["ptn", "small patterns"],
+  ["rex", "regular expressions"],
+  ["json", "JSON"],
+  ["csv", "CSV"],
+  ["io", "standard input and output"],
+];

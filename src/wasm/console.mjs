@@ -33,6 +33,7 @@ export const GUIDE = {
     rules: [
         'Pinax code runs when it is whole: it ends with "," or ".", or with the end of its block.',
         'A line with only `use io` or `set_order (io, str)` needs no dot: the terminal puts it.',
+        "An empty line runs the text gathered, outside any block: the way out of a forgotten dot.",
         "A loop or a block runs once, when its end is typed; the status line shows the blocks open.",
         "A statement that declares something (word, const, global, use, set_order, ...) is added to the program.",
     ],
@@ -296,6 +297,26 @@ export async function createConsole({ createPinax, bytes, print, store = null })
             return { prompt: prompt() };
         if (gathered.length === 0 && line.trimStart().startsWith(":"))
             return { ...command(line.trim()), prompt: prompt() };
+        // an empty line after text that waits for its dot runs the text, when no block is open: the way out of a
+        // forgotten dot (inside a block an empty line is only a line)
+        if (gathered.length && line.trim() === "") {
+            const text = gathered.join("\n");
+            const b = pinax.blocks(text);
+            if (!b.ok || b.depth > 0)
+                return { prompt: prompt() };
+            const r = session.eval(text);
+            if (r.unfinished) { // the text itself is not whole (a statement that wants more): it still waits
+                print("info", "(not a whole statement yet: it needs more)\n");
+                return { prompt: prompt() };
+            }
+            gathered = [];
+            trialled = false;
+            if (r.ok) {
+                remember(text);
+                showStack(r.stack);
+            }
+            return { prompt: prompt() };
+        }
         // `use io` and `set_order (io, str)` alone on a line are whole statements: the terminal ends them, as a file does
         if (gathered.length === 0 && ONE_LINERS.test(line))
             line += ".";
@@ -367,7 +388,7 @@ export async function createConsole({ createPinax, bytes, print, store = null })
             if (b.depth > 0)
                 return `in ${plural(b.depth, "block")}, depth ${b.depth}: ${b.open.join(" \u203a ")}. It runs whole at its end`;
             if (gathered.length)
-                return "waiting for , or . to run";
+                return "waiting for , or . (or an empty line) to run";
         }
         return `ready \u00b7 program ${plural(lines.length, "line")} \u00b7 stack ${plural(session.stack().length, "value")}`;
     }

@@ -174,7 +174,7 @@ definitions and blocks are still open at the end of a text, the outermost first 
 
 `./nob wasm` also writes `build/dist/pinax-playground.html`, one page with the module inside it, which opens from disk
 with no server. The page is a terminal. Code runs when it is whole: it ends with `,` or `.`, or with the `end` of
-the block it opened. A line that holds only `use io` or `set_order (io, str)` needs no dot: the terminal puts it, as a file needs none. A loop or a block waits until its `end` is typed and then runs once, whole, and the status line
+the block it opened. A line that holds only `use io` or `set_order (io, str)` needs no dot: the terminal puts it, as a file needs none. An empty line runs the text gathered when no block is open, the way out of a forgotten dot. After `use` and inside the parentheses of `set_order`, the completion offers the modules (each with what it is and its words). A loop or a block waits until its `end` is typed and then runs once, whole, and the status line
 at the bottom says how deep the typing is and in what (`depth 2: loop › if`). The stack shows after each statement.
 A statement that declares something (`word`, `const`, `use`, `set_order` and the rest) is added to a program, as
 GW-BASIC keeps one, and a name declared again takes the place of its lines. `:list` shows the program with line
