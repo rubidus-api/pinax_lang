@@ -189,7 +189,7 @@ Alt+1 to Alt+9 write the nth word, Tab writes the chosen one (in the editor Tab 
 The words of the program come first among the candidates, with their signatures. A word just compiled puts a call to try into the
 prompt (a sample value for each parameter, then the name and a dot); change the values and Enter runs it.
 `:help`, and the guide beside the terminal (F1), list the commands and keys; the page links to this manual. Each release
-carries the page as `pinax-playground.html`.
+carries the page as `pinax-playground.html`. The same page is on the web at `https://rubidus-api.github.io/pinax_lang/playground/`.
 
 In this edition the WebAssembly host registers one module, `io`; `io.read_line` always fails with `not_found`. There is
 no `file`, `clock`, `random`, `env` or `extern`. The modules of the core (`str`, `json`, `csv`, `rex` and the rest) and

@@ -177,7 +177,7 @@ Tab 은 고른 낱말을 쓰고(편집기에서 후보가 없으면 Tab 은 빈�
 프로그램의 낱말이 후보 맨 앞에 시그니처와 함께 온다. 방금 컴파일한 낱말은 시험해 볼 호출을 입력 줄에 채워 둔다(매개변수마다
 견본 값, 그다음 이름과 마침표). 값을 고치고 Enter 로 돌린다.
 `:help` 와 터미널 옆의 안내판(F1)이 명령과 키를 알리고, 페이지에는 이 매뉴얼로 가는 링크가 있다. 릴리스마다 이
-페이지를 `pinax-playground.html` 로 함께 올린다.
+페이지를 `pinax-playground.html` 로 함께 올린다. 같은 페이지가 `https://rubidus-api.github.io/pinax_lang/playground/` 에도 있다.
 
 이 판의 웹어셈블리 호스트가 등록하는 모듈은 `io` 하나다. `io.read_line` 은 늘 `not_found` 로 실패한다. `file`,
 `clock`, `random`, `env` 와 `extern` 은 없다. 핵의 모듈(`str`, `json`, `csv`, `rex` 따위)과 작업은 그대로 돈다.
