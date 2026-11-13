@@ -704,6 +704,17 @@ static const char *check_word(const pinax_state *st, uint32_t index, span range,
                                               ((code[i - 2] >> 16) & 0xffu) != PNX_G_BUFFER || x == PNX_GSELECTED))
                 return "code: a sheet word of a file without the GSEL of its buffer";
         }
+        if (op == PNX_TXT || op == PNX_TXTF || op == PNX_TXTW || op == PNX_TXTWF) { // RFC-0046
+            uint32_t ni, ri, si, so;
+            if (c >= PNX_TXW_COUNT)
+                return "code: unknown text word";
+            const pnx_txword *tw = &pnx_txwords[c];
+            pnx_text_regs(tw, &ni, &ri, &si, &so);
+            if (a + (ni > ri ? ni : ri) > word->int_cells || b + (si > so ? si : so) > word->str_cells ||
+                pnx_txhas(tw->flags, 'F') != (op == PNX_TXTF || op == PNX_TXTWF) ||
+                pnx_txhas(tw->flags, 'W') != (op == PNX_TXTW || op == PNX_TXTWF))
+                return "code: text instruction outside the window or of the wrong kind";
+        }
         if (target >= 0 || info.c == PNX_K_J || info.shape == PNX_F_AX) {
             if (target < range.begin || target >= range.end || heads[target] != 1)
                 return "code: jump outside the word or into an instruction";
@@ -763,7 +774,7 @@ static const char *check_word(const pinax_state *st, uint32_t index, span range,
             case PNX_PALIVEW: want = PNX_G_POOL; break;
             case PNX_IXGETW: case PNX_IXGETSW: case PNX_IXHASW: case PNX_IXHASSW: want = PNX_G_INDEX; break;
             case PNX_POOLNX: want = PNX_G_POOL; break;
-            case PNX_SHEET: case PNX_SHEETF: case PNX_SHEETR: case PNX_SHEETRF: want = PNX_G_BUFFER; break;
+            case PNX_SHEET: case PNX_SHEETF: case PNX_SHEETR: case PNX_SHEETRF: case PNX_TXTW: case PNX_TXTWF: want = PNX_G_BUFFER; break;
             case PNX_BPUTW: case PNX_BPUTSW: case PNX_BENCW: case PNX_JPUTIW: case PNX_JPUTSW: case PNX_CPUTSW:
             case PNX_CPUTIW: want = PNX_G_BUFFER; break;
             default: want = PNX_G_TASKS; break; // TSPAWNW TRESUMEW TDONEW
@@ -978,6 +989,12 @@ static const char *flow_step(const pinax_state *st, pnx_counts counts, span rang
         pnx_sheet_regs(&pnx_shwords[reg[2] < PNX_SHW_COUNT ? reg[2] : 0], &sh_ni, &sh_ri, &sh_si, &sh_sr);
         reads = reads && set_has(now.i, reg[0], sh_ni) && (!sh_si || set_has(now.s, reg[1], 1));
     }
+    const bool text = op == PNX_TXT || op == PNX_TXTF || op == PNX_TXTW || op == PNX_TXTWF;
+    uint32_t   tx_ni = 0, tx_ri = 0, tx_si = 0, tx_so = 0;
+    if (text) {
+        pnx_text_regs(&pnx_txwords[reg[2] < PNX_TXW_COUNT ? reg[2] : 0], &tx_ni, &tx_ri, &tx_si, &tx_so);
+        reads = reads && set_has(now.i, reg[0], tx_ni) && set_has(now.s, reg[1], tx_si);
+    }
     pnx_counts callee = {0};
     uint32_t ibase = reg[0], sbase = reg[1];
     const bool calls = op == PNX_CALL || op == PNX_CALLR, hosts = op == PNX_HCALL || op == PNX_HCALLF;
@@ -1016,6 +1033,9 @@ static const char *flow_step(const pinax_state *st, pnx_counts counts, span rang
         set_put(now.i, reg[0], sh_ri);
         if (sh_sr)
             set_put(now.s, reg[1], 1);
+    } else if (text) {
+        set_put(now.i, reg[0], tx_ri);
+        set_put(now.s, reg[1], tx_so);
     } else {
         for (unsigned k = 0; k < 3; ++k) {
             if (role[k] == 'w')
@@ -1460,6 +1480,7 @@ static void prove_step(pinax_state *st, span range, uint32_t i, facts *now, fact
         *falls = false;
         break;
     case PNX_SHEET: case PNX_SHEETF: case PNX_SHEETR: case PNX_SHEETRF: // registers from A change; the sheet may change
+    case PNX_TXT: case PNX_TXTF: case PNX_TXTW: case PNX_TXTWF: // the buffer a text word writes may change
     case PNX_CALL: case PNX_CALLR: case PNX_HCALL: case PNX_HCALLF: // the callee may change any collection
         facts_drop_passed(now);
         facts_drop_from(now, a);

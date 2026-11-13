@@ -43,6 +43,22 @@ the commas in themselves.
 
 #ex("spec", "16-json-write.pnx")
 
+=== Path, validity and layout
+
+#para("5a")[Four more words read the text as a whole, with the strict grammar of RFC 8259 (the token reader above is
+lenient on purpose: it reads a stream). A text is valid when it is one value and white space; a nesting deeper than 64 is
+not valid here. A path names a value: names joined by dots, an index in brackets, and a name that holds a dot or a
+bracket as `["a.b"]` (`user.langs[1]`, `[0].id`); the empty path names the whole text. A name is compared with the key as it
+is after its escapes are decoded. The reading stops where it finds the value, so the words do not check the rest of the text.
+#table(columns: (auto, auto, 1fr), inset: 5pt, stroke: 0.5pt + luma(170),
+  [*Word*], [*Signature*], [*Meaning*],
+  [`valid`], [`(s str gives bool)`], [whether `s` is one JSON value, with only white space around it],
+  [`at`], [`(path str, s str gives kind int, value str or fail)`], [the value `path` names in `s`: its kind (the constants above, never `json.key`) and its text, as `json.next` gives it, except that an object or an array is given whole, as written, to be read again by `json.next` or `json.at`. `err.not_found` when there is no such value (a name missing, an index past the end, a name asked of an array or an index of an object); `err.format` when the path is malformed or the text is malformed where it was read],
+  [`minify`], [`(s str, b buffer or fail)`], [appends `s` without the white space between its tokens; `err.format` when `s` is not valid, `err.full` when it does not fit (the buffer is then as it was)],
+  [`pretty`], [`(s str, indent int, b buffer or fail)`], [appends `s` with each member and element on a line of its own, `indent` blanks (0 to 16; any other number is a fault) to a level, `": "` after a key; an empty object or array stays as it is. The failures are those of `minify`],
+)]
+#ex("spec", "16-json-path.pnx")
+
 === Records
 
 #para("6")[`row buf json.pack` appends a row of a record as an object whose keys are the field names. `s row
@@ -56,7 +72,8 @@ only when everything is right; when it fails (`err.format`) the row is unchanged
 
 #part("Constraints")
 
-#para("7")[`json.next` and `json.skip` take only a `str`; `pack` and `unpack` only rows of records.]
+#para("7")[`json.next` and `json.skip` take only a `str`; `pack` and `unpack` only rows of records. The source text of `minify`, `pretty`, `valid` and
+`at` is not the buffer they write into.]
 #ex("spec", "16-json-type.pnx")
 
 #part("Diagnostics")

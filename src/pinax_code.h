@@ -377,6 +377,11 @@ enum {
     X(SHEETF, 0xdd, PNX_K_I, PNX_K_S, PNX_K_IMM, PNX_F_ABC, PNX_X_GLOBAL, 1, "---") \
     X(SHEETR, 0xde, PNX_K_I, PNX_K_S, PNX_K_IMM, PNX_F_ABC, PNX_X_GLOBAL, 0, "---") \
     X(SHEETRF, 0xdf, PNX_K_I, PNX_K_S, PNX_K_IMM, PNX_F_ABC, PNX_X_GLOBAL, 1, "---") \
+    /* text words (RFC-0046): A the first int register, B the first str register, C the word; TXTW writes a buffer */ \
+    X(TXT, 0x66, PNX_K_I, PNX_K_S, PNX_K_IMM, PNX_F_ABC, PNX_X_NONE, 0, "---") \
+    X(TXTF, 0x67, PNX_K_I, PNX_K_S, PNX_K_IMM, PNX_F_ABC, PNX_X_NONE, 1, "---") \
+    X(TXTW, 0x68, PNX_K_I, PNX_K_S, PNX_K_IMM, PNX_F_ABC, PNX_X_GLOBAL, 0, "---") \
+    X(TXTWF, 0x69, PNX_K_I, PNX_K_S, PNX_K_IMM, PNX_F_ABC, PNX_X_GLOBAL, 1, "---") \
     X(BARRIER, 0xfd, PNX_K_NONE, PNX_K_NONE, PNX_K_NONE, PNX_F_ABC, PNX_X_NONE, 0, "---")
 
 enum {

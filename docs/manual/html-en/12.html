@@ -127,7 +127,79 @@ demo <span style="color: #d73948">or_else</span> (e) e err_text io.println <span
 </code></pre><p class="ex-label">Output</p><pre><code data-lang="text">$ pnx 11-csv-write.pnx
 kim,3,true
 "a, b",2.50
-</code></pre></div><h3>11.2 Bytes</h3><p>The module <code>bytes</code> writes and reads fixed widths in a given byte order. With <code>big_endian</code> in a record, <code>bytes.pack</code> writes the most significant byte first. A <code>varint</code> field writes small numbers in few bytes.</p><div class="example run"><p class="ex-file"><code>11-binary.pnx</code></p><pre><code data-lang="pinax"><span style="color: #d73948">use</span> io
+</code></pre></div><h3>11.2 Paths, settings files and Markdown</h3><p>Reading by tokens suits a stream. When the text is a document and one value is wanted, <code>json.at</code> takes a path: names joined by dots and indexes in brackets, <code>user.langs[1]</code>. It gives the kind and the text of the value; an object or an array comes whole, as written, so it can be asked again. A missing value is <code>err.not_found</code>, so <code>or_else</code> is the place for a default. <code>json.valid</code> says whether a text is JSON at all, and <code>json.minify</code> and <code>json.pretty</code> write it into a buffer without its blanks, or one value to a line.</p><div class="example run"><p class="ex-file"><code>11-json-path.pnx</code></p><pre><code data-lang="pinax"><span style="color: #d73948">use</span> io
+<span style="color: #d73948">use</span> json
+<span style="color: #d73948">word</span> main (<span style="color: #d73948">or</span> <span style="color: #d73948">fail</span>)
+<span style="color: #198810">  </span><span style="color: #d73948">text</span><span style="color: #198810"> </span><span style="color: #4b69c6">END</span>
+<span style="color: #198810">{"user": {"name": "kim", "langs": ["ko", "en"]}, "visits": 12}</span>
+<span style="color: #4b69c6">END</span>
+  <span style="color: #d73948">to</span> doc
+  <span style="color: #198810">"user.name"</span> doc json.at <span style="color: #d73948">or_fail</span> io.println drop      <span style="color: #74747c">rem the value at a path</span>
+  <span style="color: #198810">"user.langs[1]"</span> doc json.at <span style="color: #d73948">or_fail</span> io.println drop  <span style="color: #74747c">rem an index in brackets</span>
+  <span style="color: #198810">"visits"</span> doc json.at <span style="color: #d73948">or_fail</span> drop json.number eq <span style="color: #d73948">to</span> is_number
+  <span style="color: #d73948">cat</span> (<span style="color: #198810">"visits is a number: "</span>, is_number) io.println
+  <span style="color: #198810">"user.email"</span> doc json.at <span style="color: #d73948">or_else</span> (e) <span style="color: #d73948">cat</span> (<span style="color: #198810">"no email: "</span>, e err_text) io.println <span style="color: #b60157">0</span> <span style="color: #198810">""</span> <span style="color: #d73948">end</span> drop drop
+<span style="color: #d73948">end</span>
+main <span style="color: #d73948">or_else</span> (e) e err_text io.println <span style="color: #d73948">end</span>
+</code></pre><p class="ex-label">Output</p><pre><code data-lang="text">$ pnx 11-json-path.pnx
+kim
+en
+visits is a number: true
+no email: not_found
+</code></pre></div><p>TOML, the format of settings files, is read the same way by the module <code>toml</code>: <code>toml.at</code> with a path (<code>server.ports[1]</code>, <code>backend[1].url</code> for the second <code>[[backend]]</code>), or <code>toml.next</code> for every statement in order, headers included. A value is given as written: a string without its quotes (and with its escapes decoded), a number as its text. The module reads; it does not write TOML.</p><div class="example run"><p class="ex-file"><code>11-toml-config.pnx</code></p><pre><code data-lang="pinax"><span style="color: #d73948">use</span> io
+<span style="color: #d73948">use</span> toml
+<span style="color: #d73948">word</span> main (<span style="color: #d73948">or</span> <span style="color: #d73948">fail</span>)
+<span style="color: #198810">  </span><span style="color: #d73948">text</span><span style="color: #198810"> </span><span style="color: #4b69c6">END</span>
+<span style="color: #198810">name = "shop"            # the name of the service</span>
+<span style="color: #198810">[server]</span>
+<span style="color: #198810">host = "0.0.0.0"</span>
+<span style="color: #198810">ports = [8080, 8443]</span>
+<span style="color: #198810">[[backend]]</span>
+<span style="color: #198810">url = "http://a.local"</span>
+<span style="color: #198810">[[backend]]</span>
+<span style="color: #198810">url = "http://b.local"</span>
+<span style="color: #4b69c6">END</span>
+  <span style="color: #d73948">to</span> conf
+  <span style="color: #198810">"server.host"</span> conf toml.at <span style="color: #d73948">or_fail</span> io.println drop
+  <span style="color: #198810">"server.ports[1]"</span> conf toml.at <span style="color: #d73948">or_fail</span> io.println drop
+  <span style="color: #198810">"backend[1].url"</span> conf toml.at <span style="color: #d73948">or_fail</span> io.println drop
+  conf toml.valid <span style="color: #d73948">to</span> fine
+  <span style="color: #d73948">cat</span> (<span style="color: #198810">"valid: "</span>, fine) io.println
+<span style="color: #d73948">end</span>
+main <span style="color: #d73948">or_else</span> (e) e err_text io.println <span style="color: #d73948">end</span>
+</code></pre><p class="ex-label">Output</p><pre><code data-lang="text">$ pnx 11-toml-config.pnx
+0.0.0.0
+8443
+http://b.local
+valid: true
+</code></pre></div><p>Markdown becomes HTML with <code>md.html</code>: headings, paragraphs, emphasis, code, links, lists, quotes and tables. Raw HTML in the text is not passed on and a link to <code>javascript:</code> is written as plain text, so the result is safe to put in a page. <code>md.next</code> reads a document a block at a time, and <code>md.inline</code> writes one line without a paragraph around it. Both are a subset of CommonMark (standard 16.12 says which).</p><div class="example run"><p class="ex-file"><code>11-md-html.pnx</code></p><pre><code data-lang="pinax"><span style="color: #d73948">use</span> io
+<span style="color: #d73948">use</span> md
+<span style="color: #d73948">buffer</span> page <span style="color: #b60157">1024</span>
+<span style="color: #d73948">word</span> main (<span style="color: #d73948">or</span> <span style="color: #d73948">fail</span>)
+<span style="color: #198810">  </span><span style="color: #d73948">text</span><span style="color: #198810"> </span><span style="color: #4b69c6">END</span>
+<span style="color: #198810">## Notes</span>
+
+<span style="color: #198810">A line with *emphasis*, `code` and a [link](https://example.org).</span>
+<span style="color: #198810">Raw &lt;b&gt;tags&lt;/b&gt; stay text.</span>
+
+<span style="color: #198810">1. first</span>
+<span style="color: #198810">2. second</span>
+<span style="color: #4b69c6">END</span>
+  <span style="color: #d73948">to</span> doc
+  doc page md.html <span style="color: #d73948">or_fail</span>
+  page contents io.println
+<span style="color: #d73948">end</span>
+main <span style="color: #d73948">or_else</span> (e) e err_text io.println <span style="color: #d73948">end</span>
+</code></pre><p class="ex-label">Output</p><pre><code data-lang="text">$ pnx 11-md-html.pnx
+&lt;h2&gt;Notes&lt;/h2&gt;
+&lt;p&gt;A line with &lt;em&gt;emphasis&lt;/em&gt;, &lt;code&gt;code&lt;/code&gt; and a &lt;a href="https://example.org"&gt;link&lt;/a&gt;.
+Raw &amp;lt;b&amp;gt;tags&amp;lt;/b&amp;gt; stay text.&lt;/p&gt;
+&lt;ol&gt;
+&lt;li&gt;first&lt;/li&gt;
+&lt;li&gt;second&lt;/li&gt;
+&lt;/ol&gt;
+
+</code></pre></div><div class="box qa"><p class="box-title">Q&amp;A</p><p><strong>Q. Is there a tree after <code>json.at</code>?</strong></p><p>A. No. Each call reads the text again from the front up to the value it wants, so for many values from one large document the token words, which read it once, are cheaper.</p></div><h3>11.3 Bytes</h3><p>The module <code>bytes</code> writes and reads fixed widths in a given byte order. With <code>big_endian</code> in a record, <code>bytes.pack</code> writes the most significant byte first. A <code>varint</code> field writes small numbers in few bytes.</p><div class="example run"><p class="ex-file"><code>11-binary.pnx</code></p><pre><code data-lang="pinax"><span style="color: #d73948">use</span> io
 <span style="color: #d73948">use</span> bytes
 <span style="color: #d73948">use</span> encode
 <span style="color: #d73948">use</span> hash
@@ -167,7 +239,7 @@ read back: version 1, length 300
 <span style="color: #d73948">word</span> write (p points) p out json.pack <span style="color: #d73948">end</span>   <span style="color: #74747c">rem pack fails when the buffer is full: no guard</span>
 </code></pre><p class="ex-label">Refused</p><pre><code data-lang="text">$ pnx 11-pack-unguarded.pnx
 11-pack-unguarded.pnx:8:39: a word that can fail is followed by or_fail, or_return or or_else
-</code></pre></div><div class="box qa"><p class="box-title">Q&amp;A</p><p><strong>Q. Does the record lie in memory in big-endian order too?</strong></p><p>A. No. <code>big_endian</code> sets only the order of the bytes that <code>pack</code> and <code>unpack</code> use. The layout in memory is the processor’s, and a script cannot see it.</p></div><h3>11.3 Other conversions</h3><p><code>fmt</code> turns numbers into hexadecimal, binary and zero-padded text. <code>hash</code> gives CRC-32, FNV-1a and SipHash; <code>encode</code> gives Base64, hexadecimal and URL percent-encoding. Words that write their results into a buffer fail when the buffer is full. The full lists are in clause 16 of the standard.</p><p>A hash takes text and gives an <code>int</code>. <code>hash.crc32</code> is a checksum; <code>hash.fnv1a</code> and <code>hash.hash64</code> mix keys. How many bytes one row of a record becomes under <code>bytes.pack</code> is told in advance by <code>bytes.packed_size</code>, which helps in sizing a buffer.</p><div class="example run"><p class="ex-file"><code>11-hash.pnx</code></p><pre><code data-lang="pinax"><span style="color: #d73948">use</span> io
+</code></pre></div><div class="box qa"><p class="box-title">Q&amp;A</p><p><strong>Q. Does the record lie in memory in big-endian order too?</strong></p><p>A. No. <code>big_endian</code> sets only the order of the bytes that <code>pack</code> and <code>unpack</code> use. The layout in memory is the processor’s, and a script cannot see it.</p></div><h3>11.4 Other conversions</h3><p><code>fmt</code> turns numbers into hexadecimal, binary and zero-padded text. <code>hash</code> gives CRC-32, FNV-1a and SipHash; <code>encode</code> gives Base64, hexadecimal and URL percent-encoding. Words that write their results into a buffer fail when the buffer is full. The full lists are in clause 16 of the standard.</p><p>A hash takes text and gives an <code>int</code>. <code>hash.crc32</code> is a checksum; <code>hash.fnv1a</code> and <code>hash.hash64</code> mix keys. How many bytes one row of a record becomes under <code>bytes.pack</code> is told in advance by <code>bytes.packed_size</code>, which helps in sizing a buffer.</p><div class="example run"><p class="ex-file"><code>11-hash.pnx</code></p><pre><code data-lang="pinax"><span style="color: #d73948">use</span> io
 <span style="color: #d73948">use</span> fmt
 <span style="color: #d73948">use</span> hash
 <span style="color: #d73948">use</span> bytes
@@ -184,4 +256,4 @@ demo
 </code></pre><p class="ex-label">Output</p><pre><code data-lang="text">$ pnx 11-hash.pnx
 crc32 19afea99, fnv1a 131b946615bc7b35
 a pair packs into 10 bytes
-</code></pre></div><div class="box qa"><p class="box-title">Q&amp;A</p><p><strong>Q. Can the JSON writer indent, or add line breaks?</strong></p><p>A. No. The writing words of <code>json</code> append one line. When a layout for people is needed, the receiving side makes it. The reading side accepts spaces and line breaks as they come.</p></div><div class="box summary"><p class="box-title">Summary</p><ul><li><code>json.next</code> and <code>csv.fields</code> read one token, one field at a time; no tree is built (standard 16.8, 16.9).</li><li><code>pack</code> writes into a buffer; <code>unpack</code> writes into the row only when all is right (16.5, 16.8, 16.9).</li><li><code>big_endian</code> sets only the byte order (16.5).</li><li>Lists of records have no <code>pop</code> (15.3).</li></ul></div></main><nav class="bottom"><a href="index.html">Start</a> · <a href="11.html">Previous</a> · <a href="13.html">Next</a> · <a href="../html-ko/12.html">한국어</a></nav></body></html>
+</code></pre></div><div class="box qa"><p class="box-title">Q&amp;A</p><p><strong>Q. Can the JSON writer indent, or add line breaks?</strong></p><p>A. The writing words of <code>json</code> append one line. For a layout for people, give the text to <code>json.pretty</code>, which writes it with a member to a line.</p></div><div class="box summary"><p class="box-title">Summary</p><ul><li><code>json.next</code> and <code>csv.fields</code> read one token, one field at a time; no tree is built (standard 16.8, 16.9).</li><li><code>pack</code> writes into a buffer; <code>unpack</code> writes into the row only when all is right (16.5, 16.8, 16.9).</li><li><code>json.at</code> and <code>toml.at</code> find a value by a path; <code>md.html</code> makes safe HTML from Markdown (16.8, 16.11, 16.12).</li><li><code>big_endian</code> sets only the byte order (16.5).</li><li>Lists of records have no <code>pop</code> (15.3).</li></ul></div></main><nav class="bottom"><a href="index.html">Start</a> · <a href="11.html">Previous</a> · <a href="13.html">Next</a> · <a href="../html-ko/12.html">한국어</a></nav></body></html>

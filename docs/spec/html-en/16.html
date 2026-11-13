@@ -521,7 +521,43 @@ demo <span style="color: #d73948">or_else</span> (e) e err_text io.println <span
 out contents io.println
 </code></pre><p class="ex-label">Output</p><pre><code data-lang="text">$ pnx 16-json-write.pnx
 {"name":"kim \"k\"","tags":[1,true,null]}
-</code></pre></div><h4>16.8.3 Records</h4><p class="para"><span class="pn">(6)</span> <code>row buf json.pack</code> appends a row of a record as an object whose keys are the field names. <code>s row<br>json.unpack</code> reads an object into the fields of the same names and gives the rest after the object. Values of unknown keys are passed over. Numbers shall be integers that fit the field’s width; a <code>dec(N)</code> field takes a number with at most <code>N</code> digits after the point and is written with all <code>N</code> (7.5); <code>null</code> is not accepted. The row is written only when everything is right; when it fails (<code>err.format</code>) the row is unchanged.</p><div class="example run"><p class="ex-file"><code>16-json-record.pnx</code></p><pre><code data-lang="pinax"><span style="color: #d73948">use</span> io
+</code></pre></div><h4>16.8.3 Path, validity and layout</h4><p class="para"><p><span class="pn">(5a)</span> Four more words read the text as a whole, with the strict grammar of RFC 8259 (the token reader above is lenient on purpose: it reads a stream). A text is valid when it is one value and white space; a nesting deeper than 64 is not valid here. A path names a value: names joined by dots, an index in brackets, and a name that holds a dot or a bracket as <code>["a.b"]</code> (<code>user.langs[1]</code>, <code>[0].id</code>); the empty path names the whole text. A name is compared with the key as it is after its escapes are decoded. The reading stops where it finds the value, so the words do not check the rest of the text.</p><table><tr><td><strong>Word</strong></td><td><strong>Signature</strong></td><td><strong>Meaning</strong></td></tr><tr><td><code>valid</code></td><td><code>(s str gives bool)</code></td><td>whether <code>s</code> is one JSON value, with only white space around it</td></tr><tr><td><code>at</code></td><td><code>(path str, s str gives kind int, value str or fail)</code></td><td>the value <code>path</code> names in <code>s</code>: its kind (the constants above, never <code>json.key</code>) and its text, as <code>json.next</code> gives it, except that an object or an array is given whole, as written, to be read again by <code>json.next</code> or <code>json.at</code>. <code>err.not_found</code> when there is no such value (a name missing, an index past the end, a name asked of an array or an index of an object); <code>err.format</code> when the path is malformed or the text is malformed where it was read</td></tr><tr><td><code>minify</code></td><td><code>(s str, b buffer or fail)</code></td><td>appends <code>s</code> without the white space between its tokens; <code>err.format</code> when <code>s</code> is not valid, <code>err.full</code> when it does not fit (the buffer is then as it was)</td></tr><tr><td><code>pretty</code></td><td><code>(s str, indent int, b buffer or fail)</code></td><td>appends <code>s</code> with each member and element on a line of its own, <code>indent</code> blanks (0 to 16; any other number is a fault) to a level, <code>": "</code> after a key; an empty object or array stays as it is. The failures are those of <code>minify</code></td></tr></table></p><div class="example run"><p class="ex-file"><code>16-json-path.pnx</code></p><pre><code data-lang="pinax"><span style="color: #d73948">use</span> io
+<span style="color: #d73948">use</span> json
+<span style="color: #d73948">buffer</span> shown <span style="color: #b60157">512</span>
+<span style="color: #d73948">word</span> main (<span style="color: #d73948">or</span> <span style="color: #d73948">fail</span>)
+<span style="color: #198810">  </span><span style="color: #d73948">text</span><span style="color: #198810"> </span><span style="color: #4b69c6">END</span>
+<span style="color: #198810">{"user": {"name": "kim", "langs": ["ko", "en"], "age": 31}, "ok": true}</span>
+<span style="color: #4b69c6">END</span>
+  <span style="color: #d73948">to</span> doc
+  doc json.valid <span style="color: #d73948">to</span> fine
+  <span style="color: #d73948">cat</span> (<span style="color: #198810">"valid: "</span>, fine) io.println
+  <span style="color: #198810">"user.name"</span> doc json.at <span style="color: #d73948">or_fail</span> io.println drop     <span style="color: #74747c">rem a value by its path: the text, and its kind</span>
+  <span style="color: #198810">"user.langs[1]"</span> doc json.at <span style="color: #d73948">or_fail</span> io.println drop
+  <span style="color: #198810">"user.langs"</span> doc json.at <span style="color: #d73948">or_fail</span> <span style="color: #d73948">to</span> langs drop      <span style="color: #74747c">rem an array is given as written, to be read again</span>
+  <span style="color: #198810">"[0]"</span> langs json.at <span style="color: #d73948">or_fail</span> io.println drop
+  <span style="color: #198810">"user.size"</span> doc json.at <span style="color: #d73948">or_else</span> (e) <span style="color: #d73948">cat</span> (<span style="color: #198810">"no value: "</span>, e err_text) io.println <span style="color: #b60157">0</span> <span style="color: #198810">""</span> <span style="color: #d73948">end</span> drop drop
+  doc <span style="color: #b60157">2</span> shown json.pretty <span style="color: #d73948">or_fail</span>                     <span style="color: #74747c">rem laid out, two blanks to a level</span>
+  shown contents io.println
+<span style="color: #d73948">end</span>
+main <span style="color: #d73948">or_else</span> (e) e err_text io.println <span style="color: #d73948">end</span>
+</code></pre><p class="ex-label">Output</p><pre><code data-lang="text">$ pnx 16-json-path.pnx
+valid: true
+kim
+en
+ko
+no value: not_found
+{
+  "user": {
+    "name": "kim",
+    "langs": [
+      "ko",
+      "en"
+    ],
+    "age": 31
+  },
+  "ok": true
+}
+</code></pre></div><h4>16.8.4 Records</h4><p class="para"><span class="pn">(6)</span> <code>row buf json.pack</code> appends a row of a record as an object whose keys are the field names. <code>s row<br>json.unpack</code> reads an object into the fields of the same names and gives the rest after the object. Values of unknown keys are passed over. Numbers shall be integers that fit the field’s width; a <code>dec(N)</code> field takes a number with at most <code>N</code> digits after the point and is written with all <code>N</code> (7.5); <code>null</code> is not accepted. The row is written only when everything is right; when it fails (<code>err.format</code>) the row is unchanged.</p><div class="example run"><p class="ex-file"><code>16-json-record.pnx</code></p><pre><code data-lang="pinax"><span style="color: #d73948">use</span> io
 <span style="color: #d73948">use</span> json
 <span style="color: #d73948">record</span> user
   name <span style="color: #d73948">str</span>(<span style="color: #b60157">8</span>)
@@ -575,7 +611,7 @@ demo <span style="color: #d73948">or_else</span> (e) e err_text io.println <span
 pen,1.50
 3.05
 3.055: format
-</code></pre></div><h5>Constraints</h5><p class="para"><span class="pn">(7)</span> <code>json.next</code> and <code>json.skip</code> take only a <code>str</code>; <code>pack</code> and <code>unpack</code> only rows of records.</p><div class="example refused"><p class="ex-file"><code>16-json-type.pnx</code></p><pre><code data-lang="pinax"><span style="color: #d73948">use</span> json
+</code></pre></div><h5>Constraints</h5><p class="para"><span class="pn">(7)</span> <code>json.next</code> and <code>json.skip</code> take only a <code>str</code>; <code>pack</code> and <code>unpack</code> only rows of records. The source text of <code>minify</code>, <code>pretty</code>, <code>valid</code> and <code>at</code> is not the buffer they write into.</p><div class="example refused"><p class="ex-file"><code>16-json-type.pnx</code></p><pre><code data-lang="pinax"><span style="color: #d73948">use</span> json
 <span style="color: #d73948">word</span> f () <span style="color: #b60157">5</span> json.next drop drop drop <span style="color: #d73948">end</span>
 </code></pre><p class="ex-label">Refused</p><pre><code data-lang="text">$ pnx 16-json-type.pnx
 16-json-type.pnx:2:13: this word takes the JSON text as a str
@@ -780,4 +816,93 @@ indexed: false
 main <span style="color: #d73948">or_else</span> <span style="color: #d73948">end</span>
 </code></pre><p class="ex-label">Fault</p><pre><code data-lang="text">$ pnx 16-sheet-range.pnx
 16-sheet-range.pnx:7: index out of range
-</code></pre></div><h5>Diagnostics</h5><table><thead><tr><th><strong>Condition</strong></th><th><strong>Message</strong></th></tr></thead><tbody><tr><td>A value of another type for a word of <code>sheet</code></td><td><code>this word of sheet takes int for row, column and number, str for text, bool for put_bool, dec(N) for put_dec</code></td></tr><tr><td>A word of <code>sheet</code> without a buffer last</td><td><code>the words of sheet take a buffer last: v row column grid sheet.put_int</code></td></tr><tr><td>A word of a file with a book that is a reference, or with a file that is not a buffer</td><td><code>this word of sheet takes the buffer of the file, then the book: 0 file book sheet.load_csv</code></td></tr></tbody></table></main><nav class="bottom"><a href="index.html">Start</a> · <a href="15.html">Previous</a> · <a href="17.html">Next</a> · <a href="../html-ko/16.html">한국어</a></nav></body></html>
+</code></pre></div><h5>Diagnostics</h5><table><thead><tr><th><strong>Condition</strong></th><th><strong>Message</strong></th></tr></thead><tbody><tr><td>A value of another type for a word of <code>sheet</code></td><td><code>this word of sheet takes int for row, column and number, str for text, bool for put_bool, dec(N) for put_dec</code></td></tr><tr><td>A word of <code>sheet</code> without a buffer last</td><td><code>the words of sheet take a buffer last: v row column grid sheet.put_int</code></td></tr><tr><td>A word of a file with a book that is a reference, or with a file that is not a buffer</td><td><code>this word of sheet takes the buffer of the file, then the book: 0 file book sheet.load_csv</code></td></tr></tbody></table><h3>16.11 <code>toml</code> — TOML</h3><p class="para"><span class="pn">(1)</span> The module <code>toml</code> reads TOML text of version 1, a file of settings, without building a tree. A value is given as the bytes it has in the text, and a string without its quotes; a string with escapes, or of several lines with a backslash at the end of a line, is decoded into text written in the region (12.2). Nothing is converted: a number is given as written (<code>5_000</code>, <code>0xff</code>), to be read by the program with the word of the type it wants. The module reads; it does not write TOML.</p><p class="para"><p><span class="pn">(2)</span> <code>kind</code> is one of the constants below.</p><table><tr><td><strong>Constant</strong></td><td><strong>Value</strong></td></tr><tr><td><code>toml.table</code></td><td>a header <code>[a.b]</code>, or a table a path names: no value</td></tr><tr><td><code>toml.tables</code></td><td>a header <code>[[a.b]]</code> of an array of tables: no value</td></tr><tr><td><code>toml.string</code></td><td>a string of any of the four kinds</td></tr><tr><td><code>toml.int</code> <code>toml.float</code></td><td>a number as written; <code>inf</code> and <code>nan</code> are floats</td></tr><tr><td><code>toml.bool</code></td><td><code>true</code> or <code>false</code></td></tr><tr><td><code>toml.datetime</code></td><td>a date, a time or both, as written (<code>1979-05-27T07:32:00Z</code>)</td></tr><tr><td><code>toml.array</code> <code>toml.inline</code></td><td>an array or an inline table whole, as written, to be read again by <code>toml.at</code></td></tr></table></p><h4>16.11.1 Reading</h4><p class="para"><span class="pn">(3)</span> <code>s toml.next</code> reads the first statement of <code>s</code> and gives <code>(kind int, key str, value str, rest str)</code> (<code>or fail</code>): a header (<code>kind</code> <code>toml.table</code> or <code>toml.tables</code>, <code>key</code> the name between the brackets as written, <code>value</code> empty) or a pair (<code>key</code> as written, dots and quotes included, <code>value</code> as above). Blank lines and comments are passed over. At the end it fails with <code>err.not_found</code>; a statement that is not TOML is <code>err.format</code>. The program keeps the header it is under; every <code>key</code> is relative to it.</p><p class="para"><span class="pn">(4)</span> <code>path s toml.at</code> gives <code>(kind int, value str)</code> (<code>or fail</code>): the value <code>path</code> names, in the way a reader of the file would see it. A path is names joined by dots (a quoted name, <code>"a.b"</code> or <code>'a.b'</code>, may hold dots) and indexes in brackets: <code>server.ports[1]</code>, <code>user[0].name</code>, <code>a."b c".d</code>. Keys given with dots (<code>a.b.c = 1</code>), tables made by a header, inline tables and arrays are all followed, and an index chooses an element of an array of values or of tables (the order of the <code>[[...]]</code> headers; those below an element belong to it). A path that names a table gives <code>toml.table</code> and no value. <code>err.not_found</code> when there is none; <code>err.format</code> when the path is malformed or the text is malformed where it was read.</p><p class="para"><span class="pn">(5)</span> <code>s toml.valid</code> gives whether every statement of <code>s</code> is well formed. The check is of the syntax of each statement: a key given twice, a table defined twice and the range of a number or the existence of a date are not checked.</p><table><tr><td><strong>Word</strong></td><td><strong>Signature</strong></td><td><strong>Meaning</strong></td></tr><tr><td><code>valid</code></td><td><code>(s str gives bool)</code></td><td>whether every statement of <code>s</code> is well formed</td></tr><tr><td><code>at</code></td><td><code>(path str, s str gives kind int, value str or fail)</code></td><td>the value <code>path</code> names in <code>s</code>; <code>err.not_found</code>, <code>err.format</code></td></tr><tr><td><code>next</code></td><td><code>(s str gives kind int, key str, value str, rest str or fail)</code></td><td>the first statement of <code>s</code> and what is left after it; <code>err.not_found</code> at the end, <code>err.format</code></td></tr></table><div class="example run"><p class="ex-file"><code>16-toml.pnx</code></p><pre><code data-lang="pinax"><span style="color: #d73948">use</span> io
+<span style="color: #d73948">use</span> toml
+<span style="color: #d73948">word</span> main (<span style="color: #d73948">or</span> <span style="color: #d73948">fail</span>)
+<span style="color: #198810">  </span><span style="color: #d73948">text</span><span style="color: #198810"> </span><span style="color: #4b69c6">END</span>
+<span style="color: #198810">title = "Pinax"          # a comment</span>
+<span style="color: #198810">[server]</span>
+<span style="color: #198810">host = "localhost"</span>
+<span style="color: #198810">ports = [8080, 8081]</span>
+<span style="color: #198810">[[user]]</span>
+<span style="color: #198810">name = "kim"</span>
+<span style="color: #198810">[[user]]</span>
+<span style="color: #198810">name = "lee"</span>
+<span style="color: #4b69c6">END</span>
+  <span style="color: #d73948">to</span> conf
+  <span style="color: #198810">"title"</span> conf toml.at <span style="color: #d73948">or_fail</span> io.println drop       <span style="color: #74747c">rem the text of a string, without its quotes</span>
+  <span style="color: #198810">"server.ports[1]"</span> conf toml.at <span style="color: #d73948">or_fail</span> io.println drop
+  <span style="color: #198810">"user[1].name"</span> conf toml.at <span style="color: #d73948">or_fail</span> io.println drop
+  <span style="color: #198810">"server"</span> conf toml.at <span style="color: #d73948">or_fail</span> drop toml.table eq <span style="color: #d73948">to</span> is_table
+  <span style="color: #d73948">cat</span> (<span style="color: #198810">"server is a table: "</span>, is_table) io.println
+  conf <span style="color: #d73948">to</span> rest                                        <span style="color: #74747c">rem every statement, in order</span>
+  <span style="color: #d73948">loop</span>
+    rest toml.next <span style="color: #d73948">or_else</span> (e) <span style="color: #d73948">break</span> <span style="color: #d73948">end</span> <span style="color: #d73948">to</span> (kind, key, value, rest)
+    <span style="color: #d73948">cat</span> (kind, <span style="color: #198810">" "</span>, key, <span style="color: #198810">" ["</span>, value, <span style="color: #198810">"]"</span>) io.println
+  <span style="color: #d73948">end</span>
+<span style="color: #d73948">end</span>
+main <span style="color: #d73948">or_else</span> (e) e err_text io.println <span style="color: #d73948">end</span>
+</code></pre><p class="ex-label">Output</p><pre><code data-lang="text">$ pnx 16-toml.pnx
+Pinax
+8081
+lee
+server is a table: true
+3 title [Pinax]
+1 server []
+3 host [localhost]
+8 ports [[8080, 8081]]
+2 user []
+3 name [kim]
+2 user []
+3 name [lee]
+</code></pre></div><h5>Constraints</h5><p class="para"><span class="pn">(6)</span> The arguments are <code>str</code>. The path may have at most 40 steps, a key at most 16 parts, and arrays and inline tables inside one another may go at most 32 deep; a text of more than 32 different arrays of tables is <code>err.format</code> for <code>toml.at</code>.</p><div class="example refused"><p class="ex-file"><code>16-toml-type.pnx</code></p><pre><code data-lang="pinax"><span style="color: #d73948">use</span> toml
+<span style="color: #d73948">word</span> f () <span style="color: #b60157">5</span> toml.valid drop <span style="color: #d73948">end</span>
+</code></pre><p class="ex-label">Refused</p><pre><code data-lang="text">$ pnx 16-toml-type.pnx
+16-toml-type.pnx:2:13: this word takes a str (the text, and the path before it)
+</code></pre></div><h5>Diagnostics</h5><table><thead><tr><th><strong>Condition</strong></th><th><strong>Message</strong></th></tr></thead><tbody><tr><td>A value of another type for a word of <code>toml</code></td><td><code>this word takes a str (the text, and the path before it)</code></td></tr></tbody></table><h3>16.12 <code>md</code> — Markdown</h3><p class="para"><span class="pn">(1)</span> The module <code>md</code> reads Markdown, a text for people, and writes it as HTML. It is a subset of CommonMark with the tables and the strikethrough of GFM, made for the notes, the READMEs and the pages a script meets; it is not every corner of the specification. Raw HTML in the text is never passed on: <code>&lt;</code> is written as <code>&amp;lt;</code>. A link or an image whose address has a scheme other than <code>http</code>, <code>https</code>, <code>mailto</code>, <code>tel</code> and <code>ftp</code> is written as its text only. So the HTML is safe to put in a page whatever the Markdown was.</p><p class="para"><span class="pn">(2)</span> What is read. Blocks: ATX headings (<code>#</code> to <code>######</code>) and setext headings, paragraphs, thematic breaks, block quotes, lists (bullets <code>-</code> <code>+</code> <code>*</code>, numbers <code>1.</code> <code>1)</code>, nested, tight or loose), fenced code (three or more backticks or tildes, the first word of the info string becoming <code>class="language-..."</code> when it is letters, digits and <code>- _ + # .</code>), indented code, and tables (a row, a row of dashes with colons for the alignment, rows). Inline: emphasis <code>*a*</code> <code>_a_</code>, strong <code>**a**</code> <code>__a__</code>, strikethrough <code>~~a~~</code>, code spans, links <code>[text](address "title")</code>, images <code>![alt](address)</code>, autolinks <code>&lt;https://...&gt;</code> and <code>&lt;a@b.c&gt;</code>, backslash escapes, character references (<code>&amp;amp;</code> <code>&amp;#65;</code>), a hard break (two blanks or a backslash at the end of a line). Not read: link reference definitions, raw HTML, a setext heading after a list, and the finer rules of CommonMark for emphasis next to punctuation; these give text or a plain paragraph, never a failure. A nesting of containers or of emphasis deeper than 12 is written as text. The search for the closing mark of a link, an emphasis or a code span is paid from a budget of sixteen bytes for each byte of the text; when it is spent, the marks left are text, so a text that is all unclosed marks is read in a time that grows with its size.</p><h4>16.12.1 Writing HTML</h4><p class="para"><span class="pn">(3)</span> <code>s b md.html</code> appends the HTML of the Markdown text <code>s</code> to the buffer <code>b</code>, <code>s b md.inline</code> that of one line or paragraph, with no block around it. They fail with <code>err.full</code> when there is not enough room (the buffer is then as it was). The room is needed for the HTML itself and, while a block quote or a list item is written, for a copy of it at the end of the buffer, one for each level the block lies in, none longer than the text. <code>s</code> is not the buffer.</p><h4>16.12.2 Reading by blocks</h4><p class="para"><p><span class="pn">(4)</span> <code>s md.next</code> reads the first block of <code>s</code> and gives <code>(kind int, level int, text str, rest str)</code> (<code>or fail</code>); at the end it fails with <code>err.not_found</code>. Nothing is copied: <code>text</code> is a view of <code>s</code>. <code>kind</code> is one of the constants below, <code>text</code> what the table says, and <code>level</code> the level of a heading (1 to 6), 1 for an ordered list and 0 for the others.</p><table><tr><td><strong>Constant</strong></td><td><strong>text</strong></td></tr><tr><td><code>md.heading</code></td><td>the text of the heading, without its <code>#</code> and its underline, to be read as inline Markdown</td></tr><tr><td><code>md.paragraph</code></td><td>the lines of the paragraph, as written</td></tr><tr><td><code>md.code</code></td><td>fenced: the lines between the fences; indented: the lines as written, with their indentation</td></tr><tr><td><code>md.quote</code> <code>md.list</code> <code>md.table</code></td><td>the block as written, with its markers, to be given to <code>md.html</code></td></tr><tr><td><code>md.rule</code></td><td>empty</td></tr></table></p><table><tr><td><strong>Word</strong></td><td><strong>Signature</strong></td><td><strong>Meaning</strong></td></tr><tr><td><code>html</code></td><td><code>(s str, b buffer or fail)</code></td><td>appends the HTML of the Markdown text <code>s</code>; <code>err.full</code></td></tr><tr><td><code>inline</code></td><td><code>(s str, b buffer or fail)</code></td><td>appends the HTML of the text of one line or paragraph; <code>err.full</code></td></tr><tr><td><code>next</code></td><td><code>(s str gives kind int, level int, text str, rest str or fail)</code></td><td>the first block of <code>s</code> and what is left after it; <code>err.not_found</code> at the end</td></tr></table><div class="example run"><p class="ex-file"><code>16-md.pnx</code></p><pre><code data-lang="pinax"><span style="color: #d73948">use</span> <span style="color: #d73948">str</span>
+<span style="color: #d73948">use</span> io
+<span style="color: #d73948">use</span> md
+<span style="color: #d73948">buffer</span> page <span style="color: #b60157">2048</span>
+<span style="color: #d73948">word</span> main (<span style="color: #d73948">or</span> <span style="color: #d73948">fail</span>)
+<span style="color: #198810">  </span><span style="color: #d73948">text</span><span style="color: #198810"> </span><span style="color: #4b69c6">END</span>
+<span style="color: #198810"># Plan</span>
+
+<span style="color: #198810">Read the *first* chapter, then [try it](https://example.org/try).</span>
+
+<span style="color: #198810">- one</span>
+<span style="color: #198810">- two</span>
+
+<span style="color: #198810">```pnx</span>
+<span style="color: #198810">word main end</span>
+<span style="color: #198810">```</span>
+<span style="color: #4b69c6">END</span>
+  <span style="color: #d73948">to</span> doc
+  doc page md.html <span style="color: #d73948">or_fail</span>
+  page contents io.println
+  doc <span style="color: #d73948">to</span> rest                                        <span style="color: #74747c">rem the blocks, one at a time</span>
+  <span style="color: #d73948">loop</span>
+    rest md.next <span style="color: #d73948">or_else</span> (e) <span style="color: #d73948">break</span> <span style="color: #d73948">end</span> <span style="color: #d73948">to</span> (kind, level, body, rest)
+    <span style="color: #d73948">cat</span> (kind, <span style="color: #198810">" "</span>, level, <span style="color: #198810">" "</span>, body <span style="color: #d73948">str</span>.len) io.println
+  <span style="color: #d73948">end</span>
+<span style="color: #d73948">end</span>
+main <span style="color: #d73948">or_else</span> (e) e err_text io.println <span style="color: #d73948">end</span>
+</code></pre><p class="ex-label">Output</p><pre><code data-lang="text">$ pnx 16-md.pnx
+&lt;h1&gt;Plan&lt;/h1&gt;
+&lt;p&gt;Read the &lt;em&gt;first&lt;/em&gt; chapter, then &lt;a href="https://example.org/try"&gt;try it&lt;/a&gt;.&lt;/p&gt;
+&lt;ul&gt;
+&lt;li&gt;one&lt;/li&gt;
+&lt;li&gt;two&lt;/li&gt;
+&lt;/ul&gt;
+&lt;pre&gt;&lt;code class="language-pnx"&gt;word main end
+&lt;/code&gt;&lt;/pre&gt;
+
+1 1 4
+2 0 65
+5 0 11
+3 0 14
+</code></pre></div><h5>Constraints</h5><p class="para"><span class="pn">(5)</span> <code>s</code> is a <code>str</code>, and the buffer of <code>html</code> and <code>inline</code> comes last.</p><div class="example refused"><p class="ex-file"><code>16-md-type.pnx</code></p><pre><code data-lang="pinax"><span style="color: #d73948">use</span> md
+<span style="color: #d73948">buffer</span> page <span style="color: #b60157">64</span>
+<span style="color: #d73948">word</span> f () <span style="color: #b60157">7</span> page md.html drop <span style="color: #d73948">end</span>
+</code></pre><p class="ex-label">Refused</p><pre><code data-lang="text">$ pnx 16-md-type.pnx
+16-md-type.pnx:3:18: this word takes a str (the text, and the path before it)
+</code></pre></div><h5>Diagnostics</h5><table><thead><tr><th><strong>Condition</strong></th><th><strong>Message</strong></th></tr></thead><tbody><tr><td>A value of another type for a word of <code>md</code></td><td><code>this word takes a str (the text, and the path before it)</code></td></tr></tbody></table></main><nav class="bottom"><a href="index.html">Start</a> · <a href="15.html">Previous</a> · <a href="17.html">Next</a> · <a href="../html-ko/16.html">한국어</a></nav></body></html>

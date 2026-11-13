@@ -1,0 +1,20 @@
+rem run
+use io
+use json
+buffer shown 512
+word main (or fail)
+  text END
+{"user": {"name": "kim", "langs": ["ko", "en"], "age": 31}, "ok": true}
+END
+  to doc
+  doc json.valid to fine
+  cat ("valid: ", fine) io.println
+  "user.name" doc json.at or_fail io.println drop     rem a value by its path: the text, and its kind
+  "user.langs[1]" doc json.at or_fail io.println drop
+  "user.langs" doc json.at or_fail to langs drop      rem an array is given as written, to be read again
+  "[0]" langs json.at or_fail io.println drop
+  "user.size" doc json.at or_else (e) cat ("no value: ", e err_text) io.println 0 "" end drop drop
+  doc 2 shown json.pretty or_fail                     rem laid out, two blanks to a level
+  shown contents io.println
+end
+main or_else (e) e err_text io.println end

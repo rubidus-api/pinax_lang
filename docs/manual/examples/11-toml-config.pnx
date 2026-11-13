@@ -1,0 +1,22 @@
+rem run
+use io
+use toml
+word main (or fail)
+  text END
+name = "shop"            # the name of the service
+[server]
+host = "0.0.0.0"
+ports = [8080, 8443]
+[[backend]]
+url = "http://a.local"
+[[backend]]
+url = "http://b.local"
+END
+  to conf
+  "server.host" conf toml.at or_fail io.println drop
+  "server.ports[1]" conf toml.at or_fail io.println drop
+  "backend[1].url" conf toml.at or_fail io.println drop
+  conf toml.valid to fine
+  cat ("valid: ", fine) io.println
+end
+main or_else (e) e err_text io.println end

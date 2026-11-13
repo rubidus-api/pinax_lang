@@ -196,6 +196,10 @@ PNX_INLINE int pnx_tail_word(pinax_state *st, const pnx_wordrec *callee, uint32_
     X(RUNF2, SHEETF) \
     X(RUN2, SHEETR) \
     X(RUNF2, SHEETRF) \
+    X(RUN, TXT) \
+    X(RUNF, TXTF) \
+    X(RUN2, TXTW) \
+    X(RUNF2, TXTWF) \
     X(RUN2, SREPL) \
     X(RUNF, QPUT) \
     X(RUNF, QTAKE) \
@@ -1367,6 +1371,153 @@ PNX_OP(SHEET) { return pnx_sheet_exec(st, R, S, w, x); }
 PNX_OP(SHEETF) { return pnx_sheet_exec(st, R, S, w, x); }
 PNX_OP(SHEETR) { return pnx_sheet_exec(st, R, S, w, x); }
 PNX_OP(SHEETRF) { return pnx_sheet_exec(st, R, S, w, x); }
+
+
+// ---- the words of json, toml and md that read a text (RFC-0046) ----------------------------------------------
+PNX_INLINE pnx_scell pnx_text_slice(pnx_scell base, uint32_t start, uint32_t len) {
+    return (pnx_scell){base.segment, len, base.offset + start};
+}
+// Bytes decoded into the region: a string with escapes (toml: its escapes; json: its escapes). PNX_R_OK, PNX_R_FAILED
+// (format), or the fault PINAX_ERR_FULL.
+PNX_INLINE int pnx_text_decoded(pinax_state *st, pnx_scell *out, pnx_scell base, uint32_t start, uint32_t len, bool toml) {
+    const uint8_t *bytes = pnx_view_bytes(st, base);
+    const uint32_t before = st->region_used;
+    uint8_t       *copy = len ? pnx_region_alloc(st, len) : NULL;
+    if (len && !copy)
+        return PINAX_ERR_FULL;
+    const uint32_t n = toml ? pnx_toml_decode(bytes + start, len, copy) : pnx_json_unescape(bytes + start, len, copy);
+    if (n >= PNX_TXT_BAD) {
+        pnx_region_give_back(st, before);
+        st->fail = PINAX_ERR_FORMAT;
+        return PNX_R_FAILED;
+    }
+    st->region_used = (uint32_t)(copy - st->region) + n;
+    *out = (pnx_scell){PNX_SEG_REGION, n, (uint64_t)(copy - st->region)};
+    return PNX_R_OK;
+}
+// A toml value: a string is given without its quotes and decoded when it has escapes; anything else as written.
+PNX_INLINE int pnx_text_toml_value(pinax_state *st, pnx_scell *out, pnx_scell base, int kind, uint32_t off, uint32_t len) {
+    if (kind != PNX_TOML_STRING) {
+        *out = pnx_text_slice(base, off, len);
+        return PNX_R_OK;
+    }
+    uint32_t a = 0, n = 0;
+    const int how = len ? pnx_toml_string(pnx_view_bytes(st, base) + off, len, &a, &n) : -1;
+    if (how < 0) {
+        st->fail = PINAX_ERR_FORMAT;
+        return PNX_R_FAILED;
+    }
+    if (how == 0) {
+        *out = pnx_text_slice(base, off + a, n);
+        return PNX_R_OK;
+    }
+    return pnx_text_decoded(st, out, base, off + a, n, true);
+}
+
+PNX_INLINE int pnx_text_exec(pinax_state *st, int64_t *R, pnx_scell *S, uint32_t w, uint32_t x, bool buffered) {
+    if (OP_C(w) >= PNX_TXW_COUNT)
+        return PINAX_ERR_STATE;
+    const pnx_txword *word = &pnx_txwords[OP_C(w)];
+    int64_t *const    r = R + OP_A(w);
+    pnx_scell        *s = S + OP_B(w);
+    const bool        two = word->in[0] == 's' && word->in[1] == 's';
+    const pnx_scell   first = s[0], text = s[two ? 1 : 0];
+    const uint8_t    *tb = pnx_view_bytes(st, text);
+    const uint32_t    tn = text.length;
+    st->charge += tn;
+    int kind = 0;
+    uint32_t a = 0, b = 0, c = 0, d = 0, past = 0;
+    int rc;
+    pnx_scell value = {0}, key = {0};
+    switch (OP_C(w)) {
+    case PNX_TXW_JSON_VALID: r[0] = pnx_json_valid(tb, tn); return PNX_R_OK;
+    case PNX_TXW_TOML_VALID: r[0] = pnx_toml_valid(tb, tn); return PNX_R_OK;
+    case PNX_TXW_JSON_AT: {
+        bool escaped = false;
+        st->charge += first.length;
+        rc = pnx_json_at(tb, tn, pnx_view_bytes(st, first), first.length, &kind, &a, &b, &escaped);
+        if (rc <= 0) {
+            st->fail = rc == 0 ? PINAX_ERR_NOT_FOUND : PINAX_ERR_FORMAT;
+            return PNX_R_FAILED;
+        }
+        value = pnx_text_slice(text, a, b);
+        if (escaped && (rc = pnx_text_decoded(st, &value, text, a, b, false)) != PNX_R_OK)
+            return rc;
+        r[0] = kind;
+        s[0] = value;
+        return PNX_R_OK;
+    }
+    case PNX_TXW_TOML_AT:
+        st->charge += first.length;
+        rc = pnx_toml_at(tb, tn, pnx_view_bytes(st, first), first.length, &kind, &a, &b);
+        if (rc <= 0) {
+            st->fail = rc == 0 ? PINAX_ERR_NOT_FOUND : PINAX_ERR_FORMAT;
+            return PNX_R_FAILED;
+        }
+        if ((rc = pnx_text_toml_value(st, &value, text, kind, a, b)) != PNX_R_OK)
+            return rc;
+        r[0] = kind;
+        s[0] = value;
+        return PNX_R_OK;
+    case PNX_TXW_TOML_NEXT:
+        rc = pnx_toml_next(tb, tn, &kind, &a, &b, &c, &d, &past);
+        if (rc <= 0) {
+            st->fail = rc == 0 ? PINAX_ERR_NOT_FOUND : PINAX_ERR_FORMAT;
+            return PNX_R_FAILED;
+        }
+        key = pnx_text_slice(text, a, b);
+        if ((rc = pnx_text_toml_value(st, &value, text, kind, c, d)) != PNX_R_OK)
+            return rc;
+        r[0] = kind;
+        s[0] = key;
+        s[1] = value;
+        s[2] = pnx_text_slice(text, past, tn - past);
+        return PNX_R_OK;
+    case PNX_TXW_MD_NEXT: {
+        int level = 0;
+        if (!pnx_md_next(tb, tn, &kind, &level, &a, &b, &past)) {
+            st->fail = PINAX_ERR_NOT_FOUND;
+            return PNX_R_FAILED;
+        }
+        r[0] = kind;
+        r[1] = level;
+        s[0] = pnx_text_slice(text, a, b);
+        s[1] = pnx_text_slice(text, past, tn - past);
+        return PNX_R_OK;
+    }
+    default: break;
+    }
+    if (!buffered)
+        return PINAX_ERR_STATE;
+    const pnx_global *g = &st->globals[PNX_GX(st, x)];
+    const uint64_t    len0 = pnx_buffer_len(g);
+    uint8_t *const    out = g->ptr + 8 + len0;
+    const uint64_t    room = g->capacity - len0;
+    uint32_t          res;
+    switch (OP_C(w)) {
+    case PNX_TXW_JSON_MINIFY: res = pnx_json_minify(tb, tn, out, room); break;
+    case PNX_TXW_JSON_PRETTY:
+        if (r[0] < 0 || r[0] > 16)
+            return PINAX_ERR_RANGE;
+        res = pnx_json_pretty(tb, tn, (uint32_t)r[0], out, room);
+        break;
+    case PNX_TXW_MD_HTML: res = pnx_md_html(tb, tn, out, room); break;
+    case PNX_TXW_MD_INLINE: res = pnx_md_inline(tb, tn, out, room); break;
+    default: return PINAX_ERR_STATE;
+    }
+    if (res >= PNX_TXT_BAD) {
+        st->fail = res == PNX_TXT_FULL ? PINAX_ERR_FULL : PINAX_ERR_FORMAT;
+        return PNX_R_FAILED;
+    }
+    st->charge += res;
+    const uint64_t now = len0 + res;
+    __builtin_memcpy(g->ptr, &now, 8);
+    return PNX_R_OK;
+}
+PNX_OP(TXT) { return pnx_text_exec(st, R, S, w, x, false); }
+PNX_OP(TXTF) { return pnx_text_exec(st, R, S, w, x, false); }
+PNX_OP(TXTW) { return pnx_text_exec(st, R, S, w, x, true); }
+PNX_OP(TXTWF) { return pnx_text_exec(st, R, S, w, x, true); }
 
 PNX_OP(POOLNX) { // the next live row from slot R[A] on; PNX_R_FAILED when none is left
     const pnx_global *g = &st->globals[PNX_GX(st, x)];

@@ -127,7 +127,79 @@ demo <span style="color: #d73948">or_else</span> (e) e err_text io.println <span
 </code></pre><p class="ex-label">출력</p><pre><code data-lang="text">$ pnx 11-csv-write.pnx
 kim,3,true
 "a, b",2.50
-</code></pre></div><h3>11.2 바이트</h3><p>모듈 <code>bytes</code> 는 정해진 폭과 바이트 순서로 쓰고 읽는다. 레코드에 <code>big_endian</code> 을 적으면 <code>bytes.pack</code> 이 큰 끝부터 쓴다. <code>varint</code> 필드는 작은 수를 적은 바이트로 쓴다.</p><div class="example run"><p class="ex-file"><code>11-binary.pnx</code></p><pre><code data-lang="pinax"><span style="color: #d73948">use</span> io
+</code></pre></div><h3>11.2 경로, 설정 파일, Markdown</h3><p>토큰으로 읽는 것은 흐름에 맞다. 글이 문서이고 값 하나가 필요하면 <code>json.at</code> 이 경로를 받는다: 점으로 이은 이름과 괄호 안의 번호, <code>user.langs[1]</code>. 값의 종류와 글을 주고, 객체나 배열은 적힌 대로 통째로 주므로 다시 물을 수 있다. 없는 값은 <code>err.not_found</code> 이니 기본값은 <code>or_else</code> 에 둔다. <code>json.valid</code> 는 글이 JSON 인지 보고, <code>json.minify</code> 와 <code>json.pretty</code> 는 글을 버퍼에 공백 없이, 또는 값 하나에 한 줄씩 쓴다.</p><div class="example run"><p class="ex-file"><code>11-json-path.pnx</code></p><pre><code data-lang="pinax"><span style="color: #d73948">use</span> io
+<span style="color: #d73948">use</span> json
+<span style="color: #d73948">word</span> main (<span style="color: #d73948">or</span> <span style="color: #d73948">fail</span>)
+<span style="color: #198810">  </span><span style="color: #d73948">text</span><span style="color: #198810"> </span><span style="color: #4b69c6">END</span>
+<span style="color: #198810">{"user": {"name": "kim", "langs": ["ko", "en"]}, "visits": 12}</span>
+<span style="color: #4b69c6">END</span>
+  <span style="color: #d73948">to</span> doc
+  <span style="color: #198810">"user.name"</span> doc json.at <span style="color: #d73948">or_fail</span> io.println drop      <span style="color: #74747c">rem the value at a path</span>
+  <span style="color: #198810">"user.langs[1]"</span> doc json.at <span style="color: #d73948">or_fail</span> io.println drop  <span style="color: #74747c">rem an index in brackets</span>
+  <span style="color: #198810">"visits"</span> doc json.at <span style="color: #d73948">or_fail</span> drop json.number eq <span style="color: #d73948">to</span> is_number
+  <span style="color: #d73948">cat</span> (<span style="color: #198810">"visits is a number: "</span>, is_number) io.println
+  <span style="color: #198810">"user.email"</span> doc json.at <span style="color: #d73948">or_else</span> (e) <span style="color: #d73948">cat</span> (<span style="color: #198810">"no email: "</span>, e err_text) io.println <span style="color: #b60157">0</span> <span style="color: #198810">""</span> <span style="color: #d73948">end</span> drop drop
+<span style="color: #d73948">end</span>
+main <span style="color: #d73948">or_else</span> (e) e err_text io.println <span style="color: #d73948">end</span>
+</code></pre><p class="ex-label">출력</p><pre><code data-lang="text">$ pnx 11-json-path.pnx
+kim
+en
+visits is a number: true
+no email: not_found
+</code></pre></div><p>설정 파일의 형식인 TOML 은 모듈 <code>toml</code> 이 같은 방식으로 읽는다: 경로를 준 <code>toml.at</code>(<code>server.ports[1]</code>, 둘째 <code>[[backend]]</code> 는 <code>backend[1].url</code>), 또는 머리를 포함해 모든 문장을 차례로 주는 <code>toml.next</code>. 값은 적힌 대로 준다: 문자열은 따옴표를 떼고(이스케이프는 풀어서), 수는 그 글로. 이 모듈은 읽기만 하고 TOML 을 쓰지 않는다.</p><div class="example run"><p class="ex-file"><code>11-toml-config.pnx</code></p><pre><code data-lang="pinax"><span style="color: #d73948">use</span> io
+<span style="color: #d73948">use</span> toml
+<span style="color: #d73948">word</span> main (<span style="color: #d73948">or</span> <span style="color: #d73948">fail</span>)
+<span style="color: #198810">  </span><span style="color: #d73948">text</span><span style="color: #198810"> </span><span style="color: #4b69c6">END</span>
+<span style="color: #198810">name = "shop"            # the name of the service</span>
+<span style="color: #198810">[server]</span>
+<span style="color: #198810">host = "0.0.0.0"</span>
+<span style="color: #198810">ports = [8080, 8443]</span>
+<span style="color: #198810">[[backend]]</span>
+<span style="color: #198810">url = "http://a.local"</span>
+<span style="color: #198810">[[backend]]</span>
+<span style="color: #198810">url = "http://b.local"</span>
+<span style="color: #4b69c6">END</span>
+  <span style="color: #d73948">to</span> conf
+  <span style="color: #198810">"server.host"</span> conf toml.at <span style="color: #d73948">or_fail</span> io.println drop
+  <span style="color: #198810">"server.ports[1]"</span> conf toml.at <span style="color: #d73948">or_fail</span> io.println drop
+  <span style="color: #198810">"backend[1].url"</span> conf toml.at <span style="color: #d73948">or_fail</span> io.println drop
+  conf toml.valid <span style="color: #d73948">to</span> fine
+  <span style="color: #d73948">cat</span> (<span style="color: #198810">"valid: "</span>, fine) io.println
+<span style="color: #d73948">end</span>
+main <span style="color: #d73948">or_else</span> (e) e err_text io.println <span style="color: #d73948">end</span>
+</code></pre><p class="ex-label">출력</p><pre><code data-lang="text">$ pnx 11-toml-config.pnx
+0.0.0.0
+8443
+http://b.local
+valid: true
+</code></pre></div><p>Markdown 은 <code>md.html</code> 로 HTML 이 된다: 제목, 문단, 강조, 코드, 링크, 목록, 인용, 표. 글 속의 날 HTML 은 넘기지 않고 <code>javascript:</code> 로 가는 링크는 글로만 쓰므로, 결과를 쪽에 넣어도 안전하다. <code>md.next</code> 는 문서를 블록 하나씩 읽고, <code>md.inline</code> 은 문단으로 싸지 않고 한 줄만 쓴다. 둘 다 CommonMark 의 부분집합이다(표준 16.12 에 적혀 있다).</p><div class="example run"><p class="ex-file"><code>11-md-html.pnx</code></p><pre><code data-lang="pinax"><span style="color: #d73948">use</span> io
+<span style="color: #d73948">use</span> md
+<span style="color: #d73948">buffer</span> page <span style="color: #b60157">1024</span>
+<span style="color: #d73948">word</span> main (<span style="color: #d73948">or</span> <span style="color: #d73948">fail</span>)
+<span style="color: #198810">  </span><span style="color: #d73948">text</span><span style="color: #198810"> </span><span style="color: #4b69c6">END</span>
+<span style="color: #198810">## Notes</span>
+
+<span style="color: #198810">A line with *emphasis*, `code` and a [link](https://example.org).</span>
+<span style="color: #198810">Raw &lt;b&gt;tags&lt;/b&gt; stay text.</span>
+
+<span style="color: #198810">1. first</span>
+<span style="color: #198810">2. second</span>
+<span style="color: #4b69c6">END</span>
+  <span style="color: #d73948">to</span> doc
+  doc page md.html <span style="color: #d73948">or_fail</span>
+  page contents io.println
+<span style="color: #d73948">end</span>
+main <span style="color: #d73948">or_else</span> (e) e err_text io.println <span style="color: #d73948">end</span>
+</code></pre><p class="ex-label">출력</p><pre><code data-lang="text">$ pnx 11-md-html.pnx
+&lt;h2&gt;Notes&lt;/h2&gt;
+&lt;p&gt;A line with &lt;em&gt;emphasis&lt;/em&gt;, &lt;code&gt;code&lt;/code&gt; and a &lt;a href="https://example.org"&gt;link&lt;/a&gt;.
+Raw &amp;lt;b&amp;gt;tags&amp;lt;/b&amp;gt; stay text.&lt;/p&gt;
+&lt;ol&gt;
+&lt;li&gt;first&lt;/li&gt;
+&lt;li&gt;second&lt;/li&gt;
+&lt;/ol&gt;
+
+</code></pre></div><div class="box qa"><p class="box-title">문답</p><p><strong>물음. <code>json.at</code> 뒤에 나무가 남는가?</strong></p><p>답. 아니다. 호출마다 글을 앞에서부터 원하는 값까지 다시 읽는다. 큰 문서에서 값을 많이 뽑으려면 한 번만 읽는 토큰 낱말이 더 싸다.</p></div><h3>11.3 바이트</h3><p>모듈 <code>bytes</code> 는 정해진 폭과 바이트 순서로 쓰고 읽는다. 레코드에 <code>big_endian</code> 을 적으면 <code>bytes.pack</code> 이 큰 끝부터 쓴다. <code>varint</code> 필드는 작은 수를 적은 바이트로 쓴다.</p><div class="example run"><p class="ex-file"><code>11-binary.pnx</code></p><pre><code data-lang="pinax"><span style="color: #d73948">use</span> io
 <span style="color: #d73948">use</span> bytes
 <span style="color: #d73948">use</span> encode
 <span style="color: #d73948">use</span> hash
@@ -167,7 +239,7 @@ read back: version 1, length 300
 <span style="color: #d73948">word</span> write (p points) p out json.pack <span style="color: #d73948">end</span>   <span style="color: #74747c">rem pack fails when the buffer is full: no guard</span>
 </code></pre><p class="ex-label">거절</p><pre><code data-lang="text">$ pnx 11-pack-unguarded.pnx
 11-pack-unguarded.pnx:8:39: a word that can fail is followed by or_fail, or_return or or_else
-</code></pre></div><div class="box qa"><p class="box-title">문답</p><p><strong>물음. 메모리 안의 레코드도 큰 끝으로 놓이는가?</strong></p><p>답. 아니다. <code>big_endian</code> 은 <code>pack</code> 과 <code>unpack</code> 이 쓰는 바이트의 차례만 정한다. 메모리 안의 모양은 처리기가 정하고, 스크립트는 그것을 볼 수 없다.</p></div><h3>11.3 그 밖의 바꾸기</h3><p><code>fmt</code> 는 수를 십육진, 이진, 0 을 채운 모양으로 바꾼다. <code>hash</code> 는 CRC-32, FNV-1a, SipHash 를, <code>encode</code> 는 Base64, 십육진, URL 퍼센트 부호화를 준다. 바꾼 결과를 버퍼에 쓰는 낱말은 버퍼가 차면 실패한다. 자세한 목록은 표준 16절에 있다.</p><p>해시는 글을 받아 <code>int</code> 를 준다. <code>hash.crc32</code> 는 검사합으로, <code>hash.fnv1a</code> 와 <code>hash.hash64</code> 는 키를 섞는 데 쓴다. 레코드 한 줄이 <code>bytes.pack</code> 으로 몇 바이트가 되는지는 <code>bytes.packed_size</code> 가 미리 알려 준다 — 버퍼의 자리를 가늠할 때 쓴다.</p><div class="example run"><p class="ex-file"><code>11-hash.pnx</code></p><pre><code data-lang="pinax"><span style="color: #d73948">use</span> io
+</code></pre></div><div class="box qa"><p class="box-title">문답</p><p><strong>물음. 메모리 안의 레코드도 큰 끝으로 놓이는가?</strong></p><p>답. 아니다. <code>big_endian</code> 은 <code>pack</code> 과 <code>unpack</code> 이 쓰는 바이트의 차례만 정한다. 메모리 안의 모양은 처리기가 정하고, 스크립트는 그것을 볼 수 없다.</p></div><h3>11.4 그 밖의 바꾸기</h3><p><code>fmt</code> 는 수를 십육진, 이진, 0 을 채운 모양으로 바꾼다. <code>hash</code> 는 CRC-32, FNV-1a, SipHash 를, <code>encode</code> 는 Base64, 십육진, URL 퍼센트 부호화를 준다. 바꾼 결과를 버퍼에 쓰는 낱말은 버퍼가 차면 실패한다. 자세한 목록은 표준 16절에 있다.</p><p>해시는 글을 받아 <code>int</code> 를 준다. <code>hash.crc32</code> 는 검사합으로, <code>hash.fnv1a</code> 와 <code>hash.hash64</code> 는 키를 섞는 데 쓴다. 레코드 한 줄이 <code>bytes.pack</code> 으로 몇 바이트가 되는지는 <code>bytes.packed_size</code> 가 미리 알려 준다 — 버퍼의 자리를 가늠할 때 쓴다.</p><div class="example run"><p class="ex-file"><code>11-hash.pnx</code></p><pre><code data-lang="pinax"><span style="color: #d73948">use</span> io
 <span style="color: #d73948">use</span> fmt
 <span style="color: #d73948">use</span> hash
 <span style="color: #d73948">use</span> bytes
@@ -184,4 +256,4 @@ demo
 </code></pre><p class="ex-label">출력</p><pre><code data-lang="text">$ pnx 11-hash.pnx
 crc32 19afea99, fnv1a 131b946615bc7b35
 a pair packs into 10 bytes
-</code></pre></div><div class="box qa"><p class="box-title">문답</p><p><strong>물음. JSON 으로 쓸 때 들여쓰기나 줄바꿈을 넣을 수 있는가?</strong></p><p>답. 없다. <code>json</code> 의 쓰는 낱말은 한 줄로 붙인다. 사람이 읽을 모양이 필요하면 받은 쪽에서 다듬는다. 읽는 쪽은 공백과 줄바꿈이 있어도 그대로 읽는다.</p></div><div class="box summary"><p class="box-title">정리</p><ul><li><code>json.next</code> 와 <code>csv.fields</code> 는 한 토큰, 한 필드씩 읽는다. 나무를 만들지 않는다(표준 16.8, 16.9).</li><li><code>pack</code> 은 버퍼에 쓰고, <code>unpack</code> 은 모두 맞을 때만 줄에 쓴다(16.5, 16.8, 16.9).</li><li><code>big_endian</code> 은 바이트 순서만 정한다(16.5).</li><li>레코드의 목록에는 <code>pop</code> 이 없다(15.3).</li></ul></div></main><nav class="bottom"><a href="index.html">처음</a> · <a href="11.html">앞</a> · <a href="13.html">다음</a> · <a href="../html-en/12.html">English</a></nav></body></html>
+</code></pre></div><div class="box qa"><p class="box-title">문답</p><p><strong>물음. JSON 으로 쓸 때 들여쓰기나 줄바꿈을 넣을 수 있는가?</strong></p><p>답. <code>json</code> 의 쓰는 낱말은 한 줄로 붙인다. 사람이 읽을 모양이 필요하면 그 글을 <code>json.pretty</code> 에 주면 멤버마다 한 줄로 쓴다.</p></div><div class="box summary"><p class="box-title">정리</p><ul><li><code>json.next</code> 와 <code>csv.fields</code> 는 한 토큰, 한 필드씩 읽는다. 나무를 만들지 않는다(표준 16.8, 16.9).</li><li><code>pack</code> 은 버퍼에 쓰고, <code>unpack</code> 은 모두 맞을 때만 줄에 쓴다(16.5, 16.8, 16.9).</li><li><code>json.at</code> 과 <code>toml.at</code> 은 경로로 값을 찾고, <code>md.html</code> 은 Markdown 에서 안전한 HTML 을 만든다(16.8, 16.11, 16.12).</li><li><code>big_endian</code> 은 바이트 순서만 정한다(16.5).</li><li>레코드의 목록에는 <code>pop</code> 이 없다(15.3).</li></ul></div></main><nav class="bottom"><a href="index.html">처음</a> · <a href="11.html">앞</a> · <a href="13.html">다음</a> · <a href="../html-en/12.html">English</a></nav></body></html>

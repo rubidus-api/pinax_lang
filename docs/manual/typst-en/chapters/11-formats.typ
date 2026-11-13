@@ -62,6 +62,30 @@ the commas between fields are the words' business. One row of a record as one li
 
 #ex("manual", "11-csv-write.pnx")
 
+== Paths, settings files and Markdown
+
+Reading by tokens suits a stream. When the text is a document and one value is wanted, #word("json.at") takes a path: names joined by dots
+and indexes in brackets, `user.langs[1]`. It gives the kind and the text of the value; an object or an array comes whole, as written, so it can be
+asked again. A missing value is `err.not_found`, so `or_else` is the place for a default. #word("json.valid") says whether a text is JSON at
+all, and `json.minify` and `json.pretty` write it into a buffer without its blanks, or one value to a line.
+
+#ex("manual", "11-json-path.pnx")
+
+TOML, the format of settings files, is read the same way by the module `toml`: `toml.at` with a path (`server.ports[1]`, `backend[1].url`
+for the second `[[backend]]`), or `toml.next` for every statement in order, headers included. A value is given as written: a string without its
+quotes (and with its escapes decoded), a number as its text. The module reads; it does not write TOML.
+
+#ex("manual", "11-toml-config.pnx")
+
+Markdown becomes HTML with #word("md.html"): headings, paragraphs, emphasis, code, links, lists, quotes and tables. Raw HTML in the text is not
+passed on and a link to `javascript:` is written as plain text, so the result is safe to put in a page. `md.next` reads a document a block at a time,
+and `md.inline` writes one line without a paragraph around it. Both are a subset of CommonMark (standard 16.12 says which).
+
+#ex("manual", "11-md-html.pnx")
+
+#qa[Is there a tree after `json.at`?][No. Each call reads the text again from the front up to the value it wants, so for many values from one large
+document the token words, which read it once, are cheaper.]
+
 == Bytes
 
 The module `bytes` writes and reads fixed widths in a given byte order. With `big_endian` in a record, `bytes.pack` writes
@@ -89,12 +113,13 @@ helps in sizing a buffer.
 
 #ex("manual", "11-hash.pnx")
 
-#qa[Can the JSON writer indent, or add line breaks?][No. The writing words of `json` append one line. When a layout for
-people is needed, the receiving side makes it. The reading side accepts spaces and line breaks as they come.]
+#qa[Can the JSON writer indent, or add line breaks?][The writing words of `json` append one line. For a layout for people, give the text to
+`json.pretty`, which writes it with a member to a line.]
 
 #summary[
 - `json.next` and `csv.fields` read one token, one field at a time; no tree is built (standard 16.8, 16.9).
 - `pack` writes into a buffer; `unpack` writes into the row only when all is right (16.5, 16.8, 16.9).
+- `json.at` and `toml.at` find a value by a path; `md.html` makes safe HTML from Markdown (16.8, 16.11, 16.12).
 - `big_endian` sets only the byte order (16.5).
 - Lists of records have no `pop` (15.3).
 ]

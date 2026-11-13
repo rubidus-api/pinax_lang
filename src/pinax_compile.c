@@ -1873,7 +1873,8 @@ static const struct builtin {
 static uint8_t standard_module(name n) {
     return name_is(n, "str") ? 1 : name_is(n, "fmt") ? 2 : name_is(n, "hash") ? 3 : name_is(n, "encode") ? 4
          : name_is(n, "bytes") ? 5 : name_is(n, "ptn") ? 6 : name_is(n, "rex") ? 7 : name_is(n, "json") ? 8
-         : name_is(n, "csv") ? 9 : name_is(n, "sheet") ? 10 : 0;
+         : name_is(n, "csv") ? 9 : name_is(n, "sheet") ? 10
+         : name_is(n, "toml") ? 11 : name_is(n, "md") ? 12 : 0;
 }
 
 static const struct builtin *find_builtin(name n, uint8_t module) {
@@ -5267,6 +5268,9 @@ static bool text_put(comp *c, uint32_t op, uint32_t kind, tid value) {
     return emit_g(c, op, ra, kind, gi) != NONE && guard_op(c, TY_NONE);
 }
 
+static const pnx_txword *txw_find(uint8_t module, name n);
+static bool txw_word(comp *c, uint8_t module, name n);
+
 static bool json_word(comp *c, name n) {
     fn *f = c->f;
     static const struct {
@@ -5297,6 +5301,8 @@ static bool json_word(comp *c, name n) {
         return text_put(c, PNX_JPUTS, name_is(n, "put_key") ? PNX_JSON_KEY : PNX_JSON_STRING, TY_STR);
     if (name_is(n, "pack") || name_is(n, "unpack"))
         return text_record(c, true, name_is(n, "unpack"));
+    if (txw_find(8, n))
+        return txw_word(c, 8, n);
     if (!name_is(n, "next") && !name_is(n, "skip"))
         return error(c, PINAX_ERR_NOT_FOUND, "the module has no word of this name");
     if (!need(c, 1))
@@ -5471,6 +5477,97 @@ static bool sheet_word(comp *c, name n) {
         return advance(c) && guard(c, &s, base, in, false);
     }
     return (out == TY_NONE || push_slot(c, out)) && advance(c);
+}
+
+
+// ---- the text words of json, toml and md (RFC-0046) ----------------------------------------------------
+
+static const pnx_txword *txw_find(uint8_t module, name n) {
+    for (uint32_t k = 0; k < PNX_TXW_COUNT; ++k) {
+        if (pnx_txwords[k].module == module && name_is(n, pnx_txwords[k].name))
+            return &pnx_txwords[k];
+    }
+    return NULL;
+}
+// the kinds toml.next, toml.at and md.next give
+static bool txw_const(uint8_t module, name n, int64_t *value) {
+    static const char *const toml[] = {"table", "tables", "string", "int", "float", "bool", "datetime", "array", "inline"};
+    static const char *const md[] = {"heading", "paragraph", "code", "quote", "list", "rule", "table"};
+    const char *const *names = module == 11 ? toml : module == 12 ? md : NULL;
+    const size_t       count = module == 11 ? sizeof toml / sizeof toml[0] : module == 12 ? sizeof md / sizeof md[0] : 0;
+    for (size_t k = 0; k < count; ++k) {
+        if (name_is(n, names[k])) {
+            *value = (int64_t)k + 1;
+            return true;
+        }
+    }
+    return false;
+}
+
+static bool txw_word(comp *c, uint8_t module, name n) {
+    fn *f = c->f;
+    int64_t constant;
+    if (txw_const(module, n, &constant))
+        return push(c, (entry){.type = TY_INT, .kind = E_CONST, .value = constant}) && advance(c);
+    const pnx_txword *tw = txw_find(module, n);
+    if (!tw)
+        return error(c, PINAX_ERR_NOT_FOUND, "the module has no word of this name");
+    const bool       writes = pnx_txhas(tw->flags, 'W'), fails = pnx_txhas(tw->flags, 'F');
+    const globalsym *g = NULL;
+    uint32_t         gi = 0;
+    if (writes) {
+        if (!need_coll(c, &g, &gi))
+            return false;
+        if (g->kind != GK_BUFFER)
+            return type_error(c, "this word writes into a buffer, which comes last: text buf md.html");
+    }
+    const uint32_t k_in = (uint32_t)pnx_shlen(tw->in);
+    if (!need(c, k_in))
+        return false;
+    for (uint32_t k = 0; k < k_in; ++k) { // the types, deepest first
+        const entry *e = &f->stack[f->depth - k_in + k];
+        const char   t = tw->in[k];
+        if (t == 's' ? e->type != TY_STR : e->type != TY_INT)
+            return type_error(c, t == 's' ? "this word takes a str (the text, and the path before it)" : "this word takes an int (the indent)");
+    }
+    for (uint32_t k = 0; k < k_in; ++k) {
+        if (!settle(c, f->depth - k_in + k))
+            return false;
+    }
+    f->depth -= k_in;
+    if (!settle_all(c))
+        return false;
+    uint32_t ni, ri, si, so;
+    pnx_text_regs(tw, &ni, &ri, &si, &so);
+    const uint32_t span_i = ni > ri ? ni : ri, span_s = si > so ? si : so;
+    const uint32_t a = top_slot(c, BANK_I, span_i ? span_i : 1);
+    const uint32_t b = top_slot(c, BANK_S, span_s ? span_s : 1);
+    const uint32_t op = writes ? (fails ? PNX_TXTWF : PNX_TXTW) : (fails ? PNX_TXTF : PNX_TXT);
+    const uint32_t sub = (uint32_t)(tw - pnx_txwords);
+    uint32_t       global = gi;
+    if (writes && global >= REF_GLOBAL) { // a buffer a reference names (RFC-0018)
+        if (!read_only(c, global) || !select_ref(c, global - REF_GLOBAL))
+            return false;
+        global = PNX_GSELECTED;
+    } else if (writes && !read_only(c, global)) {
+        return false;
+    }
+    if (emit(c, PNX_ABC(op, a, b, sub)) == NONE || (writes && emit(c, global) == NONE))
+        return false;
+    f->def_at = NONE;
+    sig out = {0};
+    for (const char *p = tw->out; *p; ++p)
+        out.out[out.n_out++] = *p == 's' ? TY_STR : *p == 'b' ? TY_BOOL : TY_INT;
+    if (fails) {
+        out.fails = true;
+        const uint32_t zero[2] = {0, 0};
+        return advance(c) && guard(c, &out, zero, zero, false);
+    }
+    for (uint32_t k = 0; k < out.n_out; ++k) {
+        if (!push_slot(c, out.out[k]))
+            return false;
+    }
+    return advance(c);
 }
 
 // The words of the module bytes (RFC-0009 section 4.4): put_T and get_T for T in u8 u16 u32 u64
@@ -6981,6 +7078,10 @@ static bool module_has(comp *c, name real, name n) {
     }
     if (standard == 10)
         return sheet_find(n) != NULL || sheet_const(n, &(int64_t){0});
+    if (standard == 11 || standard == 12)
+        return txw_find(standard, n) != NULL || txw_const(standard, n, &(int64_t){0});
+    if (standard == 8 && txw_find(8, n))
+        return true;
     if (standard == 5)
         return name_is(n, "pack") || name_is(n, "unpack") || name_is(n, "packed_size") ||
                (n.length > 4 && (__builtin_memcmp(n.text, "get_", 4) == 0 || __builtin_memcmp(n.text, "put_", 4) == 0));
@@ -7025,6 +7126,11 @@ static bool path_word(comp *c, name module, name n) {
         if (c->data_only)
             return syntax(c, "a data source calls no words; only literals, const names and stores");
         return sheet_word(c, n);
+    }
+    if (standard == 11 || standard == 12) { // toml, md
+        if (c->data_only)
+            return syntax(c, "a data source calls no words; only literals, const names and stores");
+        return txw_word(c, standard, n);
     }
     if (standard == 5) { // bytes: the name says the width
         if (c->data_only)

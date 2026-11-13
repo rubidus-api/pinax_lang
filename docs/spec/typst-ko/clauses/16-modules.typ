@@ -22,3 +22,5 @@
 #include "16-8-json.typ"
 #include "16-9-csv.typ"
 #include "16-10-sheet.typ"
+#include "16-11-toml.typ"
+#include "16-12-md.typ"

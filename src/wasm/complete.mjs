@@ -107,7 +107,7 @@ export function complete(words, text, cursor, limit = 8, modules = [], used = []
             items.push({ label: "get_order", insert: "get_order", module: "", word: "get_order", signature: "",
                          meaning: "the order as it is now: set_order (get_order, str) puts str behind it" });
         return items.length && !(items.length === 1 && items[0].insert === where.stem)
-            ? { from: cursor - where.stem.length, to: cursor, items: items.slice(0, 12) } : null;
+            ? { from: cursor - where.stem.length, to: cursor, items: items.slice(0, 16) } : null;
     }
     const typed = /[A-Za-z_][A-Za-z_0-9.]*$/.exec(before)?.[0];
     if (!typed || /^[0-9]/.test(typed))

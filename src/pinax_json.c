@@ -319,3 +319,359 @@ uint32_t pnx_csv_quote(const uint8_t *in, uint32_t n, uint8_t *out, uint64_t cap
     out[o++] = '"';
     return (uint32_t)o;
 }
+
+// ---- RFC-0046: a value by path, validity, minify and pretty ---------------------------------------------
+
+// Strict JSON (RFC 8259) for `valid`, `minify` and `pretty`; json.next above is lenient on purpose (it reads a
+// stream). Depth is bounded: a text nested deeper than 64 is not valid here.
+static bool jsx_string(const uint8_t *s, uint32_t n, uint32_t *at) {
+    uint32_t k = *at + 1;
+    while (k < n && s[k] != '"') {
+        if (s[k] < 0x20)
+            return false;
+        if (s[k] == '\\') {
+            if (++k == n)
+                return false;
+            if (s[k] == 'u') {
+                if (n - k < 5)
+                    return false;
+                for (uint32_t d = 1; d <= 4; ++d) {
+                    const uint8_t c = s[k + d];
+                    if (!((c >= '0' && c <= '9') || ((c | 0x20) >= 'a' && (c | 0x20) <= 'f')))
+                        return false;
+                }
+                k += 4;
+            } else if (!__builtin_memchr("\"\\/bfnrt", s[k], 8)) {
+                return false;
+            }
+        }
+        ++k;
+    }
+    if (k == n)
+        return false;
+    *at = k + 1;
+    return true;
+}
+
+static void jsx_ws(const uint8_t *s, uint32_t n, uint32_t *at) {
+    while (*at < n && jsn_space(s[*at]))
+        ++*at;
+}
+
+static bool jsx_value(const uint8_t *s, uint32_t n, uint32_t *at, uint32_t depth) {
+    if (depth > 64)
+        return false;
+    jsx_ws(s, n, at);
+    if (*at == n)
+        return false;
+    const uint8_t b = s[*at];
+    if (b == '"')
+        return jsx_string(s, n, at);
+    if (b == '{' || b == '[') {
+        const uint8_t close = b == '{' ? '}' : ']';
+        ++*at;
+        jsx_ws(s, n, at);
+        if (*at < n && s[*at] == close) {
+            ++*at;
+            return true;
+        }
+        for (;;) {
+            if (b == '{') {
+                jsx_ws(s, n, at);
+                if (*at == n || s[*at] != '"' || !jsx_string(s, n, at))
+                    return false;
+                jsx_ws(s, n, at);
+                if (*at == n || s[*at] != ':')
+                    return false;
+                ++*at;
+            }
+            if (!jsx_value(s, n, at, depth + 1))
+                return false;
+            jsx_ws(s, n, at);
+            if (*at == n)
+                return false;
+            if (s[*at] == ',') {
+                ++*at;
+                continue;
+            }
+            if (s[*at] != close)
+                return false;
+            ++*at;
+            return true;
+        }
+    }
+    if (b == 't' || b == 'f' || b == 'n') {
+        const char *w = b == 't' ? "true" : b == 'f' ? "false" : "null";
+        const uint32_t len = b == 'f' ? 5 : 4;
+        if (n - *at < len || __builtin_memcmp(s + *at, w, len) != 0)
+            return false;
+        *at += len;
+        return true;
+    }
+    uint32_t k = *at;
+    if (k < n && s[k] == '-')
+        ++k;
+    if (k == n || s[k] < '0' || s[k] > '9')
+        return false;
+    if (s[k] == '0') {
+        ++k;
+    } else {
+        while (k < n && s[k] >= '0' && s[k] <= '9')
+            ++k;
+    }
+    if (k < n && s[k] == '.') {
+        const uint32_t d = ++k;
+        while (k < n && s[k] >= '0' && s[k] <= '9')
+            ++k;
+        if (k == d)
+            return false;
+    }
+    if (k < n && (s[k] | 0x20) == 'e') {
+        ++k;
+        if (k < n && (s[k] == '+' || s[k] == '-'))
+            ++k;
+        const uint32_t d = k;
+        while (k < n && s[k] >= '0' && s[k] <= '9')
+            ++k;
+        if (k == d)
+            return false;
+    }
+    *at = k;
+    return true;
+}
+
+// One JSON value and nothing else but white space.
+bool pnx_json_valid(const uint8_t *s, uint32_t n) {
+    uint32_t at = 0;
+    if (!jsx_value(s, n, &at, 0))
+        return false;
+    jsx_ws(s, n, &at);
+    return at == n;
+}
+
+typedef struct {
+    uint8_t *out;
+    uint64_t cap, len;
+    bool     full;
+} jsx_out;
+static void jsx_put(jsx_out *o, uint8_t b) {
+    if (o->len < o->cap)
+        o->out[o->len] = b;
+    else
+        o->full = true;
+    ++o->len;
+}
+
+// The same value without the white space between its tokens. PNX_TXT_BAD when it is not valid JSON, PNX_TXT_FULL
+// when the output does not fit (the bytes it needs are not counted).
+uint32_t pnx_json_minify(const uint8_t *s, uint32_t n, uint8_t *out, uint64_t cap) {
+    if (!pnx_json_valid(s, n))
+        return PNX_TXT_BAD;
+    jsx_out o = {out, cap, 0, false};
+    bool    in_string = false;
+    for (uint32_t k = 0; k < n; ++k) {
+        const uint8_t b = s[k];
+        if (in_string) {
+            jsx_put(&o, b);
+            if (b == '\\')
+                jsx_put(&o, s[++k]);
+            else if (b == '"')
+                in_string = false;
+        } else if (!jsn_space(b)) {
+            jsx_put(&o, b);
+            in_string = b == '"';
+        }
+    }
+    return o.full || o.len >= PNX_TXT_BAD ? PNX_TXT_FULL : (uint32_t)o.len;
+}
+
+static void jsx_newline(jsx_out *o, uint32_t indent, uint32_t depth) {
+    jsx_put(o, '\n');
+    for (uint64_t k = 0; k < (uint64_t)indent * depth && !o->full; ++k)
+        jsx_put(o, ' ');
+}
+
+// The value laid out one member or element to a line, `indent` spaces for each level (0 to 16); an empty object or
+// array stays as it is.
+uint32_t pnx_json_pretty(const uint8_t *s, uint32_t n, uint32_t indent, uint8_t *out, uint64_t cap) {
+    if (indent > 16 || !pnx_json_valid(s, n))
+        return PNX_TXT_BAD;
+    jsx_out  o = {out, cap, 0, false};
+    uint32_t depth = 0;
+    for (uint32_t k = 0; k < n; ++k) {
+        const uint8_t b = s[k];
+        if (jsn_space(b))
+            continue;
+        if (b == '"') {
+            uint32_t e = k;
+            (void)jsx_string(s, n, &e);
+            for (; k < e; ++k)
+                jsx_put(&o, s[k]);
+            --k;
+        } else if (b == '{' || b == '[') {
+            uint32_t m = k + 1;
+            while (m < n && jsn_space(s[m]))
+                ++m;
+            jsx_put(&o, b);
+            if (m < n && s[m] == (b == '{' ? '}' : ']')) {
+                jsx_put(&o, s[m]);
+                k = m;
+            } else {
+                ++depth;
+                jsx_newline(&o, indent, depth);
+            }
+        } else if (b == '}' || b == ']') {
+            --depth;
+            jsx_newline(&o, indent, depth);
+            jsx_put(&o, b);
+        } else if (b == ',') {
+            jsx_put(&o, b);
+            jsx_newline(&o, indent, depth);
+        } else if (b == ':') {
+            jsx_put(&o, b);
+            jsx_put(&o, ' ');
+        } else {
+            jsx_put(&o, b);
+        }
+        if (o.full)
+            return PNX_TXT_FULL;
+    }
+    return o.full || o.len >= PNX_TXT_BAD ? PNX_TXT_FULL : (uint32_t)o.len;
+}
+
+// A path: names joined by dots and indexes in brackets (`a.b[2].c`), a name that holds a dot or a bracket as
+// ["a.b"]. Gives 1 and the next piece (a name or an index), 0 at the end, -1 when the path is malformed.
+typedef struct {
+    const uint8_t *key;
+    uint32_t       key_len;
+    int64_t        index; // -1: a name
+} jsx_step;
+static int jsx_path_step(const uint8_t *p, uint32_t n, uint32_t *at, jsx_step *step, bool first) {
+    if (*at == n)
+        return 0;
+    if (p[*at] == '.') {
+        ++*at;
+    } else if (!first && p[*at] != '[') {
+        return -1;
+    }
+    if (*at < n && p[*at] == '[') {
+        ++*at;
+        if (*at < n && p[*at] == '"') {
+            const uint32_t s0 = ++*at;
+            while (*at < n && p[*at] != '"')
+                ++*at;
+            if (*at + 1 >= n || p[*at + 1] != ']')
+                return -1;
+            step->key = p + s0;
+            step->key_len = *at - s0;
+            step->index = -1;
+            *at += 2;
+            return 1;
+        }
+        int64_t v = 0;
+        const uint32_t d0 = *at;
+        while (*at < n && p[*at] >= '0' && p[*at] <= '9') {
+            v = v * 10 + (p[*at] - '0');
+            if (v > INT32_MAX)
+                return -1;
+            ++*at;
+        }
+        if (*at == d0 || *at == n || p[*at] != ']')
+            return -1;
+        ++*at;
+        step->index = v;
+        step->key = NULL;
+        step->key_len = 0;
+        return 1;
+    }
+    const uint32_t s0 = *at;
+    while (*at < n && p[*at] != '.' && p[*at] != '[')
+        ++*at;
+    if (*at == s0)
+        return -1;
+    step->key = p + s0;
+    step->key_len = *at - s0;
+    step->index = -1;
+    return 1;
+}
+
+// The value `path` names in `s`: 1 found (kind, and the bytes of the value in *start and *len, a string without its
+// quotes and still escaped when *escaped; an object or array whole), 0 when there is none, -1 when the text or the
+// path is malformed where it was read.
+int pnx_json_at(const uint8_t *s, uint32_t n, const uint8_t *path, uint32_t pn, int *kind, uint32_t *start, uint32_t *len,
+                bool *escaped) {
+    uint32_t base = 0, at = 0;
+    jsx_step step;
+    bool     first = true;
+    for (;;) {
+        const int r = jsx_path_step(path, pn, &at, &step, first);
+        first = false;
+        if (r < 0)
+            return -1;
+        if (r == 0)
+            break;
+        uint32_t st, ln, past;
+        bool     esc;
+        const int open = pnx_json_next(s + base, n - base, &st, &ln, &esc, &past);
+        if (open < 0)
+            return -1;
+        if (step.index < 0 ? open != PNX_JSON_OBJECT : open != PNX_JSON_ARRAY)
+            return 0;
+        base += past;
+        int64_t seen = 0;
+        for (;;) {
+            const int t = pnx_json_next(s + base, n - base, &st, &ln, &esc, &past);
+            if (t < 0)
+                return -1;
+            if (t == 0 || t == PNX_JSON_OBJECT_END || t == PNX_JSON_ARRAY_END)
+                return t == 0 ? -1 : 0;
+            bool match;
+            if (step.index < 0) {
+                if (t != PNX_JSON_KEY)
+                    return -1;
+                uint8_t  buf[256];
+                match = false;
+                if (!esc) {
+                    match = ln == step.key_len && __builtin_memcmp(s + base + st, step.key, ln) == 0;
+                } else if (ln <= sizeof buf) {
+                    const uint32_t m = pnx_json_unescape(s + base + st, ln, buf);
+                    match = m == step.key_len && __builtin_memcmp(buf, step.key, m) == 0;
+                }
+                base += past;
+            } else {
+                match = seen++ == step.index;
+            }
+            if (match)
+                break;
+            uint32_t skip;
+            if (step.index >= 0 && t == PNX_JSON_KEY)
+                return -1;
+            if (pnx_json_skip(s + base, n - base, &skip) <= 0)
+                return -1;
+            base += skip;
+        }
+    }
+    uint32_t st, ln, past;
+    bool     esc;
+    int      k = pnx_json_next(s + base, n - base, &st, &ln, &esc, &past);
+    if (k <= 0)
+        return -1;
+    if (k == PNX_JSON_KEY)
+        k = PNX_JSON_STRING;
+    if (k == PNX_JSON_OBJECT || k == PNX_JSON_ARRAY) {
+        uint32_t whole;
+        if (pnx_json_skip(s + base, n - base, &whole) <= 0)
+            return -1;
+        *start = base + st;
+        *len = whole - st;
+        *escaped = false;
+    } else if (k == PNX_JSON_OBJECT_END || k == PNX_JSON_ARRAY_END) {
+        return -1;
+    } else {
+        *start = base + st;
+        *len = ln;
+        *escaped = esc;
+    }
+    *kind = k;
+    return 1;
+}

@@ -201,8 +201,71 @@ int      pnx_json_next(const uint8_t *s, uint32_t n, uint32_t *start, uint32_t *
 int      pnx_json_skip(const uint8_t *s, uint32_t n, uint32_t *past);
 uint32_t pnx_json_unescape(const uint8_t *in, uint32_t n, uint8_t *out);
 uint32_t pnx_json_quote(const uint8_t *in, uint32_t n, uint8_t *out, uint64_t cap);
+// RFC-0046. The writers give the length written, PNX_TXT_FULL when the output does not fit, PNX_TXT_BAD when the input is not what they read.
+#define PNX_TXT_FULL UINT32_MAX
+#define PNX_TXT_BAD (UINT32_MAX - 1u)
+bool     pnx_json_valid(const uint8_t *s, uint32_t n);
+int      pnx_json_at(const uint8_t *s, uint32_t n, const uint8_t *path, uint32_t pn, int *kind, uint32_t *start, uint32_t *len, bool *escaped);
+uint32_t pnx_json_minify(const uint8_t *s, uint32_t n, uint8_t *out, uint64_t cap);
+uint32_t pnx_json_pretty(const uint8_t *s, uint32_t n, uint32_t indent, uint8_t *out, uint64_t cap);
 int      pnx_csv_field(const uint8_t *s, uint32_t n, uint32_t *start, uint32_t *len, bool *doubled, uint32_t *past, bool *last);
 uint32_t pnx_csv_quote(const uint8_t *in, uint32_t n, uint8_t *out, uint64_t cap);
+
+// The text formats toml and md (pinax_toml.c, pinax_md.c; RFC-0046), read without a tree.
+enum { PNX_TOML_TABLE = 1, PNX_TOML_TABLES, PNX_TOML_STRING, PNX_TOML_INT, PNX_TOML_FLOAT, PNX_TOML_BOOL, PNX_TOML_DATETIME,
+       PNX_TOML_ARRAY, PNX_TOML_INLINE };
+int      pnx_toml_next(const uint8_t *s, uint32_t n, int *kind, uint32_t *key_off, uint32_t *key_len, uint32_t *val_off,
+                       uint32_t *val_len, uint32_t *past);
+bool     pnx_toml_valid(const uint8_t *s, uint32_t n);
+int      pnx_toml_string(const uint8_t *s, uint32_t n, uint32_t *off, uint32_t *len);
+uint32_t pnx_toml_decode(const uint8_t *in, uint32_t n, uint8_t *out);
+int      pnx_toml_at(const uint8_t *s, uint32_t n, const uint8_t *path, uint32_t pn, int *kind, uint32_t *off, uint32_t *len);
+enum { PNX_MD_HEADING = 1, PNX_MD_PARAGRAPH, PNX_MD_CODE, PNX_MD_QUOTE, PNX_MD_LIST, PNX_MD_RULE, PNX_MD_TABLE };
+int      pnx_md_next(const uint8_t *s, uint32_t n, int *kind, int *level, uint32_t *off, uint32_t *len, uint32_t *past);
+uint32_t pnx_md_html(const uint8_t *s, uint32_t n, uint8_t *out, uint64_t cap);
+uint32_t pnx_md_inline(const uint8_t *s, uint32_t n, uint8_t *out, uint64_t cap);
+
+// The words of json (more than json.next), toml and md that read a text and give values or write a buffer
+// (RFC-0046): id, module (8 json, 11 toml, 12 md), name, what they take in stack order (i int or bool, s str), what
+// they give, flags: F can fail, W writes the buffer that comes last. The ints go in the registers from A in the
+// order written, the strs from B.
+#define PNX_TEXT_WORDS(X)                                                                           \
+    X(JSON_VALID, 8, "valid", "s", "b", "") X(JSON_AT, 8, "at", "ss", "is", "F")                    \
+    X(JSON_MINIFY, 8, "minify", "s", "", "FW") X(JSON_PRETTY, 8, "pretty", "si", "", "FW")          \
+    X(TOML_VALID, 11, "valid", "s", "b", "") X(TOML_AT, 11, "at", "ss", "is", "F")                  \
+    X(TOML_NEXT, 11, "next", "s", "isss", "F")                                                      \
+    X(MD_NEXT, 12, "next", "s", "iiss", "F") X(MD_HTML, 12, "html", "s", "", "FW")                  \
+    X(MD_INLINE, 12, "inline", "s", "", "FW")
+
+enum {
+#define X(id, module, name, in, out, flags) PNX_TXW_##id,
+    PNX_TEXT_WORDS(X)
+#undef X
+    PNX_TXW_COUNT
+};
+typedef struct {
+    uint8_t     module;
+    const char *name, *in, *out, *flags;
+} pnx_txword;
+static const pnx_txword pnx_txwords[PNX_TXW_COUNT] = {
+#define X(id, module, name, in, out, flags) [PNX_TXW_##id] = {module, name, in, out, flags},
+    PNX_TEXT_WORDS(X)
+#undef X
+};
+static inline bool pnx_txhas(const char *s, char c) {
+    for (; *s; ++s)
+        if (*s == c)
+            return true;
+    return false;
+}
+// The registers of a text word: ints (and bools) in and out from A, strs in and out from B.
+static inline void pnx_text_regs(const pnx_txword *w, uint32_t *ni, uint32_t *ri, uint32_t *si, uint32_t *ro) {
+    *ni = *ri = *si = *ro = 0;
+    for (const char *p = w->in; *p; ++p)
+        *(*p == 's' ? si : ni) += 1;
+    for (const char *p = w->out; *p; ++p)
+        *(*p == 's' ? ro : ri) += 1;
+}
 
 // What the last ptn.match of a run found, for ptn.capture: the whole match and the captures.
 typedef struct pnx_ptn_found {
@@ -281,7 +344,7 @@ static inline bool pnx_writes_global(uint32_t op) {
     case PNX_BPUT: case PNX_BPUTS: case PNX_BPUTW: case PNX_BPUTSW: case PNX_BCAT: case PNX_BCATI: case PNX_BENC:
     case PNX_BENCW: case PNX_BTRUNC: case PNX_JPUTI: case PNX_JPUTIW: case PNX_JPUTS: case PNX_JPUTSW: case PNX_CPUTS:
     case PNX_CPUTSW: case PNX_CPUTI: case PNX_CPUTIW: case PNX_LCOPYR: case PNX_QPUT: case PNX_QTAKE: case PNX_QWTAKE:
-    case PNX_QWPUT: case PNX_PALLOC: case PNX_PFREE: case PNX_SORT: case PNX_SORTBY: case PNX_SHEET: case PNX_SHEETF: return true;
+    case PNX_QWPUT: case PNX_PALLOC: case PNX_PFREE: case PNX_SORT: case PNX_SORTBY: case PNX_SHEET: case PNX_SHEETF: case PNX_TXTW: case PNX_TXTWF: return true;
     default: return false;
     }
 }

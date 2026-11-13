@@ -1,0 +1,19 @@
+rem run
+use io
+use md
+buffer page 1024
+word main (or fail)
+  text END
+## Notes
+
+A line with *emphasis*, `code` and a [link](https://example.org).
+Raw <b>tags</b> stay text.
+
+1. first
+2. second
+END
+  to doc
+  doc page md.html or_fail
+  page contents io.println
+end
+main or_else (e) e err_text io.println end

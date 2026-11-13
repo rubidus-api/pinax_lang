@@ -1,0 +1,28 @@
+rem run
+use str
+use io
+use md
+buffer page 2048
+word main (or fail)
+  text END
+# Plan
+
+Read the *first* chapter, then [try it](https://example.org/try).
+
+- one
+- two
+
+```pnx
+word main end
+```
+END
+  to doc
+  doc page md.html or_fail
+  page contents io.println
+  doc to rest                                        rem the blocks, one at a time
+  loop
+    rest md.next or_else (e) break end to (kind, level, body, rest)
+    cat (kind, " ", level, " ", body str.len) io.println
+  end
+end
+main or_else (e) e err_text io.println end
