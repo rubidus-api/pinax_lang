@@ -1,0 +1,24 @@
+rem run
+use io
+use csv
+use sheet
+buffer book 65536
+buffer blob 262144
+word fill (or fail)
+  "name" blob csv.put or_fail  "qty" blob csv.put or_fail  "price" blob csv.put or_fail  blob csv.end_line or_fail
+  "a, \"b\"" blob csv.put or_fail  7 blob csv.put_int or_fail  "1.50" blob csv.put or_fail  blob csv.end_line or_fail
+  "007" blob csv.put or_fail  "" blob csv.put or_fail  "-2" blob csv.put or_fail  blob csv.end_line or_fail
+end
+word main (or fail)
+  1 book sheet.open_book or_fail
+  "t" 20 3 book sheet.create or_fail drop
+  fill or_fail                                       rem in a program the file is read by file.read_all_into
+  0 blob book sheet.load_csv or_fail to n            rem mode 0: numbers become numbers, "007" stays text
+  cat ("rows ", n, ", row 1 column 1 is ", 1 1 book sheet.kind, ", row 2 column 0 is ", 2 0 book sheet.str or_fail) io.println
+  blob book sheet.save_xlsx or_fail drop             rem the book written as an xlsx into the same buffer
+  1 book sheet.open_book or_fail
+  "back" 20 3 book sheet.create or_fail drop
+  0 0 blob book sheet.load_xlsx or_fail to m         rem and read from it: mode 0, workbook sheet 0
+  cat ("read back ", m, " rows, price is a dec: ", 1 2 book sheet.kind sheet.k_dec eq) io.println
+end
+main or_else (e) e err_text io.println end

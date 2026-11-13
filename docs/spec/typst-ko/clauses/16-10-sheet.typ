@@ -110,6 +110,26 @@
   [`indexed`], [`(col int, b buffer gives bool)`], [그 열에 색인이 있는가],
 )]
 
+=== 파일
+
+#para("9a")[CSV와 xlsx 파일을 현재 시트로 읽고 현재 시트에서 쓴다. 파일에 대한 권한은 없다: 프로그램이 파일을 `buffer` 로 읽고(`file.read_all_into`)
+버퍼를 내보낸다(`contents` 를 `file.write`). 이 낱말들은 #term("버퍼 둘", en: "two buffers")을 받는다. 파일이 먼저, 작업책이 마지막이다(`0 blob book sheet.load_csv`).
+둘은 서로 다른 버퍼이고, 작업책은 참조가 아닌 버퍼 자신이어야 한다(파일은 컬렉션 매개변수(9.9)여도 된다). 파일을 받는 낱말은 그 버퍼의 바이트를
+바꿀 수 있다(작업 공간이다. 공유 버퍼는 거절한다). 읽기는 현재 시트의 마지막 줄 뒤에 줄을 더하고 더한 수를 주며, 실패하면 시트는 처음 그대로다.
+`rows_max` 를 넘는 줄이나 시트보다 많은 열은 `err.full`, CSV가 아닌 글이나 xlsx가 아닌 파일은 `err.format` 이다. `mode` 는 0 또는 1이고 다른 값은 오류(fault)다.]
+#table(columns: (auto, auto, 1fr), inset: 5pt, stroke: 0.5pt + luma(170),
+  [*낱말*], [*서명*], [*뜻*],
+  [`load_csv`], [`(mode int, f buffer, b buffer gives n int or fail)`], [`f` 의 글을 읽는다. 줄은 LF나 CRLF로 끝나고 필드는 쉼표로 나뉘며, 따옴표 필드는 쉼표·줄바꿈·겹따옴표를 담을 수 있다(그 자리에서 풀어 쓴다). 빈 줄과 UTF-8 BOM은 건너뛴다. mode 0: 정규형 정수(`-?(0|[1-9][0-9]*)`, int에 들어가는 것)는 `int`, 소수점 뒤 1~18자리인 정규형 수(들어가는 것)는 그 자릿수의 `dec`(`1.50` 은 `dec(2)`), 빈 필드는 빈 칸, 나머지는 글(`007`, `-0` 도). mode 1: 모두 글],
+  [`load_xlsx`], [`(mode int, n int, f buffer, b buffer gives rows int or fail)`], [`f` 의 xlsx에서 `n` 번 시트(0부터, 통합 문서 순서, 없으면 `err.not_found`)를 읽는다. 숫자는 CSV 규칙을 따른다(소수 18자리를 넘는 자리는 반올림, 지수는 적용, 들어가지 않으면 글). 공유·인라인·수식 결과 문자열은 글(서식 있는 글은 이어 붙이고 발음 표기는 버린다), `t="b"` 는 `bool`, 오류값(`#N/A`)은 글, 수식은 저장된 결과를 준다. 숫자 서식이 날짜나 시간인 칸(내장 14~22, 27~36, 45~47, 50~58, 71~81, 또는 따옴표·대괄호 밖에 `y`, `d`, `h`, `s`, `m` 이 있는 사용자 서식, `[h]`, `[mm]` 포함)은 mode 0에서 Unix 초(UTC, 파일의 1900/1904 날짜 체계, 시각만 있는 값은 자정부터)의 `int`, mode 1에서는 일련번호 그대로의 `dec`. 파일이 비운 줄과 열은 빈 칸],
+  [`save_csv`], [`(dst buffer, b buffer gives n int or fail)`], [`dst` 의 내용을 현재 시트의 CSV로 바꾼다(쓴 마지막 줄과 열까지, 쉼표·따옴표·줄바꿈이 든 글은 따옴표로 감싼다, `dec` 는 자릿수대로, `bool` 은 `true`/`false`). 쓴 바이트 수를 준다. `dst` 가 작으면 `err.full`(그때 `dst` 는 비어 있다)],
+  [`save_xlsx`], [`(dst buffer, b buffer gives n int or fail)`], [`dst` 의 내용을 현재 시트의 xlsx로 바꾼다(시트 하나, 이름은 시트 이름대로 31자까지, `[]:*?/\` 는 뺀다. 글은 인라인 문자열, 수·`dec`·`bool` 은 그대로이고, 날짜 형이 없으니 날짜는 가진 수로 쓴다). ZIP은 압축하지 않고 저장만 한다],
+)
+#para("9b")[#term("작업 공간", en: "work area") 아무것도 할당하지 않는다(12절). `load_xlsx` 는 파일이 든 버퍼의 마지막 바이트 뒤 남은 용량을 쓴다: 약
+130 KB(inflate의 창과 훑개의 버퍼)에 풀어낸 공유 문자열(하나에 4바이트와 그 글)을 더한 만큼이다. 버퍼는 파일보다 크게 선언해야 하고 자리가 모자라면 `err.full` 이다.
+파일의 부품은 ZIP의 중앙 디렉터리로 찾는다. ZIP64, 암호화된 부품, stored와 deflate 외의 방식은 `err.format`, 풀었을 때 256 MiB를 넘는 부품도 같다.
+풀어낸 바이트마다 명령 예산에서 차감한다.]
+#ex("spec", "16-sheet-files.pnx")
+
 #ex("spec", "16-sheet.pnx")
 #ex("spec", "16-sheet-pipe.pnx")
 #ex("spec", "16-sheet-book.pnx")
@@ -129,4 +149,5 @@
 #diag(
   ([`sheet` 의 낱말에 다른 형의 값], "this word of sheet takes int for row, column and number, str for text, bool for put_bool, dec(N) for put_dec"),
   ([`sheet` 의 낱말인데 끝에 버퍼가 없음], "the words of sheet take a buffer last: v row column grid sheet.put_int"),
+  ([파일을 받는 낱말에 참조인 작업책이나 버퍼가 아닌 파일], "this word of sheet takes the buffer of the file, then the book: 0 file book sheet.load_csv"),
 )

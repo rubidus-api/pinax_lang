@@ -99,6 +99,12 @@ pnx_sheet_result pnx_sheet_where(uint8_t *b, uint32_t cap, bool text, int64_t co
 pnx_sheet_result pnx_sheet_total(uint8_t *b, uint32_t cap, int what, int over, int64_t line, int64_t *out, uint64_t *scanned);
 pnx_sheet_result pnx_sheet_order_by(uint8_t *b, uint32_t cap, int64_t col, bool desc, uint64_t *scanned);
 pnx_sheet_result pnx_sheet_compact(uint8_t *b, uint32_t cap);
+// The files (pinax_sheetio.c, RFC-0045). `charge` takes the bytes worked on.
+pnx_sheet_result pnx_sheet_load_csv(uint8_t *b, uint32_t cap, uint8_t *src, uint64_t n, int mode, int64_t *added, uint64_t *charge);
+pnx_sheet_result pnx_sheet_load_xlsx(uint8_t *b, uint32_t cap, uint8_t *src, uint64_t n, uint64_t srccap, int mode, int64_t sheet,
+                                     int64_t *added, uint64_t *charge);
+pnx_sheet_result pnx_sheet_save_csv(uint8_t *b, uint32_t cap, uint8_t *dst, uint64_t dstcap, int64_t *len, uint64_t *charge);
+pnx_sheet_result pnx_sheet_save_xlsx(uint8_t *b, uint32_t cap, uint8_t *dst, uint64_t dstcap, int64_t *len, uint64_t *charge);
 
 
 // The words of `sheet` (RFC-0042): id, name, what they take (in stack order: i int, b bool, s str, d a dec(N)
@@ -140,7 +146,9 @@ pnx_sheet_result pnx_sheet_compact(uint8_t *b, uint32_t cap);
     X(MAX_ROW, "max_row", "i", "i", "FR") X(COUNT_ROW, "count_row", "i", "i", "R")                  \
     X(SUM_SEL, "sum_sel", "i", "i", "R") X(MIN_SEL, "min_sel", "i", "i", "FR")                      \
     X(MAX_SEL, "max_sel", "i", "i", "FR") X(COUNT_SEL, "count_sel", "i", "i", "R")                  \
-    X(ORDER_BY, "order_by", "i", "", "F") X(ORDER_BY_DESC, "order_by_desc", "i", "", "F")
+    X(ORDER_BY, "order_by", "i", "", "F") X(ORDER_BY_DESC, "order_by_desc", "i", "", "F")                \
+    X(LOAD_CSV, "load_csv", "i", "i", "FO") X(LOAD_XLSX, "load_xlsx", "ii", "i", "FO")              \
+    X(SAVE_CSV, "save_csv", "", "i", "FO") X(SAVE_XLSX, "save_xlsx", "", "i", "FO")
 
 enum {
 #define X(id, name, in, out, flags) PNX_SHW_##id,

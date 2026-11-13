@@ -700,6 +700,9 @@ static const char *check_word(const pinax_state *st, uint32_t index, span range,
                 ((pnx_shhas(sw->flags, 'F')) != (op == PNX_SHEETF || op == PNX_SHEETRF)) ||
                 ((pnx_shhas(sw->flags, 'R')) != (op == PNX_SHEETR || op == PNX_SHEETRF)))
                 return "code: sheet instruction outside the window or of the wrong kind";
+            if (pnx_shhas(sw->flags, 'O') && (heads[i] != 2 || (code[i - 2] & 0xffu) != PNX_GSEL ||
+                                              ((code[i - 2] >> 16) & 0xffu) != PNX_G_BUFFER || x == PNX_GSELECTED))
+                return "code: a sheet word of a file without the GSEL of its buffer";
         }
         if (target >= 0 || info.c == PNX_K_J || info.shape == PNX_F_AX) {
             if (target < range.begin || target >= range.end || heads[target] != 1)

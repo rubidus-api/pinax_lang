@@ -125,6 +125,14 @@ answer without scanning, and the answers are the same. A write costs a little mo
 
 #ex("manual", "06-sheet-book.pnx")
 
+Spreadsheets and CSV files come in and go out through two buffers: the file, then the book. `load_csv` and `load_xlsx` add the file's rows
+to the current sheet (`mode` 0 turns numbers into numbers, and in an xlsx a date into Unix seconds; mode 1 keeps the text, or the serial number),
+and `save_csv` and `save_xlsx` write the sheet into a buffer, which the program then writes to a file. The words give the number of rows
+or bytes. They have no power over files, because the program moves the bytes itself (`file.read_all_into`, `file.write`), and nothing is
+allocated: an xlsx is read in the spare room after the file's bytes in its buffer, so declare that buffer larger than the file.
+
+#ex("manual", "06-sheet-files.pnx")
+
 Columns do not grow: `widen` rebuilds the table, in the same buffer, with another number of columns. A cell of another
 kind than the word asks for fails with `err.format`; ask `kind` first when it can be so.
 
@@ -135,5 +143,5 @@ kind than the word asks for fails with `err.format`; ask `kind` first when it ca
 - `push` `pop` `put` `take` can fail: `full` when full, `range` when empty (8.5, 8.6).
 - Only arrays and lists are stems (10.6).
 - `map_into` and `filter_into` write into the destination they are given (10.6).
-- `sheet` keeps rows and columns of any kind of cell in a buffer; rows grow, columns are fixed by `create`; several sheets in one book, and ordered indexes (standard 16.10).
+- `sheet` keeps rows and columns of any kind of cell in a buffer; rows grow, columns are fixed by `create`; several sheets in one book, ordered indexes, and CSV and xlsx files in and out through two buffers (standard 16.10).
 ]

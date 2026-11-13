@@ -1337,6 +1337,28 @@ PNX_INLINE int pnx_sheet_exec(pinax_state *st, int64_t *R, pnx_scell *S, uint32_
         e = pnx_sheet_order_by(b, cap, r[0], OP_C(w) == PNX_SHW_ORDER_BY_DESC, &scanned);
         st->charge += scanned;
         break;
+    case PNX_SHW_LOAD_CSV: case PNX_SHW_LOAD_XLSX: case PNX_SHW_SAVE_CSV: case PNX_SHW_SAVE_XLSX: { // the file: the buffer a GSEL chose (RFC-0045)
+        const pnx_global *og = &st->globals[st->gsel];
+        if (st->gsel == PNX_GX(st, x))
+            return PINAX_ERR_STATE; // the file and the book are one buffer
+        uint8_t       *ob = og->ptr + 8;
+        const uint64_t olen = pnx_buffer_len(og), ocap = og->capacity;
+        uint64_t       work = 0;
+        out = 0;
+        if (OP_C(w) == PNX_SHW_LOAD_CSV)
+            e = pnx_sheet_load_csv(b, cap, ob, olen, (int)r[0] == r[0] ? (int)r[0] : -1, &out, &work);
+        else if (OP_C(w) == PNX_SHW_LOAD_XLSX)
+            e = pnx_sheet_load_xlsx(b, cap, ob, olen, ocap, (int)r[0] == r[0] ? (int)r[0] : -1, r[1], &out, &work);
+        else {
+            e = OP_C(w) == PNX_SHW_SAVE_CSV ? pnx_sheet_save_csv(b, cap, ob, ocap, &out, &work)
+                                             : pnx_sheet_save_xlsx(b, cap, ob, ocap, &out, &work);
+            const uint64_t len = e == PNX_SH_OK ? (uint64_t)out : 0;
+            __builtin_memcpy(og->ptr, &len, 8);
+        }
+        st->charge += work;
+        r[0] = out;
+        break;
+    }
     default: return PINAX_ERR_STATE;
     }
     return pnx_sheet_status(st, e);

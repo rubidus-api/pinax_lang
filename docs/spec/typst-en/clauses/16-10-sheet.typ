@@ -116,6 +116,28 @@ changes nothing. The index is a means, never a meaning: a program that does not 
   [`indexed`], [`(col int, b buffer gives bool)`], [whether the column has one],
 )]
 
+=== Files
+
+#para("9a")[CSV and xlsx files are read into the current sheet and written from it, without any power over files: the program reads the
+file into a `buffer` (`file.read_all_into`) and writes the buffer out (`file.write` of `contents`). These words take #term("two buffers"),
+the file first and the book last (`0 blob book sheet.load_csv`); the two are different buffers, and a name for the file may be a collection
+parameter (9.9) while the book is a buffer of its own. A word that takes the file may change the bytes of its buffer: it is a work area
+(a shared buffer is refused). A load adds rows after the last row of the current sheet and gives the number added; when it fails, the sheet is as it was.
+Rows beyond `rows_max` or columns beyond the sheet are `err.full`, a text that is not a CSV or a file that is not an xlsx is `err.format`.
+The `mode` is 0 or 1 (any other is a fault).]
+#table(columns: (auto, auto, 1fr), inset: 5pt, stroke: 0.5pt + luma(170),
+  [*Word*], [*Signature*], [*Meaning*],
+  [`load_csv`], [`(mode int, f buffer, b buffer gives n int or fail)`], [reads the text in `f`: lines end with LF or CRLF, fields with commas, a quoted field holds commas, line breaks and doubled quotes (it is unescaped in place), blank lines and a UTF-8 BOM are skipped. Mode 0: a field that is an integer in its canonical form (`-?(0|[1-9][0-9]*)`, fitting an int) becomes an `int`; a canonical integer with 1 to 18 digits after the point, fitting, becomes a `dec` of that many digits (`1.50` is `dec(2)`); an empty field is an empty cell; any other, `007` and `-0` too, is text. Mode 1: all text],
+  [`load_xlsx`], [`(mode int, n int, f buffer, b buffer gives rows int or fail)`], [reads sheet `n` (0 first, in the order of the workbook; `err.not_found` when there is none) of the xlsx in `f`. Numbers follow the CSV rule (the digits after the point beyond 18 are rounded; an exponent is applied; a value that does not fit is text), shared, inline and formula-result strings are text (rich text is joined, phonetic runs dropped), `t="b"` is a `bool`, an error value (`#N/A`) is text, a formula gives its stored result. A cell whose number format is a date or time (built-in formats 14 to 22, 27 to 36, 45 to 47, 50 to 58, 71 to 81, or a custom format with `y`, `d`, `h`, `s` or `m` outside quotes and brackets, `[h]` and `[mm]` included) is, in mode 0, an `int` of Unix seconds (UTC, the 1900 or 1904 date system of the file, a time of day alone counted from midnight); in mode 1 it stays the serial number as a `dec`. Rows and columns the file leaves out are empty cells],
+  [`save_csv`], [`(dst buffer, b buffer gives n int or fail)`], [replaces the contents of `dst` with the current sheet as CSV (up to its last used row and column; texts quoted when they hold a comma, a quote or a line break; `dec` with its digits; `bool` as `true` and `false`) and gives the bytes; `err.full` when `dst` is too small (it is then empty)],
+  [`save_xlsx`], [`(dst buffer, b buffer gives n int or fail)`], [replaces the contents of `dst` with an xlsx of the current sheet (one sheet, named like it, at most 31 characters without `[]:*?/\`; texts as inline strings; numbers, `dec` and `bool` as such; no date type, so a date is written as the number it holds). The ZIP is stored, not compressed],
+)
+#para("9b")[#term("work area"): nothing is allocated (clause 12). `load_xlsx` uses the spare capacity of the buffer that holds the file after its last byte, about
+130 KB (a window for the inflate, the scanner's buffers) plus the decoded shared strings (4 bytes for each and their text). The buffer is declared larger than the
+file; when the room does not suffice the load is `err.full`. A part of the file is read through the central directory of the ZIP: ZIP64, encrypted parts and methods other than
+stored and deflate are `err.format`, as is a part larger than 256 MiB when inflated. Every byte inflated is charged to the instruction budget.]
+#ex("spec", "16-sheet-files.pnx")
+
 #ex("spec", "16-sheet.pnx")
 #ex("spec", "16-sheet-pipe.pnx")
 #ex("spec", "16-sheet-book.pnx")
@@ -136,4 +158,5 @@ that does not fit are faults.]
 #diag(
   ([A value of another type for a word of `sheet`], "this word of sheet takes int for row, column and number, str for text, bool for put_bool, dec(N) for put_dec"),
   ([A word of `sheet` without a buffer last], "the words of sheet take a buffer last: v row column grid sheet.put_int"),
+  ([A word of a file with a book that is a reference, or with a file that is not a buffer], "this word of sheet takes the buffer of the file, then the book: 0 file book sheet.load_csv"),
 )

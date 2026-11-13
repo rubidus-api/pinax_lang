@@ -5387,6 +5387,17 @@ static bool sheet_word(comp *c, name n) {
         return false;
     if (g->kind != GK_BUFFER)
         return type_error(c, "the words of sheet take a buffer last: v row column grid sheet.put_int");
+    const bool       two = pnx_shhas(sw->flags, 'O'); // a file and a book: file book sheet.load_csv (RFC-0045)
+    const globalsym *g2 = NULL;
+    uint32_t         gi2 = 0;
+    if (two) {
+        if (gi >= REF_GLOBAL)
+            return type_error(c, "this word of sheet takes a book of its own, not a reference: 0 file book sheet.load_csv");
+        if (!need_coll(c, &g2, &gi2))
+            return false;
+        if (g2->kind != GK_BUFFER)
+            return type_error(c, "this word of sheet takes the buffer of the file, then the book: 0 file book sheet.load_csv");
+    }
     const uint32_t k_in = (uint32_t)pnx_shlen(sw->in);
     if (!need(c, k_in))
         return false;
@@ -5418,7 +5429,8 @@ static bool sheet_word(comp *c, name n) {
     uint32_t ni, ri;
     bool     si, sr;
     pnx_sheet_regs(sw, &ni, &ri, &si, &sr);
-    const uint32_t a = top_slot(c, BANK_I, (ni > ri ? ni : ri) ? (ni > ri ? ni : ri) : 1u);
+    const uint32_t span = (ni > ri ? ni : ri) ? (ni > ri ? ni : ri) : 1u;
+    const uint32_t a = top_slot(c, BANK_I, span + (two ? 1u : 0u));
     const uint32_t b = top_slot(c, BANK_S, 1);
     if (pnx_shhas(sw->in, 'd') && !load_int(c, a + ni - 1, scale))
         return false;
@@ -5430,6 +5442,17 @@ static bool sheet_word(comp *c, name n) {
         if ((!ro && !read_only(c, global)) || !select_ref(c, global - REF_GLOBAL))
             return false;
         global = PNX_GSELECTED;
+    }
+    if (two) { // the file: a GSEL right before the instruction chooses it; its writes are checked like the book's
+        if (!read_only(c, gi2))
+            return false;
+        if (gi2 >= REF_GLOBAL) {
+            if (!select_ref(c, gi2 - REF_GLOBAL))
+                return false;
+        } else if (!load_int(c, a + span, gi2) || emit_raw(c, PNX_ABC(PNX_GSEL, a + span, PNX_G_BUFFER, 0)) == NONE ||
+                   emit_raw(c, 0) == NONE) {
+            return false;
+        }
     }
     if (emit(c, PNX_ABC(op, a, b, sub)) == NONE || emit(c, global) == NONE)
         return false;
