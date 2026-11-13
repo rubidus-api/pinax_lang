@@ -28,7 +28,8 @@ word main (or fail)
   "insert into fruit values ('apple', 3), ('pear', 5), ('fig', null)" db sqlite.exec or_fail
   "select name, price from fruit order by name" db sqlite.prepare or_fail to q
   defer q sqlite.finalize end
-  64 2 grid sheet.init or_fail
+  1 grid sheet.open_book or_fail
+  "fruit" 64 2 grid sheet.create or_fail drop
   q grid fetch or_fail drop
   cat ("rows ", grid sheet.rows) io.println
   cat ("fig: ", 1 0 grid sheet.str or_fail, ", price empty: ", 1 1 grid sheet.is_empty) io.println

@@ -1,0 +1,21 @@
+rem run
+use io
+use sheet
+buffer book 32768
+word main (or fail)
+  2 book sheet.open_book or_fail                   rem a book of at most 2 sheets
+  "stock" 4 2 book sheet.create or_fail to s0      rem a sheet by name: its number comes back
+  "sales" 4 2 book sheet.create or_fail to s1
+  book sheet.add_row or_fail drop                  rem the first sheet made is the current one
+  "pear" 0 0 book sheet.put_str or_fail
+  7 0 1 book sheet.put_int or_fail
+  "sales" book sheet.activate or_fail                   rem now the other, by name
+  book sheet.add_row or_fail drop
+  0 0 s0 0 0 book sheet.copy_to or_fail            rem a cell of this sheet copied into sheet s0 (the value is shared)
+  s0 book sheet.activate_n or_fail                      rem or by number
+  cat ("stock rows ", book sheet.rows, ", sales is number ", "sales" book sheet.find_sheet or_fail) io.println
+  cat ("sheet 1 is ", 1 book sheet.sheet_name or_fail) io.println
+  "sales" book sheet.remove or_fail                  rem gone: its number is free for a new sheet
+  cat ("current: ", book sheet.current) io.println
+end
+main or_else (e) e err_text io.println end

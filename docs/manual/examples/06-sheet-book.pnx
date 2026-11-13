@@ -1,0 +1,19 @@
+rem run
+use io
+use sheet
+buffer book 65536
+word main (or fail)
+  1 book sheet.open_book or_fail
+  "people" 100 2 book sheet.create or_fail drop
+  100 do book sheet.add_row or_fail drop end times
+  0 100 range do (r int)
+    cat ("user", r 7 mul 100 mod) r 0 book sheet.put_str or_fail
+    r 3 mul r 1 book sheet.put_int or_fail
+  end each
+  0 book sheet.index or_fail                    rem names are looked up a lot: index column 0
+  "user21" 0 book sheet.find_row_str or_fail to r
+  cat ("user21 is row ", r, ", score ", r 1 book sheet.int or_fail) io.println
+  1 sheet.ge 270 book sheet.where_int          rem the rows whose column 1 is at least 270
+  cat ("scores from 270: ", book sheet.sel_len) io.println
+end
+main or_else (e) e err_text io.println end

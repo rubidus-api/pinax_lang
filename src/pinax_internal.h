@@ -51,10 +51,25 @@ size_t   pnx_rex_work(const uint8_t *prog, uint32_t len);
 int      pnx_rex_search(const uint8_t *prog, uint32_t plen, const uint8_t *s, uint32_t len, uint32_t from, uint32_t *found,
                         void *work, uint64_t *steps);
 
-// The module `sheet` (pinax_sheet.c, RFC-0042): a table of rows and columns in one buffer. `b` is the
-// buffer's bytes and `cap` its capacity; every function checks that the bytes still hold a sheet.
-typedef enum { PNX_SH_OK, PNX_SH_FULL, PNX_SH_RANGE, PNX_SH_KIND, PNX_SH_NONE, PNX_SH_BAD, PNX_SH_OVERFLOW } pnx_sheet_result;
-pnx_sheet_result pnx_sheet_init(uint8_t *b, uint32_t cap, uint32_t rmax, uint32_t cols);
+// The module `sheet` (pinax_sheet.c, RFC-0042, RFC-0044): a book of sheets, each a table of rows and columns, in
+// one buffer. `b` is the buffer's bytes and `cap` its capacity; every function checks that the bytes still hold a
+// book. Words other than the book words work on the current sheet (STATE: there is none).
+typedef enum { PNX_SH_OK, PNX_SH_FULL, PNX_SH_RANGE, PNX_SH_KIND, PNX_SH_NONE, PNX_SH_BAD, PNX_SH_OVERFLOW, PNX_SH_STATE } pnx_sheet_result;
+pnx_sheet_result pnx_sheet_open(uint8_t *b, uint32_t cap, uint32_t nmax);
+pnx_sheet_result pnx_sheet_create(uint8_t *b, uint32_t cap, const uint8_t *name, uint32_t n, int64_t rmax, int64_t cols, bool colmajor, int64_t *num);
+pnx_sheet_result pnx_sheet_use(uint8_t *b, uint32_t cap, const uint8_t *name, uint32_t n);
+pnx_sheet_result pnx_sheet_use_n(uint8_t *b, uint32_t cap, int64_t k);
+pnx_sheet_result pnx_sheet_current(uint8_t *b, uint32_t cap, int64_t *out);
+pnx_sheet_result pnx_sheet_sheets(uint8_t *b, uint32_t cap, int64_t *out);
+pnx_sheet_result pnx_sheet_sheet_name(uint8_t *b, uint32_t cap, int64_t k, uint32_t *off, uint32_t *len);
+pnx_sheet_result pnx_sheet_find_sheet(uint8_t *b, uint32_t cap, const uint8_t *name, uint32_t n, int64_t *num);
+pnx_sheet_result pnx_sheet_drop(uint8_t *b, uint32_t cap, const uint8_t *name, uint32_t n);
+pnx_sheet_result pnx_sheet_rename(uint8_t *b, uint32_t cap, int64_t k, const uint8_t *name, uint32_t n);
+pnx_sheet_result pnx_sheet_copy_to(uint8_t *b, uint32_t cap, int64_t r1, int64_t c1, int64_t k, int64_t r2, int64_t c2);
+pnx_sheet_result pnx_sheet_index(uint8_t *b, uint32_t cap, int64_t col);
+pnx_sheet_result pnx_sheet_drop_index(uint8_t *b, uint32_t cap, int64_t col);
+pnx_sheet_result pnx_sheet_indexed(uint8_t *b, uint32_t cap, int64_t col, int64_t *out);
+pnx_sheet_result pnx_sheet_dim(uint8_t *b, uint32_t cap, int which, int64_t *out);
 uint32_t pnx_sheet_rows(uint8_t *b, uint32_t cap);
 uint32_t pnx_sheet_cols(uint8_t *b, uint32_t cap);
 uint32_t pnx_sheet_rows_max(uint8_t *b, uint32_t cap);
@@ -73,14 +88,14 @@ pnx_sheet_result pnx_sheet_get_int(uint8_t *b, uint32_t cap, int64_t r, int64_t 
 pnx_sheet_result pnx_sheet_get_bool(uint8_t *b, uint32_t cap, int64_t r, int64_t c, int64_t *v);
 pnx_sheet_result pnx_sheet_get_dec(uint8_t *b, uint32_t cap, int64_t r, int64_t c, uint32_t scale, int64_t *v);
 pnx_sheet_result pnx_sheet_get_str(uint8_t *b, uint32_t cap, int64_t r, int64_t c, uint32_t *off, uint32_t *len);
-pnx_sheet_result pnx_sheet_find_int(uint8_t *b, uint32_t cap, bool across, int64_t key, int64_t line, int64_t from, int64_t *found);
+pnx_sheet_result pnx_sheet_find_int(uint8_t *b, uint32_t cap, bool across, int64_t key, int64_t line, int64_t from, int64_t *found, uint64_t *scanned);
 pnx_sheet_result pnx_sheet_find_str(uint8_t *b, uint32_t cap, bool across, const uint8_t *s, uint32_t n, int64_t line, int64_t from,
-                                    int64_t *found);
+                                    int64_t *found, uint64_t *scanned);
 uint32_t         pnx_sheet_sel_len(uint8_t *b, uint32_t cap);
 pnx_sheet_result pnx_sheet_sel_row(uint8_t *b, uint32_t cap, int64_t k, int64_t *row);
 pnx_sheet_result pnx_sheet_select_all(uint8_t *b, uint32_t cap);
-pnx_sheet_result pnx_sheet_narrow(uint8_t *b, uint32_t cap, bool text, int64_t col, int64_t op, int64_t ikey, const uint8_t *s, uint32_t n);
-pnx_sheet_result pnx_sheet_where(uint8_t *b, uint32_t cap, bool text, int64_t col, int64_t op, int64_t ikey, const uint8_t *s, uint32_t n);
+pnx_sheet_result pnx_sheet_narrow(uint8_t *b, uint32_t cap, bool text, int64_t col, int64_t op, int64_t ikey, const uint8_t *s, uint32_t n, uint64_t *scanned);
+pnx_sheet_result pnx_sheet_where(uint8_t *b, uint32_t cap, bool text, int64_t col, int64_t op, int64_t ikey, const uint8_t *s, uint32_t n, uint64_t *scanned);
 pnx_sheet_result pnx_sheet_total(uint8_t *b, uint32_t cap, int what, int over, int64_t line, int64_t *out, uint64_t *scanned);
 pnx_sheet_result pnx_sheet_order_by(uint8_t *b, uint32_t cap, int64_t col, bool desc, uint64_t *scanned);
 pnx_sheet_result pnx_sheet_compact(uint8_t *b, uint32_t cap);
@@ -91,7 +106,15 @@ pnx_sheet_result pnx_sheet_compact(uint8_t *b, uint32_t cap);
 // and flags: F can fail, R reads the sheet only. The ints go in the registers from A in the order written, the
 // str in register B; the result takes A (or B).
 #define PNX_SHEET_WORDS(X)                                                                          \
-    X(INIT, "init", "ii", "", "F") X(ROWS, "rows", "", "i", "R") X(COLS, "cols", "", "i", "R")      \
+    X(OPEN_BOOK, "open_book", "i", "", "F") X(CREATE, "create", "sii", "i", "F")                    \
+    X(CREATE_COLS, "create_cols", "sii", "i", "F") X(USE, "activate", "s", "", "F")                      \
+    X(USE_N, "activate_n", "i", "", "F") X(CURRENT, "current", "", "i", "R")                             \
+    X(SHEETS, "sheets", "", "i", "R") X(SHEET_NAME, "sheet_name", "i", "s", "FR")                   \
+    X(FIND_SHEET, "find_sheet", "s", "i", "FR") X(DROP, "remove", "s", "", "F")                       \
+    X(RENAME, "rename", "is", "", "F") X(COPY_TO, "copy_to", "iiiii", "", "F")                      \
+    X(INDEX, "index", "i", "", "F") X(DROP_INDEX, "unindex", "i", "", "")                        \
+    X(INDEXED, "indexed", "i", "b", "R")                                                            \
+    X(ROWS, "rows", "", "i", "R") X(COLS, "cols", "", "i", "R")                                     \
     X(ROWS_MAX, "rows_max", "", "i", "R") X(ADD_ROW, "add_row", "", "i", "F")                       \
     X(TRUNCATE_ROWS, "truncate_rows", "i", "", "") X(WIDEN, "widen", "i", "", "F")                  \
     X(CLEAR, "clear", "", "", "") X(COMPACT, "compact", "", "", "")                                 \

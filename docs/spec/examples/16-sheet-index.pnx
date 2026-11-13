@@ -1,0 +1,31 @@
+rem run
+use io
+use sheet
+buffer book 262144
+word load (or fail)
+  1 book sheet.open_book or_fail
+  "names" 2000 2 book sheet.create or_fail drop
+  2000 do book sheet.add_row or_fail drop end times
+  0 2000 range do (r int)
+    r 7 mul 2000 mod r 0 book sheet.put_int or_fail     rem column 0: a number each row
+    cat ("n", r 13 mul 100 mod) r 1 book sheet.put_str or_fail   rem column 1: a text, many rows alike
+  end each
+end
+word main (or fail)
+  load or_fail
+  0 book sheet.index or_fail                          rem an ordered index (a B+tree) on column 0
+  1 book sheet.index or_fail                          rem and one on column 1
+  cat ("indexed: ", 0 book sheet.indexed, " ", 1 book sheet.indexed) io.println
+  1234 0 book sheet.find_row_int or_fail to r         rem answered by the index: O(log n), not a scan
+  cat ("1234 is in row ", r) io.println
+  0 sheet.lt 3 book sheet.where_int                   rem where starts again from all rows
+  cat ("below 3: ", book sheet.sel_len) io.println
+  "n42" 1 book sheet.find_row_str or_fail to q
+  cat ("n42 first in row ", q) io.println
+  book sheet.select_all
+  0 book sheet.order_by or_fail                       rem from the index, no sort
+  cat ("smallest in row ", 0 book sheet.sel_row) io.println
+  0 book sheet.unindex
+  cat ("indexed: ", 0 book sheet.indexed) io.println
+end
+main or_else (e) e err_text io.println end

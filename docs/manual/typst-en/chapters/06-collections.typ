@@ -106,16 +106,24 @@ its cells are written one by one with `set`.]
 == A table of rows and columns
 
 When a table of rows and columns is wanted that holds a number in one cell and a text in the next, as a spreadsheet
-does, the module `sheet` keeps it in a buffer. It is a library; it is not a type. The buffer is made a table by `init`
-(at most so many rows, exactly so many columns), a row is added at a time, and every word of `sheet` takes the buffer
-last. A cell comes out through the word of its kind: `int`, `str`, `bool`, `dec`. Equal texts and big numbers are
-stored once, however many cells hold them.
+does, the module `sheet` keeps it in a buffer. It is a library; it is not a type. The buffer is made a #strong[book] by
+`open_book`, and `create` makes named sheets in it (at most so many rows, exactly so many columns). A sheet is chosen by name
+(`activate`) or by number (`activate_n`), and every other word then works on the chosen #strong[current sheet]: the shape of connecting
+to a service, choosing one thing in it and asking. A row is added at a time, and every word of `sheet` takes the buffer last.
+A cell comes out through the word of its kind: `int`, `str`, `bool`, `dec`. Equal texts and big numbers are stored once,
+however many cells hold them and in however many sheets.
 
 Searching and choosing work on a #strong[selection], the rows chosen so far. `where_str` and `where_int` start it from all
 the rows; `narrow_int` and `narrow_str` keep, of the rows selected, those that are still right. A line of such words is
 the pipe, and `order_by`, `sum_sel` and `sel_row` read what is left.
 
 #ex("manual", "06-sheet.pnx")
+
+With several sheets `find_sheet`, `sheet_name`, `copy_to`, `remove` and `rename` help, and a column that is searched often, or
+chosen by range, can be given an ordered index (a B+tree) by `index`. With one, `find_row_*`, `where_*` and `order_by`
+answer without scanning, and the answers are the same. A write costs a little more.
+
+#ex("manual", "06-sheet-book.pnx")
 
 Columns do not grow: `widen` rebuilds the table, in the same buffer, with another number of columns. A cell of another
 kind than the word asks for fails with `err.format`; ask `kind` first when it can be so.
@@ -127,5 +135,5 @@ kind than the word asks for fails with `err.format`; ask `kind` first when it ca
 - `push` `pop` `put` `take` can fail: `full` when full, `range` when empty (8.5, 8.6).
 - Only arrays and lists are stems (10.6).
 - `map_into` and `filter_into` write into the destination they are given (10.6).
-- `sheet` keeps rows and columns of any kind of cell in a buffer; rows grow, columns are fixed by `init` (standard 16.10).
+- `sheet` keeps rows and columns of any kind of cell in a buffer; rows grow, columns are fixed by `create`; several sheets in one book, and ordered indexes (standard 16.10).
 ]

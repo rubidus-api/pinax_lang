@@ -1,37 +1,57 @@
 #import "/tools/common.typ": *
 
-== `sheet` --- a table of rows and columns <std-sheet>
+== `sheet` --- a book of tables of rows and columns <std-sheet>
 
-#para("1")[The module `sheet` keeps a table of rows and columns in a buffer (8.7) the program declares. It is a library,
-not a type: the buffer is formatted by `init`, and every word of `sheet` takes the buffer, written last, as a collection
-parameter (9.9) does. A cell holds nothing, an `int`, a `bool`, a `dec(N)` or a `str`, whatever the program puts there.
-The kind of a cell is known only to the module: a value leaves a cell through the word of its type (`int`, `str`, ...),
-so every word has a fixed signature and the stack never holds a value of no type.]
+#para("1")[The module `sheet` keeps tables of rows and columns, called #term("sheets"), in a buffer (8.7) the program declares:
+the buffer holds a #term("book"). It is a library, not a type, and it works as an adapter does: the program opens the book,
+makes sheets in it, chooses one by name or by number, and every other word then works on that #term("current sheet"). Every word of
+`sheet` takes the buffer, written last, as a collection parameter (9.9) does. A cell holds nothing, an `int`, a `bool`, a
+`dec(N)` or a `str`, whatever the program puts there. The kind of a cell is known only to the module: a value leaves a cell
+through the word of its type (`int`, `str`, ...), so every word has a fixed signature and the stack never holds a value of no
+type. How the cells, the pools and the indexes lie in the buffer is not part of the interface.]
 
-#para("2")[Rows and columns are counted from 0. A row is added at the end by `add_row` and the table holds at most the
-`Rmax` rows `init` was given. The number of columns is fixed by `init`; `widen` changes it by rebuilding the table in the
-same buffer. A value put in a cell is copied. Equal values are kept once: a number that does not fit a cell, and every
-text, go to a pool with a count of the cells that hold them, and a cell that is overwritten, cleared or cut off gives its
-value back. A pool that has no room is `err.full`; free text space that is scattered is gathered when a new text needs it
-(and by `compact`). `sheet` is for a table that is read and written by index and by what it holds. What is found by a
-name is kept in an index (8.10).]
+#para("2")[Rows, columns and sheets are counted from 0. A row is added at the end by `add_row` and a sheet holds at most the
+`rmax` rows `create` was given. The number of columns is fixed by `create`; `widen` changes it. A value put in a cell is
+copied. Equal values are kept once, in a pool the whole book shares: a number that does not fit a cell, and every text, go
+to the pool with a count of the cells that hold them (in any sheet), and a cell that is overwritten, cleared or cut off gives
+its value back. A pool that has no room is `err.full`; free text space that is scattered is gathered when a new text needs it
+(and by `compact`). `sheet` is for tables that are read and written by index and by what they hold. What is found by a name is
+kept in an index (8.10).]
+
+=== Books and sheets
+
+#para("3")[A word other than the ones of this group needs a current sheet: without one it is the fault `state`. The first sheet
+made in a book is the current one. A name is 1 to 255 bytes and is kept once in the book. A sheet number is the order in which
+it was made; the number of a dropped sheet is given again to the next sheet made.
+#table(columns: (auto, auto, 1fr), inset: 5pt, stroke: 0.5pt + luma(170),
+  [*Word*], [*Signature*], [*Meaning*],
+  [`open_book`], [`(nmax int, b buffer or fail)`], [formats the buffer as a book of at most `nmax` (1 to 256) sheets, with none made; `err.full` when the buffer is too small. The buffer then reads as full: nothing can be appended over a book],
+  [`create` `create_cols`], [`(name str, rmax int, cols int, b buffer gives int or fail)`], [makes a sheet of at most `rmax` rows and exactly `cols` columns and gives its number. `create_cols` stores the sheet column by column: a scan of one column is several times faster, reading a whole row is slower. `err.format` when the name is taken; `err.full` when there is no room or number left],
+  [`activate` `activate_n`], [`(name str, b buffer or fail)` `(n int, b buffer or fail)`], [makes the sheet of that name, or that number, the current one; `err.not_found` when there is none. A read-only book cannot change its current sheet],
+  [`current` `sheets`], [`(b buffer gives int)`], [the number of the current sheet (-1 when there is none); one more than the highest number in use],
+  [`sheet_name`], [`(n int, b buffer gives str or fail)`], [a view of the name of sheet `n`, good until the next write to the book; `err.not_found` for a number not in use],
+  [`find_sheet`], [`(name str, b buffer gives int or fail)`], [the number of the sheet of that name; `err.not_found` otherwise],
+  [`remove`], [`(name str, b buffer or fail)`], [removes a sheet with its indexes and gives back what its cells held. When it was the current sheet there is none afterwards],
+  [`rename`], [`(n int, name str, b buffer or fail)`], [gives sheet `n` another name; `err.format` when the name is taken],
+  [`copy_to`], [`(row1 int, col1 int, n int, row2 int, col2 int, b buffer or fail)`], [copies a cell of the current sheet into a cell of sheet `n`, sharing the value; `err.not_found` when there is no sheet `n`],
+)]
 
 === Making and growing
 
-#para("3")[
+#para("4")[The words of this group work on the current sheet.
 #table(columns: (auto, auto, 1fr), inset: 5pt, stroke: 0.5pt + luma(170),
   [*Word*], [*Signature*], [*Meaning*],
-  [`init`], [`(rmax int, cols int, b buffer or fail)`], [formats the buffer as a table of at most `rmax` rows and exactly `cols` columns, with no rows; `err.full` when the buffer is too small. The buffer then reads as full: nothing can be appended over a table],
   [`rows` `cols` `rows_max`], [`(b buffer gives int)`], [the rows now, the columns, the most rows],
   [`add_row`], [`(b buffer gives int or fail)`], [adds an empty row and gives its number; `err.full` at `rmax`],
   [`truncate_rows`], [`(n int, b buffer)`], [keeps the first `n` rows and gives back what the others held; more than there are is the fault `range`],
-  [`widen`], [`(cols int, b buffer or fail)`], [rebuilds the table with `cols` columns, keeping the rows and the values. More columns need room in the buffer (`err.full`); fewer columns only when the cut columns are all empty (`err.format`)],
-  [`clear` `compact`], [`(b buffer)`], [removes every row; gathers the free space of the texts],
+  [`widen`], [`(cols int, b buffer or fail)`], [makes the sheet again with `cols` columns, keeping the rows, the values and the indexes. More columns need room in the book (`err.full`); fewer columns only when the cut columns are all empty (`err.format`). The old room is left as a hole that `compact` closes],
+  [`clear`], [`(b buffer)`], [removes every row],
+  [`compact`], [`(b buffer)`], [gathers the free space of the texts and closes the holes between the sheets],
 )]
 
 === Cells
 
-#para("4")[Words that take a row and a column fault with `range` when the cell is outside the table. A buffer that is not a table
+#para("5")[Words that take a row and a column fault with `range` when the cell is outside the table. A buffer that is not a table
 is the same fault.
 #table(columns: (auto, auto, 1fr), inset: 5pt, stroke: 0.5pt + luma(170),
   [*Word*], [*Signature*], [*Meaning*],
@@ -48,7 +68,7 @@ is the same fault.
 
 === Finding and choosing
 
-#para("5")[A search compares numbers as numbers and texts by what they say. It looks at one column going down, or at one
+#para("6")[A search compares numbers as numbers and texts by what they say. It looks at one column going down, or at one
 row going across. A text that is in no cell is found to be so at once.
 #table(columns: (auto, auto, 1fr), inset: 5pt, stroke: 0.5pt + luma(170),
   [*Word*], [*Signature*], [*Meaning*],
@@ -57,11 +77,10 @@ row going across. A text that is in no cell is found to be so at once.
   [`find_row_from_int` `find_row_from_str` `find_col_from_int` `find_col_from_str`], [`(key, line int, from int, b buffer gives int or fail)`], [the same, starting at row or column `from`],
 )]
 
-#para("6")[A table keeps a #term("selection"): a list of rows, at first all of them. `where_*` starts again from all the rows and
+#para("7")[A sheet keeps a #term("selection"): a list of rows, at first all of them. `where_*` starts again from all the rows and
 keeps those whose column holds a value in the relation `op` with `v` (`sheet.eq` `ne` `lt` `le` `gt` `ge`); `narrow_*` keeps,
 of the rows now selected, those that are. Cells of another kind, and empty ones, are never in the relation. Because each
-word works on the selection of the table, a line of them is a pipe. The selection is one place of the buffer and is
-lost with it.
+word works on the selection of the sheet, a line of them is a pipe. The selection is kept in the book, per sheet.
 #table(columns: (auto, auto, 1fr), inset: 5pt, stroke: 0.5pt + luma(170),
   [*Word*], [*Signature*], [*Meaning*],
   [`where_int` `narrow_int`], [`(col int, op int, v int, b buffer)`], [selects, or narrows, by a number],
@@ -72,7 +91,7 @@ lost with it.
   [`order_by` `order_by_desc`], [`(col int, b buffer or fail)`], [puts the selected rows in order of column `col`, smallest (largest) first, stably; numbers, then texts, then the rest. Room for the numbers is taken from the free end of the buffer (`err.full`)],
 )]
 
-#para("7")[The totals look at the int cells only. `sum_*` is the fault `overflow` when the sum does not fit; `min_*` and `max_*`
+#para("8")[The totals look at the int cells only. `sum_*` is the fault `overflow` when the sum does not fit; `min_*` and `max_*`
 fail with `err.not_found` when there is no number.
 #table(columns: (auto, auto, 1fr), inset: 5pt, stroke: 0.5pt + luma(170),
   [*Word*], [*Signature*], [*Meaning*],
@@ -81,17 +100,35 @@ fail with `err.not_found` when there is no number.
   [`sum_sel` `min_sel` `max_sel` `count_sel`], [`(col int, b buffer gives int)`], [over column `col` of the selected rows],
 )]
 
+=== Ordered indexes
+
+#para("9")[A column can have an #term("index"): an ordered structure over its numbers and texts (numbers first, then texts by
+bytes, ties by row), a B+tree of pages taken from the free end of the book. `index` builds it, writes to the column keep it in
+step, `unindex` frees its pages. With an index `find_row_*` (down the column), `where_*` with every relation but `ne`, and
+`order_by` with every row selected answer without scanning, in time that grows with the logarithm of the rows and the number of rows
+found; the answers are the same as without it, rows in row order. An index costs a write, and a book whose pages and sheets
+fill the buffer refuses a new one with `err.full`; a write that would need a page that is not there is `err.full` too and
+changes nothing. The index is a means, never a meaning: a program that does not use it works as before.
+#table(columns: (auto, auto, 1fr), inset: 5pt, stroke: 0.5pt + luma(170),
+  [*Word*], [*Signature*], [*Meaning*],
+  [`index`], [`(col int, b buffer or fail)`], [builds the index of column `col` of the current sheet (nothing when there is one); `err.full` when the book has no pages left],
+  [`unindex`], [`(col int, b buffer)`], [removes it],
+  [`indexed`], [`(col int, b buffer gives bool)`], [whether the column has one],
+)]
+
 #ex("spec", "16-sheet.pnx")
 #ex("spec", "16-sheet-pipe.pnx")
+#ex("spec", "16-sheet-book.pnx")
+#ex("spec", "16-sheet-index.pnx")
 
 #part("Constraints")
 
-#para("8")[The last argument is a buffer; the others are of the types of the signatures above.]
+#para("10")[The last argument is a buffer; the others are of the types of the signatures above.]
 #ex("spec", "16-sheet-args.pnx")
 
 #part("Faults")
 
-#para("9")[A row or a column outside the table, a buffer that was not formatted by `init` (or was changed since), and a sum
+#para("11")[A row or a column outside the sheet, a word that needs a current sheet when there is none (`state`), a buffer that was not formatted by `open_book` (or was changed since), and a sum
 that does not fit are faults.]
 #ex("spec", "16-sheet-range.pnx")
 

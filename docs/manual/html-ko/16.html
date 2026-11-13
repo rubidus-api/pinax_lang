@@ -154,7 +154,8 @@ rows 0
   <span style="color: #198810">"insert into fruit values ('apple', 3), ('pear', 5), ('fig', null)"</span> db sqlite.exec <span style="color: #d73948">or_fail</span>
   <span style="color: #198810">"select name, price from fruit order by name"</span> db sqlite.prepare <span style="color: #d73948">or_fail</span> <span style="color: #d73948">to</span> q
   defer q sqlite.finalize <span style="color: #d73948">end</span>
-  <span style="color: #b60157">64</span> <span style="color: #b60157">2</span> grid sheet.init <span style="color: #d73948">or_fail</span>
+  <span style="color: #b60157">1</span> grid sheet.open_book <span style="color: #d73948">or_fail</span>
+  <span style="color: #198810">"fruit"</span> <span style="color: #b60157">64</span> <span style="color: #b60157">2</span> grid sheet.create <span style="color: #d73948">or_fail</span> drop
   q grid fetch <span style="color: #d73948">or_fail</span> drop
   <span style="color: #d73948">cat</span> (<span style="color: #198810">"rows "</span>, grid sheet.rows) io.println
   <span style="color: #d73948">cat</span> (<span style="color: #198810">"fig: "</span>, <span style="color: #b60157">1</span> <span style="color: #b60157">0</span> grid sheet.str <span style="color: #d73948">or_fail</span>, <span style="color: #198810">", price empty: "</span>, <span style="color: #b60157">1</span> <span style="color: #b60157">1</span> grid sheet.is_empty) io.println
