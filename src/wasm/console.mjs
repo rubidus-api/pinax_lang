@@ -46,7 +46,8 @@ export const GUIDE = {
         [":delete N[-M]", "removes lines N to M (:del)"],
         [":run", "RESETS: empties the stack and forgets every definition, then runs the program from line 1 (F5); the program's lines stay"],
         [":new", "no program, and a fresh state"],
-        [":stack", "the values on the stack, the first pushed first (:s)"],
+        [":stack", "the values on the stack, the first pushed first (:s); it may be typed inside a block"],
+        [":blocks", "the definitions and blocks open in the text being typed, the outer one first; it may be typed inside a block"],
         [":clear", "empties the stack only"],
         [":words", "the words of the program, each with its signature"],
         [":get_order", "the search order as it is, as the word get_order tells it"],
@@ -246,6 +247,18 @@ export async function createConsole({ createPinax, bytes, print, store = null })
                 print("stack", stack.join(" ") + "\n");
             return {};
         }
+        case "blocks": { // what the text gathered has open, outside in (the status line shows it as one line)
+            const text = gathered.join("\n");
+            const b = text.trim() === "" ? { ok: true, open: [] } : pinax.blocks(text);
+            if (!b.ok)
+                print("info", "inside a string: nothing else is open until it is closed\n");
+            else if (!b.open.length)
+                print("info", "no definition or block is open\n");
+            else
+                print("info", `${plural(b.open.length, "block")} open, the outer one first (the lines are of the text gathered):\n` +
+                    b.open.map((o, k) => `${"  ".repeat(k + 1)}${k + 1}. ${o}\n`).join(""));
+            return {};
+        }
         case "clear":
             session.clear();
             print("info", "the stack is empty\n");
@@ -324,7 +337,7 @@ export async function createConsole({ createPinax, bytes, print, store = null })
         }
         if (gathered.length === 0 && line.trim() === "")
             return { prompt: prompt() };
-        if (gathered.length === 0 && line.trimStart().startsWith(":"))
+        if (line.trimStart().startsWith(":") && (gathered.length === 0 || /^:(stack|s|blocks|words|help|list)\b/.test(line.trim())))
             return { ...command(line.trim()), prompt: prompt() };
         // an empty line after text that waits for its dot runs the text, when no block is open: the way out of a
         // forgotten dot (inside a block an empty line is only a line)
