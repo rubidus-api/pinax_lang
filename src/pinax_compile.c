@@ -895,6 +895,7 @@ static bool dec_scale(comp *c, tid *out) {
         *out = (tid)(TY_DEC + (uint32_t)c->tok.integer);
         return advance(c);
     }
+    return type_error(c, "a decimal type is written dec N, N digits after the point (0 to 18)");
     if (c->tok.kind != PNX_T_LPAREN)
         return type_error(c, "a decimal type is written dec(N), N digits after the point (0 to 18)");
     if (!advance(c))
@@ -1016,6 +1017,8 @@ static bool parse_sig(comp *c, sig *s, pnx_word_id stop) {
                 if (!advance(c))
                     return false;
             }
+            if (is_word(c, PNX_KW_word)) // a block: word ( effect ), gone with RFC-0049
+                return type_error(c, "the type of a procedure is declared: type Name proc ... end");
             if (is_word(c, PNX_KW_word)) { // a block: word ( effect )
                 sig inner;
                 if (c->sigs == MAX_SIGS) // each is a call on the C stack; a signature that deep is too long anyway
@@ -2689,6 +2692,8 @@ static bool guard(comp *c, const sig *s, const uint32_t base[2], const uint32_t 
     land(c, &handler);
     if (!advance(c))
         return false;
+    if (c->tok.kind == PNX_T_LPAREN)
+        return syntax(c, "or_else takes the failure with to: or_else to e ... end");
     if (c->tok.kind == PNX_T_LPAREN) {
         if (!advance(c))
             return false;
@@ -3063,6 +3068,8 @@ static bool store(comp *c) {
         const name n = tok_name(c);
         return store_local(c, n) && past_store(c);
     }
+    if (c->tok.kind == PNX_T_LPAREN)
+        return syntax(c, "to takes one name at a time: to (a, b) is written to b to a");
     if (c->tok.kind == PNX_T_LPAREN) {
         name     names[MAX_PARAMS];
         uint32_t count = 0;
@@ -3440,6 +3447,8 @@ static bool do_loop(comp *c) {
     name n = {0};
     if (!advance(c))
         return false;
+    if (c->tok.kind == PNX_T_LPAREN)
+        return syntax(c, "a loop has no name: break 2 . leaves two loops");
     if (c->tok.kind == PNX_T_LPAREN) {
         if (!advance(c))
             return false;
@@ -3481,10 +3490,16 @@ static bool leave_target(comp *c, block **out, pnx_word_id which) {
         if (c->tok.kind != PNX_T_DOT)
             return syntax(c, "a depth is followed by a period: break 2 .");
     }
-    if ((which == PNX_KW_break || which == PNX_KW_continue) && c->tok.kind == PNX_T_DOT && !advance(c))
-        return false;
+    if (which == PNX_KW_break || which == PNX_KW_continue) {
+        if (c->tok.kind != PNX_T_DOT)
+            return syntax(c, which == PNX_KW_break ? "break ends with a period: break ." : "continue ends with a period: continue .");
+        if (!advance(c))
+            return false;
+    }
     uint32_t seen = 0;
     name n = {0};
+    if (c->tok.kind == PNX_T_LPAREN)
+        return syntax(c, "a loop has no name: break 2 . leaves two loops");
     if (c->tok.kind == PNX_T_LPAREN) {
         if (!advance(c))
             return false;
@@ -3523,6 +3538,8 @@ static bool leave_target(comp *c, block **out, pnx_word_id which) {
 
 static bool do_leave(comp *c, pnx_word_id which) {
     fn *f = c->f;
+    if (which == PNX_KW_while || which == PNX_KW_until)
+        return syntax(c, "while and until are gone: write the condition with if: x if break . end");
     const pnx_token at = c->tok;
     // The condition must be taken before the loop name is read, but the name decides which
     // stack it is checked against; so the condition is popped first and kept.
@@ -3870,6 +3887,7 @@ static bool case_item(comp *c) {
         land(c, &body);
         return open_block(c, B_OF) != NULL && advance(c);
     }
+    return syntax(c, "a branch of match is when VALUES do ... end");
     if (c->tok.kind == PNX_T_LPAREN) {
         if (!advance(c))
             return false;
@@ -3945,6 +3963,7 @@ static bool cat_emit(comp *c, uint32_t first);
 static bool do_cat(comp *c) {
     if (!advance(c))
         return false;
+    return syntax(c, "cat takes args: args a b . cat");
     if (c->tok.kind != PNX_T_LPAREN)
         return syntax(c, "cat is followed by its items in parentheses: cat (a, b)");
     if (c->cats == MAX_CATS)
@@ -4439,45 +4458,6 @@ static bool end_rex_block(comp *c, block *b) {
 // stem do [ ( params ) ] body end each | fold      count do body end times
 // RFC-0033: do NAME end with no signature, NAME a word defined with `word` (here or exported by a module
 // in use), is that word itself. The current token is the one after `do`; *done says it was taken.
-static bool word_value(comp *c, bool *done) {
-    *done = false;
-    if (c->tok.kind != PNX_T_NAME && c->tok.kind != PNX_T_PATH)
-        return true;
-    pnx_lexer lx = *c->lx;
-    pnx_token t;
-    if (!pnx_lex_next(&lx, &t) || t.kind != PNX_T_RESERVED || t.word != PNX_KW_end)
-        return true;
-    const name n = tok_name(c);
-    uint32_t   index = NONE;
-    if (c->tok.kind == PNX_T_NAME) {
-        if (find_local(c->f, n) || find_const(c, n) || find_global(c, n) != NONE)
-            return true;
-        if (!find_word(c, n, &index)) {
-            if (find_fwd(c, n, NULL))
-                return type_error(c, "a word declared with forward is given as a value only after its definition");
-            return true;
-        }
-    } else {
-        uint32_t dot = 0;
-        while (n.text[dot] != '.')
-            ++dot;
-        name real;
-        const uint32_t m = module_of(c, (name){n.text, dot}, &real) ? source_module(c, real) : NONE;
-        if (m == NONE)
-            return true;
-        index = name_first(c, &c->ix_words, &c->words, sizeof(wordsym), (name){n.text + dot + 1, n.length - dot - 1}, 0,
-                           c->base.words, wordsym_from, m);
-        if (index == NONE)
-            return true;
-    }
-    if (c->data_only)
-        return syntax(c, "a data source holds no blocks");
-    tid type;
-    if (!block_type(c, &((const wordsym *)c->words.ptr + index)->sig, &type))
-        return false;
-    *done = true;
-    return push(c, (entry){.type = type, .kind = E_CONST, .value = index}) && advance(c) && advance(c); // past the end
-}
 
 // ref NAME : the value of a procedure of the program, not a call (RFC-0049). `ref` takes the next
 // token as a name, as `to` does, so nothing ends it.
@@ -4530,8 +4510,8 @@ static bool do_block(comp *c) {
             return false;
         if (!advance(c)) // past do
             return false;
-    } else if (!bare && !parse_sig(c, &bs, 0)) {
-        return false;
+    } else if (!bare) {
+        return syntax(c, "a block takes its names with to: do to x ... end; a value with a signature is def str, str gives bool do ... end");
     }
     // `do to p ... end each`: the names the block takes are written as `to` at its start (RFC-0049);
     // the types are the combining word's and are filled in below. The last pushed is bound first.
@@ -4577,13 +4557,6 @@ static bool do_block(comp *c) {
     for (size_t k = 0; k < sizeof users / sizeof users[0]; ++k)
         expanded = expanded || name_is(user, users[k]);
     if (!expanded) {
-        if (bare) {
-            bool done = false;
-            if (!word_value(c, &done))
-                return false;
-            if (done)
-                return true;
-        }
         c->bare_block = bare;
         return value_block(c, &bs, at.line, at.column);
     }
@@ -7815,7 +7788,8 @@ static bool body_token(comp *c) {
     case PNX_KW_or_fail:
     case PNX_KW_or_return:
     case PNX_KW_or_else: return syntax(c, "this word follows a word that can fail, and nothing else");
-    case PNX_KW_case: case PNX_KW_match: return do_case(c);
+    case PNX_KW_case: return syntax(c, "case is now match: c match when 1 2 do ... end otherwise ... end end");
+    case PNX_KW_match: return do_case(c);
     case PNX_KW_cat: return do_cat(c);
     case PNX_KW_do:
     case PNX_KW_def: return do_block(c);
@@ -8036,6 +8010,8 @@ static bool value_block(comp *c, const sig *bs, uint32_t line, uint32_t column) 
 // cannot be called from the source and the tool that runs tests can find it.
 static bool definition(comp *c, bool is_test) {
     c->new_def = is_word(c, PNX_KW_def);
+    if (!c->new_def && !is_test)
+        return syntax(c, "word is now def: def name parameters gives results do ... end");
     if (c->top_fn->n_blocks)
         return syntax(c, "a definition does not belong inside a block");
     if (!advance(c))
@@ -8085,7 +8061,9 @@ static bool definition(comp *c, bool is_test) {
     c->def_index = c->words.n - 1;
     if (!is_test && !parse_sig(c, &w->sig, c->new_def ? PNX_KW_do : 0))
         return false;
-    if ((c->new_def || is_test) && is_word(c, PNX_KW_do) && !advance(c)) // the body opens with do (RFC-0049)
+    if ((c->new_def || is_test) && !is_word(c, PNX_KW_do))
+        return syntax(c, is_test ? "test NAME is followed by do: test name do ... end" : "the body of a def opens with do");
+    if ((c->new_def || is_test) && !advance(c)) // the body opens with do (RFC-0049)
         return false;
     char text[72];
     if (!sig_text(c, &w->sig, text, sizeof text))
@@ -8175,7 +8153,9 @@ static bool use_module(comp *c) {
         if (!advance(c))
             return false;
     }
-    if (c->tok.kind == PNX_T_DOT && !advance(c)) // use NAME [as NAME] . (RFC-0049)
+    if (c->tok.kind != PNX_T_DOT)
+        return syntax(c, "use ends with a period: use io .");
+    if (!advance(c)) // use NAME [as NAME] . (RFC-0049)
         return false;
     return open_module(c, n, prefix, NULL);
 }
@@ -8216,6 +8196,8 @@ static bool set_order(comp *c) {
         return syntax(c, "set_order stands at the top level, outside definitions and blocks");
     if (!advance(c))
         return false;
+    if (c->tok.kind == PNX_T_LPAREN)
+        return syntax(c, "set_order is written set_order io str . : no parentheses, no commas, ended by a period");
     const bool open = c->tok.kind != PNX_T_LPAREN; // set_order io str . (RFC-0049)
     if (!open && !advance(c))
         return false;
@@ -8318,7 +8300,8 @@ static bool declare_extern(comp *c) {
     c->in_extern = true;
     char text[72];
     bool open = false; // extern NAME signature from "lib" [as NAME] end (RFC-0049)
-    const bool ok = advance(c) && ((open = c->tok.kind != PNX_T_LPAREN), parse_sig(c, &s, open ? PNX_KW_from : 0)) &&
+    const bool ok = advance(c) && (c->tok.kind != PNX_T_LPAREN || syntax(c, "extern is written extern NAME parameters from \"lib\" end")) &&
+                    ((open = true), parse_sig(c, &s, PNX_KW_from)) &&
                     (sig_text(c, &s, text, sizeof text) || syntax(c, "the signature is longer than 71 bytes"));
     c->in_extern = false;
     if (!ok)
@@ -8529,6 +8512,7 @@ static bool str_capacity(comp *c, uint8_t *out) {
         *out = (uint8_t)n;
         return true;
     }
+    return type_error(c, "stored text is written str N, N the size in bytes; a str view lives only in locals, arguments and results");
     if (c->tok.kind != PNX_T_LPAREN)
         return type_error(c, "stored text is str N; a str view lives only in locals, arguments and results");
     if (!advance(c) || !declared_size(c, &n))
@@ -8688,6 +8672,8 @@ static bool declare_collection(comp *c, uint8_t kind) {
 static bool declare_forward(comp *c) {
     if (!advance(c))
         return false;
+    if (is_word(c, PNX_KW_word)) // forward word NAME (effect), gone with RFC-0049
+        return syntax(c, "forward is written forward NAME parameters gives results end");
     if (is_word(c, PNX_KW_word)) { // forward word NAME ( effect )
         if (!advance(c))
             return false;
@@ -8817,6 +8803,7 @@ static bool declare_record(comp *c) {
                 if (n > 255)
                     return type_error(c, "str N fields hold at most 255 bytes for now");
             } else {
+                return type_error(c, "a field holds str N, N the size in bytes; a str view lives only in locals, arguments and results");
                 if (c->tok.kind != PNX_T_LPAREN)
                     return type_error(c, "a field holds str N; a str view lives only in locals, arguments and results");
                 if (!advance(c) || !declared_size(c, &n))
@@ -9088,9 +9075,13 @@ static bool row_item(comp *c) {
         pnx_token t;
         if (!pnx_lex_next(&lx, &t))
             return false;
-        named = t.kind == PNX_T_LPAREN; // the old form: row list name (values)
-        open = !named;
-    } else if (c->tok.kind != PNX_T_LPAREN) {
+        if (t.kind == PNX_T_LPAREN)
+            return syntax(c, "a row is written row list values . : no parentheses, no commas; its name goes after as");
+        named = false;
+        open = true;
+    } else if (c->tok.kind == PNX_T_LPAREN) {
+        return syntax(c, "a row is written row list values . : no parentheses, no commas");
+    } else {
         open = true;
     }
     if (named) {
