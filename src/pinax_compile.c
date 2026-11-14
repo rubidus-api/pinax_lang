@@ -170,6 +170,7 @@ typedef struct block {
     name     name;       // loop name
     uint32_t head;       // loop: first instruction
     uint32_t exits;      // chain of jumps to the end
+    uint32_t nexts;      // chain of jumps to the next pass (continue, RFC-0049)
     uint32_t else_jump;  // if: the jump taken when the condition is false
     uint32_t locals_mark;
     uint8_t  nloc_mark[2];
@@ -2705,6 +2706,15 @@ static bool guard(comp *c, const sig *s, const uint32_t base[2], const uint32_t 
             return syntax(c, "the error name is one name in parentheses");
         return advance(c);
     }
+    // or_else to e ... end (RFC-0049): the body enters with the failure on the stack. While the old
+    // form is still accepted that is so only when the body begins with `to`; the migration adds `drop`
+    // to the bodies that did not take the failure, and then every body gets it.
+    if (!is_word(c, PNX_KW_to))
+        return true;
+    if (!push_slot(c, TY_ERR))
+        return false;
+    if (emit(c, PNX_ABX(PNX_GETFAIL, slot_of(c, f->depth - 1), 0)) == NONE)
+        return false;
     return true;
 }
 
@@ -3301,7 +3311,7 @@ static block *open_block(comp *c, uint8_t kind) {
     __builtin_memset(b, 0, sizeof *b);
     b->depth = (uint8_t)f->n_blocks++;
     b->kind = kind;
-    b->exits = b->else_jump = b->next_test = NONE;
+    b->exits = b->else_jump = b->next_test = b->nexts = NONE;
     b->locals_mark = f->n_locals;
     b->nloc_mark[0] = f->nloc[0];
     b->nloc_mark[1] = f->nloc[1];
@@ -3439,11 +3449,24 @@ static bool do_loop(comp *c) {
 
 // The loop that while, until or break leaves: the innermost one, or the one named in
 // parentheses after the word. The current token is the word itself.
-static bool leave_target(comp *c, block **out) {
+static bool leave_target(comp *c, block **out, pnx_word_id which) {
     fn *f = c->f;
     const pnx_token at = c->tok;
     if (!advance(c))
         return false;
+    uint32_t want = 1; // `break 2 .` leaves two loops (RFC-0049)
+    if ((which == PNX_KW_break || which == PNX_KW_continue) && c->tok.kind == PNX_T_INT) {
+        if (c->tok.integer < 1 || c->tok.integer > 64)
+            return error_at(c, PINAX_ERR_SYNTAX, at.line, at.column, "the depth of break and continue is 1 or more");
+        want = (uint32_t)c->tok.integer;
+        if (!advance(c))
+            return false;
+        if (c->tok.kind != PNX_T_DOT)
+            return syntax(c, "a depth is followed by a period: break 2 .");
+    }
+    if ((which == PNX_KW_break || which == PNX_KW_continue) && c->tok.kind == PNX_T_DOT && !advance(c))
+        return false;
+    uint32_t seen = 0;
     name n = {0};
     if (c->tok.kind == PNX_T_LPAREN) {
         if (!advance(c))
@@ -3463,7 +3486,7 @@ static bool leave_target(comp *c, block **out) {
         if (b->kind == B_DO) {
             // the block of a combining word that gives nothing is one loop with its stem (RFC-0036)
             const bool leaves = b->use == USE_EACH || b->use == USE_EACH_INDEX || b->use == USE_TIMES;
-            if (leaves && !n.length) {
+            if (leaves && !n.length && ++seen == want) {
                 *out = b;
                 return true;
             }
@@ -3472,7 +3495,7 @@ static bool leave_target(comp *c, block **out) {
                                    : "only the block of each, each_index or times is left early; this word gives a "
                                      "result made from every element");
         }
-        if (b->kind == B_LOOP && (!n.length || (b->name.length && name_eq(b->name, n)))) {
+        if (b->kind == B_LOOP && (n.length ? b->name.length && name_eq(b->name, n) : ++seen == want)) {
             *out = b;
             return true;
         }
@@ -3487,10 +3510,10 @@ static bool do_leave(comp *c, pnx_word_id which) {
     // The condition must be taken before the loop name is read, but the name decides which
     // stack it is checked against; so the condition is popped first and kept.
     entry cond = {0};
-    if (which != PNX_KW_break && !pop_cond(c, &cond))
+    if (which != PNX_KW_break && which != PNX_KW_continue && !pop_cond(c, &cond))
         return false;
     block *target;
-    if (!leave_target(c, &target))
+    if (!leave_target(c, &target, which))
         return false;
     if (which == PNX_KW_while)
         cond_negate(&cond); // leave when the condition is false
@@ -3499,8 +3522,14 @@ static bool do_leave(comp *c, pnx_word_id which) {
     if (!same_stack(f, &target->in))
         return error_at(c, PINAX_ERR_TYPE, at.line, at.column,
                         "where a loop is left the stack must be as it was when the loop began");
-    target->targeted = true;
     const uint32_t from = target->depth + 1;
+    if (which == PNX_KW_continue) { // to the next pass: the defers inside the body run on the way
+        if (!emit_defers(c, from) || !same_owns(c, target, target->owns_in))
+            return false;
+        f->dead = true;
+        return jump_later(c, &target->nexts);
+    }
+    target->targeted = true;
     if (defers_from(f, from)) { // the defers inside the loop run on the way out
         lstate states[MAX_LOCALS];
         save_owns(f, states);
@@ -3536,6 +3565,14 @@ static bool end_loop(comp *c, block *b) {
     fn *f = c->f;
     if (!f->dead && !emit_defers(c, b->depth + 1)) // the end of one turn leaves the body
         return false;
+    if (b->nexts != NONE) { // continue lands here, with the stack the pass began with
+        if (f->dead) {
+            restore(f, &b->in);
+            restore_owns(f, b->owns_in, b->locals_mark);
+            f->dead = false;
+        }
+        land(c, &b->nexts);
+    }
     if (!f->dead) {
         if (!settle_all(c))
             return false;
@@ -3794,6 +3831,28 @@ static bool case_item(comp *c) {
     }
     int64_t  values[MAX_CASE];
     uint32_t count = 0;
+    if (is_word(c, PNX_KW_when)) { // when VALUE... do body end (RFC-0049)
+        if (!advance(c))
+            return false;
+        while (!is_word(c, PNX_KW_do)) {
+            if (c->tok.kind == PNX_T_END || is_word(c, PNX_KW_end))
+                return syntax(c, "the values of a when are followed by do");
+            if (count == MAX_CASE)
+                return syntax(c, "a match has at most 32 values");
+            if (!case_value(c, b, &values[count++]))
+                return false;
+        }
+        if (!count)
+            return syntax(c, "when is followed by at least one value");
+        land(c, &b->next_test);
+        uint32_t body = NONE;
+        for (uint32_t k = 0; k < count; ++k) {
+            if (!case_test(c, b, values[k], k + 1 == count, &body))
+                return false;
+        }
+        land(c, &body);
+        return open_block(c, B_OF) != NULL && advance(c);
+    }
     if (c->tok.kind == PNX_T_LPAREN) {
         if (!advance(c))
             return false;
@@ -3945,7 +4004,7 @@ static bool scan_user(comp *c, name *out, name *dst) {
         if (t.kind != PNX_T_RESERVED)
             continue;
         switch (t.word) {
-        case PNX_KW_do: case PNX_KW_if: case PNX_KW_loop: case PNX_KW_case:
+        case PNX_KW_do: case PNX_KW_if: case PNX_KW_loop: case PNX_KW_case: case PNX_KW_match:
         case PNX_KW_of: case PNX_KW_otherwise: case PNX_KW_or_else: case PNX_KW_defer: ++depth; break;
         case PNX_KW_end: --depth; break;
         default: break;
@@ -4357,6 +4416,41 @@ static bool word_value(comp *c, bool *done) {
     return push(c, (entry){.type = type, .kind = E_CONST, .value = index}) && advance(c) && advance(c); // past the end
 }
 
+// ref NAME : the value of a procedure of the program, not a call (RFC-0049). `ref` takes the next
+// token as a name, as `to` does, so nothing ends it.
+static bool ref_value(comp *c) {
+    if (!advance(c))
+        return false;
+    if (c->tok.kind != PNX_T_NAME && c->tok.kind != PNX_T_PATH)
+        return name_due(c, "ref is followed by the name of a procedure");
+    const name n = tok_name(c);
+    uint32_t   index = NONE;
+    if (c->tok.kind == PNX_T_NAME) {
+        if (!find_word(c, n, &index)) {
+            if (find_fwd(c, n, NULL))
+                return type_error(c, "a procedure declared with forward is given as a value only after its definition");
+            return type_error(c, "ref names a procedure of the program");
+        }
+    } else {
+        uint32_t dot = 0;
+        while (n.text[dot] != '.')
+            ++dot;
+        name real;
+        const uint32_t m = module_of(c, (name){n.text, dot}, &real) ? source_module(c, real) : NONE;
+        if (m != NONE)
+            index = name_first(c, &c->ix_words, &c->words, sizeof(wordsym), (name){n.text + dot + 1, n.length - dot - 1}, 0,
+                               c->base.words, wordsym_from, m);
+        if (m == NONE || index == NONE)
+            return type_error(c, "ref names a procedure of the program");
+    }
+    if (c->data_only)
+        return syntax(c, "a data source holds no blocks");
+    tid type;
+    if (!block_type(c, &((const wordsym *)c->words.ptr + index)->sig, &type))
+        return false;
+    return push(c, (entry){.type = type, .kind = E_CONST, .value = index}) && advance(c);
+}
+
 static bool do_block(comp *c) {
     fn *f = c->f;
     name user, dst_name;
@@ -4389,6 +4483,23 @@ static bool do_block(comp *c) {
     }
     if (bs.fails)
         return error_at(c, PINAX_ERR_SYNTAX, at.line, at.column, "a block that can fail is not supported yet");
+    // `do to p ... end each`: the names the block takes are written as `to` at its start (RFC-0049);
+    // the types are the combining word's and are filled in below. The last pushed is bound first.
+    name     binders[2] = {{0}};
+    uint32_t n_binders = 0;
+    if (bare && !name_is(user, "times") && is_word(c, PNX_KW_to)) {
+        while (is_word(c, PNX_KW_to)) {
+            if (n_binders == 2)
+                return syntax(c, "a block binds at most two names");
+            if (!advance(c))
+                return false;
+            if (c->tok.kind != PNX_T_NAME)
+                return name_due(c, "to is followed by the name the block takes");
+            binders[n_binders++] = tok_name(c);
+            if (!advance(c))
+                return false;
+        }
+    }
     const bool has_stem = f->depth > f->floor && bank_of(f->stack[f->depth - 1].type) == BANK_NONE;
     uint8_t  use, kind = STEM_TIMES, cur = 0, lim = 0, hidden = 0;
     uint16_t src = 0;
@@ -4420,6 +4531,39 @@ static bool do_block(comp *c) {
     } else {
         return error_at(c, PINAX_ERR_SYNTAX, at.line, at.column,
                         "this block is used by a word the compiler does not expand yet");
+    }
+    if (n_binders) {
+        const uint32_t want = use == USE_EACH_INDEX || use == USE_FOLD ? 2u : 1u;
+        if (n_binders != want)
+            return error_at(c, PINAX_ERR_TYPE, at.line, at.column,
+                            want == 2 ? "this block binds two names: to i to x" : "this block binds one name: to x");
+        const uint32_t acc_at = f->depth - hidden - 1;
+        const tid      acc    = use == USE_FOLD && f->depth - f->floor >= (uint32_t)hidden + 1 ? f->stack[acc_at].type : TY_NONE;
+        tid            in[2]  = {element, TY_NONE};
+        name           names[2] = {binders[0], {0}};
+        if (use == USE_EACH_INDEX) {
+            in[0] = element, in[1] = TY_INT;
+            names[0] = binders[1], names[1] = binders[0];
+        } else if (use == USE_FOLD) {
+            in[0] = acc, in[1] = element;
+            names[0] = binders[1], names[1] = binders[0];
+        }
+        bs.n_in  = (uint8_t)want;
+        bs.in[0] = in[0], bs.in[1] = in[1];
+        bs.named = true;
+        if (use == USE_FOLD) {
+            bs.n_out  = 1;
+            bs.out[0] = acc;
+        } else if (use != USE_EACH && use != USE_EACH_INDEX && use != USE_MAP) {
+            bs.n_out  = 1;
+            bs.out[0] = TY_BOOL;
+        }
+        bs.names = arena_alloc(c, sizeof(signames) + sizeof(name) * ((size_t)bs.n_in + 2u));
+        if (!bs.names)
+            return false;
+        bs.names->n_in = bs.n_in;
+        __builtin_memcpy(bs.names->all, names, sizeof(name) * bs.n_in);
+        __builtin_memset(bs.names->all + bs.n_in, 0, sizeof(name) * 2u);
     }
     // rex.matches: after the whole match the block may take the groups, named str parameters
     // (RFC-0011 section 4.2); here they are left out of the checks and bound below
@@ -4458,6 +4602,10 @@ static bool do_block(comp *c) {
                             : g && g->record != NONE ? "an array of records is not filled by filter_into; a list is"
                                                      : "map_into and filter_into fill a list or an array of values: "
                                                        "... end names map_into");
+        if (n_binders && use == USE_MAP) {
+            bs.n_out  = 1;
+            bs.out[0] = g->type;
+        }
         if (rows) {
             if (bs.n_out != 1 || bs.n_in > 1 || (bs.n_in == 1 && bs.in[0] != element) || bs.out[0] != TY_BOOL)
                 return error_at(c, PINAX_ERR_TYPE, at.line, at.column, "the block of filter_into is (x T gives bool)");
@@ -4637,6 +4785,14 @@ static bool end_do(comp *c, block *b) {
         return false;
     if (b->use == USE_WITH || b->use == USE_BY)
         return end_rex_block(c, b);
+    if (b->nexts != NONE) { // continue lands here, with the stack the pass began with
+        if (f->dead) {
+            restore(f, &b->in);
+            restore_owns(f, b->owns_in, b->locals_mark);
+            f->dead = false;
+        }
+        land(c, &b->nexts);
+    }
     if (!f->dead) {
         if (b->use == USE_FOLD) {
             if (f->depth != (uint32_t)b->in.depth + 1 || f->stack[f->depth - 1].type != b->acc_type)
@@ -7499,7 +7655,7 @@ static bool body_token(comp *c) {
     default: return syntax(c, "this token does not belong here");
     }
     if (c->in_defer && (t.word == PNX_KW_return || t.word == PNX_KW_fail || t.word == PNX_KW_break ||
-                        t.word == PNX_KW_while || t.word == PNX_KW_until || t.word == PNX_KW_to || t.word == PNX_KW_set ||
+                        t.word == PNX_KW_while || t.word == PNX_KW_until || t.word == PNX_KW_continue || t.word == PNX_KW_to || t.word == PNX_KW_set ||
                         t.word == PNX_KW_loop ||
                         t.word == PNX_KW_do || t.word == PNX_KW_defer || t.word == PNX_KW_case))
         return syntax(c, "a defer holds no return, fail, break, while, until, to, set, loop, do, case or defer");
@@ -7520,7 +7676,8 @@ static bool body_token(comp *c) {
     case PNX_KW_loop: return do_loop(c);
     case PNX_KW_while:
     case PNX_KW_until:
-    case PNX_KW_break: return do_leave(c, t.word);
+    case PNX_KW_break:
+    case PNX_KW_continue: return do_leave(c, t.word);
     case PNX_KW_return:
         if (f->is_top)
             return syntax(c, "return belongs inside a definition");
@@ -7559,9 +7716,10 @@ static bool body_token(comp *c) {
     case PNX_KW_or_fail:
     case PNX_KW_or_return:
     case PNX_KW_or_else: return syntax(c, "this word follows a word that can fail, and nothing else");
-    case PNX_KW_case: return do_case(c);
+    case PNX_KW_case: case PNX_KW_match: return do_case(c);
     case PNX_KW_cat: return do_cat(c);
     case PNX_KW_do: return do_block(c);
+    case PNX_KW_ref: return ref_value(c);
     case PNX_KW_end: {
         if (f->n_blocks == 0)
             return syntax(c, "end without anything open");
@@ -7955,14 +8113,14 @@ static bool set_order(comp *c) {
         return syntax(c, "set_order stands at the top level, outside definitions and blocks");
     if (!advance(c))
         return false;
-    if (c->tok.kind != PNX_T_LPAREN)
-        return syntax(c, "set_order is followed by modules in parentheses: set_order (io, str)");
-    if (!advance(c))
+    const bool open = c->tok.kind != PNX_T_LPAREN; // set_order io str . (RFC-0049)
+    if (!open && !advance(c))
         return false;
+    const pnx_token_kind close = open ? PNX_T_DOT : PNX_T_RPAREN;
     uint8_t  order[16];
     bool     named[16]; // written by name, not brought by get_order
     uint32_t n_order = 0;
-    while (c->tok.kind != PNX_T_RPAREN) {
+    while (c->tok.kind != close) {
         const bool all = c->tok.kind == PNX_T_RESERVED && c->tok.word == PNX_KW_get_order;
         if (!all && c->tok.kind != PNX_T_NAME)
             return syntax(c, "set_order names modules, separated by commas: set_order (io, str)");
@@ -8001,7 +8159,7 @@ static bool set_order(comp *c) {
             return false;
         if (c->tok.kind == PNX_T_COMMA && !advance(c))
             return false;
-        else if (c->tok.kind != PNX_T_RPAREN && c->tok.kind != PNX_T_NAME &&
+        else if (c->tok.kind != close && c->tok.kind != PNX_T_NAME &&
                  !(c->tok.kind == PNX_T_RESERVED && c->tok.word == PNX_KW_get_order))
             return syntax(c, "set_order names modules, separated by commas: set_order (io, str)");
     }
@@ -8259,8 +8417,16 @@ static bool declared_size(comp *c, uint32_t *out);
 // ( N ) after `str` in a declaration.
 static bool str_capacity(comp *c, uint8_t *out) {
     uint32_t n;
+    if (c->tok.kind == PNX_T_INT) { // str 32 (RFC-0049)
+        if (!declared_size(c, &n))
+            return false;
+        if (n > 255)
+            return type_error(c, "str N holds at most 255 bytes for now");
+        *out = (uint8_t)n;
+        return true;
+    }
     if (c->tok.kind != PNX_T_LPAREN)
-        return type_error(c, "stored text is str(N); a str view lives only in locals, arguments and results");
+        return type_error(c, "stored text is str N; a str view lives only in locals, arguments and results");
     if (!advance(c) || !declared_size(c, &n))
         return false;
     if (c->tok.kind != PNX_T_RPAREN)
@@ -8540,16 +8706,23 @@ static bool declare_record(comp *c) {
             bytes = 8;
         } else if (name_is(tn, "str")) { // str(N): one length byte, then N bytes
             uint32_t n;
-            if (c->tok.kind != PNX_T_LPAREN)
-                return type_error(c, "a field holds str(N); a str view lives only in locals, arguments and results");
-            if (!advance(c) || !declared_size(c, &n))
-                return false;
-            if (c->tok.kind != PNX_T_RPAREN)
-                return syntax(c, "str(N) is closed by )");
-            if (n > 255)
-                return type_error(c, "str(N) fields hold at most 255 bytes for now");
-            if (!advance(c))
-                return false;
+            if (c->tok.kind == PNX_T_INT) { // name str 8 (RFC-0049)
+                if (!declared_size(c, &n))
+                    return false;
+                if (n > 255)
+                    return type_error(c, "str N fields hold at most 255 bytes for now");
+            } else {
+                if (c->tok.kind != PNX_T_LPAREN)
+                    return type_error(c, "a field holds str N; a str view lives only in locals, arguments and results");
+                if (!advance(c) || !declared_size(c, &n))
+                    return false;
+                if (c->tok.kind != PNX_T_RPAREN)
+                    return syntax(c, "str(N) is closed by )");
+                if (n > 255)
+                    return type_error(c, "str(N) fields hold at most 255 bytes for now");
+                if (!advance(c))
+                    return false;
+            }
             fd.type = TY_STR;
             fd.is_str = true;
             fd.extra = (uint8_t)n;
@@ -8721,12 +8894,12 @@ static bool item_value(comp *c, tid *type, int64_t *value) {
 // The values of one row: value , value ... up to the closing parenthesis, stored field by
 // field into the row in register `row` of table `gi`. The current token is the first value
 // or the parenthesis; it is the parenthesis at the end.
-static bool row_values(comp *c, uint32_t gi, uint32_t row) {
+static bool row_values(comp *c, uint32_t gi, uint32_t row, bool open) {
     const globalsym *g = (const globalsym *)c->globals.ptr + gi;
     const record *rec = (const record *)c->records.ptr + g->record;
     const uint32_t value = top_slot(c, BANK_I, 3) + 2, text = top_slot(c, BANK_S, 1);
     for (uint32_t k = 0;; ++k) {
-        if (c->tok.kind == PNX_T_RPAREN && k == 0)
+        if (c->tok.kind == (open ? PNX_T_DOT : PNX_T_RPAREN) && k == 0)
             return true; // an empty row: all fields zero
         if (k >= rec->count)
             return type_error(c, "the row has more values than the record has fields");
@@ -8747,6 +8920,13 @@ static bool row_values(comp *c, uint32_t gi, uint32_t row) {
         }
         if (!advance(c))
             return false;
+        if (open) { // row LIST values . : no commas (RFC-0049)
+            if (c->tok.kind == PNX_T_DOT)
+                return true;
+            if (c->tok.kind == PNX_T_COMMA && !advance(c))
+                return false;
+            continue;
+        }
         if (c->tok.kind == PNX_T_RPAREN)
             return true;
         if (c->tok.kind != PNX_T_COMMA)
@@ -8773,7 +8953,25 @@ static bool row_item(comp *c) {
     if (!advance(c))
         return false;
     name row_name = {0};
-    if (c->tok.kind == PNX_T_NAME) {
+    bool open = false; // row LIST [as NAME] values . (RFC-0049)
+    bool named = false;
+    if (is_word(c, PNX_KW_as)) {
+        named = open = true;
+        if (!advance(c))
+            return false;
+        if (c->tok.kind != PNX_T_NAME)
+            return name_due(c, "as is followed by the name of the row: row list as name values .");
+    } else if (c->tok.kind == PNX_T_NAME) {
+        pnx_lexer lx = *c->lx;
+        pnx_token t;
+        if (!pnx_lex_next(&lx, &t))
+            return false;
+        named = t.kind == PNX_T_LPAREN; // the old form: row list name (values)
+        open = !named;
+    } else if (c->tok.kind != PNX_T_LPAREN) {
+        open = true;
+    }
+    if (named) {
         row_name = tok_name(c);
         if (g->record == NONE)
             return type_error(c, "only a row of a record has a name");
@@ -8782,10 +8980,13 @@ static bool row_item(comp *c) {
         if (!advance(c))
             return false;
     }
-    if (c->tok.kind != PNX_T_LPAREN)
-        return syntax(c, "the values of a row are in parentheses");
-    if (!advance(c))
-        return false;
+    if (!open) {
+        if (c->tok.kind != PNX_T_LPAREN)
+            return syntax(c, "the values of a row are in parentheses");
+        if (!advance(c))
+            return false;
+    }
+    const pnx_token_kind close = open ? PNX_T_DOT : PNX_T_RPAREN;
     if (g->rows == g->capacity)
         return type_error(c, "the list has no room for this row");
     const uint32_t row = top_slot(c, BANK_I, 2), value = row + 1;
@@ -8809,7 +9010,7 @@ static bool row_item(comp *c) {
             if (emit(c, PNX_ABX(PNX_LOADKS, text, (uint32_t)v)) == NONE || emit(c, PNX_ABC(PNX_FSETS, text, row, 0)) == NONE ||
                 emit(c, PNX_FIELD(gi, 0, g->strcap)) == NONE || !advance(c))
                 return false;
-            if (c->tok.kind != PNX_T_RPAREN)
+            if (c->tok.kind != close)
                 return syntax(c, "a row of a list of values has one value");
             ++g->rows;
             return advance(c);
@@ -8829,7 +9030,7 @@ static bool row_item(comp *c) {
     if (g->record == NONE) {
         if (!advance(c))
             return false;
-        if (c->tok.kind != PNX_T_RPAREN)
+        if (c->tok.kind != close)
             return syntax(c, "a row of a list of values has one value");
         ++g->rows;
         return advance(c);
@@ -8844,7 +9045,7 @@ static bool row_item(comp *c) {
         *k = (constant){.name = row_name, .type = g->type, .value = (int64_t)g->rows + 1};
         g = (globalsym *)c->globals.ptr + gi;
     }
-    if (!row_values(c, gi, row))
+    if (!row_values(c, gi, row, open))
         return false;
     // the row enters every index of its list; a key that is there already is a fault while loading
     for (uint32_t x = 0; x < c->globals.n; ++x) {
@@ -8887,7 +9088,7 @@ static bool assign_item(comp *c) {
             return syntax(c, "each value of an array of records is a row in parentheses");
         if (k >= g->capacity)
             return type_error(c, "assign has more values than the array has cells");
-        if (!advance(c) || !load_int(c, value, (int64_t)k + 1) || !row_values(c, gi, value) || !advance(c))
+        if (!advance(c) || !load_int(c, value, (int64_t)k + 1) || !row_values(c, gi, value, false) || !advance(c))
             return false;
         g = (const globalsym *)c->globals.ptr + gi;
         if (c->tok.kind == PNX_T_RPAREN)
