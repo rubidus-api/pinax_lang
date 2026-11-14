@@ -303,6 +303,7 @@ typedef struct fwd {
 typedef struct dtype {
     name name;
     tid  base;
+    bool alias;        // type NAME proc ... end: the name stands for a block type, not a type of its own (RFC-0049)
     uint16_t module;   // the source module it was declared in (set when the load is done)
     bool     exported; // visible to other modules as module.name
 } dtype;
@@ -833,7 +834,8 @@ static tid type_of_name(const comp *c, name n) {
     uint32_t k = name_first(c, (nindex *)&c->ix_dtypes, &c->dtypes, sizeof(dtype), n, c->eval ? 0 : c->base.dtypes,
                             c->dtypes.n, dtype_own, 0);
     if (k != NONE)
-        return (tid)((TY_DISTINCT + k) | (((const dtype *)c->dtypes.ptr + k)->base & TY_SBANK));
+        return ((const dtype *)c->dtypes.ptr + k)->alias ? ((const dtype *)c->dtypes.ptr + k)->base
+                                                         : (tid)((TY_DISTINCT + k) | (((const dtype *)c->dtypes.ptr + k)->base & TY_SBANK));
     for (uint32_t k = 0; k < c->st->n_handle_types; ++k) { // a type the host gave
         if (name_is(n, c->st->handle_types[k].name))
             return (tid)(TY_HANDLE + k);
@@ -849,7 +851,8 @@ static tid type_of_name(const comp *c, name n) {
     // a type or a table of records that a module in use exports
     k = name_first(c, (nindex *)&c->ix_dtypes, &c->dtypes, sizeof(dtype), n, 0, c->base.dtypes, dtype_from, NONE);
     if (k != NONE)
-        return (tid)((TY_DISTINCT + k) | (((const dtype *)c->dtypes.ptr + k)->base & TY_SBANK));
+        return ((const dtype *)c->dtypes.ptr + k)->alias ? ((const dtype *)c->dtypes.ptr + k)->base
+                                                         : (tid)((TY_DISTINCT + k) | (((const dtype *)c->dtypes.ptr + k)->base & TY_SBANK));
     k = name_first(c, (nindex *)&c->ix_globals, &c->globals, sizeof(globalsym), n, 0, c->base.globals, table_from, NONE);
     if (k != NONE)
         return row_type(k);
@@ -3923,6 +3926,7 @@ static bool body_token(comp *c);
 // most, or a long source would run the C stack out.
 enum { MAX_CATS = 32 };
 static bool cat_items(comp *c);
+static bool cat_emit(comp *c, uint32_t first);
 
 static bool do_cat(comp *c) {
     if (!advance(c))
@@ -3968,6 +3972,12 @@ static bool cat_items(comp *c) {
         if (!advance(c))
             return false;
     }
+    return cat_emit(c, first) && advance(c);
+}
+
+// The values from `first` up to the top of the stack, joined into one string in the region.
+static bool cat_emit(comp *c, uint32_t first) {
+    fn *f = c->f;
     const uint32_t scratch = top_slot(c, BANK_S, 1);
     if (emit(c, PNX_ABC(PNX_RMARK, scratch, 0, 0)) == NONE)
         return false;
@@ -3980,9 +3990,46 @@ static bool cat_items(comp *c) {
             return false;
     }
     f->depth = first;
-    if (!push_slot(c, TY_STR) || !move_slot(c, TY_STR, slot_of(c, f->depth - 1), scratch))
+    return push_slot(c, TY_STR) && move_slot(c, TY_STR, slot_of(c, f->depth - 1), scratch);
+}
+
+// args a b c . cat (RFC-0049): the values the code up to the period leaves, joined by cat. The count and
+// the types are known where it is written, so nothing is built in the region but the string.
+static bool do_args(comp *c) {
+    fn *f = c->f;
+    if (c->cats == MAX_CATS)
+        return syntax(c, "args is nested too deeply");
+    if (!advance(c))
         return false;
-    return advance(c);
+    ++c->cats;
+    const uint32_t first = f->depth, floor = f->floor, blocks = f->n_blocks;
+    f->floor = first;
+    while (c->tok.kind != PNX_T_DOT) {
+        if (c->tok.kind == PNX_T_END)
+            return syntax(c, "args is closed by a period: args a b . cat");
+        if (!body_token(c))
+            return false;
+        if (f->n_blocks < blocks)
+            return syntax(c, "this end closes something opened outside the args");
+    }
+    f->floor = floor;
+    --c->cats;
+    if (f->n_blocks != blocks)
+        return syntax(c, "something opened inside args is not closed");
+    if (f->dead || f->depth == first)
+        return type_error(c, "args leaves at least one value");
+    for (uint32_t k = first; k < f->depth; ++k) {
+        const tid type = f->stack[k].type;
+        if (type != TY_STR && type != TY_BOOL && !is_number(c, type))
+            return type_error(c, "cat joins str, int and bool values");
+        if (!settle(c, k))
+            return false;
+    }
+    if (!advance(c)) // past the period
+        return false;
+    if (!is_word(c, PNX_KW_cat))
+        return syntax(c, "args is followed by cat for now: args a b . cat");
+    return cat_emit(c, first) && advance(c);
 }
 
 // ---- stems and the blocks of combining words ----------------------------------------------
@@ -7720,6 +7767,7 @@ static bool body_token(comp *c) {
     case PNX_KW_cat: return do_cat(c);
     case PNX_KW_do: return do_block(c);
     case PNX_KW_ref: return ref_value(c);
+    case PNX_KW_args: return do_args(c);
     case PNX_KW_end: {
         if (f->n_blocks == 0)
             return syntax(c, "end without anything open");
@@ -8766,6 +8814,23 @@ static bool declare_type(comp *c) {
         return false;
     if (c->tok.kind != PNX_T_NAME)
         return syntax(c, "the declaration is: type name base");
+    if (name_is(tok_name(c), "proc")) { // type Handler proc n int gives int end (RFC-0049)
+        sig s;
+        if (!advance(c) || !parse_sig(c, &s, PNX_KW_end))
+            return false;
+        if (!block_type(c, &s, &d.base))
+            return false;
+        d.alias = true;
+        if (!advance(c)) // past end
+            return false;
+        if (c->dtypes.n >= 0x3000u)
+            return syntax(c, "too many declared types");
+        dtype *slot = vec_push(c, &c->dtypes, sizeof(dtype));
+        if (!slot)
+            return false;
+        *slot = d;
+        return true;
+    }
     d.base = basic_type(tok_name(c));
     const bool dec = name_is(tok_name(c), "dec");
     if (!advance(c) || (dec && !dec_scale(c, &d.base)))

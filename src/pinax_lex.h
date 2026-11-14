@@ -18,7 +18,7 @@
     X(to) X(do) X(end) X(if) X(else) X(loop) X(while) X(until) X(break) X(case) X(of)              \
     X(otherwise) X(return) X(or_fail) X(or_return) X(or_else) X(cat) X(defer) X(set)  \
     X(fits) X(set_order) X(get_order)                                                              \
-    X(def) X(ref) X(match) X(when) X(continue)
+    X(def) X(ref) X(match) X(when) X(continue) X(args)
 
 typedef enum pnx_word_id {
     PNX_KW_NONE,
