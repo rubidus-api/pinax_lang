@@ -14055,6 +14055,7 @@ const GUIDE = {
         [":delete N[-M]", "removes lines N to M (:del)"],
         [":run", "RESETS: empties the stack and forgets every definition, then runs the program from line 1 (F5); the program's lines stay"],
         [":new", "no program, and a fresh state"],
+        [":stack", "the values on the stack, the first pushed first (:s)"],
         [":clear", "empties the stack only"],
         [":words", "the words of the program, each with its signature"],
         [":get_order", "the search order as it is, as the word get_order tells it"],
@@ -14247,6 +14248,13 @@ async function createConsole({ createPinax, bytes, print, store = null }) {
             session.reset();
             print("info", "no program; a fresh state\n");
             return {};
+        case "stack": case "s": {
+            const stack = session.stack();
+            print("info", stack.length ? `${plural(stack.length, "value")} on the stack, the first pushed first:\n` : "the stack is empty\n");
+            if (stack.length)
+                print("stack", stack.join(" ") + "\n");
+            return {};
+        }
         case "clear":
             session.clear();
             print("info", "the stack is empty\n");
