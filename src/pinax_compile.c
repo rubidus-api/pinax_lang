@@ -5369,7 +5369,7 @@ static bool sheet_const(name n, int64_t *value) {
         const char *name;
         int64_t     value;
     } consts[] = {{"eq", 0},      {"ne", 1},     {"lt", 2},     {"le", 3},      {"gt", 4},       {"ge", 5},
-                  {"k_empty", 0}, {"k_int", 1},  {"k_bool", 2}, {"k_dec", 3},   {"k_str", 4}};
+                  {"k_empty", 0}, {"k_int", 1},  {"k_bool", 2}, {"k_dec", 3},   {"k_str", 4}, {"k_date", 5}};
     for (size_t k = 0; k < sizeof consts / sizeof consts[0]; ++k) {
         if (name_is(n, consts[k].name)) {
             *value = consts[k].value;

@@ -39,7 +39,7 @@ typedef struct { uint64_t value; uint32_t count, next; } wslot;                 
 typedef struct { uint32_t off, len, count, next, hash; } tslot;                  // 20 bytes
 
 // cell tags (low 4 bits)
-enum { T_EMPTY, T_INT, T_BOOL, T_DEC, T_STR, T_WINT, T_WDEC };
+enum { T_EMPTY, T_INT, T_BOOL, T_DEC, T_STR, T_WINT, T_WDEC, T_DATE }; // T_DATE: Unix seconds, kept in the cell like T_INT
 
 static inline uint64_t mix(uint64_t x) {
     x ^= x >> 33; x *= 0xff51afd7ed558ccdull; x ^= x >> 33; x *= 0xc4ceb9fe1a85ec53ull; x ^= x >> 33;
@@ -289,10 +289,13 @@ static void retain(uint8_t *b, uint64_t c) {
 static int64_t wide_value(uint8_t *b, uint32_t s) { return (int64_t)wide_at(b, s)->value; }
 
 // Rank of a cell for ordering: numbers, then texts, then the rest (empty, bool, dec) last in either direction.
+// A date counts as its seconds, an int, for everything that orders, finds or selects (RFC-0048).
 static int rank_of(uint64_t c) {
-    return ((c & 15u) == T_INT || (c & 15u) == T_WINT) ? 0 : (c & 15u) == T_STR ? 1 : 2;
+    return ((c & 15u) == T_INT || (c & 15u) == T_WINT || (c & 15u) == T_DATE) ? 0 : (c & 15u) == T_STR ? 1 : 2;
 }
-static int64_t int_of(uint8_t *b, uint64_t c) { return (c & 15u) == T_INT ? cell_int(c) : wide_value(b, (uint32_t)(c >> 4)); }
+static int64_t int_of(uint8_t *b, uint64_t c) {
+    return (c & 15u) == T_INT || (c & 15u) == T_DATE ? cell_int(c) : wide_value(b, (uint32_t)(c >> 4));
+}
 // -1, 0, 1 for two cells of the same rank; `desc` turns the order of numbers and texts around, never the place of the rest.
 static int cmp_cells(uint8_t *b, uint64_t x, uint64_t y, bool desc) {
     const int rx = rank_of(x), ry = rank_of(y);
@@ -978,6 +981,22 @@ pnx_sheet_result pnx_sheet_put_int(uint8_t *b, uint32_t cap, int64_t v, int64_t 
         return e;
     return put_raw(b, cap, r, c, (uint64_t)s << 4 | T_WINT);
 }
+// A date is Unix seconds in the cell itself, so it must fit 60 bits (any date of the years 1 to 9999 does, by far).
+pnx_sheet_result pnx_sheet_put_date(uint8_t *b, uint32_t cap, int64_t v, int64_t r, int64_t c) {
+    if (!fits_int(v))
+        return PNX_SH_RANGE;
+    return put_raw(b, cap, r, c, (uint64_t)v << 4 | T_DATE);
+}
+pnx_sheet_result pnx_sheet_get_date(uint8_t *b, uint32_t cap, int64_t r, int64_t c, int64_t *v) {
+    uint64_t *cell;
+    pnx_sheet_result e = at(b, cap, r, c, &cell);
+    if (e)
+        return e;
+    if ((*cell & 15u) != T_DATE)
+        return PNX_SH_KIND;
+    *v = cell_int(*cell);
+    return PNX_SH_OK;
+}
 pnx_sheet_result pnx_sheet_put_bool(uint8_t *b, uint32_t cap, int64_t v, int64_t r, int64_t c) {
     return put_raw(b, cap, r, c, (v ? 16u : 0u) | T_BOOL);
 }
@@ -1046,6 +1065,7 @@ static uint32_t kind_of(uint64_t c) {
     case T_INT: case T_WINT: return 1;
     case T_BOOL: return 2;
     case T_DEC: case T_WDEC: return 3;
+    case T_DATE: return 5;
     default: return 4;
     }
 }
@@ -1061,8 +1081,8 @@ pnx_sheet_result pnx_sheet_get_int(uint8_t *b, uint32_t cap, int64_t r, int64_t 
     pnx_sheet_result e = at(b, cap, r, c, &cell);
     if (e)
         return e;
-    if (rank_of(*cell) != 0)
-        return PNX_SH_KIND;
+    if (rank_of(*cell) != 0 || (*cell & 15u) == T_DATE)
+        return PNX_SH_KIND; // a date is read with `date`
     *v = int_of(b, *cell);
     return PNX_SH_OK;
 }
@@ -1151,7 +1171,7 @@ pnx_sheet_result pnx_sheet_indexed(uint8_t *b, uint32_t cap, int64_t col, int64_
 
 // Whether a cell equals an int key.
 static bool eq_int(uint8_t *b, uint64_t c, int64_t key) {
-    if ((c & 15u) == T_INT)
+    if ((c & 15u) == T_INT || (c & 15u) == T_DATE)
         return cell_int(c) == key;
     return (c & 15u) == T_WINT && wide_value(b, (uint32_t)(c >> 4)) == key;
 }

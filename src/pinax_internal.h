@@ -79,6 +79,8 @@ pnx_sheet_result pnx_sheet_clear(uint8_t *b, uint32_t cap);
 pnx_sheet_result pnx_sheet_widen(uint8_t *b, uint32_t cap, uint32_t cols);
 pnx_sheet_result pnx_sheet_put_int(uint8_t *b, uint32_t cap, int64_t v, int64_t r, int64_t c);
 pnx_sheet_result pnx_sheet_put_bool(uint8_t *b, uint32_t cap, int64_t v, int64_t r, int64_t c);
+pnx_sheet_result pnx_sheet_put_date(uint8_t *b, uint32_t cap, int64_t v, int64_t r, int64_t c);
+pnx_sheet_result pnx_sheet_get_date(uint8_t *b, uint32_t cap, int64_t r, int64_t c, int64_t *v);
 pnx_sheet_result pnx_sheet_put_dec(uint8_t *b, uint32_t cap, int64_t v, uint32_t scale, int64_t r, int64_t c);
 pnx_sheet_result pnx_sheet_put_str(uint8_t *b, uint32_t cap, const uint8_t *s, uint32_t n, int64_t r, int64_t c);
 pnx_sheet_result pnx_sheet_clear_cell(uint8_t *b, uint32_t cap, int64_t r, int64_t c);
@@ -124,11 +126,11 @@ pnx_sheet_result pnx_sheet_save_xlsx(uint8_t *b, uint32_t cap, uint8_t *dst, uin
     X(ROWS_MAX, "rows_max", "", "i", "R") X(ADD_ROW, "add_row", "", "i", "F")                       \
     X(TRUNCATE_ROWS, "truncate_rows", "i", "", "") X(WIDEN, "widen", "i", "", "F")                  \
     X(CLEAR, "clear", "", "", "") X(COMPACT, "compact", "", "", "")                                 \
-    X(PUT_INT, "put_int", "iii", "", "F") X(PUT_BOOL, "put_bool", "bii", "", "F")                   \
+    X(PUT_INT, "put_int", "iii", "", "F") X(PUT_BOOL, "put_bool", "bii", "", "F") X(PUT_DATE, "put_date", "iii", "", "F")                   \
     X(PUT_DEC, "put_dec", "dii", "", "F") X(PUT_STR, "put_str", "sii", "", "F")                     \
     X(CLEAR_CELL, "clear_cell", "ii", "", "") X(COPY_CELL, "copy_cell", "iiii", "", "")             \
     X(KIND, "kind", "ii", "i", "R") X(IS_EMPTY, "is_empty", "ii", "b", "R")                         \
-    X(GET_INT, "int", "ii", "i", "FR") X(GET_BOOL, "bool", "ii", "b", "FR")                         \
+    X(GET_INT, "int", "ii", "i", "FR") X(GET_BOOL, "bool", "ii", "b", "FR") X(GET_DATE, "date", "ii", "i", "FR")                         \
     X(GET_DEC, "dec", "iin", "D", "FR") X(GET_STR, "str", "ii", "s", "FR")                          \
     X(FIND_ROW_INT, "find_row_int", "ii", "i", "FR") X(FIND_ROW_STR, "find_row_str", "si", "i", "FR") \
     X(FIND_COL_INT, "find_col_int", "ii", "i", "FR") X(FIND_COL_STR, "find_col_str", "si", "i", "FR") \
@@ -217,6 +219,14 @@ enum { PNX_TOML_TABLE = 1, PNX_TOML_TABLES, PNX_TOML_STRING, PNX_TOML_INT, PNX_T
 int      pnx_toml_next(const uint8_t *s, uint32_t n, int *kind, uint32_t *key_off, uint32_t *key_len, uint32_t *val_off,
                        uint32_t *val_len, uint32_t *past);
 bool     pnx_toml_valid(const uint8_t *s, uint32_t n);
+size_t   pnx_toml_check_room(uint32_t n);
+int      pnx_toml_check(const uint8_t *s, uint32_t n, uint8_t *mem, size_t memlen);
+size_t   pnx_toml_write_room(uint32_t n, uint32_t extra);
+// toml.set and toml.remove: 0 and the length written, 1 format, 2 full, 3 not found
+int      pnx_toml_set(const uint8_t *s, uint32_t n, const uint8_t *path, uint32_t pn, int kind, const uint8_t *val, uint32_t vn,
+                      uint8_t *out, uint64_t cap, uint32_t *outlen, uint8_t *mem, size_t memlen);
+int      pnx_toml_remove(const uint8_t *s, uint32_t n, const uint8_t *path, uint32_t pn, uint8_t *out, uint64_t cap, uint32_t *outlen,
+                         uint8_t *mem, size_t memlen);
 int      pnx_toml_string(const uint8_t *s, uint32_t n, uint32_t *off, uint32_t *len);
 uint32_t pnx_toml_decode(const uint8_t *in, uint32_t n, uint8_t *out);
 int      pnx_toml_at(const uint8_t *s, uint32_t n, const uint8_t *path, uint32_t pn, int *kind, uint32_t *off, uint32_t *len);
@@ -233,7 +243,8 @@ uint32_t pnx_md_inline(const uint8_t *s, uint32_t n, uint8_t *out, uint64_t cap)
     X(JSON_VALID, 8, "valid", "s", "b", "") X(JSON_AT, 8, "at", "ss", "is", "F")                    \
     X(JSON_MINIFY, 8, "minify", "s", "", "FW") X(JSON_PRETTY, 8, "pretty", "si", "", "FW")          \
     X(TOML_VALID, 11, "valid", "s", "b", "") X(TOML_AT, 11, "at", "ss", "is", "F")                  \
-    X(TOML_NEXT, 11, "next", "s", "isss", "F")                                                      \
+    X(TOML_NEXT, 11, "next", "s", "isss", "F") X(TOML_CHECK, 11, "check", "s", "", "F")            \
+    X(TOML_SET, 11, "set", "sssi", "", "FW") X(TOML_REMOVE, 11, "remove", "ss", "", "FW")           \
     X(MD_NEXT, 12, "next", "s", "iiss", "F") X(MD_HTML, 12, "html", "s", "", "FW")                  \
     X(MD_INLINE, 12, "inline", "s", "", "FW")
 

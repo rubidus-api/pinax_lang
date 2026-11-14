@@ -741,3 +741,783 @@ int pnx_toml_at(const uint8_t *s, uint32_t n, const uint8_t *path, uint32_t pn, 
     }
     return 0;
 }
+
+// ---- the rules of the whole document (toml.check) ------------------------------------------------------------
+//
+// toml.valid reads each statement alone. The rules that need the statements before it - a key is defined once, a
+// table once, a table made by dotted keys is not reopened by a header, an inline table and an array are closed -
+// are kept in a table of nodes in memory the caller lends (the region, given back afterwards): one node for every
+// key part, found by (parent, name) through a hash, so the time is linear. A document with more nodes than the
+// loan holds is `full`, never "valid". The numbers and dates of every value are checked too.
+
+enum { TCK_IMPL, TCK_HDR, TCK_DOT, TCK_VALUE, TCK_INLINE, TCK_ARRT };
+
+typedef struct {
+    uint32_t parent, hash, off, len, next, cur;
+    uint32_t sect, nel; // the end of the statements of this table's own section; the elements of an array of tables
+    uint8_t  type, esc;
+} tck_node;
+
+typedef struct {
+    tck_node      *nodes;
+    uint32_t      *bucket;
+    uint32_t       count, cap, mask;
+    const uint8_t *s;
+    uint32_t       n;
+} tck;
+
+#define TCK_NAME 256 // a key part with escapes longer than this decodes to nothing: the check says full
+
+static uint32_t tck_hash(uint32_t parent, const uint8_t *p, uint32_t n) {
+    uint32_t h = 2166136261u ^ (parent * 16777619u);
+    for (uint32_t k = 0; k < n; ++k)
+        h = (h ^ p[k]) * 16777619u;
+    return h;
+}
+
+// The bytes of a key part as the key means them: quoted with escapes decoded into `buf`. -1: too long to decode.
+static int tck_text(const uint8_t *s, tml_seg g, uint8_t esc, uint8_t *buf, const uint8_t **p, uint32_t *n) {
+    if (!esc) {
+        *p = s + g.off;
+        *n = g.len;
+        return 0;
+    }
+    if (g.len > TCK_NAME)
+        return -1;
+    const uint32_t m = pnx_toml_decode(s + g.off, g.len, buf);
+    if (m >= PNX_TXT_BAD)
+        return -2;
+    *p = buf;
+    *n = m;
+    return 0;
+}
+
+static uint8_t tck_esc(const uint8_t *s, tml_seg g) {
+    if (g.off == 0 || s[g.off - 1] != '"')
+        return 0;
+    for (uint32_t k = 0; k < g.len; ++k)
+        if (s[g.off + k] == '\\')
+            return 1;
+    return 0;
+}
+
+// A node whose parent is `parent` and whose name is `name`: its index, 0 when there is none.
+static uint32_t tck_find(const tck *c, uint32_t parent, uint32_t h, const uint8_t *name, uint32_t nlen) {
+    for (uint32_t i = c->bucket[h & c->mask]; i; i = c->nodes[i].next) {
+        const tck_node *m = &c->nodes[i];
+        if (m->hash != h || m->parent != parent)
+            continue;
+        uint8_t        buf[TCK_NAME];
+        const uint8_t *p;
+        uint32_t       pn;
+        if (tck_text(c->s, (tml_seg){m->off, m->len}, m->esc, buf, &p, &pn) < 0)
+            continue;
+        if (pn == nlen && __builtin_memcmp(p, name, nlen) == 0)
+            return i;
+    }
+    return 0;
+}
+
+// A new node: its index, 0 when the loan is used up. `hashed` 0: it is not found by name (an element of an array of
+// tables, an inline table in an array).
+static uint32_t tck_make(tck *c, uint32_t parent, uint32_t h, tml_seg g, uint8_t esc, uint8_t type, bool hashed) {
+    if (c->count >= c->cap)
+        return 0;
+    const uint32_t i = c->count++;
+    c->nodes[i] = (tck_node){parent, h, g.off, g.len, 0, 0, 0, 0, type, esc};
+    if (hashed) {
+        c->nodes[i].next = c->bucket[h & c->mask];
+        c->bucket[h & c->mask] = i;
+    }
+    return i;
+}
+
+static uint32_t tck_table(const tck *c, uint32_t i) { return c->nodes[i].type == TCK_ARRT ? c->nodes[i].cur : i; }
+
+// One step down from `parent` by the key part `g`: the node, 0 when there is none, -1 too long, -2 malformed.
+static int64_t tck_step(const tck *c, uint32_t parent, tml_seg g, uint8_t esc, uint32_t *hash) {
+    uint8_t        buf[TCK_NAME];
+    const uint8_t *p;
+    uint32_t       n;
+    const int      r = tck_text(c->s, g, esc, buf, &p, &n);
+    if (r < 0)
+        return r == -1 ? -1 : -2;
+    *hash = tck_hash(parent, p, n);
+    return tck_find(c, parent, *hash, p, n);
+}
+
+// ---- numbers and dates ----
+
+static bool tck_int(const uint8_t *t, uint32_t len) {
+    uint32_t k = 0;
+    bool     neg = false;
+    if (t[0] == '+' || t[0] == '-') {
+        neg = t[0] == '-';
+        k = 1;
+    }
+    uint32_t radix = 10;
+    if (len - k > 1 && t[k] == '0' && (t[k + 1] == 'x' || t[k + 1] == 'o' || t[k + 1] == 'b')) {
+        radix = t[k + 1] == 'x' ? 16 : t[k + 1] == 'o' ? 8 : 2;
+        k += 2;
+        neg = false;
+    }
+    const uint64_t limit = neg ? (uint64_t)1 << 63 : ((uint64_t)1 << 63) - 1;
+    uint64_t       v = 0;
+    for (; k < len; ++k) {
+        if (t[k] == '_')
+            continue;
+        const uint8_t  b = t[k] | 0x20;
+        const uint32_t d = tml_digit(t[k]) ? t[k] - '0' : b - 'a' + 10;
+        if (v > (limit - d) / radix)
+            return false;
+        v = v * radix + d;
+    }
+    return true;
+}
+
+// A float must be a finite double: its size, from the digits and the exponent, against 1.7976931348623157e308.
+static bool tck_float(const uint8_t *t, uint32_t len) {
+    uint32_t k = 0;
+    if (t[0] == '+' || t[0] == '-')
+        k = 1;
+    if (len - k == 3 && (t[k] == 'i' || t[k] == 'n'))
+        return true; // inf and nan
+    char     sig[17];
+    uint32_t ns = 0, ints = 0, lead = 0;
+    bool     seen = false, point = false;
+    int64_t  ex = 0;
+    for (; k < len; ++k) {
+        const uint8_t b = t[k];
+        if (b == '_')
+            continue;
+        if (b == '.') {
+            point = true;
+            continue;
+        }
+        if ((b | 0x20) == 'e') {
+            bool eneg = false;
+            ++k;
+            if (k < len && (t[k] == '+' || t[k] == '-'))
+                eneg = t[k++] == '-';
+            for (; k < len; ++k)
+                if (tml_digit(t[k]) && ex < 100000)
+                    ex = ex * 10 + (t[k] - '0');
+            if (eneg)
+                ex = -ex;
+            break;
+        }
+        if (!seen && b == '0') {
+            if (point)
+                ++lead;
+            continue;
+        }
+        seen = true;
+        if (!point)
+            ++ints;
+        if (ns < 17)
+            sig[ns++] = (char)b;
+    }
+    if (!seen)
+        return true; // zero
+    const int64_t mag = ints ? (int64_t)ints - 1 + ex : ex - 1 - (int64_t)lead;
+    if (mag > 308)
+        return false;
+    if (mag < 308)
+        return true;
+    static const char max[] = "17976931348623157";
+    for (uint32_t i = 0; i < 17; ++i) {
+        const char d = i < ns ? sig[i] : '0';
+        if (d != max[i])
+            return d < max[i];
+    }
+    return true;
+}
+
+// `digits` decimal digits at `at` in t, within lo..hi.
+static bool tck_num(const uint8_t *t, uint32_t len, uint32_t at, uint32_t digits, uint32_t lo, uint32_t hi, uint32_t *value) {
+    if (at + digits > len)
+        return false;
+    uint32_t v = 0;
+    for (uint32_t k = 0; k < digits; ++k) {
+        if (!tml_digit(t[at + k]))
+            return false;
+        v = v * 10 + (t[at + k] - '0');
+    }
+    *value = v;
+    return v >= lo && v <= hi;
+}
+
+static bool tck_time(const uint8_t *t, uint32_t len, uint32_t at, uint32_t *end) {
+    uint32_t h, m, sec;
+    if (at + 8 > len || t[at + 2] != ':' || t[at + 5] != ':')
+        return false;
+    if (!tck_num(t, len, at, 2, 0, 23, &h) || !tck_num(t, len, at + 3, 2, 0, 59, &m) || !tck_num(t, len, at + 6, 2, 0, 60, &sec))
+        return false;
+    at += 8;
+    if (at < len && t[at] == '.') {
+        const uint32_t from = ++at;
+        while (at < len && tml_digit(t[at]))
+            ++at;
+        if (at == from)
+            return false;
+    }
+    *end = at;
+    return true;
+}
+
+static bool tck_datetime(const uint8_t *t, uint32_t len) {
+    uint32_t at = 0, end;
+    if (len >= 3 && t[2] == ':') // a local time
+        return tck_time(t, len, 0, &end) && end == len;
+    uint32_t y, mo, d;
+    if (len < 10 || !tck_num(t, len, 0, 4, 0, 9999, &y) || t[4] != '-' || !tck_num(t, len, 5, 2, 1, 12, &mo) ||
+        t[7] != '-' || !tck_num(t, len, 8, 2, 1, 31, &d))
+        return false;
+    static const uint8_t days[12] = {31, 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31};
+    const bool leap = (y % 4 == 0 && y % 100 != 0) || y % 400 == 0;
+    if (d < 1 || d > days[mo - 1] + (mo == 2 && leap ? 1u : 0u))
+        return false;
+    at = 10;
+    if (at == len)
+        return true;
+    if (t[at] != 'T' && t[at] != 't' && t[at] != ' ')
+        return false;
+    if (!tck_time(t, len, at + 1, &end))
+        return false;
+    at = end;
+    if (at == len)
+        return true;
+    if ((t[at] == 'Z' || t[at] == 'z') && at + 1 == len)
+        return true;
+    uint32_t oh, om;
+    return (t[at] == '+' || t[at] == '-') && at + 6 == len && t[at + 3] == ':' && tck_num(t, len, at + 1, 2, 0, 23, &oh) &&
+           tck_num(t, len, at + 4, 2, 0, 59, &om);
+}
+
+static bool tck_scalar(int kind, const uint8_t *t, uint32_t len) {
+    if (kind == PNX_TOML_INT)
+        return tck_int(t, len);
+    if (kind == PNX_TOML_FLOAT)
+        return tck_float(t, len);
+    if (kind == PNX_TOML_DATETIME)
+        return tck_datetime(t, len);
+    return true;
+}
+
+// ---- keys and values ----
+
+#define TCK_BAD (-1)
+#define TCK_FULL (-2)
+
+static int64_t tck_assign(tck *c, uint32_t table, const tml_seg *segs, uint32_t nsegs, uint32_t vat, uint32_t depth);
+
+// A value from its first byte: where it ends. `node` is the node of the key that holds it (an inline table fills
+// it), 0 for an element of an array (an inline table there is a node nobody finds). TCK_BAD, TCK_FULL.
+static int64_t tck_value(tck *c, uint32_t node, uint32_t at, uint32_t depth) {
+    const uint8_t *s = c->s;
+    const uint32_t n = c->n;
+    if (at >= n || depth > TML_DEPTH)
+        return TCK_BAD;
+    if (s[at] == '[') {
+        uint32_t k = at + 1;
+        for (;;) {
+            k = tml_gap(s, n, k, true);
+            if (k >= n)
+                return TCK_BAD;
+            if (s[k] == ']')
+                return (int64_t)k + 1;
+            const int64_t e = tck_value(c, 0, k, depth + 1);
+            if (e < 0)
+                return e;
+            k = tml_gap(s, n, (uint32_t)e, true);
+            if (k < n && s[k] == ',') {
+                ++k;
+                continue;
+            }
+            if (k >= n || s[k] != ']')
+                return TCK_BAD;
+            return (int64_t)k + 1;
+        }
+    }
+    if (s[at] == '{') {
+        if (!node) {
+            node = tck_make(c, 0, 0, (tml_seg){0, 0}, 0, TCK_INLINE, false);
+            if (!node)
+                return TCK_FULL;
+        }
+        uint32_t k = tml_gap(s, n, at + 1, false);
+        if (k < n && s[k] == '}')
+            return (int64_t)k + 1;
+        for (;;) {
+            tml_seg  segs[TML_SEGS];
+            uint32_t count;
+            k = tml_gap(s, n, k, false);
+            if (tml_keys(s, n, &k, segs, &count) < 0)
+                return TCK_BAD;
+            k = tml_gap(s, n, k, false);
+            if (k >= n || s[k] != '=')
+                return TCK_BAD;
+            k = tml_gap(s, n, k + 1, false);
+            const int64_t e = tck_assign(c, node, segs, count, k, depth + 1);
+            if (e < 0)
+                return e;
+            k = tml_gap(s, n, (uint32_t)e, false);
+            if (k < n && s[k] == ',') {
+                ++k;
+                continue;
+            }
+            if (k >= n || s[k] != '}')
+                return TCK_BAD;
+            return (int64_t)k + 1;
+        }
+    }
+    int64_t e;
+    int     kind = 0;
+    if (s[at] == '"' || s[at] == '\'') {
+        bool multi;
+        e = tml_string(s, n, at, &multi);
+    } else {
+        uint32_t end = 0;
+        kind = tml_token(s, n, at, &end);
+        e = kind < 0 ? -1 : (int64_t)end;
+    }
+    if (e < 0 || !tck_scalar(kind, s + at, (uint32_t)e - at))
+        return TCK_BAD;
+    return e;
+}
+
+// key parts `segs` set down from `table`, then the value at `vat`: the end of the value. The parts before the last
+// are tables made by the dotted key (new, or made so before); the last must be new.
+static int64_t tck_assign(tck *c, uint32_t table, const tml_seg *segs, uint32_t nsegs, uint32_t vat, uint32_t depth) {
+    uint32_t parent = table;
+    for (uint32_t i = 0; i < nsegs; ++i) {
+        const uint8_t esc = tck_esc(c->s, segs[i]);
+        uint32_t      h;
+        const int64_t f = tck_step(c, parent, segs[i], esc, &h);
+        if (f == -1)
+            return TCK_FULL;
+        if (f == -2)
+            return TCK_BAD;
+        const bool last = i + 1 == nsegs;
+        if (!last) {
+            uint32_t m = (uint32_t)f;
+            if (!m) {
+                m = tck_make(c, parent, h, segs[i], esc, TCK_DOT, true);
+                if (!m)
+                    return TCK_FULL;
+            } else if (c->nodes[m].type != TCK_DOT) {
+                return TCK_BAD;
+            }
+            parent = m;
+            continue;
+        }
+        if (f)
+            return TCK_BAD; // a second definition
+        const bool inline_table = vat < c->n && c->s[vat] == '{';
+        const uint32_t m = tck_make(c, parent, h, segs[i], esc, inline_table ? TCK_INLINE : TCK_VALUE, true);
+        if (!m)
+            return TCK_FULL;
+        return tck_value(c, m, vat, depth);
+    }
+    return TCK_BAD;
+}
+
+// A header: the table it opens, 0 for the root, TCK_BAD, TCK_FULL.
+static int64_t tck_header(tck *c, const tml_seg *segs, uint32_t nsegs, bool dbl) {
+    uint32_t parent = 0;
+    for (uint32_t i = 0; i < nsegs; ++i) {
+        const uint8_t esc = tck_esc(c->s, segs[i]);
+        uint32_t      h;
+        const int64_t f = tck_step(c, parent, segs[i], esc, &h);
+        if (f == -1)
+            return TCK_FULL;
+        if (f == -2)
+            return TCK_BAD;
+        uint32_t m = (uint32_t)f;
+        if (i + 1 < nsegs) {
+            if (!m) {
+                m = tck_make(c, parent, h, segs[i], esc, TCK_IMPL, true);
+                if (!m)
+                    return TCK_FULL;
+            } else if (c->nodes[m].type == TCK_VALUE || c->nodes[m].type == TCK_INLINE) {
+                return TCK_BAD;
+            }
+            parent = tck_table(c, m);
+            continue;
+        }
+        if (dbl) {
+            if (!m) {
+                m = tck_make(c, parent, h, segs[i], esc, TCK_ARRT, true);
+                if (!m)
+                    return TCK_FULL;
+            } else if (c->nodes[m].type != TCK_ARRT) {
+                return TCK_BAD;
+            }
+            const uint32_t el = tck_make(c, m, ++c->nodes[m].nel, (tml_seg){0, 0}, 0, TCK_HDR, false);
+            if (!el)
+                return TCK_FULL;
+            c->nodes[m].cur = el;
+            return el;
+        }
+        if (!m) {
+            m = tck_make(c, parent, h, segs[i], esc, TCK_HDR, true);
+            if (!m)
+                return TCK_FULL;
+        } else if (c->nodes[m].type == TCK_IMPL) {
+            c->nodes[m].type = TCK_HDR;
+        } else {
+            return TCK_BAD;
+        }
+        return m;
+    }
+    return TCK_BAD;
+}
+
+// Memory the check wants for a text of n bytes: at most one node for every byte, and its bucket.
+size_t pnx_toml_check_room(uint32_t n) { return ((size_t)n + 16) * (sizeof(tck_node) + 8) + 16; }
+
+static bool tck_init(tck *c, const uint8_t *s, uint32_t n, uint8_t *mem, size_t memlen) {
+    const uintptr_t pad = (8 - ((uintptr_t)mem & 7)) & 7;
+    if (memlen < pad + 4 * sizeof(tck_node))
+        return false;
+    mem += pad;
+    memlen -= pad;
+    const uint32_t m = (uint32_t)(memlen / (sizeof(tck_node) + 8));
+    uint32_t buckets = 1;
+    while (buckets * 2 <= m && buckets < (1u << 24))
+        buckets *= 2;
+    const size_t tail = (memlen - (size_t)buckets * 4) & ~(size_t)7; // where the buckets begin
+    *c = (tck){(tck_node *)mem, (uint32_t *)(mem + tail), 1, (uint32_t)(tail / sizeof(tck_node)), buckets - 1, s, n};
+    __builtin_memset(c->bucket, 0, (size_t)buckets * 4);
+    c->nodes[0] = (tck_node){0, 0, 0, 0, 0, 0, 0, 0, TCK_HDR, 0}; // the root
+    return true;
+}
+
+// Every statement of the text against the rules: 0, 1 it breaks one, 2 the loan is used up.
+static int tck_run(tck *c) {
+    uint32_t cur = 0, at = 0;
+    tml_stmt st;
+    for (;;) {
+        const int r = tml_next(c->s, c->n, at, &st);
+        if (r < 0)
+            return 1;
+        if (r == 0)
+            return 0;
+        at = st.past;
+        int64_t e;
+        if (st.kind == PNX_TOML_TABLE || st.kind == PNX_TOML_TABLES) {
+            e = tck_header(c, st.segs, st.nsegs, st.kind == PNX_TOML_TABLES);
+            if (e >= 0)
+                cur = (uint32_t)e;
+        } else {
+            e = tck_assign(c, cur, st.segs, st.nsegs, st.val_off, 0);
+        }
+        if (e == TCK_BAD)
+            return 1;
+        if (e == TCK_FULL)
+            return 2;
+        c->nodes[cur].sect = st.past;
+    }
+}
+
+// 0: the document keeps every rule; 1: it does not; 2: `mem` is too small to say.
+int pnx_toml_check(const uint8_t *s, uint32_t n, uint8_t *mem, size_t memlen) {
+    tck c;
+    if (!tck_init(&c, s, n, mem, memlen))
+        return 2;
+    return tck_run(&c);
+}
+
+// ---- writing: toml.set and toml.remove ------------------------------------------------------------------------
+//
+// The document is copied with one change; every other byte, comments and layout included, stays. A value is written
+// on one line: a string quoted and escaped, an int, float, bool or date as the text the program gives (it must be
+// one), an array of one line. The result must keep the rules of toml.check, and is not given otherwise.
+
+typedef struct {
+    uint8_t *out;
+    uint64_t cap, len;
+} tml_w;
+
+static void tw_put(tml_w *w, const uint8_t *p, uint64_t n) {
+    if (w->out && w->len + n <= w->cap && n)
+        __builtin_memcpy(w->out + w->len, p, n);
+    w->len += n;
+}
+static void tw_str(tml_w *w, const char *z) { tw_put(w, (const uint8_t *)z, __builtin_strlen(z)); }
+
+// UTF-8 of one code point at p (n bytes left): its length, 0 when it is not well formed.
+static uint32_t tml_utf8(const uint8_t *p, uint32_t n) {
+    if (p[0] < 0x80)
+        return 1;
+    uint32_t len, cp;
+    if (p[0] >= 0xC2 && p[0] <= 0xDF) {
+        len = 2;
+        cp = p[0] & 0x1F;
+    } else if ((p[0] & 0xF0) == 0xE0) {
+        len = 3;
+        cp = p[0] & 0x0F;
+    } else if (p[0] >= 0xF0 && p[0] <= 0xF4) {
+        len = 4;
+        cp = p[0] & 0x07;
+    } else {
+        return 0;
+    }
+    if (len > n)
+        return 0;
+    for (uint32_t k = 1; k < len; ++k) {
+        if ((p[k] & 0xC0) != 0x80)
+            return 0;
+        cp = cp << 6 | (p[k] & 0x3F);
+    }
+    if ((len == 3 && cp < 0x800) || (len == 4 && (cp < 0x10000 || cp > 0x10FFFF)) || (cp >= 0xD800 && cp <= 0xDFFF))
+        return 0;
+    return len;
+}
+
+// The content of a basic string for the bytes p: escapes where TOML wants them. false: not UTF-8.
+static bool tw_escaped(tml_w *w, const uint8_t *p, uint32_t n) {
+    static const char hex[] = "0123456789ABCDEF";
+    for (uint32_t k = 0; k < n;) {
+        const uint8_t b = p[k];
+        const uint32_t u = tml_utf8(p + k, n - k);
+        if (!u)
+            return false;
+        if (u > 1) {
+            tw_put(w, p + k, u);
+            k += u;
+            continue;
+        }
+        ++k;
+        switch (b) {
+        case '"': tw_str(w, "\\\""); break;
+        case '\\': tw_str(w, "\\\\"); break;
+        case '\b': tw_str(w, "\\b"); break;
+        case '\t': tw_str(w, "\\t"); break;
+        case '\n': tw_str(w, "\\n"); break;
+        case '\f': tw_str(w, "\\f"); break;
+        case '\r': tw_str(w, "\\r"); break;
+        default:
+            if (b < 0x20 || b == 0x7F) {
+                const uint8_t e[6] = {'\\', 'u', '0', '0', (uint8_t)hex[b >> 4], (uint8_t)hex[b & 15]};
+                tw_put(w, e, 6);
+            } else {
+                tw_put(w, &b, 1);
+            }
+        }
+    }
+    return true;
+}
+
+// A value of `kind` as text on one line: false when it is not one.
+static bool tw_value(tml_w *w, int kind, const uint8_t *v, uint32_t vn) {
+    if (kind == PNX_TOML_STRING) {
+        tw_str(w, "\"");
+        if (!tw_escaped(w, v, vn))
+            return false;
+        tw_str(w, "\"");
+        return true;
+    }
+    if (vn == 0)
+        return false;
+    for (uint32_t k = 0; k < vn; ++k)
+        if (v[k] == '\n' || v[k] == '\r')
+            return false;
+    int k2 = 0;
+    if (kind == PNX_TOML_ARRAY) {
+        if (v[0] != '[')
+            return false;
+        const int64_t e = tml_value(v, vn, 0, 0, &k2);
+        if (e != (int64_t)vn || k2 != PNX_TOML_ARRAY)
+            return false;
+    } else if (kind == PNX_TOML_INT || kind == PNX_TOML_FLOAT || kind == PNX_TOML_BOOL || kind == PNX_TOML_DATETIME) {
+        uint32_t end = 0;
+        const int t = tml_token(v, vn, 0, &end);
+        if (t != kind || end != vn || !tck_scalar(kind, v, vn))
+            return false;
+    } else {
+        return false;
+    }
+    tw_put(w, v, vn);
+    return true;
+}
+
+// A key part: bare when it can be, else quoted.
+static bool tw_key(tml_w *w, const uint8_t *p, uint32_t n) {
+    bool bare = n > 0;
+    for (uint32_t k = 0; k < n; ++k)
+        bare = bare && tml_bare(p[k]);
+    if (bare) {
+        tw_put(w, p, n);
+        return true;
+    }
+    tw_str(w, "\"");
+    if (!tw_escaped(w, p, n))
+        return false;
+    tw_str(w, "\"");
+    return true;
+}
+
+static bool tw_keys(tml_w *w, const tml_step *t, uint32_t from, uint32_t to) {
+    for (uint32_t i = from; i < to; ++i) {
+        if (i > from)
+            tw_str(w, ".");
+        if (!tw_key(w, t[i].key, t[i].key_len))
+            return false;
+    }
+    return true;
+}
+
+// The result of a writer: 0, 1 format, 2 full, 3 not found.
+enum { TW_OK = 0, TW_FORMAT, TW_FULL, TW_NONE };
+
+static int tw_finish(tml_w *w, uint32_t *outlen, uint8_t *mem, size_t memlen) {
+    if (w->len > w->cap)
+        return TW_FULL;
+    const int r = pnx_toml_check(w->out, (uint32_t)w->len, mem, memlen);
+    if (r)
+        return r == 1 ? TW_FORMAT : TW_FULL;
+    *outlen = (uint32_t)w->len;
+    return TW_OK;
+}
+
+// Memory toml.set and toml.remove want for a text of n bytes that grows by at most `extra`.
+size_t pnx_toml_write_room(uint32_t n, uint32_t extra) { return pnx_toml_check_room(n + extra); }
+
+int pnx_toml_set(const uint8_t *s, uint32_t n, const uint8_t *path, uint32_t pn, int kind, const uint8_t *val, uint32_t vn,
+                 uint8_t *out, uint64_t cap, uint32_t *outlen, uint8_t *mem, size_t memlen) {
+    tml_w probe = {NULL, 0, 0};
+    if (!tw_value(&probe, kind, val, vn))
+        return TW_FORMAT;
+    tml_step steps[TML_STEPS];
+    const int ns = tml_path(path, pn, steps);
+    if (ns <= 0)
+        return TW_FORMAT;
+    int      fk = 0;
+    uint32_t fo = 0, fl = 0;
+    const int found = pnx_toml_at(s, n, path, pn, &fk, &fo, &fl);
+    if (found < 0 || (found == 1 && fk == PNX_TOML_TABLE))
+        return TW_FORMAT;
+    tml_w w = {out, cap, 0};
+    if (found == 1) { // a value that is there: replaced
+        tw_put(&w, s, fo);
+        tw_value(&w, kind, val, vn);
+        tw_put(&w, s + fo + fl, n - fo - fl);
+        return tw_finish(&w, outlen, mem, memlen);
+    }
+    tck c;
+    if (!tck_init(&c, s, n, mem, memlen))
+        return TW_FULL;
+    const int rr = tck_run(&c);
+    if (rr)
+        return rr == 1 ? TW_FORMAT : TW_FULL;
+    uint32_t parent = 0, used = 0, own = 0, ownnode = 0;
+    int      i = 0;
+    for (; i < ns; ++i) {
+        if (!steps[i].key)
+            return TW_NONE; // an index of something that is not there
+        const uint32_t h = tck_hash(parent, steps[i].key, steps[i].key_len);
+        uint32_t       m = tck_find(&c, parent, h, steps[i].key, steps[i].key_len);
+        if (!m)
+            break;
+        const uint8_t ty = c.nodes[m].type;
+        if (ty == TCK_VALUE || ty == TCK_INLINE)
+            return TW_FORMAT; // nothing can be added to a value
+        used = (uint32_t)i + 1;
+        if (ty == TCK_ARRT) {
+            if (i + 1 >= ns || steps[i + 1].key)
+                return TW_NONE;
+            uint32_t el = 0;
+            for (uint32_t k = 1; k < c.count && !el; ++k)
+                if (c.nodes[k].parent == m && c.nodes[k].hash == steps[i + 1].index + 1u && c.nodes[k].type == TCK_HDR)
+                    el = k;
+            if (!el)
+                return TW_NONE;
+            ++i;
+            used = (uint32_t)i + 1;
+            m = el;
+            own = used;
+            ownnode = m;
+        } else if (ty == TCK_HDR) {
+            own = used;
+            ownnode = m;
+        }
+        parent = m;
+    }
+    for (int k = i; k < ns; ++k)
+        if (!steps[k].key)
+            return TW_NONE;
+    if (i >= ns)
+        return TW_FORMAT; // it is there after all, as something that is not a value
+    const uint8_t pty = c.nodes[parent].type;
+    if (parent == 0 || pty == TCK_HDR) {
+        own = used;
+        ownnode = parent;
+    }
+    if (pty == TCK_HDR || parent == 0 || pty == TCK_DOT) {
+        // the key goes at the end of the statements of the table that owns the place, dotted from there
+        const uint32_t at = c.nodes[ownnode].sect;
+        tw_put(&w, s, at);
+        if (at > 0 && s[at - 1] != '\n')
+            tw_str(&w, "\n");
+        if (!tw_keys(&w, steps, own, (uint32_t)ns))
+            return TW_FORMAT;
+        tw_str(&w, " = ");
+        tw_value(&w, kind, val, vn);
+        tw_str(&w, "\n");
+        tw_put(&w, s + at, n - at);
+        return tw_finish(&w, outlen, mem, memlen);
+    }
+    // an implicit table (made only by the headers of tables below it) has no section: a header of its own at the end
+    for (uint32_t k = 0; k < used; ++k)
+        if (!steps[k].key)
+            return TW_FORMAT;
+    tw_put(&w, s, n);
+    if (n > 0) {
+        if (s[n - 1] != '\n')
+            tw_str(&w, "\n");
+        tw_str(&w, "\n");
+    }
+    tw_str(&w, "[");
+    if (!tw_keys(&w, steps, 0, used))
+        return TW_FORMAT;
+    tw_str(&w, "]\n");
+    if (!tw_keys(&w, steps, used, (uint32_t)ns))
+        return TW_FORMAT;
+    tw_str(&w, " = ");
+    tw_value(&w, kind, val, vn);
+    tw_str(&w, "\n");
+    return tw_finish(&w, outlen, mem, memlen);
+}
+
+int pnx_toml_remove(const uint8_t *s, uint32_t n, const uint8_t *path, uint32_t pn, uint8_t *out, uint64_t cap, uint32_t *outlen,
+                    uint8_t *mem, size_t memlen) {
+    int      fk = 0;
+    uint32_t fo = 0, fl = 0;
+    const int found = pnx_toml_at(s, n, path, pn, &fk, &fo, &fl);
+    if (found < 0)
+        return TW_FORMAT;
+    if (found == 0)
+        return TW_NONE;
+    if (fk == PNX_TOML_TABLE)
+        return TW_FORMAT;
+    uint32_t at = 0;
+    tml_stmt st;
+    for (;;) {
+        const int r = tml_next(s, n, at, &st);
+        if (r < 0)
+            return TW_FORMAT;
+        if (r == 0)
+            return TW_FORMAT; // the value is inside another one (an element of an array or an inline table)
+        if (st.kind != PNX_TOML_TABLE && st.kind != PNX_TOML_TABLES && st.val_off == fo && st.val_len == fl)
+            break;
+        at = st.past;
+    }
+    uint32_t from = st.key_off;
+    while (from > 0 && s[from - 1] != '\n')
+        --from;
+    tml_w w = {out, cap, 0};
+    tw_put(&w, s, from);
+    tw_put(&w, s + st.past, n - st.past);
+    return tw_finish(&w, outlen, mem, memlen);
+}

@@ -1290,6 +1290,7 @@ PNX_INLINE int pnx_sheet_exec(pinax_state *st, int64_t *R, pnx_scell *S, uint32_
     case PNX_SHW_COMPACT: e = pnx_sheet_compact(b, cap); st->charge += cap / 64; break;
     case PNX_SHW_PUT_INT: e = pnx_sheet_put_int(b, cap, r[0], r[1], r[2]); break;
     case PNX_SHW_PUT_BOOL: e = pnx_sheet_put_bool(b, cap, r[0], r[1], r[2]); break;
+    case PNX_SHW_PUT_DATE: e = pnx_sheet_put_date(b, cap, r[0], r[1], r[2]); break;
     case PNX_SHW_PUT_DEC: e = pnx_sheet_put_dec(b, cap, r[0], (uint32_t)r[3], r[1], r[2]); break;
     case PNX_SHW_PUT_STR: e = pnx_sheet_put_str(b, cap, sb, sn, r[0], r[1]); break;
     case PNX_SHW_CLEAR_CELL: e = pnx_sheet_clear_cell(b, cap, r[0], r[1]); break;
@@ -1298,6 +1299,7 @@ PNX_INLINE int pnx_sheet_exec(pinax_state *st, int64_t *R, pnx_scell *S, uint32_
     case PNX_SHW_IS_EMPTY: e = pnx_sheet_kind(b, cap, r[0], r[1], &out); r[0] = out == 0; break;
     case PNX_SHW_GET_INT: e = pnx_sheet_get_int(b, cap, r[0], r[1], &out); r[0] = out; break;
     case PNX_SHW_GET_BOOL: e = pnx_sheet_get_bool(b, cap, r[0], r[1], &out); r[0] = out; break;
+    case PNX_SHW_GET_DATE: e = pnx_sheet_get_date(b, cap, r[0], r[1], &out); r[0] = out; break;
     case PNX_SHW_GET_DEC:
         e = r[2] < 0 || r[2] > 18 ? PNX_SH_RANGE : pnx_sheet_get_dec(b, cap, r[0], r[1], (uint32_t)r[2], &out);
         r[0] = out;
@@ -1447,6 +1449,21 @@ PNX_INLINE int pnx_text_exec(pinax_state *st, int64_t *R, pnx_scell *S, uint32_t
         s[0] = value;
         return PNX_R_OK;
     }
+    case PNX_TXW_TOML_CHECK: {
+        const uint32_t before = st->region_used;
+        size_t         want = pnx_toml_check_room(tn);
+        const size_t   room = st->region_len - st->region_used;
+        if (want > room)
+            want = room;
+        uint8_t *mem = want ? pnx_region_alloc(st, want) : NULL;
+        rc = mem ? pnx_toml_check(tb, tn, mem, want) : 2;
+        pnx_region_give_back(st, before);
+        if (rc != 0) {
+            st->fail = rc == 1 ? PINAX_ERR_FORMAT : PINAX_ERR_FULL;
+            return PNX_R_FAILED;
+        }
+        return PNX_R_OK;
+    }
     case PNX_TXW_TOML_AT:
         st->charge += first.length;
         rc = pnx_toml_at(tb, tn, pnx_view_bytes(st, first), first.length, &kind, &a, &b);
@@ -1501,6 +1518,31 @@ PNX_INLINE int pnx_text_exec(pinax_state *st, int64_t *R, pnx_scell *S, uint32_t
             return PINAX_ERR_RANGE;
         res = pnx_json_pretty(tb, tn, (uint32_t)r[0], out, room);
         break;
+    case PNX_TXW_TOML_SET:
+    case PNX_TXW_TOML_REMOVE: {
+        const bool     set = OP_C(w) == PNX_TXW_TOML_SET;
+        const uint32_t vlen = set ? s[2].length : 0;
+        st->charge += first.length + vlen;
+        const uint32_t before = st->region_used;
+        size_t         want = pnx_toml_write_room(tn, (vlen + first.length) * 6u + 64u);
+        if (want > st->region_len - st->region_used)
+            want = st->region_len - st->region_used;
+        uint8_t *mem = want ? pnx_region_alloc(st, want) : NULL;
+        uint32_t wrote = 0;
+        int      rc2 = 2;
+        if (mem) {
+            const uint8_t *pb = pnx_view_bytes(st, first);
+            rc2 = set ? pnx_toml_set(tb, tn, pb, first.length, (int)r[0], pnx_view_bytes(st, s[2]), vlen, out, room, &wrote, mem, want)
+                      : pnx_toml_remove(tb, tn, pb, first.length, out, room, &wrote, mem, want);
+        }
+        pnx_region_give_back(st, before);
+        if (rc2 == 3) {
+            st->fail = PINAX_ERR_NOT_FOUND;
+            return PNX_R_FAILED;
+        }
+        res = rc2 == 0 ? wrote : rc2 == 2 ? PNX_TXT_FULL : PNX_TXT_BAD;
+        break;
+    }
     case PNX_TXW_MD_HTML: res = pnx_md_html(tb, tn, out, room); break;
     case PNX_TXW_MD_INLINE: res = pnx_md_inline(tb, tn, out, room); break;
     default: return PINAX_ERR_STATE;

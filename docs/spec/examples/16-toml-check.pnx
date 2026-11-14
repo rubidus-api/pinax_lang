@@ -1,0 +1,12 @@
+use io
+use toml
+word judge (doc str)
+  doc toml.check or_else (e) cat ("refused: ", e err_text) io.println return end
+  "accepted" io.println
+end
+word main (or fail)
+  "a = 1\n[t]\nb = 2\n" judge
+  "a = 1\na = 2\n" judge                 rem a key twice
+  "d = 2023-02-29\n" judge               rem a date that does not exist
+end
+main or_else (e) e err_text io.println end

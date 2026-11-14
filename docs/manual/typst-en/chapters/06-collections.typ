@@ -126,7 +126,7 @@ answer without scanning, and the answers are the same. A write costs a little mo
 #ex("manual", "06-sheet-book.pnx")
 
 Spreadsheets and CSV files come in and go out through two buffers: the file, then the book. `load_csv` and `load_xlsx` add the file's rows
-to the current sheet (`mode` 0 turns numbers into numbers, and in an xlsx a date into Unix seconds; mode 1 keeps the text, or the serial number),
+to the current sheet (`mode` 0 turns numbers into numbers, and in an xlsx a date into Unix seconds; mode 1 keeps the text, or the serial number; mode 2 is mode 0 with a date kind, `put_date` and `date`, for the dates of an xlsx and for CSV fields such as `2024-02-29` or `2024-02-29T08:30:00`, and a date is written back as a date),
 and `save_csv` and `save_xlsx` write the sheet into a buffer, which the program then writes to a file. The words give the number of rows
 or bytes. They have no power over files, because the program moves the bytes itself (`file.read_all_into`, `file.write`), and nothing is
 allocated: an xlsx is read in the spare room after the file's bytes in its buffer, so declare that buffer larger than the file.

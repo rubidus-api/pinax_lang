@@ -73,7 +73,7 @@ all, and `json.minify` and `json.pretty` write it into a buffer without its blan
 
 TOML, the format of settings files, is read the same way by the module `toml`: `toml.at` with a path (`server.ports[1]`, `backend[1].url`
 for the second `[[backend]]`), or `toml.next` for every statement in order, headers included. A value is given as written: a string without its
-quotes (and with its escapes decoded), a number as its text. The module reads; it does not write TOML.
+quotes (and with its escapes decoded), a number as its text. `toml.check` judges a whole file before the program trusts it: a key given twice, a table opened twice, an integer that does not fit 64 bits or a date that does not exist is `err.format`. `toml.set` changes one value by its path (or adds the key at the end of its table) and `toml.remove` drops a key, each into a buffer, and everything else in the file, comments included, stays as it was.
 
 #ex("manual", "11-toml-config.pnx")
 

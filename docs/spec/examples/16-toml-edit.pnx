@@ -1,0 +1,20 @@
+use io
+use toml
+buffer out 512
+word main (or fail)
+  text END
+title = "Pinax"   # the name
+[server]
+ports = [8080, 8081]   # where
+END
+  to conf
+  "server.mode" conf "dev" toml.string out toml.set or_fail     rem a new key, at the end of its table
+  out contents io.println
+  out clear
+  "server.ports[0]" conf "9090" toml.int out toml.set or_fail   rem a value replaced, the comment kept
+  out contents io.println
+  out clear
+  "title" conf out toml.remove or_fail                          rem a key with its line
+  out contents io.println
+end
+main or_else (e) e err_text io.println end

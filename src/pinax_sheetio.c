@@ -29,6 +29,91 @@ static bool sio_push_digit(uint64_t *v, uint8_t d) {
     return true;
 }
 
+// Days since 1970-01-01 of a civil date (the proleptic Gregorian calendar), and back (RFC-0048).
+static int64_t sio_days_from_civil(int64_t y, unsigned m, unsigned d) {
+    y -= m <= 2;
+    const int64_t  era = (y >= 0 ? y : y - 399) / 400;
+    const unsigned yoe = (unsigned)(y - era * 400);
+    const unsigned doy = (153 * (m > 2 ? m - 3 : m + 9) + 2) / 5 + d - 1;
+    const unsigned doe = yoe * 365 + yoe / 4 - yoe / 100 + doy;
+    return era * 146097 + (int64_t)doe - 719468;
+}
+static void sio_civil_from_days(int64_t z, int64_t *y, unsigned *m, unsigned *d) {
+    z += 719468;
+    const int64_t  era = (z >= 0 ? z : z - 146096) / 146097;
+    const unsigned doe = (unsigned)(z - era * 146097);
+    const unsigned yoe = (doe - doe / 1460 + doe / 36524 - doe / 146096) / 365;
+    const unsigned doy = doe - (365 * yoe + yoe / 4 - yoe / 100);
+    const unsigned mp = (5 * doy + 2) / 153;
+    *d = doy - (153 * mp + 2) / 5 + 1;
+    *m = mp < 10 ? mp + 3 : mp - 9;
+    *y = (int64_t)yoe + era * 400 + (*m <= 2);
+}
+static bool sio_two(const uint8_t *s, uint32_t at, unsigned lo, unsigned hi, unsigned *v) {
+    if (!sio_is_digit(s[at]) || !sio_is_digit(s[at + 1]))
+        return false;
+    *v = (unsigned)(s[at] - '0') * 10u + (unsigned)(s[at + 1] - '0');
+    return *v >= lo && *v <= hi;
+}
+// `YYYY-MM-DD`, or with `T` or a blank and `hh:mm:ss`, and perhaps a `Z`: Unix seconds, UTC. False when the field is not one.
+static bool sio_csv_date(const uint8_t *s, uint32_t n, int64_t *secs) {
+    if (n != 10 && n != 19 && n != 20)
+        return false;
+    unsigned mo, d, h = 0, mi = 0, se = 0, a, b;
+    if (!sio_two(s, 0, 0, 99, &a) || !sio_two(s, 2, 0, 99, &b) || s[4] != '-' || !sio_two(s, 5, 1, 12, &mo) || s[7] != '-' ||
+        !sio_two(s, 8, 1, 31, &d))
+        return false;
+    const int64_t y = a * 100 + b;
+    static const uint8_t days[12] = {31, 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31};
+    const bool leap = (y % 4 == 0 && y % 100 != 0) || y % 400 == 0;
+    if (d > days[mo - 1] + (mo == 2 && leap ? 1u : 0u))
+        return false;
+    if (n > 10) {
+        if ((s[10] != 'T' && s[10] != ' ') || s[13] != ':' || s[16] != ':' || !sio_two(s, 11, 0, 23, &h) || !sio_two(s, 14, 0, 59, &mi) ||
+            !sio_two(s, 17, 0, 59, &se) || (n == 20 && s[19] != 'Z'))
+            return false;
+    }
+    *secs = sio_days_from_civil(y, mo, d) * 86400 + h * 3600 + mi * 60 + se;
+    return true;
+}
+// The text of a date for save_csv: `YYYY-MM-DD`, with `Thh:mm:ss` when it is not midnight. 0 when the year is not 0 to 9999.
+static uint32_t sio_out_date(uint8_t *out, int64_t secs) {
+    int64_t        days = secs / 86400, rem = secs % 86400;
+    if (rem < 0) {
+        rem += 86400;
+        --days;
+    }
+    int64_t  y;
+    unsigned m, d;
+    sio_civil_from_days(days, &y, &m, &d);
+    if (y < 0 || y > 9999)
+        return 0;
+    uint32_t k = 0;
+    out[k++] = (uint8_t)('0' + y / 1000 % 10);
+    out[k++] = (uint8_t)('0' + y / 100 % 10);
+    out[k++] = (uint8_t)('0' + y / 10 % 10);
+    out[k++] = (uint8_t)('0' + y % 10);
+    out[k++] = '-';
+    out[k++] = (uint8_t)('0' + m / 10);
+    out[k++] = (uint8_t)('0' + m % 10);
+    out[k++] = '-';
+    out[k++] = (uint8_t)('0' + d / 10);
+    out[k++] = (uint8_t)('0' + d % 10);
+    if (rem) {
+        const unsigned h = (unsigned)(rem / 3600), mi = (unsigned)(rem / 60 % 60), se = (unsigned)(rem % 60);
+        out[k++] = 'T';
+        out[k++] = (uint8_t)('0' + h / 10);
+        out[k++] = (uint8_t)('0' + h % 10);
+        out[k++] = ':';
+        out[k++] = (uint8_t)('0' + mi / 10);
+        out[k++] = (uint8_t)('0' + mi % 10);
+        out[k++] = ':';
+        out[k++] = (uint8_t)('0' + se / 10);
+        out[k++] = (uint8_t)('0' + se % 10);
+    }
+    return k;
+}
+
 // The CSV rule: a canonical integer, or a canonical integer with 1 to 18 digits after the point.
 static sio_number sio_csv_number(const uint8_t *s, uint32_t n) {
     sio_number   r = {0, 0, 0};
@@ -219,7 +304,7 @@ static pnx_sheet_result sio_need_row(sio_sink_t *k, uint64_t row) {
 // ---- CSV in ----------------------------------------------------------------------------------
 
 pnx_sheet_result pnx_sheet_load_csv(uint8_t *b, uint32_t cap, uint8_t *src, uint64_t n, int mode, int64_t *added, uint64_t *charge) {
-    if (mode != 0 && mode != 1)
+    if (mode < 0 || mode > 2)
         return PNX_SH_RANGE;
     sio_sink_t k = {b, cap, pnx_sheet_rows(b, cap), 0, 0, 0};
     uint64_t cols_now = pnx_sheet_cols(b, cap);
@@ -291,9 +376,12 @@ pnx_sheet_result pnx_sheet_load_csv(uint8_t *b, uint32_t cap, uint8_t *src, uint
             }
             if (flen > 0 || quoted) {
                 sio_number num = {0, 0, 0};
-                if (mode == 0)
+                int64_t    when;
+                if (mode != 1)
                     num = sio_csv_number(field, flen);
-                if (num.kind)
+                if (mode == 2 && !num.kind && sio_csv_date(field, flen, &when))
+                    e = pnx_sheet_put_date(b, cap, when, (int64_t)row, (int64_t)col);
+                else if (num.kind)
                     e = sio_put_number(&k, num, (int64_t)row, (int64_t)col);
                 else if (flen > 0)
                     e = pnx_sheet_put_str(b, cap, field, flen, (int64_t)row, (int64_t)col);
@@ -1219,10 +1307,11 @@ static void sio_xlsx_close(sio_xml *x, const uint8_t *name, uint32_t nl) {
                     break;
                 default: {
                     const sio_number num = sio_xlsx_number(t, n);
-                    if (a->mode == 0 && num.kind && sio_style_is_date(a, a->cstyle)) {
+                    if (a->mode != 1 && num.kind && sio_style_is_date(a, a->cstyle)) {
                         int64_t secs;
                         if (sio_serial_to_unix(a, num, &secs)) {
-                            e = pnx_sheet_put_int(a->sink.b, a->sink.cap, secs, row, a->col);
+                            e = a->mode == 2 ? pnx_sheet_put_date(a->sink.b, a->sink.cap, secs, row, a->col)
+                                             : pnx_sheet_put_int(a->sink.b, a->sink.cap, secs, row, a->col);
                             break;
                         }
                     }
@@ -1269,7 +1358,7 @@ static int sio_xlsx_part(sio_xrun *r, const sio_zip_t *zip, const char *name, in
 
 pnx_sheet_result pnx_sheet_load_xlsx(uint8_t *b, uint32_t cap, uint8_t *src, uint64_t n, uint64_t srccap, int mode, int64_t sheet,
                                      int64_t *added, uint64_t *charge) {
-    if (mode != 0 && mode != 1)
+    if (mode < 0 || mode > 2)
         return PNX_SH_RANGE;
     if (sheet < 0)
         return PNX_SH_NONE;
@@ -1465,6 +1554,11 @@ pnx_sheet_result pnx_sheet_save_csv(uint8_t *b, uint32_t cap, uint8_t *dst, uint
                 uint32_t scale;
                 if (sio_dec_scale_of(b, cap, r, c, &v, &scale))
                     sio_out_bytes(&o, num, sio_out_dec(num, v, scale));
+            } else if (kind == 5) {
+                if (pnx_sheet_get_date(b, cap, r, c, &v) == PNX_SH_OK) {
+                    const uint32_t dn = sio_out_date(num, v);
+                    sio_out_bytes(&o, num, dn ? dn : sio_out_int(num, v)); // outside the years 0 to 9999: the seconds
+                }
             } else if (kind == 4) {
                 uint32_t off, n;
                 if (pnx_sheet_get_str(b, cap, r, c, &off, &n) == PNX_SH_OK) {
@@ -1590,14 +1684,25 @@ pnx_sheet_result pnx_sheet_save_xlsx(uint8_t *b, uint32_t cap, uint8_t *dst, uin
     }
     name[nn] = 0;
 
+    bool has_date = false; // a styles part is written only for a sheet that has a date: the others stay as they were
+    for (uint32_t r = 0; r < rows && !has_date; ++r)
+        for (uint32_t c = 0; c < cols && !has_date; ++c) {
+            int64_t kind = 0;
+            has_date = pnx_sheet_kind(b, cap, r, c, &kind) == PNX_SH_OK && kind == 5;
+        }
+    *charge += (uint64_t)rows * cols;
+
     sio_out_t o = {dst, dstcap, 0, false};
-    sio_zpart z[5];
+    sio_zpart z[6];
     sio_zip_begin(&o, &z[0], "[Content_Types].xml");
     sio_out_str(&o, "<?xml version=\"1.0\" encoding=\"UTF-8\" standalone=\"yes\"?>\n<Types xmlns=\"http://schemas.openxmlformats.org/package/2006/content-types\">"
                 "<Default Extension=\"rels\" ContentType=\"application/vnd.openxmlformats-package.relationships+xml\"/>"
                 "<Default Extension=\"xml\" ContentType=\"application/xml\"/>"
                 "<Override PartName=\"/xl/workbook.xml\" ContentType=\"application/vnd.openxmlformats-officedocument.spreadsheetml.sheet.main+xml\"/>"
-                "<Override PartName=\"/xl/worksheets/sheet1.xml\" ContentType=\"application/vnd.openxmlformats-officedocument.spreadsheetml.worksheet+xml\"/></Types>");
+                "<Override PartName=\"/xl/worksheets/sheet1.xml\" ContentType=\"application/vnd.openxmlformats-officedocument.spreadsheetml.worksheet+xml\"/>");
+    if (has_date)
+        sio_out_str(&o, "<Override PartName=\"/xl/styles.xml\" ContentType=\"application/vnd.openxmlformats-officedocument.spreadsheetml.styles+xml\"/>");
+    sio_out_str(&o, "</Types>");
     sio_zip_end(&o, &z[0]);
     sio_zip_begin(&o, &z[1], "_rels/.rels");
     sio_out_str(&o, "<?xml version=\"1.0\" encoding=\"UTF-8\" standalone=\"yes\"?>\n<Relationships xmlns=\"http://schemas.openxmlformats.org/package/2006/relationships\">"
@@ -1611,9 +1716,27 @@ pnx_sheet_result pnx_sheet_save_xlsx(uint8_t *b, uint32_t cap, uint8_t *dst, uin
     sio_zip_end(&o, &z[2]);
     sio_zip_begin(&o, &z[3], "xl/_rels/workbook.xml.rels");
     sio_out_str(&o, "<?xml version=\"1.0\" encoding=\"UTF-8\" standalone=\"yes\"?>\n<Relationships xmlns=\"http://schemas.openxmlformats.org/package/2006/relationships\">"
-                "<Relationship Id=\"rId1\" Type=\"http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet\" Target=\"worksheets/sheet1.xml\"/></Relationships>");
+                "<Relationship Id=\"rId1\" Type=\"http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet\" Target=\"worksheets/sheet1.xml\"/>");
+    if (has_date)
+        sio_out_str(&o, "<Relationship Id=\"rId2\" Type=\"http://schemas.openxmlformats.org/officeDocument/2006/relationships/styles\" Target=\"styles.xml\"/>");
+    sio_out_str(&o, "</Relationships>");
     sio_zip_end(&o, &z[3]);
-    sio_zip_begin(&o, &z[4], "xl/worksheets/sheet1.xml");
+    int nparts = 5;
+    if (has_date) { // one number format, `yyyy-mm-dd hh:mm:ss`, as the second cell format: s="1"
+        sio_zip_begin(&o, &z[4], "xl/styles.xml");
+        sio_out_str(&o, "<?xml version=\"1.0\" encoding=\"UTF-8\" standalone=\"yes\"?>\n<styleSheet xmlns=\"http://schemas.openxmlformats.org/spreadsheetml/2006/main\">"
+                    "<numFmts count=\"1\"><numFmt numFmtId=\"164\" formatCode=\"yyyy-mm-dd hh:mm:ss\"/></numFmts>"
+                    "<fonts count=\"1\"><font><sz val=\"11\"/><name val=\"Calibri\"/></font></fonts>"
+                    "<fills count=\"2\"><fill><patternFill patternType=\"none\"/></fill><fill><patternFill patternType=\"gray125\"/></fill></fills>"
+                    "<borders count=\"1\"><border><left/><right/><top/><bottom/><diagonal/></border></borders>"
+                    "<cellStyleXfs count=\"1\"><xf numFmtId=\"0\" fontId=\"0\" fillId=\"0\" borderId=\"0\"/></cellStyleXfs>"
+                    "<cellXfs count=\"2\"><xf numFmtId=\"0\" fontId=\"0\" fillId=\"0\" borderId=\"0\" xfId=\"0\"/>"
+                    "<xf numFmtId=\"164\" fontId=\"0\" fillId=\"0\" borderId=\"0\" xfId=\"0\" applyNumberFormat=\"1\"/></cellXfs></styleSheet>");
+        sio_zip_end(&o, &z[4]);
+        nparts = 6;
+    }
+    sio_zpart *const sheet_part = &z[nparts - 1];
+    sio_zip_begin(&o, sheet_part, "xl/worksheets/sheet1.xml");
     sio_out_str(&o, "<?xml version=\"1.0\" encoding=\"UTF-8\" standalone=\"yes\"?>\n<worksheet xmlns=\"http://schemas.openxmlformats.org/spreadsheetml/2006/main\"><sheetData>");
     for (uint32_t r = 0; r < rows && !o.full; ++r) {
         bool open = false;
@@ -1641,6 +1764,27 @@ pnx_sheet_result pnx_sheet_save_xlsx(uint8_t *b, uint32_t cap, uint8_t *dst, uin
                 sio_out_str(&o, "</v></c>");
             } else if (kind == 2 && pnx_sheet_get_bool(b, cap, r, c, &v) == PNX_SH_OK) {
                 sio_out_str(&o, v ? "\" t=\"b\"><v>1</v></c>" : "\" t=\"b\"><v>0</v></c>");
+            } else if (kind == 5 && pnx_sheet_get_date(b, cap, r, c, &v) == PNX_SH_OK) {
+                int64_t days = v / 86400, rem = v % 86400;
+                if (rem < 0) {
+                    rem += 86400;
+                    --days;
+                }
+                if (days + 25569 >= 61 && days + 25569 < 2958466) { // the 1900 date system (day 61 is 1900-03-01): a date cell
+                    const int64_t frac = (rem * 1000000000 + 43200) / 86400;
+                    sio_out_str(&o, "\" s=\"1\"><v>");
+                    sio_out_bytes(&o, num, sio_out_int(num, days + 25569));
+                    if (rem) {
+                        sio_out_str(&o, ".");
+                        for (int64_t d = 100000000; d >= 1; d /= 10)
+                            sio_out_bytes(&o, (uint8_t[]){(uint8_t)('0' + frac / d % 10)}, 1);
+                    }
+                    sio_out_str(&o, "</v></c>");
+                } else { // too early or too late for the format: the seconds as a number
+                    sio_out_str(&o, "\"><v>");
+                    sio_out_bytes(&o, num, sio_out_int(num, v));
+                    sio_out_str(&o, "</v></c>");
+                }
             } else if (kind == 3) {
                 uint32_t scale = 0;
                 v = 0;
@@ -1661,10 +1805,10 @@ pnx_sheet_result pnx_sheet_save_xlsx(uint8_t *b, uint32_t cap, uint8_t *dst, uin
             sio_out_str(&o, "</row>");
     }
     sio_out_str(&o, "</sheetData></worksheet>");
-    sio_zip_end(&o, &z[4]);
+    sio_zip_end(&o, sheet_part);
     // the central directory
     const uint32_t cd = (uint32_t)o.len;
-    for (int k = 0; k < 5; ++k) {
+    for (int k = 0; k < nparts; ++k) {
         sio_out_u32(&o, 0x02014b50u);
         sio_out_u16(&o, 20);
         sio_out_u16(&o, 20);
@@ -1688,8 +1832,8 @@ pnx_sheet_result pnx_sheet_save_xlsx(uint8_t *b, uint32_t cap, uint8_t *dst, uin
     sio_out_u32(&o, 0x06054b50u);
     sio_out_u16(&o, 0);
     sio_out_u16(&o, 0);
-    sio_out_u16(&o, 5);
-    sio_out_u16(&o, 5);
+    sio_out_u16(&o, (uint32_t)nparts);
+    sio_out_u16(&o, (uint32_t)nparts);
     sio_out_u32(&o, cdsize);
     sio_out_u32(&o, cd);
     sio_out_u16(&o, 0);

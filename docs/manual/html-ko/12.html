@@ -146,7 +146,7 @@ kim
 en
 visits is a number: true
 no email: not_found
-</code></pre></div><p>설정 파일의 형식인 TOML 은 모듈 <code>toml</code> 이 같은 방식으로 읽는다: 경로를 준 <code>toml.at</code>(<code>server.ports[1]</code>, 둘째 <code>[[backend]]</code> 는 <code>backend[1].url</code>), 또는 머리를 포함해 모든 문장을 차례로 주는 <code>toml.next</code>. 값은 적힌 대로 준다: 문자열은 따옴표를 떼고(이스케이프는 풀어서), 수는 그 글로. 이 모듈은 읽기만 하고 TOML 을 쓰지 않는다.</p><div class="example run"><p class="ex-file"><code>11-toml-config.pnx</code></p><pre><code data-lang="pinax"><span style="color: #d73948">use</span> io
+</code></pre></div><p>설정 파일의 형식인 TOML 은 모듈 <code>toml</code> 이 같은 방식으로 읽는다: 경로를 준 <code>toml.at</code>(<code>server.ports[1]</code>, 둘째 <code>[[backend]]</code> 는 <code>backend[1].url</code>), 또는 머리를 포함해 모든 문장을 차례로 주는 <code>toml.next</code>. 값은 적힌 대로 준다: 문자열은 따옴표를 떼고(이스케이프는 풀어서), 수는 그 글로. <code>toml.check</code> 는 프로그램이 파일을 믿기 전에 문서 전체를 따진다: 두 번 준 키, 두 번 연 표, 64비트에 안 드는 정수, 없는 날짜는 <code>err.format</code> 이다. <code>toml.set</code> 은 경로로 값 하나를 바꾸고(없으면 그 표의 끝에 키를 더하고) <code>toml.remove</code> 는 키를 지운다. 둘 다 결과를 버퍼에 쓰며, 그 밖의 파일 내용은 주석까지 그대로 남는다.</p><div class="example run"><p class="ex-file"><code>11-toml-config.pnx</code></p><pre><code data-lang="pinax"><span style="color: #d73948">use</span> io
 <span style="color: #d73948">use</span> toml
 <span style="color: #d73948">word</span> main (<span style="color: #d73948">or</span> <span style="color: #d73948">fail</span>)
 <span style="color: #198810">  </span><span style="color: #d73948">text</span><span style="color: #198810"> </span><span style="color: #4b69c6">END</span>

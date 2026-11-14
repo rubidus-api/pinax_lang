@@ -1,0 +1,23 @@
+rem run
+use sheet
+use io
+use csv
+buffer book 65536
+buffer blob 262144
+word fill (or fail)
+  "2024-02-29" blob csv.put or_fail "start" blob csv.put or_fail blob csv.end_line or_fail
+  "2023-11-14T22:13:20" blob csv.put or_fail "restart" blob csv.put or_fail blob csv.end_line or_fail
+end
+word main (or fail)
+  1 book sheet.open_book or_fail
+  "log" 10 2 book sheet.create or_fail drop
+  fill or_fail                                       rem in a program the file is read by file.read_all_into
+  2 blob book sheet.load_csv or_fail drop            rem mode 2: a field that is a date becomes a date cell
+  cat ("first cell is a date: ", 0 0 book sheet.kind sheet.k_date eq) io.println
+  cat ("its seconds since 1970: ", 0 0 book sheet.date or_fail) io.println
+  0 book sheet.order_by or_fail                      rem dates are ordered by their seconds
+  cat ("earliest line is ", 0 book sheet.sel_row) io.println
+  blob book sheet.save_csv or_fail drop              rem and are written back as dates
+  blob contents io.print
+end
+main or_else (e) e err_text io.println end
