@@ -75,13 +75,13 @@
 )]
 
 #para("7")[시트는 #term("선택", en: "selection")을 가진다: 줄의 목록이고, 처음엔 모든 줄이다. `where_*` 는 모든 줄에서 다시 시작해, 그 열의 값이 `v` 와
-관계 `op`(`sheet.eq` `ne` `lt` `le` `gt` `ge`)인 줄만 남기고, `narrow_*` 는 지금 선택된 줄 가운데 그런 줄만 남긴다. 종류가
+관계 `rel`(`sheet.eq` `ne` `lt` `le` `gt` `ge`)인 줄만 남기고, `narrow_*` 는 지금 선택된 줄 가운데 그런 줄만 남긴다. 종류가
 다른 칸과 빈 칸은 어떤 관계도 아니다. 낱말마다 시트의 선택에 일하므로 낱말을 늘어놓으면 곧 파이프다. 선택은 버퍼 안의 한 자리이고
 작업책 안에 시트마다 보관된다.
 #table(columns: (auto, auto, 1fr), inset: 5pt, stroke: 0.5pt + luma(170),
   [*Word*], [*Signature*], [*Meaning*],
-  [`where_int` `narrow_int`], [`(col int, op int, v int, b buffer)`], [수로 고르거나 좁힌다],
-  [`where_str` `narrow_str`], [`(col int, op int, v str, b buffer)`], [글로(바이트 순서) 고르거나 좁힌다],
+  [`where_int` `narrow_int`], [`(col int, rel int, v int, b buffer)`], [수로 고르거나 좁힌다],
+  [`where_str` `narrow_str`], [`(col int, rel int, v str, b buffer)`], [글로(바이트 순서) 고르거나 좁힌다],
   [`select_all`], [`(b buffer)`], [모든 줄을 고른다],
   [`sel_len`], [`(b buffer gives int)`], [고른 줄의 수],
   [`sel_row`], [`(k int, b buffer gives int)`], [`k` 번째로 고른 줄의 번호. 범위 밖이면 결함 `range`],

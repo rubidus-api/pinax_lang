@@ -80,13 +80,13 @@ row going across. A text that is in no cell is found to be so at once.
 )]
 
 #para("7")[A sheet keeps a #term("selection"): a list of rows, at first all of them. `where_*` starts again from all the rows and
-keeps those whose column holds a value in the relation `op` with `v` (`sheet.eq` `ne` `lt` `le` `gt` `ge`); `narrow_*` keeps,
+keeps those whose column holds a value in the relation `rel` with `v` (`sheet.eq` `ne` `lt` `le` `gt` `ge`); `narrow_*` keeps,
 of the rows now selected, those that are. Cells of another kind, and empty ones, are never in the relation. Because each
 word works on the selection of the sheet, a line of them is a pipe. The selection is kept in the book, per sheet.
 #table(columns: (auto, auto, 1fr), inset: 5pt, stroke: 0.5pt + luma(170),
   [*Word*], [*Signature*], [*Meaning*],
-  [`where_int` `narrow_int`], [`(col int, op int, v int, b buffer)`], [selects, or narrows, by a number],
-  [`where_str` `narrow_str`], [`(col int, op int, v str, b buffer)`], [selects, or narrows, by a text (byte order)],
+  [`where_int` `narrow_int`], [`(col int, rel int, v int, b buffer)`], [selects, or narrows, by a number],
+  [`where_str` `narrow_str`], [`(col int, rel int, v str, b buffer)`], [selects, or narrows, by a text (byte order)],
   [`select_all`], [`(b buffer)`], [selects every row],
   [`sel_len`], [`(b buffer gives int)`], [how many rows are selected],
   [`sel_row`], [`(k int, b buffer gives int)`], [the row number of the `k`-th selected row; out of range is the fault `range`],
