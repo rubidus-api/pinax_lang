@@ -7684,7 +7684,7 @@ static bool body_token(comp *c) {
         return syntax(c, "this code cannot be reached: the code before it always leaves");
     // a stem is taken at once by its block or by a word like sum
     if (f->depth > f->floor && f->stack[f->depth - 1].type == TY_STEM &&
-        !(t.kind == PNX_T_RESERVED && t.word == PNX_KW_do) &&
+        !(t.kind == PNX_T_RESERVED && (t.word == PNX_KW_do || t.word == PNX_KW_def)) &&
         !(t.kind == PNX_T_NAME && (name_is(tok_name(c), "sum") || name_is(tok_name(c), "minimum") ||
                                    name_is(tok_name(c), "maximum"))) &&
         !(t.kind == PNX_T_PATH && ends_with_word(tok_name(c), "join_into")))
@@ -9459,7 +9459,7 @@ static bool compile(comp *c, image *im, bool *has_top) {
             continue;
         } else if (c->data_only && (is_word(c, PNX_KW_word) || is_word(c, PNX_KW_def) || is_word(c, PNX_KW_test) || is_word(c, PNX_KW_use))) {
             return syntax(c, "a data source defines no words and uses no modules");
-        } else if (is_word(c, PNX_KW_word) || (is_word(c, PNX_KW_def) && c->top_fn->depth == c->top_fn->floor) ||
+        } else if (is_word(c, PNX_KW_word) || (is_word(c, PNX_KW_def) && c->top_fn->depth == (c->eval ? c->eval_sig.n_in : c->top_fn->floor)) ||
                    is_word(c, PNX_KW_test)) { // a def after a value is a block value, not a definition
             if (!definition(c, is_word(c, PNX_KW_test)))
                 return false;
