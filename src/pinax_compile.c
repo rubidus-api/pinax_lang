@@ -403,6 +403,7 @@ typedef struct comp {
     // takes its place (RFC-0006 S11); NONE when the text redefines nothing
     uint32_t     redefine_old, redefine_new;
     bool         redefining; // `redefine` stands before the definition being read
+    bool         new_def;    // the definition being read is `def` (RFC-0049): open signature, body after `do`
     bool         renames;    // the redefinition has another signature: the old word keeps its code and
                              // its callers, under a name that begins with "(" (RFC-0040 part D)
     name         old_name;   // the session word's name, while its new definition is read
@@ -884,6 +885,12 @@ static bool     str_capacity(comp *c, uint8_t *out);
 
 // dec ( N ): the current token is the "(" after dec; ends past the ")".
 static bool dec_scale(comp *c, tid *out) {
+    if (c->tok.kind == PNX_T_INT) { // dec 2 (RFC-0049)
+        if (c->tok.integer < 0 || c->tok.integer > 18)
+            return type_error(c, "dec N has 0 to 18 digits after the point");
+        *out = (tid)(TY_DEC + (uint32_t)c->tok.integer);
+        return advance(c);
+    }
     if (c->tok.kind != PNX_T_LPAREN)
         return type_error(c, "a decimal type is written dec(N), N digits after the point (0 to 18)");
     if (!advance(c))
@@ -949,16 +956,21 @@ static bool parse_ref(comp *c, tid *out) {
 
 // "(" effect ")" ; the current token is the "(".
 enum { MAX_SIGS = 16 }; // "word (" is six bytes: deeper than this, the signature is past 71 bytes
-static bool parse_sig(comp *c, sig *s) {
+// `stop` is 0 for the old form in parentheses; for the open form (RFC-0049) it is the word that ends
+// the signature (do, or end), which is left for the caller.
+static bool parse_sig(comp *c, sig *s, pnx_word_id stop) {
     __builtin_memset(s, 0, sizeof *s);
-    if (c->tok.kind != PNX_T_LPAREN)
-        return syntax(c, "a signature is expected here: ( inputs gives results )");
-    if (!advance(c))
-        return false;
+#define SIG_DONE() (stop ? is_word(c, stop) : c->tok.kind == PNX_T_RPAREN)
+    if (!stop) {
+        if (c->tok.kind != PNX_T_LPAREN)
+            return syntax(c, "a signature is expected here: ( inputs gives results )");
+        if (!advance(c))
+            return false;
+    }
     bool outputs = false, any_named = false, any_bare = false, names_written = false;
     name in_names[MAX_PARAMS] = {0}, out_names[MAX_PARAMS] = {0};
     for (;;) {
-        if (c->tok.kind == PNX_T_RPAREN)
+        if (SIG_DONE())
             break;
         if (is_word(c, PNX_KW_gives)) {
             if (outputs)
@@ -975,7 +987,7 @@ static bool parse_sig(comp *c, sig *s) {
                 return syntax(c, "or is followed by fail in a signature");
             if (!advance(c))
                 return false;
-            if (c->tok.kind != PNX_T_RPAREN)
+            if (!SIG_DONE())
                 return syntax(c, "or fail ends the signature");
             s->fails = true;
             break;
@@ -1005,7 +1017,7 @@ static bool parse_sig(comp *c, sig *s) {
                 if (c->sigs == MAX_SIGS) // each is a call on the C stack; a signature that deep is too long anyway
                     return syntax(c, "the signature is longer than 71 bytes");
                 ++c->sigs;
-                const bool parsed = advance(c) && parse_sig(c, &inner);
+                const bool parsed = advance(c) && parse_sig(c, &inner, 0);
                 --c->sigs;
                 if (!parsed || !block_type(c, &inner, &t))
                     return false;
@@ -1064,7 +1076,7 @@ static bool parse_sig(comp *c, sig *s) {
             if (c->tok.kind != PNX_T_NAME && !is_word(c, PNX_KW_owned) && !is_word(c, PNX_KW_word) &&
                 !(!c->in_host && ref_word(c)))
                 return name_due(c, "a parameter is expected after the comma");
-        } else if (c->tok.kind != PNX_T_RPAREN && !is_word(c, PNX_KW_gives) && !is_word(c, PNX_KW_or)) {
+        } else if (!SIG_DONE() && !is_word(c, PNX_KW_gives) && !is_word(c, PNX_KW_or)) {
             return syntax(c, "parameters are separated by commas");
         }
     }
@@ -1079,7 +1091,8 @@ static bool parse_sig(comp *c, sig *s) {
         __builtin_memcpy(s->names->all, in_names, sizeof(name) * s->n_in);
         __builtin_memcpy(s->names->all + s->n_in, out_names, sizeof(name) * s->n_out);
     }
-    return advance(c); // past the ")"
+    return stop ? true : advance(c); // past the ")"
+#undef SIG_DONE
 }
 
 // The signature as the host writes it: "(last int gives total int)".
@@ -1175,7 +1188,7 @@ static bool host_sig(comp *c, const pnx_host *h, sig *s) {
     c->in_extern = h->module[0] == '@';
     c->in_host = !c->in_extern;
     c->drop_names = true; // a call needs the types only
-    const bool ok = advance(c) && parse_sig(c, s);
+    const bool ok = advance(c) && parse_sig(c, s, 0);
     c->in_extern = c->in_host = c->drop_names = false;
     c->lx = saved_lx;
     c->tok = saved_tok;
@@ -4354,7 +4367,7 @@ static bool do_block(comp *c) {
     if (!advance(c))
         return false;
     const bool bare = c->tok.kind != PNX_T_LPAREN;
-    if (!bare && !parse_sig(c, &bs))
+    if (!bare && !parse_sig(c, &bs, 0))
         return false;
     if (user.length && (ends_with_word(user, "with_match") || ends_with_word(user, "replace_by")))
         return rex_block(c, user, &bs, at.line, at.column);
@@ -7763,6 +7776,7 @@ static bool value_block(comp *c, const sig *bs, uint32_t line, uint32_t column) 
 // A test is a word without inputs and results, stored under the name "test.NAME" so that it
 // cannot be called from the source and the tool that runs tests can find it.
 static bool definition(comp *c, bool is_test) {
+    c->new_def = is_word(c, PNX_KW_def);
     if (c->top_fn->n_blocks)
         return syntax(c, "a definition does not belong inside a block");
     if (!advance(c))
@@ -7810,7 +7824,9 @@ static bool definition(comp *c, bool is_test) {
     __builtin_memset(w, 0, sizeof *w);
     w->name = n;
     c->def_index = c->words.n - 1;
-    if (!is_test && !parse_sig(c, &w->sig))
+    if (!is_test && !parse_sig(c, &w->sig, c->new_def ? PNX_KW_do : 0))
+        return false;
+    if ((c->new_def || is_test) && is_word(c, PNX_KW_do) && !advance(c)) // the body opens with do (RFC-0049)
         return false;
     char text[72];
     if (!sig_text(c, &w->sig, text, sizeof text))
@@ -8040,8 +8056,9 @@ static bool declare_extern(comp *c) {
     c->cstr_mask = 0;
     c->in_extern = true;
     char text[72];
-    const bool ok = advance(c) && parse_sig(c, &s) && (sig_text(c, &s, text, sizeof text) ||
-                                                      syntax(c, "the signature is longer than 71 bytes"));
+    bool open = false; // extern NAME signature from "lib" [as NAME] end (RFC-0049)
+    const bool ok = advance(c) && ((open = c->tok.kind != PNX_T_LPAREN), parse_sig(c, &s, open ? PNX_KW_from : 0)) &&
+                    (sig_text(c, &s, text, sizeof text) || syntax(c, "the signature is longer than 71 bytes"));
     c->in_extern = false;
     if (!ok)
         return false;
@@ -8081,6 +8098,11 @@ static bool declare_extern(comp *c) {
     if (!slot)
         return false;
     *slot = (externsym){.name = n, .host = host};
+    if (open) {
+        if (!is_word(c, PNX_KW_end))
+            return syntax(c, "extern ends with end");
+        return advance(c);
+    }
     return true;
 }
 
@@ -8404,7 +8426,23 @@ static bool declare_forward(comp *c) {
         fwd ahead = {.name = tok_name(c), .index = NONE, .exported = c->exporting};
         if (name_is_global(c, ahead.name))
             return defined_twice(c, ahead.name);
-        if (!advance(c) || !parse_sig(c, &ahead.sig))
+        if (!advance(c) || !parse_sig(c, &ahead.sig, 0))
+            return false;
+        if (c->fwds.n >= 0xffffu)
+            return syntax(c, "too many forward declarations");
+        fwd *slot = vec_push(c, &c->fwds, sizeof(fwd));
+        if (!slot)
+            return false;
+        *slot = ahead;
+        return true;
+    }
+    if (c->tok.kind == PNX_T_NAME) { // forward NAME signature end (RFC-0049)
+        fwd ahead = {.name = tok_name(c), .index = NONE, .exported = c->exporting};
+        if (name_is_global(c, ahead.name))
+            return defined_twice(c, ahead.name);
+        if (!advance(c) || !parse_sig(c, &ahead.sig, PNX_KW_end))
+            return false;
+        if (!advance(c)) // past end
             return false;
         if (c->fwds.n >= 0xffffu)
             return syntax(c, "too many forward declarations");
@@ -9041,7 +9079,7 @@ static bool compile(comp *c, image *im, bool *has_top) {
             // redefine word NAME (effect) ... end : a tool word of an interactive session
             if (!advance(c))
                 return false;
-            if (!is_word(c, PNX_KW_word))
+            if (!is_word(c, PNX_KW_word) && !is_word(c, PNX_KW_def))
                 return syntax(c, "redefine is followed by a word definition");
             c->redefining = true;
             continue;
@@ -9094,7 +9132,7 @@ static bool compile(comp *c, image *im, bool *has_top) {
         } else if (is_word(c, PNX_KW_export)) { // what other modules may name (RFC-0014)
             if (c->exporting || c->top_fn->n_blocks || !advance(c))
                 return c->err == PINAX_OK ? syntax(c, "export stands once, before a definition or a declaration") : false;
-            static const pnx_word_id may[] = {PNX_KW_word,  PNX_KW_const,  PNX_KW_global, PNX_KW_array, PNX_KW_list,
+            static const pnx_word_id may[] = {PNX_KW_word,  PNX_KW_def, PNX_KW_const,  PNX_KW_global, PNX_KW_array, PNX_KW_list,
                                               PNX_KW_queue, PNX_KW_pool,   PNX_KW_type,   PNX_KW_buffer,
                                               PNX_KW_index, PNX_KW_record, PNX_KW_forward, PNX_KW_bound, PNX_KW_shared,
                                               PNX_KW_row,   PNX_KW_extern, PNX_KW_tasks};
@@ -9105,9 +9143,9 @@ static bool compile(comp *c, image *im, bool *has_top) {
                 return syntax(c, "export is followed by a definition or a declaration");
             c->exporting = true;
             continue;
-        } else if (c->data_only && (is_word(c, PNX_KW_word) || is_word(c, PNX_KW_test) || is_word(c, PNX_KW_use))) {
+        } else if (c->data_only && (is_word(c, PNX_KW_word) || is_word(c, PNX_KW_def) || is_word(c, PNX_KW_test) || is_word(c, PNX_KW_use))) {
             return syntax(c, "a data source defines no words and uses no modules");
-        } else if (is_word(c, PNX_KW_word) || is_word(c, PNX_KW_test)) {
+        } else if (is_word(c, PNX_KW_word) || is_word(c, PNX_KW_def) || is_word(c, PNX_KW_test)) {
             if (!definition(c, is_word(c, PNX_KW_test)))
                 return false;
             ((wordsym *)c->words.ptr + c->def_index)->entry = im_pc(im);
