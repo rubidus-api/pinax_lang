@@ -1,6 +1,6 @@
 rem run
-use io
-use str
+use io .
+use str .
 rem dup: a          becomes a a
 7 dup mul str.to_str io.println               rem 7 * 7 = 49
 rem drop: a b       becomes a

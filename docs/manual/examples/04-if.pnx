@@ -1,6 +1,6 @@
 rem run
-use io
-word grade (score int gives str)
+use io .
+def grade score int gives str do
   score 90 ge if "A" return end
   score 80 ge if "B" return end
   score 70 ge if "C" else "F" end

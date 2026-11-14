@@ -1,17 +1,17 @@
 rem run: args alpha beta
-use io
-use str
-use env
-use random
-use clock
-word demo ()
-  cat ("arguments: ", env.arg_count) io.println             rem 0 is the program file
-  1 env.arg or_else (e) "?" end io.println
-  "PINAX_NO_SUCH_VARIABLE" env.getenv or_else (e) cat ("getenv failed: ", e err_text) end io.println
+use io .
+use str .
+use env .
+use random .
+use clock .
+def demo do
+  args "arguments: " env.arg_count . cat io.println             rem 0 is the program file
+  1 env.arg or_else to e "?" end io.println
+  "PINAX_NO_SUCH_VARIABLE" env.getenv or_else to e args "getenv failed: " e err_text . cat end io.println
   7 random.seed                                             rem the same seed, the same numbers
-  cat (10 random.random_below, " ", 10 random.random_below, " ", 10 random.random_below) io.println
+  args 10 random.random_below " " 10 random.random_below " " 10 random.random_below . cat io.println
   clock.monotonic_ns to a
   clock.monotonic_ns to b
-  cat ("the clock does not go back: ", b a lt not) io.println
+  args "the clock does not go back: " b a lt not . cat io.println
 end
 demo

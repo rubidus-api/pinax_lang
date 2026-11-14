@@ -1,12 +1,12 @@
 rem run
-use io
-use str
+use io .
+use str .
 rem Parse "key = value" lines without copying a byte.
-word parse (line str)
+def parse line str do
   line str.trim to t
   t str.is_empty t "#" str.starts_with or if return end      rem blank lines and remarks
-  t "=" str.try_cut or_else (e) cat ("no '=' in: ", t) io.println return end to (key, value)
-  cat ("[", key str.trim, "] = [", value str.trim, "]") io.println
+  t "=" str.try_cut or_else to e args "no '=' in: " t . cat io.println return end to value to key
+  args "[" key str.trim "] = [" value str.trim "]" . cat io.println
 end
 text END
 # settings
@@ -15,4 +15,4 @@ name = Pinax
 
 broken line
 END
-str.lines do (l str) l parse end each
+str.lines do to l l parse end each

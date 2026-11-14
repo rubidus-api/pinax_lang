@@ -1,13 +1,13 @@
 rem run
-use io
+use io .
 record item
-  name str(12)
+  name str 12
   count int
 end
 pool items item 3
 index by_name items item.name
 list order items 3
-word count_in (name str or fail)
+def count_in name str or fail do
   name by_name has not if
     items alloc or_fail to r              rem a free row: three at most
     name r to item.name
@@ -16,20 +16,20 @@ word count_in (name str or fail)
   name by_name lookup or_fail to r
   r item.count 1 add r to item.count
 end
-word drop_out (name str)
-  name by_name lookup or_else (e) return end items free
+def drop_out name str do
+  name by_name lookup or_else to e return end items free
 end
-word show ()
+def show do
   order clear
-  items do (r items) r order push or_else (e) end end each
+  items do to r r order push or_else to e end end each
   order items sort_by item.name
-  order do (r items) cat (r item.name, " ", r item.count) io.println end each
+  order do to r args r item.name " " r item.count . cat io.println end each
 end
-"pear" count_in or_else (e) end
-"fig" count_in or_else (e) end
-"pear" count_in or_else (e) end
-"plum" count_in or_else (e) end
-"kiwi" count_in or_else (e) cat ("kiwi: ", e err_text) io.println end
+"pear" count_in or_else to e end
+"fig" count_in or_else to e end
+"pear" count_in or_else to e end
+"plum" count_in or_else to e end
+"kiwi" count_in or_else to e args "kiwi: " e err_text . cat io.println end
 "fig" drop_out
-"kiwi" count_in or_else (e) end           rem the row fig gave back
+"kiwi" count_in or_else to e end           rem the row fig gave back
 show

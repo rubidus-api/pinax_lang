@@ -1,5 +1,5 @@
 rem run
-set_order (io)
-set_order (get_order, str)
+set_order io .
+set_order get_order str .
 get_order
 "pinax" lower println

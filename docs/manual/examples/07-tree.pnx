@@ -1,6 +1,6 @@
 rem run
-use io
-use str
+use io .
+use str .
 rem A binary search tree in a pool: rows point to rows by number, never by address.
 forward pool nodes
 record node
@@ -10,7 +10,7 @@ record node
 end
 pool nodes node 16
 global root nodes
-word put_key (k int or fail)
+def put_key k int or fail do
   nodes alloc or_fail to n
   k n to node.key
   root is_none if n set root return end
@@ -25,13 +25,13 @@ word put_key (k int or fail)
     end
   end
 end
-word show (t nodes)                                  rem in order: left, self, right
+def show t nodes do                                  rem in order: left, self, right
   t is_none if return end
   t node.left show
   t node.key str.to_str io.print " " io.print
   t node.right show
 end
-word build (or fail) 50 put_key or_fail 30 put_key or_fail 70 put_key or_fail 20 put_key or_fail 40 put_key or_fail end
-build or_else (e) e err_text io.println end
+def build or fail do 50 put_key or_fail 30 put_key or_fail 70 put_key or_fail 20 put_key or_fail 40 put_key or_fail end
+build or_else to e e err_text io.println end
 root show
 "" io.println

@@ -1,18 +1,18 @@
 rem run
-use io
+use io .
 tasks workers 2
-word count_to (name str, n int)
+def count_to name str, n int do
   1 to i
   loop
-    i n gt until
-    cat (name, " ", i) io.println
+    i n gt if break . end
+    args name " " i . cat io.println
     yield or_return                         rem give the other task a turn
     i 1 add to i
   end
 end
-word demo ()
-  do "ping" 3 count_to end workers spawn or_else (e) return end drop   rem spawn gives the task; not needed here
-  do "pong" 2 count_to end workers spawn or_else (e) return end drop   rem nothing runs yet: both wait for a turn
+def demo do
+  do "ping" 3 count_to end workers spawn or_else to e return end drop   rem spawn gives the task; not needed here
+  do "pong" 2 count_to end workers spawn or_else to e return end drop   rem nothing runs yet: both wait for a turn
   workers run_all                                                      rem now they run, until both are done
 end
 demo

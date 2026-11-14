@@ -1,7 +1,7 @@
 rem run
-use io
+use io .
 global total int
-word add_to_total (n int) total n add set total end     rem set: a global is written with set
+def add_to_total n int do total n add set total end     rem set: a global is written with set
 3 add_to_total
 4 add_to_total
-cat ("total ", total) io.println
+args "total " total . cat io.println

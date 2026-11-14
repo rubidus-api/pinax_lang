@@ -1,4 +1,4 @@
 rem run
-set_order (io, str)
+set_order io str .
 "pinax" upper println
 "a,b,c" "," "+" replace println

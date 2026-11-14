@@ -1,10 +1,10 @@
 rem run
-use io
-use str
-word show ()
+use io .
+use str .
+def show do
   "한글 ok" to s
-  cat ("bytes ", s str.len, ", characters ", s str.char_count) io.println
-  s str.chars do (c str) cat ("<", c, ">") io.print end each
+  args "bytes " s str.len ", characters " s str.char_count . cat io.println
+  s str.chars do to c args "<" c ">" . cat io.print end each
   "" io.println
 end
 show

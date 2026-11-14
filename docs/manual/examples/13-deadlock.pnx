@@ -1,19 +1,19 @@
 rem fault
-use io
+use io .
 tasks stages 2
 queue numbers int 2
 queue squares int 2
-word square ()
+def square do
   numbers wait_take or_return to n
   n n mul squares wait_put or_return
 end
-word show ()
+def show do
   squares wait_take or_return to n
-  cat ("square: ", n) io.println
+  args "square: " n . cat io.println
 end
-word demo ()
-  do square end stages spawn or_else (e) return end drop
-  do show end stages spawn or_else (e) return end drop
+def demo do
+  ref square stages spawn or_else to e return end drop
+  ref show stages spawn or_else to e return end drop
   stages run_all                              rem no one puts into numbers
 end
 demo

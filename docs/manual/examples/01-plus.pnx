@@ -1,4 +1,4 @@
 rem refused
-use io
-use str
+use io .
+use str .
 1 + 2 str.to_str io.println

@@ -1,8 +1,8 @@
 rem run
-use io
-use md
+use io .
+use md .
 buffer page 1024
-word main (or fail)
+def main or fail do
   text END
 ## Notes
 
@@ -16,4 +16,4 @@ END
   doc page md.html or_fail
   page contents io.println
 end
-main or_else (e) e err_text io.println end
+main or_else to e e err_text io.println end

@@ -1,7 +1,7 @@
 rem fmt
-use io
-word fizz (n int gives str)
+use io .
+def fizz n int gives str do
 n 15 mod 0 eq if "FizzBuzz" return end
    n 3 mod 0 eq if "Fizz" return end
-n 5 mod 0 eq if "Buzz" else cat (n) end
+n 5 mod 0 eq if "Buzz" else args n . cat end
 end

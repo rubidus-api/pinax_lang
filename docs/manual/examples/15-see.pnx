@@ -1,5 +1,5 @@
 rem see
-word mean (a int, b int, c int gives int)
+def mean a int, b int, c int gives int do
   a b add
   c add
   3 div

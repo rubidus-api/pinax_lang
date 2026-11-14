@@ -1,9 +1,9 @@
 rem run
-use io
-global name str(8)
-word remember (v str)
-  v set name or_else (e) cat ("too long, kept ", name) io.println return end
-  cat ("stored: ", name) io.println
+use io .
+global name str 8
+def remember v str do
+  v set name or_else to e args "too long, kept " name . cat io.println return end
+  args "stored: " name . cat io.println
 end
 "Pinax" remember
 "an embeddable language" remember

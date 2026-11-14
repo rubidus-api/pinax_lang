@@ -1,14 +1,14 @@
 rem run
-use io
-use str
-word line (i int gives str) cat ("line ", i) end
-word lots ()
+use io .
+use str .
+def line i int gives str do args "line " i . cat end
+def lots do
   region_free to before
-  1 10001 range do (i int)
+  1 10001 range do to i
     mark to m                               rem every turn gives its bytes back
     i line drop
     m release
   end each
-  cat ("bytes still taken after 10000 lines: ", before region_free sub) io.println
+  args "bytes still taken after 10000 lines: " before region_free sub . cat io.println
 end
 lots

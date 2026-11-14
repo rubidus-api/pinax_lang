@@ -1,16 +1,16 @@
 rem run
-use io
-use str
+use io .
+use str .
 rem Read "name,score" lines; a bad line is reported, not fatal.
-word parse (line str gives name str, score int or fail)
-  line "," str.try_cut or_fail to (n, s)              rem no comma: fail the same way
+def parse line str gives name str, score int or fail do
+  line "," str.try_cut or_fail to s to n              rem no comma: fail the same way
   s str.trim str.to_int or_fail to v                  rem not a number: fail
   v 0 lt v 100 gt or if err.range fail end            rem our own rule: 0..100
   n str.trim v
 end
-word report (line str)
-  line parse or_else (e) cat ("skipped \"", line, "\": ", e err_text) io.println return end to (name, score)
-  cat (name, " scored ", score) io.println
+def report line str do
+  line parse or_else to e args "skipped \"" line "\": " e err_text . cat io.println return end to score to name
+  args name " scored " score . cat io.println
 end
 text END
 kim, 91
@@ -18,4 +18,4 @@ lee 77
 park, ninety
 choi, 140
 END
-str.lines do (l str) l report end each
+str.lines do to l l report end each

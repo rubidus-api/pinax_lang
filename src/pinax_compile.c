@@ -1504,8 +1504,8 @@ static bool need(comp *c, uint32_t count) {
     c->sink = false;
     if (c->f->depth - c->f->floor < count)
         return type_error(c, c->f->bare && c->f->n_blocks == 0
-                                 ? "a block without a signature takes nothing; a word of the program is given as do NAME "
-                                   "end, any other word with the block's signature: do (str, str gives bool) "
+                                 ? "a block without a signature takes nothing; a word of the program is given as ref NAME, "
+                                   "any other word with the block's signature: def str, str gives bool do "
                                    "str.starts_with end"
                                  : "the stack does not hold enough values for this word");
     for (uint32_t k = 0; k < count; ++k) {
@@ -2709,11 +2709,25 @@ static bool guard(comp *c, const sig *s, const uint32_t base[2], const uint32_t 
             return syntax(c, "the error name is one name in parentheses");
         return advance(c);
     }
-    // or_else to e ... end (RFC-0049): the body enters with the failure on the stack. While the old
-    // form is still accepted that is so only when the body begins with `to`; the migration adds `drop`
-    // to the bodies that did not take the failure, and then every body gets it.
-    if (!is_word(c, PNX_KW_to))
-        return true;
+    if (is_word(c, PNX_KW_to)) { // or_else to e ... end: the failure is kept in e, as `or_else (e)` did
+        if (!advance(c))
+            return false;
+        if (c->tok.kind != PNX_T_NAME)
+            return name_due(c, "a name for the error number is expected: or_else to e");
+        const name n = tok_name(c);
+        if (!name_is_free(c, n))
+            return false;
+        if (f->n_locals == MAX_LOCALS || f->nloc[BANK_I] >= SLOT0 - 1)
+            return syntax(c, "too many local variables in this word");
+        local *l = &f->locals[f->n_locals++];
+        *l = (local){.name = n, .type = TY_ERR, .reg = f->nloc[BANK_I]++};
+        if (f->nloc[BANK_I] > f->maxloc[BANK_I])
+            f->maxloc[BANK_I] = f->nloc[BANK_I];
+        if (emit(c, PNX_ABX(PNX_GETFAIL, l->reg, 0)) == NONE || !debug_local(c, l, f->code.n))
+            return false;
+        return advance(c);
+    }
+    // or_else body end (RFC-0049): the body enters with the failure on the stack; `drop` lets it go
     if (!push_slot(c, TY_ERR))
         return false;
     if (emit(c, PNX_ABX(PNX_GETFAIL, slot_of(c, f->depth - 1), 0)) == NONE)
@@ -4037,11 +4051,12 @@ static bool do_args(comp *c) {
 // Finds the word after the end that closes the block opened by the current `do`.
 static bool value_block(comp *c, const sig *bs, uint32_t line, uint32_t column);
 
-static bool scan_user(comp *c, name *out, name *dst) {
+static bool scan_user(comp *c, name *out, name *dst, bool from_def) {
     *dst = (name){0};
     pnx_lexer lx = *c->lx;
     pnx_token t;
-    for (uint32_t depth = 1; depth;) {
+    bool entered = !from_def; // `def SIG do ... end`: the block opens at its do
+    for (uint32_t depth = from_def ? 0 : 1; !entered || depth;) {
         if (!pnx_lex_next(&lx, &t))
             return error_at(c, PINAX_ERR_SYNTAX, lx.error_line, lx.error_column, lx.error);
         if (t.kind == PNX_T_END) {
@@ -4056,6 +4071,7 @@ static bool scan_user(comp *c, name *out, name *dst) {
         case PNX_KW_end: --depth; break;
         default: break;
         }
+        entered = entered || depth;
     }
     if (!pnx_lex_next(&lx, &t))
         return error_at(c, PINAX_ERR_SYNTAX, lx.error_line, lx.error_column, lx.error);
@@ -4475,7 +4491,7 @@ static bool ref_value(comp *c) {
     if (c->tok.kind == PNX_T_NAME) {
         if (!find_word(c, n, &index)) {
             if (find_fwd(c, n, NULL))
-                return type_error(c, "a procedure declared with forward is given as a value only after its definition");
+                return type_error(c, "a word declared with forward is given as a value only after its definition");
             return type_error(c, "ref names a procedure of the program");
         }
     } else {
@@ -4501,17 +4517,60 @@ static bool ref_value(comp *c) {
 static bool do_block(comp *c) {
     fn *f = c->f;
     name user, dst_name;
-    if (!scan_user(c, &user, &dst_name))
+    const bool is_def = is_word(c, PNX_KW_def); // def SIG do ... end : a block value with its own signature
+    if (!scan_user(c, &user, &dst_name, is_def))
         return false;
     const pnx_token at = c->tok;
     sig bs = {0};
     if (!advance(c))
         return false;
-    const bool bare = c->tok.kind != PNX_T_LPAREN;
-    if (!bare && !parse_sig(c, &bs, 0))
+    const bool bare = !is_def && c->tok.kind != PNX_T_LPAREN;
+    if (is_def) {
+        if (!parse_sig(c, &bs, PNX_KW_do))
+            return false;
+        if (!advance(c)) // past do
+            return false;
+    } else if (!bare && !parse_sig(c, &bs, 0)) {
         return false;
-    if (user.length && (ends_with_word(user, "with_match") || ends_with_word(user, "replace_by")))
+    }
+    // `do to p ... end each`: the names the block takes are written as `to` at its start (RFC-0049);
+    // the types are the combining word's and are filled in below. The last pushed is bound first.
+    name     binders[MAX_PARAMS] = {{0}};
+    uint32_t n_binders = 0;
+    if (bare && !name_is(user, "times") && is_word(c, PNX_KW_to)) {
+        while (is_word(c, PNX_KW_to)) {
+            if (n_binders == MAX_PARAMS)
+                return syntax(c, "a block binds too many names");
+            if (!advance(c))
+                return false;
+            if (c->tok.kind != PNX_T_NAME)
+                return name_due(c, "to is followed by the name the block takes");
+            binders[n_binders++] = tok_name(c);
+            if (!advance(c))
+                return false;
+        }
+    }
+    if (user.length && (ends_with_word(user, "with_match") || ends_with_word(user, "replace_by"))) {
+        if (n_binders) { // the whole match and the groups, all str
+            const bool replace = ends_with_word(user, "replace_by");
+            bs.n_in  = (uint8_t)n_binders;
+            bs.named = true;
+            for (uint32_t k = 0; k < n_binders; ++k)
+                bs.in[k] = TY_STR;
+            if (replace) {
+                bs.n_out  = 1;
+                bs.out[0] = TY_STR;
+            }
+            bs.names = arena_alloc(c, sizeof(signames) + sizeof(name) * ((size_t)bs.n_in + 2u));
+            if (!bs.names)
+                return false;
+            bs.names->n_in = bs.n_in;
+            for (uint32_t k = 0; k < n_binders; ++k)
+                bs.names->all[k] = binders[n_binders - 1 - k];
+            __builtin_memset(bs.names->all + bs.n_in, 0, sizeof(name) * 2u);
+        }
         return rex_block(c, user, &bs, at.line, at.column);
+    }
     static const char *const users[] = {"times", "each",       "fold",     "count",      "any",
                                         "all",   "first",      "each_index", "map_into", "filter_into"};
     bool expanded = false;
@@ -4530,23 +4589,6 @@ static bool do_block(comp *c) {
     }
     if (bs.fails)
         return error_at(c, PINAX_ERR_SYNTAX, at.line, at.column, "a block that can fail is not supported yet");
-    // `do to p ... end each`: the names the block takes are written as `to` at its start (RFC-0049);
-    // the types are the combining word's and are filled in below. The last pushed is bound first.
-    name     binders[2] = {{0}};
-    uint32_t n_binders = 0;
-    if (bare && !name_is(user, "times") && is_word(c, PNX_KW_to)) {
-        while (is_word(c, PNX_KW_to)) {
-            if (n_binders == 2)
-                return syntax(c, "a block binds at most two names");
-            if (!advance(c))
-                return false;
-            if (c->tok.kind != PNX_T_NAME)
-                return name_due(c, "to is followed by the name the block takes");
-            binders[n_binders++] = tok_name(c);
-            if (!advance(c))
-                return false;
-        }
-    }
     const bool has_stem = f->depth > f->floor && bank_of(f->stack[f->depth - 1].type) == BANK_NONE;
     uint8_t  use, kind = STEM_TIMES, cur = 0, lim = 0, hidden = 0;
     uint16_t src = 0;
@@ -4579,25 +4621,32 @@ static bool do_block(comp *c) {
         return error_at(c, PINAX_ERR_SYNTAX, at.line, at.column,
                         "this block is used by a word the compiler does not expand yet");
     }
-    if (n_binders) {
-        const uint32_t want = use == USE_EACH_INDEX || use == USE_FOLD ? 2u : 1u;
-        if (n_binders != want)
+    if (bare && use != USE_TIMES) {
+        const uint32_t base = use == USE_EACH_INDEX || use == USE_FOLD ? 2u : 1u;
+        const bool     rex  = kind == STEM_REX && use != USE_EACH_INDEX;
+        // a block of fold or each_index must name what it takes; the others may leave the element on the stack
+        if (n_binders ? (n_binders < base || (rex ? n_binders > base + PNX_PTN_CAPS : n_binders != base))
+                      : (use == USE_FOLD || use == USE_EACH_INDEX))
             return error_at(c, PINAX_ERR_TYPE, at.line, at.column,
-                            want == 2 ? "this block binds two names: to i to x" : "this block binds one name: to x");
+                            base == 2 ? "this block binds two names: to i to x" : "this block binds one name: to x");
         const uint32_t acc_at = f->depth - hidden - 1;
         const tid      acc    = use == USE_FOLD && f->depth - f->floor >= (uint32_t)hidden + 1 ? f->stack[acc_at].type : TY_NONE;
-        tid            in[2]  = {element, TY_NONE};
-        name           names[2] = {binders[0], {0}};
-        if (use == USE_EACH_INDEX) {
-            in[0] = element, in[1] = TY_INT;
-            names[0] = binders[1], names[1] = binders[0];
-        } else if (use == USE_FOLD) {
-            in[0] = acc, in[1] = element;
-            names[0] = binders[1], names[1] = binders[0];
+        tid            in[MAX_PARAMS];
+        for (uint32_t k = 0; k < n_binders; ++k)
+            in[k] = TY_STR; // the groups of a rex stem
+        if (n_binders) {
+            if (use == USE_EACH_INDEX) {
+                in[0] = element, in[1] = TY_INT;
+            } else if (use == USE_FOLD) {
+                in[0] = acc, in[1] = element;
+            } else {
+                in[0] = element;
+            }
+            bs.n_in  = (uint8_t)n_binders;
+            bs.named = true;
+            for (uint32_t k = 0; k < n_binders; ++k)
+                bs.in[k] = in[k];
         }
-        bs.n_in  = (uint8_t)want;
-        bs.in[0] = in[0], bs.in[1] = in[1];
-        bs.named = true;
         if (use == USE_FOLD) {
             bs.n_out  = 1;
             bs.out[0] = acc;
@@ -4605,12 +4654,15 @@ static bool do_block(comp *c) {
             bs.n_out  = 1;
             bs.out[0] = TY_BOOL;
         }
-        bs.names = arena_alloc(c, sizeof(signames) + sizeof(name) * ((size_t)bs.n_in + 2u));
-        if (!bs.names)
-            return false;
-        bs.names->n_in = bs.n_in;
-        __builtin_memcpy(bs.names->all, names, sizeof(name) * bs.n_in);
-        __builtin_memset(bs.names->all + bs.n_in, 0, sizeof(name) * 2u);
+        if (n_binders) {
+            bs.names = arena_alloc(c, sizeof(signames) + sizeof(name) * ((size_t)bs.n_in + 2u));
+            if (!bs.names)
+                return false;
+            bs.names->n_in = bs.n_in;
+            for (uint32_t k = 0; k < n_binders; ++k)
+                bs.names->all[k] = binders[n_binders - 1 - k];
+            __builtin_memset(bs.names->all + bs.n_in, 0, sizeof(name) * 2u);
+        }
     }
     // rex.matches: after the whole match the block may take the groups, named str parameters
     // (RFC-0011 section 4.2); here they are left out of the checks and bound below
@@ -4649,7 +4701,7 @@ static bool do_block(comp *c) {
                             : g && g->record != NONE ? "an array of records is not filled by filter_into; a list is"
                                                      : "map_into and filter_into fill a list or an array of values: "
                                                        "... end names map_into");
-        if (n_binders && use == USE_MAP) {
+        if (bare && use == USE_MAP) {
             bs.n_out  = 1;
             bs.out[0] = g->type;
         }
@@ -7765,7 +7817,8 @@ static bool body_token(comp *c) {
     case PNX_KW_or_else: return syntax(c, "this word follows a word that can fail, and nothing else");
     case PNX_KW_case: case PNX_KW_match: return do_case(c);
     case PNX_KW_cat: return do_cat(c);
-    case PNX_KW_do: return do_block(c);
+    case PNX_KW_do:
+    case PNX_KW_def: return do_block(c);
     case PNX_KW_ref: return ref_value(c);
     case PNX_KW_args: return do_args(c);
     case PNX_KW_end: {
@@ -8122,6 +8175,8 @@ static bool use_module(comp *c) {
         if (!advance(c))
             return false;
     }
+    if (c->tok.kind == PNX_T_DOT && !advance(c)) // use NAME [as NAME] . (RFC-0049)
+        return false;
     return open_module(c, n, prefix, NULL);
 }
 
@@ -8465,7 +8520,8 @@ static bool declared_size(comp *c, uint32_t *out);
 // ( N ) after `str` in a declaration.
 static bool str_capacity(comp *c, uint8_t *out) {
     uint32_t n;
-    if (c->tok.kind == PNX_T_INT) { // str 32 (RFC-0049)
+    if (c->tok.kind == PNX_T_INT || (c->tok.kind == PNX_T_NAME && find_const(c, tok_name(c)) &&
+                                     find_const(c, tok_name(c))->type == TY_INT)) { // str 32 (RFC-0049)
         if (!declared_size(c, &n))
             return false;
         if (n > 255)
@@ -8754,7 +8810,8 @@ static bool declare_record(comp *c) {
             bytes = 8;
         } else if (name_is(tn, "str")) { // str(N): one length byte, then N bytes
             uint32_t n;
-            if (c->tok.kind == PNX_T_INT) { // name str 8 (RFC-0049)
+            if (c->tok.kind == PNX_T_INT || (c->tok.kind == PNX_T_NAME && find_const(c, tok_name(c)) &&
+                                             find_const(c, tok_name(c))->type == TY_INT)) { // name str 8 (RFC-0049)
                 if (!declared_size(c, &n))
                     return false;
                 if (n > 255)

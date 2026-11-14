@@ -1,7 +1,7 @@
 rem run
-use io
-use str
-use fmt
+use io .
+use str .
+use fmt .
 42 str.to_str io.println
 -7 str.to_str io.println
 0xff str.to_str io.println                   rem 255

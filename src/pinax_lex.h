@@ -63,6 +63,7 @@ typedef struct pnx_lexer {
     uint32_t       length, at;
     uint32_t       line, line_start;
     // What came before, to know where a new name is due (pnx_lex_next).
+    bool           sig;              // inside the signature of a def or forward (RFC-0049): names are due after a comma
     pnx_token_kind prev_kind, prev2_kind;
     pnx_word_id    prev_word, prev2_word;
     uint64_t       names;       // bit k: the parenthesis opened at depth k holds names

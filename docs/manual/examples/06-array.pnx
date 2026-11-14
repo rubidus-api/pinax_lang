@@ -1,10 +1,10 @@
 rem run
-use io
-use str
+use io .
+use str .
 const days 7
 array rain int days                         rem always full: 7 cells, all 0 at first
 assign rain (0, 5, 12, 0, 3)                rem cells 5 and 6 stay 0
 8 6 set rain                                 rem value, index, set, array: cell 6 becomes 8
-word show () rain do (r int) r str.to_str io.print " " io.print end each "" io.println end
+def show do rain do to r r str.to_str io.print " " io.print end each "" io.println end
 show
-cat ("rainy days: ", rain do (r int gives bool) r 0 gt end count, " of ", rain len) io.println
+args "rainy days: " rain do to r r 0 gt end count " of " rain len . cat io.println

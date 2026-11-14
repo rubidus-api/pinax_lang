@@ -1,9 +1,9 @@
 rem run
-use io
-use bytes
-use encode
-use hash
-use fmt
+use io .
+use bytes .
+use encode .
+use hash .
+use fmt .
 record header
   big_endian
   magic u32
@@ -13,16 +13,16 @@ end
 array headers header 2
 buffer wire 32
 buffer hex 64
-word demo (or fail)
+def demo or fail do
   0 headers idx to h
   0x50494e58 u32 h to header.magic           rem "PINX"
   1 u16 h to header.version
   300 h to header.length
   h wire bytes.pack or_fail
   wire contents hex encode.hex_encode or_fail
-  cat ("bytes: ", hex contents, ", crc32: ", wire contents hash.crc32 fmt.hex) io.println
+  args "bytes: " hex contents ", crc32: " wire contents hash.crc32 fmt.hex . cat io.println
   1 headers idx to back
   wire contents back bytes.unpack or_fail drop
-  cat ("read back: version ", back header.version, ", length ", back header.length) io.println
+  args "read back: version " back header.version ", length " back header.length . cat io.println
 end
-demo or_else (e) e err_text io.println end
+demo or_else to e e err_text io.println end

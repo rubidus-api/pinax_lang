@@ -1,9 +1,9 @@
 rem test
-use str
-word initials (name str gives str)
-  name str.trim " " str.cut to (given, family)
-  cat (given 1 str.take, family str.trim 1 str.take) str.upper
+use str .
+def initials name str gives str do
+  name str.trim " " str.cut to family to given
+  args given 1 str.take family str.trim 1 str.take . cat str.upper
 end
-test two_names "grace hopper" initials "GH" eq assert end
-test spaces_around "  ada lovelace " initials "AL" eq assert end
-test one_name "plato" initials "P" eq assert end
+test two_names do "grace hopper" initials "GH" eq assert end
+test spaces_around do "  ada lovelace " initials "AL" eq assert end
+test one_name do "plato" initials "P" eq assert end

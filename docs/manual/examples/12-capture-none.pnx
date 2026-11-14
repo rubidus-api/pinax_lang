@@ -1,7 +1,7 @@
 rem fault
-use io
-use ptn
-word first_number (gives str)
+use io .
+use ptn .
+def first_number gives str do
   1 ptn.capture                               rem no match in this run yet: there is nothing to read
 end
 first_number io.println

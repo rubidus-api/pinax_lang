@@ -639,6 +639,7 @@ static bool names_next(pnx_word_id word) {
     case PNX_KW_word: case PNX_KW_test: case PNX_KW_global: case PNX_KW_const: case PNX_KW_array:
     case PNX_KW_list: case PNX_KW_pool: case PNX_KW_queue: case PNX_KW_buffer: case PNX_KW_tasks:
     case PNX_KW_record: case PNX_KW_type: case PNX_KW_index: case PNX_KW_to: case PNX_KW_set: case PNX_KW_as:
+    case PNX_KW_def: case PNX_KW_forward:
         return true;
     default:
         return false;
@@ -667,7 +668,10 @@ static bool names_paren(const pnx_lexer *lx) {
 bool pnx_lex_next(pnx_lexer *lx, pnx_token *t) {
     const bool in_names = lx->depth > 0 && lx->depth <= 64 && (lx->names >> (lx->depth - 1) & 1);
     lx->name_next = (lx->prev_kind == PNX_T_RESERVED && names_next(lx->prev_word)) ||
-                    (in_names && (lx->prev_kind == PNX_T_LPAREN || lx->prev_kind == PNX_T_COMMA));
+                    (in_names && (lx->prev_kind == PNX_T_LPAREN || lx->prev_kind == PNX_T_COMMA)) ||
+                    (lx->sig && lx->prev_kind == PNX_T_COMMA) ||
+                    (lx->prev_kind == PNX_T_NAME && lx->prev2_kind == PNX_T_RESERVED &&
+                     (lx->prev2_word == PNX_KW_def || lx->prev2_word == PNX_KW_forward));
     if (!lex_token(lx, t))
         return false;
     if (t->kind == PNX_T_LPAREN) {
@@ -683,6 +687,12 @@ bool pnx_lex_next(pnx_lexer *lx, pnx_token *t) {
         lx->in_record = true;
     } else if (t->kind == PNX_T_RESERVED && t->word == PNX_KW_end) {
         lx->in_record = false;
+    }
+    if (t->kind == PNX_T_RESERVED) {
+        if (t->word == PNX_KW_def || t->word == PNX_KW_forward)
+            lx->sig = true;
+        else if (t->word == PNX_KW_do || t->word == PNX_KW_end || t->word == PNX_KW_from)
+            lx->sig = false;
     }
     lx->prev2_kind = lx->prev_kind;
     lx->prev2_word = lx->prev_word;

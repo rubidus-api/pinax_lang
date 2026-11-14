@@ -3,5 +3,5 @@ record reading
   value i32
 end
 list morning reading 8
-word count_them (l morning gives int) 0 end      rem a table's name as a type: one row of it
+def count_them l morning gives int do 0 end      rem a table's name as a type: one row of it
 morning count_them

@@ -1,24 +1,24 @@
 rem run
-use io
+use io .
 record city
-  name str(16)
+  name str 16
   people int
 end
 list cities city 8
 list order cities 8                           rem rows of cities
 list sizes int 8
-word city_of (n str, p int or fail)
+def city_of n str, p int or fail do
   cities add_row or_fail to r
   n r to city.name
   p r to city.people
   p sizes push or_fail
 end
-word main (or fail)
+def main or fail do
   "Lyon" 522 city_of or_fail  "Nice" 342 city_of or_fail  "Paris" 2103 city_of or_fail  "Lille" 236 city_of or_fail
   sizes sort_desc
-  cat ("largest: ", 0 sizes idx) io.println
-  cities do (c cities gives cities) c end order map_into or_fail
+  args "largest: " 0 sizes idx . cat io.println
+  cities do to c c end order map_into or_fail
   order cities sort_by city.name
-  order do (c cities) c city.name io.println end each
+  order do to c c city.name io.println end each
 end
-main or_else (e) e err_text io.println end
+main or_else to e e err_text io.println end

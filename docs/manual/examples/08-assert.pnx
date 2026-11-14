@@ -1,8 +1,8 @@
 rem fault
-use io
-word percent (part int, whole int gives int)
+use io .
+def percent part int, whole int gives int do
   whole 0 gt assert                                  rem a promise the caller must keep
   part 100 mul whole div
 end
-cat ("3 of 4: ", 3 4 percent, "%") io.println
-cat ("3 of 0: ", 3 0 percent, "%") io.println
+args "3 of 4: " 3 4 percent "%" . cat io.println
+args "3 of 0: " 3 0 percent "%" . cat io.println

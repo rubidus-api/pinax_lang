@@ -1,7 +1,7 @@
 rem run
-use io
-use ptn
-word say (ok bool, what str) cat (ok if "yes " else "no  " end, what) io.println end
+use io .
+use ptn .
+def say ok bool, what str do args ok if "yes " else "no  " end what . cat io.println end
 "order 66" "%d+" ptn.is_match "%d+: a digit, one or more" say
 "order 66" "^%d+" ptn.is_match "^%d+: digits at the start, and it starts with a letter" say
 "order 66" "%a+ %d+$" ptn.is_match "%a+ %d+$: letters, a space, digits at the end" say

@@ -1,11 +1,11 @@
 rem run
-use io
-use sqlite
+use io .
+use sqlite .
 rem A transaction that is rolled back unless it reached its commit; values go through bind, never into the text.
-word undo (db sqlite)
-  db sqlite.in_transaction if "rollback" db sqlite.exec or_else (e) end end
+def undo db sqlite do
+  db sqlite.in_transaction if "rollback" db sqlite.exec or_else to e end end
 end
-word add_all (db sqlite or fail)
+def add_all db sqlite or fail do
   "begin" db sqlite.exec or_fail
   defer db undo end
   "insert into stock values (:name, :n)" db sqlite.prepare or_fail to ins
@@ -21,11 +21,11 @@ word add_all (db sqlite or fail)
   ins sqlite.step or_fail drop
   "commit" db sqlite.exec or_fail
 end
-word main (or fail)
+def main or fail do
   ":memory:" sqlite.open or_fail to db
   defer db sqlite.close end
   "create table stock (name text primary key, n int)" db sqlite.exec or_fail
-  db add_all or_else (e) cat ("rolled back: ", e err_text, " (code ", sqlite.last_code, ")") io.println end
-  cat ("rows ", "select count(*) from stock" db sqlite.scalar_int or_fail) io.println
+  db add_all or_else to e args "rolled back: " e err_text " (code " sqlite.last_code ")" . cat io.println end
+  args "rows " "select count(*) from stock" db sqlite.scalar_int or_fail . cat io.println
 end
-main or_else (e) cat ("failed: ", e err_text) io.println end
+main or_else to e args "failed: " e err_text . cat io.println end

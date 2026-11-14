@@ -1,16 +1,16 @@
 rem run
-use io
+use io .
 array prices int 6
-word load_prices ()
-  0 6 range do (i int) i 7 mul 3 add i set prices end each
+def load_prices do
+  0 6 range do to i i 7 mul 3 add i set prices end each
 end
-word first_over (limit int gives r int)
+def first_over limit int gives r int do
   -1 to found
-  prices do (p int, i int)
-    p limit gt if i to found break end
+  prices do to i to p
+    p limit gt if i to found break . end
   end each_index
   found
 end
 load_prices
-cat ("first over 20 at ", 20 first_over) io.println
-cat ("first over 99 at ", 99 first_over) io.println
+args "first over 20 at " 20 first_over . cat io.println
+args "first over 99 at " 99 first_over . cat io.println

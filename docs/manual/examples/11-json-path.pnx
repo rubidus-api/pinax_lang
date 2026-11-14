@@ -1,7 +1,7 @@
 rem run
-use io
-use json
-word main (or fail)
+use io .
+use json .
+def main or fail do
   text END
 {"user": {"name": "kim", "langs": ["ko", "en"]}, "visits": 12}
 END
@@ -9,7 +9,7 @@ END
   "user.name" doc json.at or_fail io.println drop      rem the value at a path
   "user.langs[1]" doc json.at or_fail io.println drop  rem an index in brackets
   "visits" doc json.at or_fail drop json.number eq to is_number
-  cat ("visits is a number: ", is_number) io.println
-  "user.email" doc json.at or_else (e) cat ("no email: ", e err_text) io.println 0 "" end drop drop
+  args "visits is a number: " is_number . cat io.println
+  "user.email" doc json.at or_else to e args "no email: " e err_text . cat io.println 0 "" end drop drop
 end
-main or_else (e) e err_text io.println end
+main or_else to e e err_text io.println end

@@ -1,26 +1,26 @@
 rem run
-use io
-use csv
-use json
-use str
+use io .
+use csv .
+use json .
+use str .
 rem Read CSV rows into records, write them out as JSON.
 record city
-  name str(16)
+  name str 16
   people i32
   capital bool
 end
 list cities city 8
 buffer out 512
-word read_rows (input str or fail)
-  input str.lines do (line str)
+def read_rows input str or fail do
+  input str.lines do to line
     cities len to before
     cities add_row or_fail to c
-    line c csv.unpack or_else (e) before cities truncate  cat ("bad row: ", line) io.println  "" end drop
+    line c csv.unpack or_else to e before cities truncate  args "bad row: " line . cat io.println  "" end drop
   end each
 end
-word to_json (or fail)
+def to_json or fail do
   out json.begin_array or_fail
-  cities do (c cities) c out json.pack or_else (e) end end each
+  cities do to c c out json.pack or_else to e end end each
   out json.end_array or_fail
 end
 text END
@@ -28,6 +28,6 @@ Seoul,9411000,true
 Busan,3349000,false
 Daejeon,lots,false
 END
-read_rows or_else (e) end
-to_json or_else (e) e err_text io.println end
+read_rows or_else to e end
+to_json or_else to e e err_text io.println end
 out contents io.println

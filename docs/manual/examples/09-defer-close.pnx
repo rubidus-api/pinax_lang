@@ -1,6 +1,6 @@
 rem refused
-use file
-word first_line (path str gives str or fail)
+use file .
+def first_line path str gives str or fail do
   path file.open_read or_fail to f
   defer f file.close end
   f file.read_line or_fail

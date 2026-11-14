@@ -1,18 +1,18 @@
 rem run
-use io
-use sqlite
-use sheet
+use io .
+use sqlite .
+use sheet .
 rem The module sqlite and the module sheet do not know each other; a few words of the program join them.
 buffer grid 65536
 
 rem the rows of a query become the rows of a sheet: a null stays empty, an integer and a text go in as they are
-word fetch (q stmt, g buffer gives n int or fail)
+def fetch q stmt, g buffer gives n int or fail do
   0 to n
   loop
     q sqlite.step or_fail
-    while
+    not if break . end
     g sheet.add_row or_fail to r
-    0 q sqlite.col_count range do (c int)
+    0 q sqlite.col_count range do to c
       c q sqlite.col_kind to k
       k sqlite.k_int eq if c q sqlite.col_int or_fail r c g sheet.put_int or_fail end
       k sqlite.k_text eq if c q sqlite.col_str or_fail r c g sheet.put_str or_fail end
@@ -21,7 +21,7 @@ word fetch (q stmt, g buffer gives n int or fail)
   end
   n
 end
-word main (or fail)
+def main or fail do
   ":memory:" sqlite.open or_fail to db
   defer db sqlite.close end
   "create table fruit (name text, price int)" db sqlite.exec or_fail
@@ -31,8 +31,8 @@ word main (or fail)
   1 grid sheet.open_book or_fail
   "fruit" 64 2 grid sheet.create or_fail drop
   q grid fetch or_fail drop
-  cat ("rows ", grid sheet.rows) io.println
-  cat ("fig: ", 1 0 grid sheet.str or_fail, ", price empty: ", 1 1 grid sheet.is_empty) io.println
-  cat ("total ", 1 grid sheet.sum_col) io.println
+  args "rows " grid sheet.rows . cat io.println
+  args "fig: " 1 0 grid sheet.str or_fail ", price empty: " 1 1 grid sheet.is_empty . cat io.println
+  args "total " 1 grid sheet.sum_col . cat io.println
 end
-main or_else (e) cat ("failed: ", e err_text) io.println end
+main or_else to e args "failed: " e err_text . cat io.println end

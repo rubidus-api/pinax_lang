@@ -1,11 +1,11 @@
 rem run
-use io
-use str
-word sum_to (n int gives int)
+use io .
+use str .
+def sum_to n int gives int do
   0 to total                    rem what the loop builds lives in locals, not on the stack
   1 to i
   loop
-    i n gt until                rem leave once i passes n
+    i n gt if break . end                rem leave once i passes n
     total i add to total        rem the stack is empty again at the end of the turn
     i 1 add to i
   end

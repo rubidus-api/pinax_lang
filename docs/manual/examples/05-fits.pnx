@@ -1,14 +1,14 @@
 rem run
-use io
+use io .
 record entry
-  name str(8)
+  name str 8
 end
 list names entry 4
-word enter (v str)
-  v fits entry.name or_else (e) cat (v, ": too long, no row taken") io.println return end
-  names add_row or_else (e) "full" io.println return end to r
+def enter v str do
+  v fits entry.name or_else to e args v ": too long, no row taken" . cat io.println return end
+  names add_row or_else to e "full" io.println return end to r
   v r to entry.name
-  cat ("added ", r entry.name, ", rows ", names len) io.println
+  args "added " r entry.name ", rows " names len . cat io.println
 end
 "Pinax" enter
 "an embeddable language" enter

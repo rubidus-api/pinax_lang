@@ -1,6 +1,6 @@
 rem run
-use io
-word sign (n int gives str)
+use io .
+def sign n int gives str do
   n 0 lt if                     rem lt leaves a bool; if takes it off the stack
     "negative"                  rem this way leaves one str
   else

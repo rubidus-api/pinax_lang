@@ -1,9 +1,9 @@
 rem run
-set_order (io, sh)
-word main (or fail)
+set_order io sh .
+def main or fail do
   "echo first" run or_fail drop
-  cat ("the shell says: ", "echo hello" output or_fail) print
+  args "the shell says: " "echo hello" output or_fail . cat print
   "exit 2" run or_fail to s
-  cat ("exit 2 gave status ", s) println
+  args "exit 2 gave status " s . cat println
 end
-main or_else (e) cat ("failed: ", e err_text) println end
+main or_else to e args "failed: " e err_text . cat println end

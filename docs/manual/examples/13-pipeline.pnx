@@ -1,38 +1,38 @@
 rem run
-use io
+use io .
 rem Three stages linked by queues: numbers -> squares -> total.
 tasks stages 3
 queue numbers int 2
 queue squares int 2
 global total int
-word produce ()
+def produce do
   1 to i
   loop
-    i 5 gt until
+    i 5 gt if break . end
     i numbers wait_put or_return              rem waits while the queue is full
     i 1 add to i
   end
   -1 numbers wait_put or_return
 end
-word square ()
+def square do
   loop
     numbers wait_take or_return to n          rem waits while the queue is empty
     n 0 lt if -1 squares wait_put or_return return end
     n n mul squares wait_put or_return
   end
 end
-word add_up ()
+def add_up do
   loop
     squares wait_take or_return to n
-    n 0 lt until
+    n 0 lt if break . end
     total n add set total
   end
 end
-word demo ()
-  do produce end stages spawn or_else (e) return end drop
-  do square end stages spawn or_else (e) return end drop
-  do add_up end stages spawn or_else (e) return end drop
+def demo do
+  ref produce stages spawn or_else to e return end drop
+  ref square stages spawn or_else to e return end drop
+  ref add_up stages spawn or_else to e return end drop
   stages run_all
-  cat ("1 + 4 + 9 + 16 + 25 = ", total) io.println
+  args "1 + 4 + 9 + 16 + 25 = " total . cat io.println
 end
 demo

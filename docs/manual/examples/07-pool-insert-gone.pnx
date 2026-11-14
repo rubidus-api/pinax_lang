@@ -1,11 +1,11 @@
 rem refused
 record item
-  name str(12)
+  name str 12
   count int
 end
 pool items item 3
 index by_name items item.name
-word enter (name str or fail)
+def enter name str or fail do
   items alloc or_fail to r
   name r to item.name
   r by_name insert or_fail

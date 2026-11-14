@@ -1,12 +1,12 @@
 rem run
-use io
+use io .
 list morning int 8
 list evening int 8
-word record_all (l list int, a int, b int, c int)
-  a l push or_else (e) end  b l push or_else (e) end  c l push or_else (e) end
+def record_all l list int, a int, b int, c int do
+  a l push or_else to e end  b l push or_else to e end  c l push or_else to e end
 end
-word report (name str, l list int)
-  cat (name, ": ", l len, " readings, highest ", l maximum or_else (e) 0 end) io.println
+def report name str, l list int do
+  args name ": " l len " readings, highest " l maximum or_else to e 0 end . cat io.println
 end
 morning 12 15 11 record_all
 evening 21 19 20 record_all

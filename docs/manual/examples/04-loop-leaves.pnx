@@ -1,8 +1,8 @@
 rem refused
-word count_up (n int gives int)
+def count_up n int gives int do
   0 to i
   loop
-    i n ge until
+    i n ge if break . end
     i 1 add                     rem a new value each turn, and nothing takes it
   end
   i

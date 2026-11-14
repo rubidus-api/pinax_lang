@@ -1,5 +1,5 @@
 rem run
-use io
-use money
-word total (a cents, b cents gives cents) a b add end
-cat ("total ", 12 money.of_won 3 money.of_won total money.show) io.println
+use io .
+use money .
+def total a cents, b cents gives cents do a b add end
+args "total " 12 money.of_won 3 money.of_won total money.show . cat io.println

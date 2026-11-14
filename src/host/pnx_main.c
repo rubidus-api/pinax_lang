@@ -433,7 +433,8 @@ static pinax_err load_file(pinax_state *state, char *path, char *owned, const ch
         // a line `use NAME`, or each NAME of a line `set_order (NAME, NAME)` (RFC-0040 part C, RFC-0041)
         if (in_list) {
             at = i;
-            while (at < length && (text[at] == ' ' || text[at] == '\t' || text[at] == ','))
+            while (at < length && (text[at] == ' ' || text[at] == '\t' || text[at] == ',' ||
+                                   (in_list == 2 && (text[at] == '\n' || text[at] == '\r'))))
                 ++at;
             if (at >= length || !is_name_byte(text[at])) {
                 in_list = 0;
@@ -444,10 +445,15 @@ static pinax_err load_file(pinax_state *state, char *path, char *owned, const ch
             at = i + 9;
             while (at < length && (text[at] == ' ' || text[at] == '\t'))
                 ++at;
-            if (at >= length || text[at] != '(')
+            if (at >= length)
                 continue;
-            i = at;
-            in_list = 1;
+            if (text[at] == '(') { // set_order (a, b)
+                i = at;
+                in_list = 1;
+            } else { // set_order a b . (RFC-0049): names up to a period
+                i = at - 1;
+                in_list = 2;
+            }
             continue;
         } else {
             if ((i != 0 && text[i - 1] != '\n') || memcmp(text + i, "use", 3) != 0 || (text[i + 3] != ' ' && text[i + 3] != '\t'))

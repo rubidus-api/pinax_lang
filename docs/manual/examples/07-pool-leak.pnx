@@ -3,7 +3,7 @@ record node
   key int
 end
 pool nodes node 4
-word new_node (k int or fail)
+def new_node k int or fail do
   nodes alloc or_fail to n
   k n to node.key
 end

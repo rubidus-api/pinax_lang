@@ -1,2 +1,2 @@
 rem refused
-word average (sum int, count int gives int) sum count div end
+def average sum int, count int gives int do sum count div end

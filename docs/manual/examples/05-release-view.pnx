@@ -1,8 +1,8 @@
 rem refused
-use io
-word f ()
+use io .
+def f do
   mark to m
-  cat ("made ", "after the mark") to s
+  args "made " "after the mark" . cat to s
   m release
   s io.println
 end

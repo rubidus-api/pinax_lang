@@ -1,9 +1,9 @@
 rem run
-use io
-word day_kind (day str gives str)
-  day case
-    ("sat", "sun") of "weekend" end
-    ("mon", "tue", "wed", "thu", "fri") of "weekday" end
+use io .
+def day_kind day str gives str do
+  day match
+    when "sat" "sun" do "weekend" end
+    when "mon" "tue" "wed" "thu" "fri" do "weekday" end
     otherwise "not a day" end
   end
 end

@@ -1,19 +1,19 @@
 rem run
-use io
-use str
-word up (a int, b int gives bool) a b lt end
-word down (a int, b int gives bool) a b gt end
-word best (before word (int, int gives bool), x int, y int gives int) y x before call if y else x end end
-word order_named (how str gives word (int, int gives bool) or fail)
-  how case
-    "up" of do up end end
-    "down" of do down end end
+use io .
+use str .
+def up a int, b int gives bool do a b lt end
+def down a int, b int gives bool do a b gt end
+type Proc1 proc int, int gives bool end def best before Proc1, x int, y int gives int do y x before call if y else x end end
+def order_named how str gives Proc1 or fail do
+  how match
+    when "up" do ref up end
+    when "down" do ref down end
     otherwise err.not_found fail end
   end
 end
-word demo (or fail)
+def demo or fail do
   "up" order_named or_fail to smallest_first
   "down" order_named or_fail to largest_first
-  cat ("smallest ", smallest_first 7 3 best, ", largest ", largest_first 7 3 best) io.println
+  args "smallest " smallest_first 7 3 best ", largest " largest_first 7 3 best . cat io.println
 end
-demo or_else (e) e err_text io.println end
+demo or_else to e e err_text io.println end

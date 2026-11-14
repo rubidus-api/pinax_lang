@@ -1,6 +1,6 @@
 rem run
-use io
-use str
+use io .
+use str .
 rem (8 - 3) * (2 + 4): each bracket first, then the operation after its two values
 8 3 sub 2 4 add mul str.to_str io.println          rem 5 * 6 = 30
 rem 100 - 4 * 5 * 2: the multiplications first, as in arithmetic

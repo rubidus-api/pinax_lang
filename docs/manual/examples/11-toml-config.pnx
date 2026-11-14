@@ -1,7 +1,7 @@
 rem run
-use io
-use toml
-word main (or fail)
+use io .
+use toml .
+def main or fail do
   text END
 name = "shop"            # the name of the service
 [server]
@@ -17,6 +17,6 @@ END
   "server.ports[1]" conf toml.at or_fail io.println drop
   "backend[1].url" conf toml.at or_fail io.println drop
   conf toml.valid to fine
-  cat ("valid: ", fine) io.println
+  args "valid: " fine . cat io.println
 end
-main or_else (e) e err_text io.println end
+main or_else to e e err_text io.println end

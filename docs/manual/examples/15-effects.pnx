@@ -1,12 +1,12 @@
 rem see-effects
-use io
-use file
+use io .
+use file .
 global hits int
-word double (n int gives int) n 2 mul end
-word tally (n int) hits n add set hits end
-word save (path str or fail)
+def double n int gives int do n 2 mul end
+def tally n int do hits n add set hits end
+def save path str or fail do
   path file.open_write or_fail to f
   defer f file.close end
-  cat ("hits ", hits) f file.write or_fail
+  args "hits " hits . cat f file.write or_fail
 end
-word say () cat ("hits ", hits double) io.println end
+def say do args "hits " hits double . cat io.println end

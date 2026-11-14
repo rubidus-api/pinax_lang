@@ -1,6 +1,6 @@
 rem run
-use io
-word is_prime (n int gives bool)
+use io .
+def is_prime n int gives bool do
   n 2 lt if false return end
   2 to d
   loop
@@ -9,19 +9,19 @@ word is_prime (n int gives bool)
     d 1 add to d
   end
 end
-word first_pair (target int gives str)       rem the first a < b <= 20, both prime, with a + b = target
+def first_pair target int gives str do       rem the first a < b <= 20, both prime, with a + b = target
   2 to a
   0 to b
-  loop (outer)
+  loop
     a 1 add to b
     loop
-      b 20 gt until
-      a is_prime b is_prime and a b add target eq and until (outer)
+      b 20 gt if break . end
+      a is_prime b is_prime and a b add target eq and if break 2 . end
       b 1 add to b
     end
     a 1 add to a
     a 20 gt if "none" return end
   end
-  cat (a, " + ", b)
+  args a " + " b . cat
 end
 26 first_pair io.println

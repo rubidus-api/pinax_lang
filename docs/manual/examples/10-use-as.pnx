@@ -1,4 +1,4 @@
 rem run
-use io
-use money as m
-cat ("price ", 7 m.of_won m.show) io.println
+use io .
+use money as m .
+args "price " 7 m.of_won m.show . cat io.println

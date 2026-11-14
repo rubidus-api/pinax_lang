@@ -1,14 +1,14 @@
 rem run
-use io
-use str
-use rex
-word demo ()
-  "order 66, aisle 7" r"\d+" rex.rx rex.match or_else (e) "none" end io.println
-  "no digits here" r"\d+" rex.rx rex.match or_else (e) "none" end io.println
-  "x=1, y=22" r"(\w)=(\d+)" rex.rx rex.matches do (whole str, name str, value str)
-    cat (name, " is ", value) io.println
+use io .
+use str .
+use rex .
+def demo do
+  "order 66, aisle 7" r"\d+" rex.rx rex.match or_else to e "none" end io.println
+  "no digits here" r"\d+" rex.rx rex.match or_else to e "none" end io.println
+  "x=1, y=22" r"(\w)=(\d+)" rex.rx rex.matches do to value to name to whole
+    args name " is " value . cat io.println
   end each
-  "a;b;;c" r";" rex.rx rex.split do (p str) cat ("[", p, "]") io.print end each
+  "a;b;;c" r";" rex.rx rex.split do to p args "[" p "]" . cat io.print end each
   "" io.println
 end
 demo

@@ -1,25 +1,25 @@
 rem run
-use io
-use file
+use io .
+use file .
 rem Copy a file line by line. Both files are owned: each must be closed on every path.
-word copy_lines (source str, target str gives n int or fail)
+def copy_lines source str, target str gives n int or fail do
   source file.open_read or_fail to src
-  target file.open_write or_else (e) src file.close e fail end to dst
+  target file.open_write or_else to e src file.close e fail end to dst
   0 to n
   loop
-    src file.read_line or_else (e) break end to line
-    cat (line, "\n") dst file.write or_else (e) src file.close dst file.close e fail end
+    src file.read_line or_else to e break . end to line
+    args line "\n" . cat dst file.write or_else to e src file.close dst file.close e fail end
     n 1 add to n
   end
   src file.close
   dst file.close
   n
 end
-word setup (or fail)
+def setup or fail do
   "in.txt" file.open_write or_fail to f
-  "one\ntwo\nthree\n" f file.write or_else (e) f file.close e fail end
+  "one\ntwo\nthree\n" f file.write or_else to e f file.close e fail end
   f file.close
 end
-setup or_else (e) end
-word main () cat ("copied ", "in.txt" "out.txt" copy_lines or_else (e) -1 end, " lines") io.println end
+setup or_else to e end
+def main do args "copied " "in.txt" "out.txt" copy_lines or_else to e -1 end " lines" . cat io.println end
 main
