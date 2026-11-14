@@ -49,23 +49,23 @@ int main(void) {
     pinax_register(st, "web", words, 3);
     pinax_on_task_fault(st, faulted, NULL);
     static const char source[] =
-        "use web\n"
+        "use web .\n"
         "tasks requests 4 apart\n"
         "queue incoming int 4\n"
         "array served int 3\n"
-        "word serve ()\n"
+        "def serve do\n"
         "  incoming take or_return to id\n"
         "  id task_tag\n"
-        "  id web.fetch or_else (e) cat (\"gave up: \", e err_text) end to page\n"
+        "  id web.fetch or_else to e args \"gave up: \" e err_text . cat end to page\n"
         "  id served idx 1 add  id set served\n"
         "  id page web.reply\n"
         "end\n"
-        "word start (id int)\n"
-        "  do serve end requests spawn or_else (e) id \"busy\" web.reply return end drop\n"
-        "  id incoming put or_else (e) end\n"
+        "def start id int do\n"
+        "  ref serve requests spawn or_else to e id \"busy\" web.reply return end drop\n"
+        "  id incoming put or_else to e end\n"
         "end\n"
-        "word main ()\n"
-        "  loop web.next to id  id 0 lt until  id start end\n"
+        "def main do\n"
+        "  loop web.next to id  id 0 lt if break . end  id start end\n"
         "  requests run_all\n"
         "end\n";
     if (pinax_load(st, "main", (pinax_str){(const unsigned char *)source, sizeof source - 1}, PINAX_LOAD_CODE) != PINAX_OK) {

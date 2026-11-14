@@ -1,8 +1,8 @@
 rem run
-use io
-use str
-word show (n int) n str.to_str io.println end
-word demo ()
+use io .
+use str .
+def show n int do n str.to_str io.println end
+def demo do
   250 u8 5 u8 add raw show               rem 255
   0 u8 1 u8 wrap_sub raw show            rem 255: wraps at 2^8
   200 u8 100 u8 sat_add raw show         rem 255: stops at the end

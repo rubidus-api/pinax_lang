@@ -1,2 +1,2 @@
 rem refused
-word f (gives u8) 256 u8 end
+def f gives u8 do 256 u8 end

@@ -23,20 +23,20 @@
 // the terminal waits for: the definitions and blocks open, the line being edited or inserted.
 // MIT (see ../../LICENSE).
 
-const DECLARATIONS = new Set(["word", "const", "global", "array", "list", "pool", "queue", "buffer", "tasks",
+const DECLARATIONS = new Set(["def", "const", "global", "array", "list", "pool", "queue", "buffer", "tasks",
     "record", "type", "extern", "forward", "index", "bound", "shared", "test", "use", "set_order"]);
-// statements whose end is plain from their form: `use NAME [as NAME]`, `set_order (...)`, `get_order`. They take the
-// next name or one parenthesized list, so the terminal runs them when that is typed; a dot may be written, or not
-const SELF_ENDED = /^\s*(use\s+[A-Za-z_][A-Za-z_0-9]*(\s+as\s+[A-Za-z_][A-Za-z_0-9]*)?|set_order\s*\([^()]*\)|get_order)\s*$/;
+// statements whose end is plain from their form: `get_order`. `use io .` and `set_order io str .` end with a period
+// (RFC-0049), as a row does
+const SELF_ENDED = /^\s*get_order\s*$/;
 const PROMPT = "pinax> ", MORE = "  ...> ";
 // what :help says and the page's guide shows: one list for both
 export const GUIDE = {
     rules: [
         'Pinax code runs when it is whole: it ends with "," or ".", or with the end of its block.',
-        "`use io`, `set_order (io, str)` and `get_order` need no dot: what they take is plain, so they run when typed.",
+        "`use io .` and `set_order io str .` end with a period, as `row` does; `get_order` needs none and runs when typed.",
         "An empty line runs the text gathered, outside any block: the way out of a forgotten dot.",
         "A loop or a block runs once, when its end is typed; the status line shows the blocks open.",
-        "A statement that declares something (word, const, global, use, set_order, ...) is added to the program.",
+        "A statement that declares something (def, const, global, use, set_order, ...) is added to the program.",
     ],
     commands: [
         [":list [N[-M]]", "the program with its line numbers"],
@@ -49,7 +49,7 @@ export const GUIDE = {
         [":stack", "the values on the stack, the first pushed first (:s); it may be typed inside a block"],
         [":blocks", "the definitions and blocks open in the text being typed, the outer one first; it may be typed inside a block"],
         [":clear", "empties the stack only"],
-        [":words", "the words of the program, each with its signature"],
+        [":procs", "the procedures of the program, each with its signature"],
         [":get_order", "the search order as it is, as the word get_order tells it"],
         [":save, :load", "the program as a .pnx file"],
         [":help", "this list"],
@@ -82,12 +82,12 @@ export function usedModules(text) {
 // the words a program declares, for completion: [module "", word, signature, meaning, true]
 export function userWords(program) {
     const out = new Map();
-    for (const m of program.matchAll(/^[ \t]*(?:export[ \t]+|redefine[ \t]+)?word[ \t]+([A-Za-z_][A-Za-z_0-9]*)[ \t]*(\([^)]*\))?/gm))
-        out.set(m[1], ["", m[1], m[2] ?? "()", "defined in this session", true]);
+    for (const m of program.matchAll(/^[ \t]*(?:export[ \t]+|redefine[ \t]+)?def[ \t]+([A-Za-z_][A-Za-z_0-9]*)([^\n]*?)\bdo\b/gm))
+        out.set(m[1], ["", m[1], `(${m[2].trim()})`, "defined in this session", true]);
     return [...out.values()];
 }
 
-// the declaration a text begins with, as "word sq", "use io"; "" for set_order; null for none
+// the declaration a text begins with, as "def sq", "use io"; "" for set_order; null for none
 function declared(text) {
     const words = text.replace(/^(\s*(rem\b[^\n]*)?\n)+/, "").trim().split(/[\s(]+/);
     let k = 0;
@@ -263,10 +263,10 @@ export async function createConsole({ createPinax, bytes, print, store = null })
             session.clear();
             print("info", "the stack is empty\n");
             return {};
-        case "words": { // the words of the program, each with its signature
+        case "procs": { // the procedures of the program, each with its signature
             const mine = userWords(lines.join("\n"));
             if (!mine.length)
-                print("info", "no word is defined yet\n");
+                print("info", "no procedure is defined yet\n");
             else {
                 const wide = Math.max(...mine.map((w) => w[1].length));
                 print("info", mine.map((w) => `  ${w[1].padEnd(wide)}  ${w[2]}`).join("\n") + "\n");
@@ -376,9 +376,10 @@ export async function createConsole({ createPinax, bytes, print, store = null })
         if (r.ok) {
             remember(text);
             showStack(r.stack);
-            const head = /^\s*word\s+([A-Za-z_][A-Za-z_0-9]*)\s*(\([^)]*\))?/.exec(text);
+            const found = /^\s*def\s+([A-Za-z_][A-Za-z_0-9]*)([^\n]*?)\bdo\b/.exec(text);
+            const head = found && [found[0], found[1], `(${found[2].trim()})`];
             if (head)
-                print("info", `word ${head[1]} ${head[2] ?? "()"} compiled; nothing ran. It runs when it is called: ` +
+                print("info", `def ${head[1]} ${head[2]} compiled; nothing ran. It runs when it is called: ` +
                     "its arguments first, then its name\n");
             const call = head && sampleCall(head[1], head[2]);
             if (call) {
@@ -395,7 +396,7 @@ export async function createConsole({ createPinax, bytes, print, store = null })
     // results, so that one message is not a mistake here.
     function checkWord(text) {
         const b = pinax.blocks(text);
-        if (!b.ok || !b.open.length || !b.open[0].startsWith("word "))
+        if (!b.ok || !b.open.length || !b.open[0].startsWith("def "))
             return;
         trialLog = [];
         const r = session.eval(text + "\n" + "end\n".repeat(b.open.length));

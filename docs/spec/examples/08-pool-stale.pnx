@@ -4,10 +4,10 @@ record node
 end
 pool nodes node 2
 global keep nodes
-word demo (or fail)
+def demo or fail do
   nodes alloc or_fail to a
   a set keep                                 rem stored: the row is handed over
   keep nodes free
   keep node.value drop                      rem the row was given back: stale
 end
-demo or_else (e) end
+demo or_else to e end

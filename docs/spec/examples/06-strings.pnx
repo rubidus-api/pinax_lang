@@ -1,5 +1,5 @@
 rem run
-use io
+use io .
 "tab:\t| quote:\" | hex:\x41 | code point:\u00e9" io.println
 r"C:\new\table" io.println          rem raw: backslashes stay
 text END

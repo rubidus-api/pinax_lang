@@ -1,4 +1,4 @@
 rem refused
-use io
+use io .
 "this line is never printed" io.println
-word broken (n int gives r int) n "one" add end
+def broken n int gives r int do n "one" add end

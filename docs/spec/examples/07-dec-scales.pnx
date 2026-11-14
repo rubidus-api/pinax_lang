@@ -1,2 +1,2 @@
 rem refused
-word total (gives dec(2)) 1.50 0.5 add end      rem dec(2) and dec(1)
+def total gives dec 2 do 1.50 0.5 add end      rem dec(2) and dec(1)

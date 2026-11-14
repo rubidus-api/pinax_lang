@@ -3,7 +3,7 @@ record node
   value int
 end
 pool nodes node 2
-word leak (or fail)
+def leak or fail do
   nodes alloc or_fail to a
   7 a to node.value
 end

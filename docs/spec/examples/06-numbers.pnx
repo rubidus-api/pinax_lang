@@ -1,6 +1,6 @@
 rem run
-use io
-use str
+use io .
+use str .
 1_000_000 str.to_str io.println     rem underscores between digits
 0xFF str.to_str io.println          rem hexadecimal
 0b1010 str.to_str io.println        rem binary

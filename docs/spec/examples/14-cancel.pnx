@@ -1,13 +1,13 @@
 rem run
-use io
+use io .
 tasks workers 1
-word demo ()
+def demo do
   do
     loop
       "working" io.println
-      yield or_else (e) cat ("stopped: ", e err_text) io.println return end
+      yield or_else to e args "stopped: " e err_text . cat io.println return end
     end
-  end workers spawn or_else return end to t
+  end workers spawn or_else drop return end to t
   t resume drop
   t resume drop
   t cancel                                 rem the task's next yield fails with cancelled

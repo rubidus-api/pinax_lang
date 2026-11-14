@@ -1,4 +1,4 @@
 rem refused
-use csv
+use csv .
 buffer b 8
-word f () 5 b csv.pack or_else (e) end end
+def f do 5 b csv.pack or_else to e end end

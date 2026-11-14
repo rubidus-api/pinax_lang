@@ -259,7 +259,7 @@ WASM_EXPORT("pnx_wasm_eval_clear") void pnx_wasm_eval_clear(void) {
 }
 
 // The definitions and blocks open at the end of the text the page wrote at pnx_wasm_text(), the
-// outermost first, one a line ("word sq", "loop", "if"), at pnx_wasm_blocks_text(): the playground
+// outermost first, one a line ("def sq", "loop", "if"), at pnx_wasm_blocks_text(): the playground
 // shows them while it gathers lines. Returns how many are open, or -1 for text that is not Pinax.
 // pnx_wasm_blocks_closed() says whether the text's last token is the `end` that closed its
 // outermost one: 1, or 2 when that was a `do` block (a value, which a word after it may take).
@@ -275,8 +275,10 @@ WASM_EXPORT("pnx_wasm_blocks") int32_t pnx_wasm_blocks(const unsigned char *text
     enum { MAX_OPEN = 64 };
     struct { pnx_word_id kind; uint32_t start, length; } open[MAX_OPEN];
     uint32_t   depth = 0, parens = 0;
-    bool       named = false; // the token before was word, test or record: this one is its name
-    bool       forward = false;
+    bool       named = false; // the token before was def, test or record: this one is its name
+    bool       await_do = false; // a def or test is open and its body's do has not come: that do opens nothing
+    bool       skip_end = false; // inside forward, extern or type NAME proc: their end closes nothing
+    int        decl = 0, type_state = 0;
     pnx_word_id closed = PNX_KW_NONE;
     pnx_lexer  lx;
     pnx_token  t;
@@ -300,26 +302,57 @@ WASM_EXPORT("pnx_wasm_blocks") int32_t pnx_wasm_blocks(const unsigned char *text
             ++parens;
         else if (t.kind == PNX_T_RPAREN && parens)
             --parens;
+        if (decl == 1) { // forward NAME ... end opens nothing; forward list|array|pool NAME is a declaration
+            decl = 0;
+            if (t.kind == PNX_T_NAME)
+                skip_end = true;
+        }
+        if (t.kind == PNX_T_NAME && type_state) { // type NAME proc ... end opens nothing
+            if (type_state == 1) {
+                type_state = 2;
+            } else {
+                skip_end = skip_end || (t.length == 4 && __builtin_memcmp(text + t.start, "proc", 4) == 0);
+                type_state = 0;
+            }
+        } else if (t.kind != PNX_T_RESERVED && type_state == 2) {
+            type_state = 0;
+        }
         if (t.kind != PNX_T_RESERVED || parens)
             continue;
         switch (t.word) {
         case PNX_KW_forward:
-            forward = true;
+            decl = 1;
             continue;
-        case PNX_KW_word: case PNX_KW_test: case PNX_KW_record:
-            if (forward) { // forward word NAME (...) opens nothing
-                forward = false;
+        case PNX_KW_extern:
+            skip_end = true;
+            continue;
+        case PNX_KW_type:
+            type_state = 1;
+            continue;
+        case PNX_KW_def: case PNX_KW_test: case PNX_KW_record:
+            named = depth == 0 || t.word == PNX_KW_record;
+            await_do = t.word != PNX_KW_record;
+            if (depth < MAX_OPEN)
+                open[depth] = (typeof(open[0])){t.word, 0, 0};
+            ++depth;
+            break;
+        case PNX_KW_do:
+            if (await_do) { // the body of a def or test: its do opens nothing more
+                await_do = false;
                 continue;
             }
-            named = true;
             [[fallthrough]];
-        case PNX_KW_do: case PNX_KW_if: case PNX_KW_loop: case PNX_KW_case: case PNX_KW_of:
-        case PNX_KW_otherwise: case PNX_KW_or_else: case PNX_KW_defer:
+        case PNX_KW_if: case PNX_KW_loop: case PNX_KW_match: case PNX_KW_otherwise: case PNX_KW_or_else:
+        case PNX_KW_defer:
             if (depth < MAX_OPEN)
                 open[depth] = (typeof(open[0])){t.word, 0, 0};
             ++depth;
             break;
         case PNX_KW_end:
+            if (skip_end) {
+                skip_end = false;
+                break;
+            }
             if (depth) {
                 --depth;
                 if (depth == 0)
@@ -329,12 +362,11 @@ WASM_EXPORT("pnx_wasm_blocks") int32_t pnx_wasm_blocks(const unsigned char *text
         default:
             break;
         }
-        forward = false;
     }
     blocks_closed = closed == PNX_KW_NONE ? 0 : closed == PNX_KW_do ? 2 : 1;
     static const char *const kinds[PNX_KW_COUNT] = {
-        [PNX_KW_word] = "word", [PNX_KW_test] = "test", [PNX_KW_record] = "record", [PNX_KW_do] = "do",
-        [PNX_KW_if] = "if", [PNX_KW_loop] = "loop", [PNX_KW_case] = "case", [PNX_KW_of] = "of",
+        [PNX_KW_def] = "def", [PNX_KW_test] = "test", [PNX_KW_record] = "record", [PNX_KW_do] = "do",
+        [PNX_KW_if] = "if", [PNX_KW_loop] = "loop", [PNX_KW_match] = "match",
         [PNX_KW_otherwise] = "otherwise", [PNX_KW_or_else] = "or_else", [PNX_KW_defer] = "defer",
     };
     for (uint32_t k = 0; k < depth && k < MAX_OPEN; ++k) {

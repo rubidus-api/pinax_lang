@@ -5,20 +5,20 @@
 
 /* One state holds the data; two others read it in place. Nothing is copied. */
 static const char data[] =
-    "record city\n  name str(12)\n  people int\nend\n"
+    "record city\n  name str 12\n  people int\nend\n"
     "list cities city 8\n"
     "index by_name cities city.name\n"
-    "row cities (\"Seoul\", 9411)\n"
-    "row cities (\"Busan\", 3317)\n"
-    "row cities (\"Incheon\", 3001)\n";
+    "row cities \"Seoul\" 9411 .\n"
+    "row cities \"Busan\" 3317 .\n"
+    "row cities \"Incheon\" 3001 .\n";
 static const char reader[] =
-    "record city\n  name str(12)\n  people int\nend\n"
+    "record city\n  name str 12\n  people int\nend\n"
     "shared list cities city 8\n"
     "shared index by_name cities city.name\n"
-    "word people_of (name str gives n int or fail) name by_name lookup or_fail city.people end\n"
-    "word total (gives n int)\n"
+    "def people_of name str gives n int or fail do name by_name lookup or_fail city.people end\n"
+    "def total gives n int do\n"
     "  0 to t  0 to i\n"
-    "  loop i cities len lt while  t i cities idx city.people add to t  i 1 add to i end\n"
+    "  loop i cities len lt not if break . end  t i cities idx city.people add to t  i 1 add to i end\n"
     "  t\n"
     "end\n";
 

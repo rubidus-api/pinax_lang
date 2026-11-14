@@ -23,9 +23,9 @@ export function moduleContext(before) {
     const use = /(?:^|\n)[ \t]*use[ \t]+([A-Za-z_0-9]*)$/.exec(before);
     if (use)
         return { kind: "use", stem: use[1], taken: [] };
-    const order = /(?:^|[\s,.])set_order[ \t]*\(([^)]*?)([A-Za-z_0-9]*)$/.exec(before);
-    if (order && /(^|,)\s*$/.test(order[1]))
-        return { kind: "order", stem: order[2], taken: order[1].split(",").map((t) => t.trim()).filter(Boolean) };
+    const order = /(?:^|[\s,.])set_order[ \t]+([^.]*?)([A-Za-z_0-9]*)$/.exec(before);
+    if (order && /(^|\s)$/.test(order[1]))
+        return { kind: "order", stem: order[2], taken: order[1].split(/[\s,]+/).filter(Boolean) };
     return null;
 }
 
@@ -47,10 +47,12 @@ export function commandContext(before) {
 // the names a text declares: Map name -> { kind, signature }; the parameters of a word count as variables
 export function declaredNames(text) {
     const out = new Map();
-    for (const m of text.matchAll(/^[ \t]*(?:export[ \t]+|redefine[ \t]+)?(word|const|global|array|list|pool|queue|buffer|tasks|record|type|index|bound|shared)[ \t]+([A-Za-z_][A-Za-z_0-9]*)[ \t]*(\([^)]*\))?/gm)) {
-        out.set(m[2], { kind: m[1] === "word" ? "word" : m[1] === "const" ? "constant" : "variable", signature: m[1] === "word" ? m[3] ?? "()" : "" });
-        if (m[1] === "word" && m[3])
-            for (const param of m[3].slice(1, -1).split("gives")[0].split(","))
+    // def NAME parameters [gives results] [or fail] do  (RFC-0049); the others are one word and a name
+    for (const m of text.matchAll(/^[ \t]*(?:export[ \t]+|redefine[ \t]+)?(def|const|global|array|list|pool|queue|buffer|tasks|record|type|index|bound|shared)[ \t]+([A-Za-z_][A-Za-z_0-9]*)([^\n]*)/gm)) {
+        const header = m[1] === "def" ? /^(.*?)\bdo\b/.exec(m[3])?.[1] ?? m[3] : "";
+        out.set(m[2], { kind: m[1] === "def" ? "word" : m[1] === "const" ? "constant" : "variable", signature: m[1] === "def" ? `(${header.trim()})` : "" });
+        if (m[1] === "def" && header.trim())
+            for (const param of header.split("gives")[0].split(","))
                 if (/^\s*([A-Za-z_][A-Za-z_0-9]*)\s+\S/.test(param)) {
                     const name = /^\s*([A-Za-z_][A-Za-z_0-9]*)/.exec(param)[1];
                     if (!out.has(name))
@@ -105,7 +107,7 @@ export function complete(words, text, cursor, limit = 8, modules = [], used = []
         });
         if (where.kind === "order" && "get_order".startsWith(where.stem) && !where.taken.includes("get_order"))
             items.push({ label: "get_order", insert: "get_order", module: "", word: "get_order", signature: "",
-                         meaning: "the order as it is now: set_order (get_order, str) puts str behind it" });
+                         meaning: "the order as it is now: set_order get_order str . puts str behind it" });
         return items.length && !(items.length === 1 && items[0].insert === where.stem)
             ? { from: cursor - where.stem.length, to: cursor, items: items.slice(0, 16) } : null;
     }

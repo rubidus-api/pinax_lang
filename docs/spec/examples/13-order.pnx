@@ -1,10 +1,10 @@
 rem run
-use io
-use str
-set_order (io)
-set_order (get_order, str)
+use io .
+use str .
+set_order io .
+set_order get_order str .
 get_order
 "pinax" upper println
-word shout (s str) cat (s upper, "!") println end
+def shout s str do args s upper "!" . cat println end
 "hello" shout
 "abc" str.len 3 eq if "three bytes" println end

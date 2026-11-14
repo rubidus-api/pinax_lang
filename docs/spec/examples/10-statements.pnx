@@ -1,7 +1,7 @@
 rem run
-use io
-word show (n int)
-  cat ("square: ", n n mul) io.println .
+use io .
+def show n int do
+  args "square: " n n mul . cat io.println .
 end
 "start" io.println ,
 3 show ,

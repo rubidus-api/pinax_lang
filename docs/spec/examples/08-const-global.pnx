@@ -1,13 +1,13 @@
 rem run
-use io
-use str
+use io .
+use str .
 const limit 3
 const greeting "hello"
 global hits int
-global last str(16)
+global last str 16
 global seen bool
 hits str.to_str io.println           rem a global starts at zero
 limit set hits
 greeting set last
 true set seen
-cat (last, " ", hits, " ", seen) io.println
+args last " " hits " " seen . cat io.println

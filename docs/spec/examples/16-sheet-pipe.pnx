@@ -1,8 +1,8 @@
 rem run
-use io
-use sheet
+use io .
+use sheet .
 buffer grid 8192
-word load (or fail)
+def load or fail do
   1 grid sheet.open_book or_fail
   "stock" 6 3 grid sheet.create or_fail drop
   3 do grid sheet.add_row or_fail drop end times
@@ -10,11 +10,11 @@ word load (or fail)
   "pear" 1 0 grid sheet.put_str or_fail   5 1 1 grid sheet.put_int or_fail
   "pear" 2 0 grid sheet.put_str or_fail   7 2 1 grid sheet.put_int or_fail
 end
-word show (title str) cat (title, ":") io.print
-  0 grid sheet.sel_len range do (k int) cat (" ", k grid sheet.sel_row) io.print end each
+def show title str do args title ":" . cat io.print
+  0 grid sheet.sel_len range do to k args " " k grid sheet.sel_row . cat io.print end each
   "" io.println
 end
-word main (or fail)
+def main or fail do
   load or_fail
   0 sheet.eq "pear" grid sheet.where_str     rem rows whose column 0 is pear
   "pears" show
@@ -24,4 +24,4 @@ word main (or fail)
   1 grid sheet.order_by_desc or_fail         rem all rows, dearest first
   "by price" show
 end
-main or_else (e) e err_text io.println end
+main or_else to e e err_text io.println end

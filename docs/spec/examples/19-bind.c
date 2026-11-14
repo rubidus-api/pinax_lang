@@ -11,8 +11,8 @@ int main(void) {
     static const char source[] =
         "bound array samples int 5\n"
         "bound global scale int\n"
-        "word scaled_sum (gives n int) samples sum scale mul end\n"
-        "word clear_first () 0 0 set samples end\n";
+        "def scaled_sum gives n int do samples sum scale mul end\n"
+        "def clear_first do 0 0 set samples end\n";
     if (pinax_load(st, "main", (pinax_str){(const unsigned char *)source, sizeof source - 1}, PINAX_LOAD_CODE) != PINAX_OK)
         return 1;
     static int64_t samples[5] = {1, 2, 3, 4, 5};    /* host memory the script reads and writes in place */

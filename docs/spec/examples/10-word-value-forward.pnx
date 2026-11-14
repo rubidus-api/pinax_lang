@@ -1,6 +1,6 @@
 rem refused
-forward word later (n int)
-word demo ()
-  do later end drop
+forward later n int end
+def demo do
+  ref later drop
 end
-word later (n int) end
+def later n int do end

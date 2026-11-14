@@ -1,6 +1,6 @@
 rem run
-use io
-word p (s str, n int) cat (s, " = ", n) io.println end
+use io .
+def p s str, n int do args s " = " n . cat io.println end
 "7 2 floor_div" 7 2 floor_div p
 "-7 2 floor_mod" -7 2 floor_mod p
 "-1 2 u_div" -1 2 u_div p

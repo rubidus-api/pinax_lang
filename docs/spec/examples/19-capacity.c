@@ -12,7 +12,7 @@ int main(void) {
     static const char source[] =
         "tasks handlers host 32 8192 apart\n"
         "list seen int host\n"
-        "word room (gives n int) seen capacity end\n";
+        "def room gives n int do seen capacity end\n";
     const uint32_t at_once = 48;
     pinax_capacity(st, "handlers", at_once + 1); /* one more for the task that takes the requests */
     pinax_capacity(st, "seen", at_once);

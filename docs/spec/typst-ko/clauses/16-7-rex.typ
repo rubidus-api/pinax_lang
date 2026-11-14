@@ -67,9 +67,8 @@
 #ex("spec", "16-rex-bad.pnx")
 #ex("spec", "16-rex-backref.pnx")
 
-#para("9")[`regex` 자리에 `str` 를 주면 거절된다. 블록의 묶음 매개변수는 `str` 이어야 한다.]
+#para("9")[`regex` 자리에 `str` 를 주면 거절된다.]
 #ex("spec", "16-rex-str.pnx")
-#ex("spec", "16-rex-group-type.pnx")
 
 #part("결함")
 

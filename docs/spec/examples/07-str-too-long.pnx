@@ -1,5 +1,5 @@
 rem fault
-use io
-global name str(4)
+use io .
+global name str 4
 "four" set name
 "more than four" set name

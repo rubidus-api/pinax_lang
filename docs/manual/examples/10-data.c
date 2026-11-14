@@ -6,10 +6,10 @@
 /* A settings file the host reads as data: declarations and values, no code. */
 static const char settings[] =
     "global port int\n"
-    "global name str(16)\n"
+    "global name str 16\n"
     "8080 set port\n"
     "\"edge\" set name\n";
-static const char hostile[] = "word boom () end\n";
+static const char hostile[] = "def boom do end\n";
 
 int main(void) {
     static unsigned char block[1 << 20];

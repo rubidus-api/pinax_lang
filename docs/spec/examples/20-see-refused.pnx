@@ -1,5 +1,5 @@
 rem see-refused
-word f (n int gives int)
+def f n int gives int do
   n 1 add
   n
 end

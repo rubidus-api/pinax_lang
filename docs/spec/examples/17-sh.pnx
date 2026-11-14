@@ -1,9 +1,9 @@
 rem run
-use io
-use sh
-word main (or fail)
+use io .
+use sh .
+def main or fail do
   "echo one; echo two" sh.output or_fail io.print
-  cat ("status ", "exit 4" sh.run or_fail) io.println
-  cat ("echo ", "it's here" sh.quote) sh.output or_fail io.print
+  args "status " "exit 4" sh.run or_fail . cat io.println
+  args "echo " "it's here" sh.quote . cat sh.output or_fail io.print
 end
-main or_else (e) cat ("failed: ", e err_text) io.println end
+main or_else to e args "failed: " e err_text . cat io.println end

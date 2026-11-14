@@ -1,7 +1,7 @@
 rem run
-use io
-use str
+use io .
+use str .
 shared list scores int 100
-word total (l list int gives int) l sum end       rem reads its parameter only
-word everyone (gives int) scores total end        rem so a shared list may be given to it
+def total l list int gives int do l sum end       rem reads its parameter only
+def everyone gives int do scores total end        rem so a shared list may be given to it
 scores total str.to_str io.println                rem not given yet: empty

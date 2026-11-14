@@ -1,19 +1,19 @@
 rem run
-use io
+use io .
 record entry
-  name str(4)
+  name str 4
 end
 list rows entry 2
-array tags str(2) 2
+array tags str 2 2
 
-word enter (v str)
-  v fits entry.name or_else (e) cat ("refused: ", v, " (", e err_text, "), rows ", rows len) io.println return end
-  rows add_row or_else (e) "full" io.println return end to r
+def enter v str do
+  v fits entry.name or_else to e args "refused: " v " (" e err_text "), rows " rows len . cat io.println return end
+  rows add_row or_else to e "full" io.println return end to r
   v r to entry.name
-  cat ("entered: ", r entry.name, ", rows ", rows len) io.println
+  args "entered: " r entry.name ", rows " rows len . cat io.println
 end
 
 "four" enter
 "fourteen" enter
-"ab" fits tags or_else (e) "not reached" io.println end
-"abc" fits tags or_else (e) cat ("tags: ", e err_text) io.println end
+"ab" fits tags or_else to e "not reached" io.println end
+"abc" fits tags or_else to e args "tags: " e err_text . cat io.println end

@@ -7,20 +7,20 @@
 #include <string.h>
 
 static const char dictionary[] =
-    "record pair\n  term str(12)\n  meaning str(12)\nend\n"
+    "record pair\n  term str 12\n  meaning str 12\nend\n"
     "list pairs pair 64\n"
     "index by_term pairs pair.term\n"
-    "row pairs (\"sagwa\", \"apple\")\n"
-    "row pairs (\"bae\", \"pear\")\n"
-    "row pairs (\"podo\", \"grape\")\n";
+    "row pairs \"sagwa\" \"apple\" .\n"
+    "row pairs \"bae\" \"pear\" .\n"
+    "row pairs \"podo\" \"grape\" .\n";
 
 static const char translator[] =
-    "use str\n"
-    "record pair\n  term str(12)\n  meaning str(12)\nend\n"
+    "use str .\n"
+    "record pair\n  term str 12\n  meaning str 12\nend\n"
     "shared list pairs pair 64\n"
     "shared index by_term pairs pair.term\n"
-    "word known (w str gives int) w by_term lookup or_else (e) 0 return end drop 1 end\n"
-    "word count_known (n int gives r int)\n"
+    "def known w str gives int do w by_term lookup or_else to e 0 return end drop 1 end\n"
+    "def count_known n int gives r int do\n"
     "  n 0 eq if \"sagwa\" known \"kiwi\" known add return end\n"
     "  \"bae\" known \"podo\" known add \"sagwa\" known add\n"
     "end\n";

@@ -1,5 +1,5 @@
 rem fault
-use io
+use io .
 array primes int 4
 "reading cell 4 of 4" io.println
 4 primes idx drop

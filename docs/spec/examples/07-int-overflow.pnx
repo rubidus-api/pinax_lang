@@ -1,5 +1,5 @@
 rem fault
-use io
+use io .
 global big int
 9223372036854775807 set big
 "before" io.println

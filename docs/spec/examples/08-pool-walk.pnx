@@ -3,6 +3,6 @@ record node
   value int
 end
 pool nodes node 4
-word live (gives n int)
-  nodes do (r nodes) true end count
+def live gives n int do
+  nodes do to r true end count
 end

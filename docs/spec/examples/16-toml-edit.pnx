@@ -1,7 +1,7 @@
-use io
-use toml
+use io .
+use toml .
 buffer out 512
-word main (or fail)
+def main or fail do
   text END
 title = "Pinax"   # the name
 [server]
@@ -17,4 +17,4 @@ END
   "title" conf out toml.remove or_fail                          rem a key with its line
   out contents io.println
 end
-main or_else (e) e err_text io.println end
+main or_else to e e err_text io.println end

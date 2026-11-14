@@ -43,16 +43,16 @@ int main(void) {
         return 1;
     pinax_set_resolver(st, resolve, NULL);
     try_load(st, "main",
-             "extern gcd (a int, b int gives int) from \"mathlib\"\n"
-             "extern count_vowels (s str gives int) from \"mathlib\" as vowels\n"
-             "word answer (gives int) 84 36 gcd \"embeddable\" vowels add end\n");
+             "extern gcd a int, b int gives int from \"mathlib\" end\n"
+             "extern count_vowels s str gives int from \"mathlib\" as vowels end\n"
+             "def answer gives int do 84 36 gcd \"embeddable\" vowels add end\n");
     pinax_word w;
     int64_t out = 0;
     pinax_find(st, "answer", "(gives int)", 0, &w);
     pinax_run(st, w, &(pinax_args){.ri = &out});
     printf("gcd(84, 36) + vowels(\"embeddable\") = %lld\n", (long long)out);
 
-    try_load(st, "other", "extern sqrt (x int gives int) from \"libm\"\n");   /* the host gives no such thing */
+    try_load(st, "other", "extern sqrt x int gives int from \"libm\" end\n");   /* the host gives no such thing */
     pinax_close(st);
     return 0;
 }

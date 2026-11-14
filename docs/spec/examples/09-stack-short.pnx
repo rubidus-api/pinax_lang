@@ -1,2 +1,2 @@
 rem refused
-word f (int gives int) add end
+def f int gives int do add end

@@ -1,5 +1,5 @@
 rem run
-use io
+use io .
 err.full err_text io.println
 err.not_found err_text io.println
 err.format err_text io.println

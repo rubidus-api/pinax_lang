@@ -1,9 +1,9 @@
 rem see
-use str
-word tally (s str gives n int, longest int)
+use str .
+def tally s str gives n int, longest int do
   0 to n
   0 to longest
-  s str.words do (w str)
+  s str.words do to w
     n 1 add to n
     w str.len
     longest max to longest

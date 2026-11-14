@@ -1,13 +1,13 @@
 rem run
 rem stdin: 17-input.in
-use io
-use str
-word demo ()
+use io .
+use str .
+def demo do
   "no new line, " io.print
   "then one" io.println
   loop
-    io.read_line or_else (e) break end to line         rem fails at the end of the input
-    cat ("read: ", line, " (", line str.len, " bytes)") io.println
+    io.read_line or_else to e break . end to line         rem fails at the end of the input
+    args "read: " line " (" line str.len " bytes)" . cat io.println
   end
 end
 demo

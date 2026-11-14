@@ -55,14 +55,14 @@ int main(void) {
     };
     pinax_register(st, "ctr", words, 3);
     static const char source[] =
-        "use ctr\n"
-        "word twice (gives n int or fail)\n"
+        "use ctr .\n"
+        "def twice gives n int or fail do\n"
         "  ctr.new or_fail to c\n"
         "  c ctr.bump drop  c ctr.bump to n\n"
         "  c ctr.free\n"
         "  n\n"
         "end\n"
-        "word broken (gives n int or fail)\n"
+        "def broken gives n int or fail do\n"
         "  ctr.new or_fail to c\n"
         "  c ctr.bump 0 div to n\n"            /* a fault while the counter is open */
         "  c ctr.free\n"

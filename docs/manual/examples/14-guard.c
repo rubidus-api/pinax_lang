@@ -15,9 +15,9 @@ int main(void) {
         return 1;
     static const char source[] =
         "global calls int\n"
-        "word spin (gives int) calls 1 add set calls  0 to n loop n 1 add to n end end\n"
-        "word quick (gives int) calls 1 add set calls  6 7 mul end\n"
-        "word count_calls (gives int) calls end\n";
+        "def spin gives int do calls 1 add set calls  0 to n loop n 1 add to n end end\n"
+        "def quick gives int do calls 1 add set calls  6 7 mul end\n"
+        "def count_calls gives int do calls end\n";
     if (pinax_load(st, "main", (pinax_str){(const unsigned char *)source, strlen(source)}, PINAX_LOAD_CODE) != PINAX_OK)
         return 1;
 
@@ -33,7 +33,7 @@ int main(void) {
     }
     printf("spin after %d slices: %s\n", slices, err == PINAX_SUSPENDED ? "still running" : "ended");
     pinax_find(st, "quick", "(gives int)", 0, &w);
-    printf("another run while it is suspended: %s\n", pinax_run(st, w, &args) == PINAX_ERR_STATE ? "PINAX_ERR_STATE" : "?");
+    printf("another run not if break . end it is suspended: %s\n", pinax_run(st, w, &args) == PINAX_ERR_STATE ? "PINAX_ERR_STATE" : "?");
 
     pinax_abort(st);                                    /* give the spinning run up */
     err = pinax_run(st, w, &args);

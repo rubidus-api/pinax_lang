@@ -1,4 +1,4 @@
 rem refused
-use encode
+use encode .
 buffer out 8
-5 out encode.hex_encode or_else (e) end
+5 out encode.hex_encode or_else to e end

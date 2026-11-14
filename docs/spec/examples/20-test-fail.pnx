@@ -1,4 +1,4 @@
 rem test-fail
-word twice (n int gives int) n 2 mul end
-test doubles 21 twice 42 eq assert end
-test wrong 21 twice 43 eq assert end
+def twice n int gives int do n 2 mul end
+test doubles do 21 twice 42 eq assert end
+test wrong do 21 twice 43 eq assert end

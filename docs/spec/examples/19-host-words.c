@@ -59,13 +59,13 @@ int main(void) {
     };
     pinax_register(st, "app", words, 3);
     static const char source[] =
-        "use app\n"
+        "use app .\n"
         "buffer line 32\n"
-        "word demo (gives s str)\n"
+        "def demo gives s str do\n"
         "  line clear\n"
-        "  line app.stamp or_else (e) end\n"
-        "  \"12x\" app.digits or_else (e) -1 end to n\n"
-        "  cat (\"hello\" app.shout, \" \", \"42\" app.digits or_else (e) -1 end, \" \", n) line append or_else (e) end\n"
+        "  line app.stamp or_else to e end\n"
+        "  \"12x\" app.digits or_else to e -1 end to n\n"
+        "  args \"hello\" app.shout \" \" \"42\" app.digits or_else to e -1 end \" \" n . cat line append or_else to e end\n"
         "  line contents\n"
         "end\n";
     if (pinax_load(st, "main", (pinax_str){(const unsigned char *)source, sizeof source - 1}, PINAX_LOAD_CODE) != PINAX_OK)

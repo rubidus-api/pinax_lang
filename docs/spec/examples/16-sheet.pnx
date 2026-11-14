@@ -1,8 +1,8 @@
 rem run
-use io
-use sheet
+use io .
+use sheet .
 buffer grid 8192
-word fill (or fail)
+def fill or fail do
   1 grid sheet.open_book or_fail              rem a book of one sheet
   "stock" 6 3 grid sheet.create or_fail drop  rem its name, at most 6 rows, exactly 3 columns: it is the current sheet
   4 do grid sheet.add_row or_fail drop end times
@@ -14,16 +14,16 @@ word fill (or fail)
   7 2 1 grid sheet.put_int or_fail
   true 2 2 grid sheet.put_bool or_fail
 end
-word price (name str gives int or fail)
+def price name str gives int or fail do
   name 0 grid sheet.find_row_str or_fail     rem the first row whose column 0 is name
   1 swap grid sheet.int or_fail              rem the number in its column 1
 end
-word main (or fail)
+def main or fail do
   fill or_fail
-  cat ("rows ", grid sheet.rows, ", columns ", grid sheet.cols) io.println
-  cat ("pear costs ", "pear" price or_fail) io.println
-  cat ("row 3 column 0 is ", 3 0 grid sheet.kind, " (empty is ", sheet.k_empty, ")") io.println
-  "plum" price or_else (e) cat ("no plum: ", e err_text) io.println 0 end drop
-  cat ("total ", 1 grid sheet.sum_col, ", dearest ", 1 grid sheet.max_col or_fail) io.println
+  args "rows " grid sheet.rows ", columns " grid sheet.cols . cat io.println
+  args "pear costs " "pear" price or_fail . cat io.println
+  args "row 3 column 0 is " 3 0 grid sheet.kind " (empty is " sheet.k_empty ")" . cat io.println
+  "plum" price or_else to e args "no plum: " e err_text . cat io.println 0 end drop
+  args "total " 1 grid sheet.sum_col ", dearest " 1 grid sheet.max_col or_fail . cat io.println
 end
-main or_else (e) e err_text io.println end
+main or_else to e e err_text io.println end

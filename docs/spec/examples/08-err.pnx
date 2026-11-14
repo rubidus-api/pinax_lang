@@ -1,17 +1,17 @@
 rem run
-use io
-use str
+use io .
+use str .
 err key_too_long
 err value_too_long
-word check (k str, v str or fail)
+def check k str, v str or fail do
   k str.len 8 gt if key_too_long fail end
   v str.len 16 gt if value_too_long fail end
 end
-word try (k str, v str)
-  k v check or_else (e)
-    e case
-      key_too_long of "the key is too long" end
-      value_too_long of "the value is too long" end
+def try k str, v str do
+  k v check or_else to e
+    e match
+      when key_too_long do "the key is too long" end
+      when value_too_long do "the value is too long" end
       otherwise e err_text end
     end io.println
     return

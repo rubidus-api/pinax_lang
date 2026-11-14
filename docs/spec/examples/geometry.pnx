@@ -5,5 +5,5 @@ export record point
   x int
   y int
 end
-word square (n int gives int) n n mul end
-export word area (w int, h int gives int) w h mul unit square div end
+def square n int gives int do n n mul end
+export def area w int, h int gives int do w h mul unit square div end

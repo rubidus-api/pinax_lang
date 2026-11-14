@@ -17,8 +17,8 @@ int main(void) {
     if (pinax_open((pinax_mem){block, sizeof block}, &config, &st) != PINAX_OK)
         return 1;
     load(st,
-         "word total (n int gives r int) 0 to s  1 n 1 add range do (i int) s i add to s end each  s end\n"
-         "word ratio (a int, b int gives r int) a 100 mul b div end\n");
+         "def total n int gives r int do 0 to s  1 n 1 add range do to i s i add to s end each  s end\n"
+         "def ratio a int, b int gives r int do a 100 mul b div end\n");
 
     pinax_word w;
     /* the signature asked for must be the word's */

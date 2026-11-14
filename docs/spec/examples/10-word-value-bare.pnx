@@ -1,5 +1,5 @@
 rem refused
-use str
-word demo ()
+use str .
+def demo do
   do str.starts_with end drop
 end

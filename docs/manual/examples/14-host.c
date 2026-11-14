@@ -35,9 +35,9 @@ int main(void) {
 
     /* the user's rules: scarce items cost more */
     static const char rules[] =
-        "use shop\n"
-        "export word price (item int, base int gives p int)\n"
-        "  item shop.stock_of or_else (e) 0 end to left\n"
+        "use shop .\n"
+        "export def price item int, base int gives p int do\n"
+        "  item shop.stock_of or_else to e 0 end to left\n"
         "  left 0 eq if 0 return end\n"
         "  left 10 lt if base 3 mul 2 div else base end\n"
         "end\n";
@@ -64,7 +64,7 @@ int main(void) {
     }
 
     /* a second set of rules with a mistake is refused; the first stays loaded */
-    static const char broken[] = "word discount (p int gives int) p \"10\" sub end\n";
+    static const char broken[] = "def discount p int gives int do p \"10\" sub end\n";
     err = pinax_load(st, "broken", (pinax_str){(const unsigned char *)broken, strlen(broken)}, PINAX_LOAD_CODE);
     if (err != PINAX_OK)
         report(st, "broken rules refused", err);

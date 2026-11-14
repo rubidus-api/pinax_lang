@@ -1,4 +1,4 @@
 rem refused
-word f (c bool)
+def f c bool do
   c if defer end end
 end

@@ -8,16 +8,16 @@
 /* One program writes the data as a share file; any number of processes map it and read it in
    place. Here the same program maps it twice, as two processes would. */
 static const char data[] =
-    "record city\n  name str(12)\n  people int\nend\n"
+    "record city\n  name str 12\n  people int\nend\n"
     "list cities city 8\n"
     "index by_name cities city.name\n"
-    "row cities (\"Seoul\", 9411)\n"
-    "row cities (\"Busan\", 3317)\n";
+    "row cities \"Seoul\" 9411 .\n"
+    "row cities \"Busan\" 3317 .\n";
 static const char reader[] =
-    "record city\n  name str(12)\n  people int\nend\n"
+    "record city\n  name str 12\n  people int\nend\n"
     "shared list cities city 8\n"
     "shared index by_name cities city.name\n"
-    "word people_of (name str gives n int or fail) name by_name lookup or_fail city.people end\n";
+    "def people_of name str gives n int or fail do name by_name lookup or_fail city.people end\n";
 
 static unsigned char blocks[3][1024 * 1024];
 

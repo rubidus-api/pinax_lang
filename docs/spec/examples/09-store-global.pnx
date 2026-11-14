@@ -1,7 +1,7 @@
 rem run
-use io
-use str
+use io .
+use str .
 global calls int
-word tick () calls 1 add set calls end      rem set stores into a global; to only into locals
+def tick do calls 1 add set calls end      rem set stores into a global; to only into locals
 tick tick tick
 calls str.to_str io.println

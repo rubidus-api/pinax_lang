@@ -1,9 +1,9 @@
 rem run
-use str
-use io
-use md
+use str .
+use io .
+use md .
 buffer page 2048
-word main (or fail)
+def main or fail do
   text END
 # Plan
 
@@ -21,8 +21,8 @@ END
   page contents io.println
   doc to rest                                        rem the blocks, one at a time
   loop
-    rest md.next or_else (e) break end to (kind, level, body, rest)
-    cat (kind, " ", level, " ", body str.len) io.println
+    rest md.next or_else to e break . end to rest to body to level to kind
+    args kind " " level " " body str.len . cat io.println
   end
 end
-main or_else (e) e err_text io.println end
+main or_else to e e err_text io.println end

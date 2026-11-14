@@ -1,6 +1,6 @@
 rem fault
-use io
-word half (n int gives int) n 2 mod 0 eq assert n 2 div end
+use io .
+def half n int gives int do n 2 mod 0 eq assert n 2 div end
 10 half drop
 "10 is even" io.println
 7 half drop

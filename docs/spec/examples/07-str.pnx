@@ -1,8 +1,8 @@
 rem run
-use io
-use str
-global name str(8)                 rem stored text: up to 8 bytes, copied in
-word show (s str) cat ("[", s, "] ", s str.len) io.println end
+use io .
+use str .
+global name str 8                 rem stored text: up to 8 bytes, copied in
+def show s str do args "[" s "] " s str.len . cat io.println end
 "Pinax" set name
 name show
 "hello, world" 7 str.skip show        rem a view: no byte is copied

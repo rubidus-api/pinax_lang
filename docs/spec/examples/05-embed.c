@@ -22,8 +22,8 @@ int main(void) {
     pinax_register(st, "calc", words, 1);
 
     static const char source[] =
-        "use calc\n"
-        "word answer (n int gives r int) n calc.tenfold 2 add end\n";
+        "use calc .\n"
+        "def answer n int gives r int do n calc.tenfold 2 add end\n";
     pinax_str text = {(const unsigned char *)source, sizeof source - 1};
     if (pinax_load(st, "main", text, PINAX_LOAD_CODE) != PINAX_OK) {
         pinax_str why = pinax_error_text(st);

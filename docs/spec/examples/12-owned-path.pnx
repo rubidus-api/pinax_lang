@@ -1,6 +1,6 @@
 rem refused
-use file
-word f (path str, quick bool or fail)
+use file .
+def f path str, quick bool or fail do
   path file.open_read or_fail to h
   quick if return end
   h file.close

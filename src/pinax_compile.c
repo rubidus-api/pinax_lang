@@ -9459,7 +9459,8 @@ static bool compile(comp *c, image *im, bool *has_top) {
             continue;
         } else if (c->data_only && (is_word(c, PNX_KW_word) || is_word(c, PNX_KW_def) || is_word(c, PNX_KW_test) || is_word(c, PNX_KW_use))) {
             return syntax(c, "a data source defines no words and uses no modules");
-        } else if (is_word(c, PNX_KW_word) || is_word(c, PNX_KW_def) || is_word(c, PNX_KW_test)) {
+        } else if (is_word(c, PNX_KW_word) || (is_word(c, PNX_KW_def) && c->top_fn->depth == c->top_fn->floor) ||
+                   is_word(c, PNX_KW_test)) { // a def after a value is a block value, not a definition
             if (!definition(c, is_word(c, PNX_KW_test)))
                 return false;
             ((wordsym *)c->words.ptr + c->def_index)->entry = im_pc(im);

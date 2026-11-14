@@ -1,14 +1,14 @@
 rem run
-use io
-use str
+use io .
+use str .
 record user
-  name str(16)
+  name str 16
   age u8
 end
 list users user 8
 index by_name users user.name
-row users ("kim", 30)
-row users ("lee", 25)
-word find_age (name str gives age int or fail) name by_name lookup or_fail user.age raw end
-"lee" find_age or_else (e) -1 end str.to_str io.println
-"park" find_age or_else (e) -1 end str.to_str io.println
+row users "kim" 30 .
+row users "lee" 25 .
+def find_age name str gives age int or fail do name by_name lookup or_fail user.age raw end
+"lee" find_age or_else to e -1 end str.to_str io.println
+"park" find_age or_else to e -1 end str.to_str io.println

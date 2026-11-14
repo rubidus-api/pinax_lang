@@ -1,21 +1,21 @@
 rem run
-use io
+use io .
 record entry
-  name str(4)
+  name str 4
 end
 list rows entry 2
-list names str(4) 2
+list names str 4 2
 
-word keep (v str, r rows)
-  v r to entry.name or_else (e) cat ("refused: ", v, " (", e err_text, ")") io.println return end
-  cat ("stored: ", r entry.name) io.println
+def keep v str, r rows do
+  v r to entry.name or_else to e args "refused: " v " (" e err_text ")" . cat io.println return end
+  args "stored: " r entry.name . cat io.println
 end
 
-word main (or fail)
+def main or fail do
   rows add_row or_fail to r
   "four" r keep
   "fourteen" r keep
-  cat ("still: ", r entry.name) io.println
-  "fourteen" names push or_else (e) cat ("push: ", e err_text) io.println end
+  args "still: " r entry.name . cat io.println
+  "fourteen" names push or_else to e args "push: " e err_text . cat io.println end
 end
-main or_else (e) e err_text io.println end
+main or_else to e e err_text io.println end

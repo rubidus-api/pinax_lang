@@ -1,5 +1,5 @@
 rem refused
-word twice (gives int)
+def twice gives int do
   mark to m
   defer m release end
   m release

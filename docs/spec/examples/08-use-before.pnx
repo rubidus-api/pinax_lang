@@ -1,4 +1,4 @@
 rem refused
-use str
-word show (gives s str) total str.to_str end
+use str .
+def show gives s str do total str.to_str end
 global total int

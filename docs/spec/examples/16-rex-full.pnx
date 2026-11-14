@@ -1,8 +1,8 @@
 rem fault
-use rex
-use str
-use io
-word found (gives bool)
+use rex .
+use str .
+use io .
+def found gives bool do
   "x" 4194000 str.repeat to s
   s r"(a|b|c|d|e|f|g|h)+x" rex.rx rex.is_match
 end

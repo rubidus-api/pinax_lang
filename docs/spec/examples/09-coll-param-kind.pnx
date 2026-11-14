@@ -1,4 +1,4 @@
 rem refused
-list names str(8) 4
-word total (l list int gives int) l sum end
-word f (gives int) names total end
+list names str 8 4
+def total l list int gives int do l sum end
+def f gives int do names total end

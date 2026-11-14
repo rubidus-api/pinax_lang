@@ -1,5 +1,5 @@
 rem refused
-use file
-word f (path str or fail)
+use file .
+def f path str or fail do
   path file.open_read or_fail dup file.close file.close
 end

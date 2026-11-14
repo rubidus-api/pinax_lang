@@ -1,4 +1,4 @@
 rem refused
-use md
+use md .
 buffer page 64
-word f () 7 page md.html drop end
+def f do 7 page md.html drop end

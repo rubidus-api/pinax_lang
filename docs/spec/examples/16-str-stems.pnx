@@ -1,22 +1,22 @@
 rem run
-use io
-use str
-"one two  three" str.words do (w str) cat ("<", w, ">") io.print end each
+use io .
+use str .
+"one two  three" str.words do to w args "<" w ">" . cat io.print end each
 "" io.println
-"a,b,,c" ',' str.split do (w str) cat ("<", w, ">") io.print end each
+"a,b,,c" ',' str.split do to w args "<" w ">" . cat io.print end each
 "" io.println
 text END
 first line
 second line
 END
-str.lines do (l str) cat ("line: ", l) io.println end each
-"hi" str.bytes do (b u8) b str.to_str io.print " " io.print end each
+str.lines do to l args "line: " l . cat io.println end each
+"hi" str.bytes do to b b str.to_str io.print " " io.print end each
 "" io.println
-"가a!" str.chars do (c str) cat ("<", c, " ", c str.len, ">") io.print end each
+"가a!" str.chars do to c args "<" c " " c str.len ">" . cat io.print end each
 "" io.println
 buffer out 64
-", " out "x y z" str.words str.join_into or_else (e) end
+", " out "x y z" str.words str.join_into or_else to e end
 out contents io.println
 out clear
-word swap_dashes () "a-b-c" "-" "+" out str.replace_into or_else (e) 0 end to n  cat (out contents, " (", n, " replaced)") io.println end
+def swap_dashes do "a-b-c" "-" "+" out str.replace_into or_else to e 0 end to n  args out contents " (" n " replaced)" . cat io.println end
 swap_dashes

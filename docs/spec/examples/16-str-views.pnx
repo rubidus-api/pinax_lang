@@ -1,8 +1,8 @@
 rem run
-use io
-use str
-word show (label str, s str) cat (label, " [", s, "]") io.println end
-word demo ()
+use io .
+use str .
+def show label str, s str do args label " [" s "]" . cat io.println end
+def demo do
   "  key = value  " to line
   "trim" line str.trim show
   "trim_left" line str.trim_left show
@@ -12,12 +12,12 @@ word demo ()
   "skip_last 7" "hello, world" 7 str.skip_last show
   "take 99" "short" 99 str.take show                 rem n beyond the end: what is there
   "slice 7 3" "hello, world" 7 3 str.slice show
-  "key = value" " = " str.cut to (k, v)
+  "key = value" " = " str.cut to v to k
   "cut, before" k show
   "cut, after" v show
-  "a=b=c" '=' str.cut to (k2, v2)                    rem the separator may be a character
+  "a=b=c" '=' str.cut to v2 to k2                    rem the separator may be a character
   "cut at a char" v2 show
-  "2026-10-15" str.digit str.span to (year, rest)
+  "2026-10-15" str.digit str.span to rest to year
   "span digits" year show
   "span rest" rest show
 end

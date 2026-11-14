@@ -1,8 +1,8 @@
 rem run
-use io
-use random
-use clock
-word demo ()
+use io .
+use random .
+use clock .
+def demo do
   42 random.seed                                       rem the same seed, the same numbers
   6 random.random_below to a
   a 0 ge a 6 lt and if "a die in 0..5" io.println end

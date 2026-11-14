@@ -1,11 +1,11 @@
 rem run
-use io
-use str
-word twice (n int, f word (int gives int) gives int) n f call f call end
-5 do (x int gives int) x 3 mul end twice str.to_str io.println
-word add_one (int gives int) 1 add end
-word demo (gives int)
-  do (x int gives int) x add_one end to step     rem a block value in a local
+use io .
+use str .
+type Proc1 proc int gives int end def twice n int, f Proc1 gives int do n f call f call end
+5 def x int gives int do x 3 mul end twice str.to_str io.println
+def add_one int gives int do 1 add end
+def demo gives int do
+  def x int gives int do x add_one end to step     rem a block value in a local
   41 step call
 end
 demo str.to_str io.println

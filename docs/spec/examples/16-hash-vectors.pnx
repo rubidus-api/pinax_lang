@@ -1,8 +1,8 @@
 rem run
-use io
-use str
-use fmt
-use hash
+use io .
+use str .
+use fmt .
+use hash .
 "" hash.crc32 str.to_str io.println
 "123456789" hash.crc32 fmt.hex io.println
 "" hash.fnv1a fmt.hex io.println

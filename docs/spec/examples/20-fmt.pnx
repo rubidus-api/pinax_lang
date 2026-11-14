@@ -1,6 +1,6 @@
 rem fmt
-use io
-word sign (n int gives r int)
+use io .
+def sign n int gives r int do
 n 0 gt if
 1
    else   

@@ -29,9 +29,9 @@ int main(void) {
         return 1;
     pinax_register(st, "host", words, 1);
     static const char source[] =
-        "use host\n"
+        "use host .\n"
         "global calls int\n"
-        "word next (gives r int) calls 1 add set calls  calls host.twice end\n";
+        "def next gives r int do calls 1 add set calls  calls host.twice end\n";
     if (pinax_load(st, "main", (pinax_str){(const unsigned char *)source, sizeof source - 1}, PINAX_LOAD_CODE) != PINAX_OK)
         return 1;
     call_next(st);

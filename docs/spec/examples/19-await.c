@@ -22,12 +22,12 @@ int main(void) {
     static const pinax_word_def words[] = {{"fetch", "(n int gives r int or fail)", fetch, NULL, PINAX_WORD_AWAITABLE}};
     pinax_register(st, "net", words, 1);
     static const char source[] =
-        "use net\n"
+        "use net .\n"
         "tasks workers 2\n"
         "list got int 4\n"
-        "word both (gives r int)\n"
-        "  do 1 net.fetch or_else (e) -1 end got push or_else (e) end end workers spawn or_else (e) 0 return end drop\n"
-        "  do 2 net.fetch or_else (e) -1 end got push or_else (e) end end workers spawn or_else (e) 0 return end drop\n"
+        "def both gives r int do\n"
+        "  do 1 net.fetch or_else to e -1 end got push or_else to e end end workers spawn or_else to e 0 return end drop\n"
+        "  do 2 net.fetch or_else to e -1 end got push or_else to e end end workers spawn or_else to e 0 return end drop\n"
         "  workers run_all\n"
         "  got sum\n"
         "end\n";

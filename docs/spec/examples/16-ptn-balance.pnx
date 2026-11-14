@@ -1,3 +1,3 @@
 rem refused
-use ptn
-word f (s str gives bool) s "%b()" ptn.is_match end
+use ptn .
+def f s str gives bool do s "%b()" ptn.is_match end

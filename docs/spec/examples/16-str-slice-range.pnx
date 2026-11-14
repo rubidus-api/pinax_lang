@@ -1,4 +1,4 @@
 rem fault
-use io
-use str
+use io .
+use str .
 "hello" 3 5 str.slice io.println

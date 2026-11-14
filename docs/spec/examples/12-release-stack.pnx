@@ -1,6 +1,6 @@
 rem refused
-word f (gives str)
+def f gives str do
   mark to m
-  cat ("a", "b")
+  args "a" "b" . cat
   m release
 end

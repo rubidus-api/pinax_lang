@@ -101,7 +101,7 @@ guide.appendChild(table(GUIDE.commands));
 guide.appendChild(element("h2", "Keys"));
 guide.appendChild(table(GUIDE.keys));
 guide.appendChild(element("h2", "Try"));
-guide.appendChild(element("pre", "word sq (n int gives int)\n  n n mul\nend.\n9 sq.\n:list\n:insert 1\nrem squares\n\n:run"));
+guide.appendChild(element("pre", "def sq n int gives int do\n  n n mul\nend.\n9 sq.\n:list\n:insert 1\nrem squares\n\n:run"));
 function showGuide(open) {
     guide.classList.toggle("open", open);
     try { localStorage.setItem("pinax-playground-guide", open ? "open" : "closed"); } catch (e) { /* none */ }

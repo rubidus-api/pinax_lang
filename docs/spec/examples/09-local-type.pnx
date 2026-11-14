@@ -1,5 +1,5 @@
 rem refused
-word f (gives s str)
+def f gives s str do
   5 to v
   "five" to v
   v

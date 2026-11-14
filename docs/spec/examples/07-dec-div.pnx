@@ -1,2 +1,2 @@
 rem refused
-word share (gives dec(2)) 10.00 3.00 div end
+def share gives dec 2 do 10.00 3.00 div end

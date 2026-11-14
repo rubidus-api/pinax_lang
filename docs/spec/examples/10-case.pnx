@@ -1,18 +1,18 @@
 rem run
-use io
+use io .
 const quit_code 9
-word describe (cmd str gives str)
-  cmd case
-    "add" of "adds a line" end
-    ("rm", "del") of "deletes a line" end
+def describe cmd str gives str do
+  cmd match
+    when "add" do "adds a line" end
+    when "rm" "del" do "deletes a line" end
     otherwise "unknown command" end
   end
 end
-word level (n int gives str)
-  n case
-    0 of "off" end
-    1 of "low" end
-    quit_code of "quit" end
+def level n int gives str do
+  n match
+    when 0 do "off" end
+    when 1 do "low" end
+    when quit_code do "quit" end
     otherwise "high" end
   end
 end

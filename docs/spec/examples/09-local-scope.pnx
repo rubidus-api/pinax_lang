@@ -1,5 +1,5 @@
 rem refused
-word f (flag bool gives int)
+def f flag bool gives int do
   flag if 1 to v end
   v
 end

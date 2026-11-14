@@ -1,6 +1,6 @@
 rem run
-use io
-use ptn
+use io .
+use ptn .
 "a1 B2_c3!" "%a" "." ptn.replace io.println     rem letters
 "a1 B2_c3!" "%d" "." ptn.replace io.println     rem digits
 "a1 B2_c3!" "%W" "." ptn.replace io.println     rem not letter or digit

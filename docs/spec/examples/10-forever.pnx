@@ -1,7 +1,7 @@
 rem run
-use io
-use str
-word first_multiple (n int, k int gives int)     rem a loop with no exit counts as leaving
+use io .
+use str .
+def first_multiple n int, k int gives int do     rem a loop with no exit counts as leaving
   loop
     n k mod 0 eq if n return end
     n 1 add to n

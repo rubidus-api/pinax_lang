@@ -1,8 +1,8 @@
 rem repl
-use str
+use str .
 3 4
 mul
-word sq (n int gives int) n n mul end
+def sq n int gives int do n n mul end
 sq
 "x" 3 str.repeat
 1 0 div

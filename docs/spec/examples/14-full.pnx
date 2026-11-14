@@ -1,9 +1,9 @@
 rem run
-use io
+use io .
 tasks pair 2
-word demo ()
-  do yield or_return end pair spawn or_else return end drop
-  do yield or_return end pair spawn or_else return end drop
-  do end pair spawn or_else (e) cat ("third spawn: ", e err_text) io.println return end drop
+def demo do
+  do yield or_return end pair spawn or_else drop return end drop
+  do yield or_return end pair spawn or_else drop return end drop
+  do end pair spawn or_else to e args "third spawn: " e err_text . cat io.println return end drop
 end
 demo

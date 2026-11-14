@@ -1,8 +1,8 @@
 rem refused
 record city
-  name str(12)
+  name str 12
 end
 list cities city 8
 global capital cities                         rem keeps a row of cities
-word reset (l list city) 0 l truncate end
-word f () cities reset end
+def reset l list city do 0 l truncate end
+def f do cities reset end

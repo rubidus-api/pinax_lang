@@ -1,4 +1,4 @@
 rem refused
 pinax 1
-use io
+use io .
 "never read" io.println

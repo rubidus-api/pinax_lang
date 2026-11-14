@@ -7,25 +7,25 @@
 /* One state sends the numbers 1 to 100 through the channel `jobs`; two others take them and
    add them up. The loop runs the three on two threads. */
 static const char producer[] =
-    "use jobs\nuse str\n"
-    "word produce (n int gives r int)\n"
+    "use jobs .\nuse str .\n"
+    "def produce n int gives r int do\n"
     "  1 to i\n"
     "  loop\n"
-    "    i n gt until\n"
-    "    i str.to_str jobs.send or_else (e) -1 return end\n"
+    "    i n gt if break . end\n"
+    "    i str.to_str jobs.send or_else to e -1 return end\n"
     "    i 1 add to i\n"
     "  end\n"
     "  jobs.close\n"
     "  n\n"
     "end\n";
 static const char consumer[] =
-    "use jobs\nuse str\n"
-    "word consume (n int gives r int)\n"
+    "use jobs .\nuse str .\n"
+    "def consume n int gives r int do\n"
     "  0 to total\n"
     "  loop\n"
-    "    jobs.receive or_else (e) \"\" end to m      rem not_found: closed and empty\n"
-    "    m str.is_empty until\n"
-    "    m str.to_int or_else (e) 0 end total add to total\n"
+    "    jobs.receive or_else to e \"\" end to m      rem not_found: closed and empty\n"
+    "    m str.is_empty if break . end\n"
+    "    m str.to_int or_else to e 0 end total add to total\n"
     "  end\n"
     "  total\n"
     "end\n";

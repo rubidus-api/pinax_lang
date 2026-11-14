@@ -1,5 +1,5 @@
 rem fault
-use bytes
+use bytes .
 buffer b 8
-word store (n int) n u8 b bytes.put_u8 or_else (e) end end
+def store n int do n u8 b bytes.put_u8 or_else to e end end
 300 store

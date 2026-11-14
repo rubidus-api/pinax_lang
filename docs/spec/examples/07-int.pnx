@@ -1,6 +1,6 @@
 rem run
-use io
-use str
+use io .
+use str .
 9223372036854775807 str.to_str io.println          rem the largest int
 7 2 div str.to_str io.println                       rem division rounds toward zero
 -7 2 div str.to_str io.println

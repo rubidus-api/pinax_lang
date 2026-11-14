@@ -68,9 +68,8 @@ Perl or Python.]
 #ex("spec", "16-rex-bad.pnx")
 #ex("spec", "16-rex-backref.pnx")
 
-#para("9")[A `str` where a `regex` goes is refused. The group parameters of a block shall be `str`.]
+#para("9")[A `str` where a `regex` goes is refused.]
 #ex("spec", "16-rex-str.pnx")
-#ex("spec", "16-rex-group-type.pnx")
 
 #part("Faults")
 
