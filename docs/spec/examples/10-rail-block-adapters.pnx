@@ -1,0 +1,12 @@
+rem run
+use io .
+use str .
+array scores int 8
+assign scores (3, 9, 4, 7, 1, 8, 2, 6)
+def show n int do " " io.print n str.to_str io.print end
+scores do to s s 4 gt end filter do to s s show end each "" io.println            rem 9 7 8 6
+scores do to s s 10 mul end map do to s s show end each "" io.println             rem every element times ten
+scores do to s s 5 lt end skip_while do to s s show end each "" io.println        rem from the first that is not below 5
+scores do to s s 8 lt end head_while do to s s show end each "" io.println        rem until the first that is not below 8
+scores do to s s 4 gt end filter do to s s 100 mul end map sum show "" io.println  rem 3000
+"one two three four" str.words do to w w str.len 3 gt end filter do to w w io.println end each

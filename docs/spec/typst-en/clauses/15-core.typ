@@ -153,6 +153,8 @@ $n dot.c ceil(log_2 n)$ instructions (19.5).]
   [`err_text`], [`(err gives str)`], [the name of an error code (11.1)],
   [`assert`], [`(bool)`], [the fault `failed` when false],
   [`skip` `head` `step`], [`(rail, N int gives rail)`], [adapters of a rail of known length: drop the first N, keep the first N, every N-th (10.6 (1a))],
+  [`filter` `skip_while` `head_while`], [`(rail, block gives rail)`], [adapters with a block on the element: keep, drop while, end the walk when false (10.6 (1b))],
+  [`map`], [`(rail, block gives rail)`], [the block's value of the element's type in place of the element (10.6 (1b))],
   [`rev`], [`(rail gives rail)`], [the adapter that walks a rail from the last to the first (10.6 (1a))],
   [`spawn` `run_all` `resume` `is_done` `cancel` `yield` `task_tag`], [clause 14], [tasks],
 )]

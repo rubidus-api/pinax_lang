@@ -184,6 +184,14 @@ block   = "do" { "to" NAME } { body } "end"
 #ex("spec", "10-rail-adapters.pnx")
 #ex("spec", "10-rail-adapter-step.pnx")
 
+#para("1b")[`filter` `map` `skip_while` `head_while` 은 바로 앞에 쓴 블록을 받는다(`do to s s 4 gt end filter`). 블록은 원소를 받아
+`bool` 을 내고(`filter` 는 참인 원소만 남기고, `skip_while` 은 참인 동안 버리고, `head_while` 은 처음 거짓인 원소에서 훑기를 끝낸다),
+`map` 은 같은 타입의 값을 내어 원소 자리를 대신한다. 블록은 루프 안에서 원소마다 적은 차례로 돌고, 앞의 것이 버린 원소에는 돌지 않는다:
+루프는 하나이고 저장소도 부름도 없다. 블록 어댑터는 길이를 모르는 레일(`str.words`, `str.lines` …)에도 쓴다. `skip` `head` `step` `rev` 는
+이들보다 앞에 온다. 블록이 원소에 붙이는 이름은 마지막 블록의 이름과 같아도 된다.]
+#ex("spec", "10-rail-block-adapters.pnx")
+#ex("spec", "10-rail-block-late.pnx")
+
 #ex("spec", "10-combinators.pnx")
 #ex("spec", "10-first.pnx")
 

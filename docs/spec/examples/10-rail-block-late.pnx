@@ -1,0 +1,4 @@
+rem refused
+def f do
+  0 10 range do to i i 2 gt end filter skip 1 do to i end each      rem skip comes before the blocks
+end

@@ -126,6 +126,9 @@ An `N` that is an expression ends with a comma.
 `scores skip 2 head 3` is the third to the fifth, `scores head 3 skip 1` the second and the third: the order changes the meaning. They are for rails of
 known length (`range`, an array, a list), and `step` comes last.
 
+There are adapters with a block too: `do to s s 4 gt end filter` (keep), `skip_while`, `head_while`, `map` (change to a value of the same type). They run
+inside the loop for each element and work on rails of unknown length too: `scores do to s s 4 gt end filter do to s s 100 mul end map sum`.
+
 == Procedures as values
 
 A block that is not given to a combining word is written `def signature do … end` and is a #strong[value]: it can be kept in a local, returned, or given to a

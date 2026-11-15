@@ -215,6 +215,30 @@ scores skip <span style="color: #b60157">1</span> head <span style="color: #b601
 <span style="color: #d73948">end</span>
 </code></pre><p class="ex-label">거절</p><pre><code data-lang="text">$ pnx 10-rail-adapter-step.pnx
 10-rail-adapter-step.pnx:2:21: step comes last in a chain: nothing follows it
+</code></pre></div><p class="para"><span class="pn">(1b)</span> <code>filter</code> <code>map</code> <code>skip_while</code> <code>head_while</code> 은 바로 앞에 쓴 블록을 받는다(<code>do to s s 4 gt end filter</code>). 블록은 원소를 받아 <code>bool</code> 을 내고(<code>filter</code> 는 참인 원소만 남기고, <code>skip_while</code> 은 참인 동안 버리고, <code>head_while</code> 은 처음 거짓인 원소에서 훑기를 끝낸다), <code>map</code> 은 같은 타입의 값을 내어 원소 자리를 대신한다. 블록은 루프 안에서 원소마다 적은 차례로 돌고, 앞의 것이 버린 원소에는 돌지 않는다: 루프는 하나이고 저장소도 부름도 없다. 블록 어댑터는 길이를 모르는 레일(<code>str.words</code>, <code>str.lines</code> …)에도 쓴다. <code>skip</code> <code>head</code> <code>step</code> <code>rev</code> 는 이들보다 앞에 온다. 블록이 원소에 붙이는 이름은 마지막 블록의 이름과 같아도 된다.</p><div class="example run"><p class="ex-file"><code>10-rail-block-adapters.pnx</code></p><pre><code data-lang="pinax"><span style="color: #d73948">use</span> io .
+<span style="color: #d73948">use</span> <span style="color: #d73948">str</span> .
+<span style="color: #d73948">array</span> scores <span style="color: #d73948">int</span> <span style="color: #b60157">8</span>
+<span style="color: #d73948">assign</span> scores (<span style="color: #b60157">3</span>, <span style="color: #b60157">9</span>, <span style="color: #b60157">4</span>, <span style="color: #b60157">7</span>, <span style="color: #b60157">1</span>, <span style="color: #b60157">8</span>, <span style="color: #b60157">2</span>, <span style="color: #b60157">6</span>)
+<span style="color: #d73948">def</span> show n <span style="color: #d73948">int</span> <span style="color: #d73948">do</span> <span style="color: #198810">" "</span> io.print n <span style="color: #d73948">str</span>.to_str io.print <span style="color: #d73948">end</span>
+scores <span style="color: #d73948">do</span> <span style="color: #d73948">to</span> s s <span style="color: #b60157">4</span> gt <span style="color: #d73948">end</span> filter <span style="color: #d73948">do</span> <span style="color: #d73948">to</span> s s show <span style="color: #d73948">end</span> each <span style="color: #198810">""</span> io.println            <span style="color: #74747c">rem 9 7 8 6</span>
+scores <span style="color: #d73948">do</span> <span style="color: #d73948">to</span> s s <span style="color: #b60157">10</span> mul <span style="color: #d73948">end</span> map <span style="color: #d73948">do</span> <span style="color: #d73948">to</span> s s show <span style="color: #d73948">end</span> each <span style="color: #198810">""</span> io.println             <span style="color: #74747c">rem every element times ten</span>
+scores <span style="color: #d73948">do</span> <span style="color: #d73948">to</span> s s <span style="color: #b60157">5</span> lt <span style="color: #d73948">end</span> skip_while <span style="color: #d73948">do</span> <span style="color: #d73948">to</span> s s show <span style="color: #d73948">end</span> each <span style="color: #198810">""</span> io.println        <span style="color: #74747c">rem from the first that is not below 5</span>
+scores <span style="color: #d73948">do</span> <span style="color: #d73948">to</span> s s <span style="color: #b60157">8</span> lt <span style="color: #d73948">end</span> head_while <span style="color: #d73948">do</span> <span style="color: #d73948">to</span> s s show <span style="color: #d73948">end</span> each <span style="color: #198810">""</span> io.println        <span style="color: #74747c">rem until the first that is not below 8</span>
+scores <span style="color: #d73948">do</span> <span style="color: #d73948">to</span> s s <span style="color: #b60157">4</span> gt <span style="color: #d73948">end</span> filter <span style="color: #d73948">do</span> <span style="color: #d73948">to</span> s s <span style="color: #b60157">100</span> mul <span style="color: #d73948">end</span> map sum show <span style="color: #198810">""</span> io.println  <span style="color: #74747c">rem 3000</span>
+<span style="color: #198810">"one two three four"</span> <span style="color: #d73948">str</span>.words <span style="color: #d73948">do</span> <span style="color: #d73948">to</span> w w <span style="color: #d73948">str</span>.len <span style="color: #b60157">3</span> gt <span style="color: #d73948">end</span> filter <span style="color: #d73948">do</span> <span style="color: #d73948">to</span> w w io.println <span style="color: #d73948">end</span> each
+</code></pre><p class="ex-label">출력</p><pre><code data-lang="text">$ pnx 10-rail-block-adapters.pnx
+ 9 7 8 6
+ 30 90 40 70 10 80 20 60
+ 9 4 7 1 8 2 6
+ 3
+ 3000
+three
+four
+</code></pre></div><div class="example refused"><p class="ex-file"><code>10-rail-block-late.pnx</code></p><pre><code data-lang="pinax"><span style="color: #d73948">def</span> f <span style="color: #d73948">do</span>
+  <span style="color: #b60157">0</span> <span style="color: #b60157">10</span> range <span style="color: #d73948">do</span> <span style="color: #d73948">to</span> i i <span style="color: #b60157">2</span> gt <span style="color: #d73948">end</span> filter skip <span style="color: #b60157">1</span> <span style="color: #d73948">do</span> <span style="color: #d73948">to</span> i <span style="color: #d73948">end</span> each      <span style="color: #74747c">rem skip comes before the blocks</span>
+<span style="color: #d73948">end</span>
+</code></pre><p class="ex-label">거절</p><pre><code data-lang="text">$ pnx 10-rail-block-late.pnx
+10-rail-block-late.pnx:2:40: skip, head, step and rev come before filter, map, skip_while and head_while in a chain
 </code></pre></div><div class="example run"><p class="ex-file"><code>10-combinators.pnx</code></p><pre><code data-lang="pinax"><span style="color: #d73948">use</span> io .
 <span style="color: #d73948">use</span> <span style="color: #d73948">str</span> .
 <span style="color: #d73948">array</span> scores <span style="color: #d73948">int</span> <span style="color: #b60157">6</span>

@@ -433,6 +433,10 @@ typedef struct comp {
     uint8_t     *rx_buf;    // where rx compiles a constant pattern, PNX_REX_BUF bytes
     bool         data_only; // PINAX_LOAD_DATA: declarations, literals, stores and rows only
     bool         sink;      // the word being compiled may take an owned value off the stack
+    pnx_lexer    scan_after; // scan_user: the lexer just after the word that follows the block's end
+    struct { uint32_t at, line, line_start; } adpos[16]; // where the blocks of rail adapters begin (RFC-0050)
+    uint32_t     n_adpos;
+    uint8_t      ab_n, ab_kind[4], ab_idx[4]; // the block adapters of the rail stem_begin took: kind and place in adpos
     bool         ad_ok;     // the caller of stem_begin takes adapters (RFC-0050)
     bool         ad_any;    // ... and the rail had some: the registers below tell what they made
     uint8_t      ad_stride, ad_krev, ad_tmp; // a step's stride, the K of a reversed rail (index = K - cur), a place for that index
@@ -4075,6 +4079,7 @@ static bool scan_user(comp *c, name *out, name *dst, bool from_def) {
     }
     if (!pnx_lex_next(&lx, &t))
         return error_at(c, PINAX_ERR_SYNTAX, lx.error_line, lx.error_column, lx.error);
+    c->scan_after = lx;
     // anything but a combining word after the end makes the block a value
     *out = t.kind == PNX_T_NAME ? (name){lx.source + t.start, t.length} : (name){0};
     if (t.kind == PNX_T_PATH) { // rex.with_match and rex.replace_by take a block too
@@ -4101,7 +4106,11 @@ static bool found_or_fail(comp *c, tid type, uint32_t value, uint32_t flag);
 
 static local *new_local(comp *c, name n, tid type);
 // ---- rail adapters (RFC-0050): skip N, head N, step N, rev --------------------------------------
-enum { AD_SKIP = 1, AD_HEAD, AD_STEP, AD_REV };
+enum { AD_SKIP = 1, AD_HEAD, AD_STEP, AD_REV, AD_FILTER, AD_MAP, AD_SKIPW, AD_HEADW }; // from AD_FILTER: a block adapter
+static int block_adapter_id(name n) {
+    return name_is(n, "filter") ? AD_FILTER : name_is(n, "map") ? AD_MAP : name_is(n, "skip_while") ? AD_SKIPW
+         : name_is(n, "head_while") ? AD_HEADW : 0;
+}
 static int adapter_id(name n) {
     return name_is(n, "skip") ? AD_SKIP : name_is(n, "head") ? AD_HEAD : name_is(n, "step") ? AD_STEP
          : name_is(n, "rev") ? AD_REV : 0;
@@ -4117,6 +4126,8 @@ static bool do_adapter(comp *c, int id) {
     for (uint32_t k = 0; k < f->stack[rail].nad; ++k) {
         if (f->stack[rail].ad[2 * k] == AD_STEP)
             return syntax(c, "step comes last in a chain: nothing follows it");
+        if (f->stack[rail].ad[2 * k] >= AD_FILTER)
+            return syntax(c, "skip, head, step and rev come before filter, map, skip_while and head_while in a chain");
     }
     if (!advance(c))
         return false;
@@ -4156,12 +4167,139 @@ static bool do_adapter(comp *c, int id) {
     return true;
 }
 
+// do ... end filter | map | skip_while | head_while after a rail: where the block begins is kept; it is compiled where the
+// loop reads an element, once the loop is open. The lexer goes on past the adapter word.
+static bool capture_adapter_block(comp *c, name user) {
+    fn *f = c->f;
+    const uint32_t rail = f->depth - 1;
+    if (f->stack[rail].nad >= 4 || c->n_adpos == 16)
+        return syntax(c, "a chain holds four adapters at most");
+    c->adpos[c->n_adpos] = (__typeof__(c->adpos[0])){c->lx->at, c->lx->line, c->lx->line_start};
+    entry *e = &f->stack[rail];
+    e->ad[2 * e->nad] = (uint8_t)block_adapter_id(user);
+    e->ad[2 * e->nad + 1] = (uint8_t)c->n_adpos++;
+    ++e->nad;
+    *c->lx = c->scan_after;
+    return advance(c);
+}
+
+// The block adapters of a rail, taken by stem_begin: the flag of each skip_while is made before the loop begins
+typedef struct abset { uint8_t n, kind[4], idx[4], flag[4]; } abset;
+static bool ab_init(comp *c, abset *a) {
+    *a = (abset){.n = c->ab_n};
+    for (uint32_t k = 0; k < c->ab_n; ++k) {
+        a->kind[k] = c->ab_kind[k];
+        a->idx[k] = c->ab_idx[k];
+        if (a->kind[k] == AD_SKIPW) {
+            local *l = new_local(c, (name){0}, TY_INT);
+            if (!l || emit(c, PNX_ABX(PNX_LOADI, l->reg, 1)) == NONE)
+                return false;
+            a->flag[k] = (uint8_t)l->reg;
+        }
+    }
+    return true;
+}
+
+// Runs the blocks of the adapters on the element in `reg`, in the order written. `skip` is the chain of jumps to the
+// end of the turn (the element does not count), `leave` the chain that ends the loop.
+static bool ab_run(comp *c, const abset *a, uint32_t reg, tid etype, uint32_t *skip, uint32_t *leave) {
+    fn *f = c->f;
+    for (uint32_t k = 0; k < a->n; ++k) {
+        const pnx_lexer lx = *c->lx;
+        const pnx_token tok = c->tok;
+        const uint32_t depth = f->depth, floor = f->floor, n_locals = f->n_locals, n_blocks = f->n_blocks;
+        const uint8_t  nloc[2] = {f->nloc[0], f->nloc[1]};
+        uint32_t       pass = NONE;
+        if (a->kind[k] == AD_SKIPW && (emit(c, PNX_ABC(PNX_JNEI, a->flag[k], 0, 1)) == NONE || !jump_later(c, &pass)))
+            return false;
+        c->lx->at = c->adpos[a->idx[k]].at;
+        c->lx->line = c->adpos[a->idx[k]].line;
+        c->lx->line_start = c->adpos[a->idx[k]].line_start;
+        if (!advance(c))
+            return false;
+        f->floor = depth;
+        if (is_word(c, PNX_KW_to)) { // do to x ... end
+            if (!advance(c))
+                return false;
+            if (c->tok.kind != PNX_T_NAME)
+                return name_due(c, "to is followed by the name the block takes");
+            const local *same = find_local(f, tok_name(c)); // the name of the combining block's own element: the same value
+            if (same && same->reg == reg && bank_of(same->type) == bank_of(etype)) {
+                if (!advance(c))
+                    return false;
+            } else {
+                local *l = new_local(c, tok_name(c), etype);
+                if (!l || !move_slot(c, etype, l->reg, reg) || !advance(c))
+                    return false;
+            }
+            if (is_word(c, PNX_KW_to))
+                return syntax(c, "the block of an adapter takes one element: do to x ... end");
+        } else if (!push_slot(c, etype) || !move_slot(c, etype, slot_of(c, f->depth - 1), reg)) {
+            return false;
+        }
+        while (!(is_word(c, PNX_KW_end) && f->n_blocks == n_blocks)) {
+            if (c->tok.kind == PNX_T_END)
+                return syntax(c, "the block of an adapter is not closed by end");
+            if (!body_token(c))
+                return false;
+        }
+        if (f->dead)
+            return type_error(c, "the block of an adapter does not leave the word or the loop");
+        const bool value = a->kind[k] == AD_MAP;
+        if (f->depth != depth + 1 || f->stack[depth].type != (value ? etype : TY_BOOL))
+            return type_error(c, value ? "the block of map gives one value of the element's type"
+                                       : "the block of this adapter gives one bool: its verdict on the element");
+        if (value) {
+            if (!settle(c, depth) || !move_slot(c, etype, reg, slot_of(c, depth)))
+                return false;
+            --f->depth;
+        } else {
+            entry v;
+            if (!pop_cond(c, &v) || !settle_all(c))
+                return false;
+            if (f->depth != depth)
+                return type_error(c, "the block of an adapter leaves nothing but its verdict");
+            if (a->kind[k] == AD_FILTER) { // false: the element is dropped
+                if (!cond_jump(c, &v, 1) || !jump_later(c, skip))
+                    return false;
+            } else if (a->kind[k] == AD_HEADW) { // false: the walk ends
+                if (!cond_jump(c, &v, 1) || !jump_later(c, leave))
+                    return false;
+            } else { // skip_while: true drops the element, the first false opens the flag
+                if (!cond_jump(c, &v, 2) || emit(c, PNX_ABX(PNX_LOADI, a->flag[k], 0)) == NONE ||
+                    emit(c, PNX_AX(PNX_JMP, 1)) == NONE || !jump_later(c, skip))
+                    return false;
+            }
+        }
+        if (pass != NONE)
+            land(c, &pass);
+        for (uint32_t j = n_locals; j < f->n_locals; ++j) {
+            if (f->locals[j].drec != NONE)
+                ((dlocal *)f->dlocals.ptr)[f->locals[j].drec].to = f->code.n;
+        }
+        f->n_locals = n_locals;
+        f->nloc[0] = nloc[0];
+        f->nloc[1] = nloc[1];
+        f->floor = floor;
+        f->depth = depth;
+        f->def_at = NONE;
+        *c->lx = lx;
+        c->tok = tok;
+    }
+    return true;
+}
+
 // The window of a sized rail is [cur, lim); the adapters change it before the loop, in the order written. A reversed
 // rail reads the element K - cur, with K = first + last of the window.
 static bool apply_adapters(comp *c, const entry *rail, uint8_t kind, uint8_t cur, uint8_t lim) {
     fn *f = c->f;
+    bool window = false;
+    for (uint32_t k = 0; k < rail->nad; ++k)
+        window = window || rail->ad[2 * k] < AD_FILTER;
+    if (!window)
+        return true;
     if (kind != STEM_RANGE && kind != STEM_COLL && kind != STEM_ROWS && kind != STEM_STRS && kind != STEM_BYTES)
-        return type_error(c, "an adapter needs a rail of known length: a range, an array, a list, the bytes of a str");
+        return type_error(c, "skip, head, step and rev need a rail of known length: a range, an array, a list, the bytes of a str");
     bool    rev = false;
     uint8_t stride = 0xff;
     local  *tmp = new_local(c, (name){0}, TY_INT);
@@ -4169,6 +4307,8 @@ static bool apply_adapters(comp *c, const entry *rail, uint8_t kind, uint8_t cur
         return false;
     for (uint32_t k = 0; k < rail->nad; ++k) {
         const uint8_t id = rail->ad[2 * k], n = rail->ad[2 * k + 1];
+        if (id >= AD_FILTER)
+            continue;
         if (id == AD_REV) {
             rev = !rev;
             continue;
@@ -4223,7 +4363,14 @@ static bool stem_begin(comp *c, uint8_t *kind, uint8_t *cur, uint8_t *lim, uint1
     c->ad_any = false;
     const entry rail = f->stack[f->depth - 1];
     if (rail.nad && !ok)
-        return type_error(c, "an adapter (skip, head, step, rev) is taken by each, fold, count, any, all, first, map_into and filter_into");
+        return type_error(c, "an adapter (skip, head, step, rev, filter, map ...) is taken by each, fold, count, any, all, first, map_into, filter_into, sum, minimum and maximum");
+    c->ab_n = 0;
+    for (uint32_t k = 0; k < rail.nad; ++k) {
+        if (rail.ad[2 * k] >= AD_FILTER) {
+            c->ab_kind[c->ab_n] = rail.ad[2 * k];
+            c->ab_idx[c->ab_n++] = rail.ad[2 * k + 1];
+        }
+    }
     if (!stem_begin_raw(c, kind, cur, lim, src, count, element))
         return false;
     return !rail.nad || apply_adapters(c, &rail, *kind, *cur, *lim);
@@ -4617,6 +4764,9 @@ static bool do_block(comp *c) {
     const bool is_def = is_word(c, PNX_KW_def); // def SIG do ... end : a block value with its own signature
     if (!scan_user(c, &user, &dst_name, is_def))
         return false;
+    if (!is_def && block_adapter_id(user) && f->depth > f->floor &&
+        (f->stack[f->depth - 1].type == TY_STEM || f->stack[f->depth - 1].type == TY_COLL))
+        return capture_adapter_block(c, user); // filter, map, skip_while, head_while (RFC-0050)
     const pnx_token at = c->tok;
     sig bs = {0};
     if (!advance(c))
@@ -4708,7 +4858,7 @@ static bool do_block(comp *c) {
         c->ad_ok = true;
         if (!stem_begin(c, &kind, &cur, &lim, &src, &hidden, &element))
             return false;
-        if (c->ad_any && use == USE_EACH_INDEX)
+        if ((c->ad_any || c->ab_n) && use == USE_EACH_INDEX)
             return error_at(c, PINAX_ERR_TYPE, at.line, at.column, "each_index does not count along an adapted rail yet");
     } else {
         return error_at(c, PINAX_ERR_SYNTAX, at.line, at.column,
@@ -4893,6 +5043,9 @@ static bool do_block(comp *c) {
         b->acc = acc->reg;
         b->acc_type = acc->type;
     }
+    abset ab;
+    if (!ab_init(c, &ab))
+        return false;
     b->head = f->code.n;
     b->elem_local = NONE;
     f->def_at = NONE;
@@ -4905,7 +5058,7 @@ static bool do_block(comp *c) {
             if (!l)
                 return false;
             reg = l->reg;
-            if (kind == STEM_RANGE && !c->ad_any)
+            if (kind == STEM_RANGE && !c->ad_any && !c->ab_n)
                 b->elem_local = (uint32_t)(l - f->locals);
         } else {
             if (!push_slot(c, element))
@@ -4930,6 +5083,8 @@ static bool do_block(comp *c) {
         if (use != USE_TIMES && !stem_element(c, kind, reg, at_cur, src))
             return false;
     }
+    if (ab.n && !ab_run(c, &ab, reg, element, &b->nexts, &b->exits))
+        return false;
     for (uint32_t k = 0; k < groups; ++k) { // the groups of this match
         const local *l = new_local(c, sig_in_name(&full, (use == USE_FOLD ? 2u : 1u) + k), TY_STR);
         if (!l || emit(c, PNX_ABC(PNX_XCAPI, l->reg, 0, k + 1)) == NONE)
@@ -5179,26 +5334,37 @@ static bool do_extreme(comp *c, bool largest) {
     if (!push_slot(c, element_type) || !push_slot(c, TY_INT))
         return false;
     const uint32_t best = slot_of(c, f->depth - 2), flag = slot_of(c, f->depth - 1);
-    uint32_t       element = top_slot(c, BANK_I, 1), exits = NONE;
-    if (emit(c, PNX_ABX(PNX_LOADI, flag, 0)) == NONE || emit(c, PNX_ABX(PNX_LOADI, best, 0)) == NONE || !settle_all(c))
+    uint32_t       exits = NONE, skipped = NONE;
+    abset          ab;
+    const bool     blocks = c->ab_n > 0;
+    if (blocks) {
+        if (!push_slot(c, element_type))
+            return false;
+        f->stack[f->depth - 1].hidden = true;
+    }
+    uint32_t element = blocks ? slot_of(c, f->depth - 1) : top_slot(c, BANK_I, 1);
+    if (emit(c, PNX_ABX(PNX_LOADI, flag, 0)) == NONE || emit(c, PNX_ABX(PNX_LOADI, best, 0)) == NONE || !settle_all(c) ||
+        !ab_init(c, &ab))
         return false;
     const uint32_t head = f->code.n;
     if (emit(c, PNX_ABC(PNX_JLT, cur, lim, 1)) == NONE || !jump_later(c, &exits) || !adapted_cursor(c, cur, &ad))
         return false;
-    if (kind == STEM_RANGE && !ad.any)
+    if (kind == STEM_RANGE && !ad.any && !blocks)
         element = cur;
-    else if (!stem_element(c, kind, element, ad.ecur, src))
+    else if (!stem_element(c, kind, element, ad.ecur, src) ||
+             (blocks && !ab_run(c, &ab, element, element_type, &skipped, &exits)))
         return false;
     // the first element is taken as it is; a later one only when it beats the best so far
     if (emit(c, PNX_ABC(PNX_JEQI, flag, 0, 1)) == NONE ||
         emit(c, largest ? PNX_ABC(PNX_JLE, element, best, 1) : PNX_ABC(PNX_JLE, best, element, 1)) == NONE ||
         emit(c, PNX_ABC(PNX_MOVI, best, element, 0)) == NONE || emit(c, PNX_ABX(PNX_LOADI, flag, 1)) == NONE)
         return false;
+    land(c, &skipped);
     c->loop_stride = ad.stride;
     if (!loop_back(c, head, cur, 1))
         return false;
     land(c, &exits);
-    f->depth -= (uint32_t)hidden + 2;
+    f->depth -= (uint32_t)hidden + 2 + blocks;
     return found_or_fail(c, element_type, best, flag);
 }
 
@@ -6224,24 +6390,34 @@ static bool do_sum(comp *c) {
         return type_error(c, "sum adds int or dec(N) values");
     if (!push_slot(c, element_type)) // a dec(N) sums to a dec(N)
         return false;
-    const uint32_t acc = slot_of(c, f->depth - 1), element = top_slot(c, BANK_I, 1);
-    uint32_t       exits = NONE;
-    if (emit(c, PNX_ABX(PNX_LOADI, acc, 0)) == NONE || !settle_all(c))
+    const uint32_t acc = slot_of(c, f->depth - 1);
+    uint32_t       exits = NONE, skipped = NONE;
+    abset          ab;
+    const bool     blocks = c->ab_n > 0; // adapters with a block: the element is held on the stack while they run
+    if (blocks) {
+        if (!push_slot(c, element_type))
+            return false;
+        f->stack[f->depth - 1].hidden = true;
+    }
+    const uint32_t element = blocks ? slot_of(c, f->depth - 1) : top_slot(c, BANK_I, 1);
+    if (emit(c, PNX_ABX(PNX_LOADI, acc, 0)) == NONE || !settle_all(c) || !ab_init(c, &ab))
         return false;
     const uint32_t head = f->code.n;
     if (emit(c, PNX_ABC(PNX_JLT, cur, lim, 1)) == NONE || !jump_later(c, &exits) || !adapted_cursor(c, cur, &ad))
         return false;
-    if (kind == STEM_RANGE && !ad.any) {
+    if (kind == STEM_RANGE && !ad.any && !blocks) {
         if (emit(c, PNX_ABC(PNX_ADD, acc, acc, cur)) == NONE)
             return false;
-    } else if (!stem_element(c, kind, element, ad.ecur, src) || emit(c, PNX_ABC(PNX_ADD, acc, acc, element)) == NONE) {
+    } else if (!stem_element(c, kind, element, ad.ecur, src) || (blocks && !ab_run(c, &ab, element, element_type, &skipped, &exits)) ||
+               emit(c, PNX_ABC(PNX_ADD, acc, acc, element)) == NONE) {
         return false;
     }
+    land(c, &skipped);
     c->loop_stride = ad.stride;
     if (!loop_back(c, head, cur, 1))
         return false;
     land(c, &exits);
-    f->depth -= (uint32_t)hidden + 1;
+    f->depth -= (uint32_t)hidden + 1 + blocks;
     return push_slot(c, element_type) && move_slot(c, element_type, slot_of(c, f->depth - 1), acc);
 }
 

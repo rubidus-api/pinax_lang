@@ -121,6 +121,9 @@
 `scores skip 2 head 3` 은 셋째부터 다섯째까지이고, `scores head 3 skip 1` 은 둘째와 셋째다. 순서가 뜻을 바꾼다. 길이를 아는 레일(`range`, 배열, 목록)에만
 쓰고 `step` 은 맨 끝에 온다.
 
+블록이 든 어댑터도 있다: `do to s s 4 gt end filter`(남김), `skip_while`, `head_while`, `map`(같은 타입의 값으로 바꿈). 루프 안에서 원소마다 돌고, 길이를 모르는 레일에도 쓴다.
+`scores do to s s 4 gt end filter do to s s 100 mul end map sum` 처럼 이어 붙인다.
+
 == 값인 프로시저
 
 조합 낱말에 주지 않는 블록은 `def 서명 do … end` 로 쓰고, #strong[값]이다. 지역 변수에 넣거나, 돌려주거나, `proc` 타입

@@ -186,6 +186,15 @@ A negative `N` (a `step` of less than 1) is the fault `range`. Adapters are for 
 #ex("spec", "10-rail-adapters.pnx")
 #ex("spec", "10-rail-adapter-step.pnx")
 
+#para("1b")[`filter`, `map`, `skip_while` and `head_while` take the block written right before them (`do to s s 4 gt end filter`).
+The block takes the element and gives a `bool` (`filter` keeps the elements for which it is true, `skip_while` drops them while it is
+true, `head_while` ends the walk at the first for which it is false), or, for `map`, a value of the same type that takes the element's place. They run
+inside the loop, once for each element and in the order written, and never for an element an earlier one dropped; so there is one loop, no storage and no
+call. A block adapter works on any rail, of known length or not (`str.words`, `str.lines`, ...). `skip`, `head`, `step` and `rev` come before them in a
+chain. The name the block gives the element may be the one the final block uses.]
+#ex("spec", "10-rail-block-adapters.pnx")
+#ex("spec", "10-rail-block-late.pnx")
+
 #ex("spec", "10-combinators.pnx")
 #ex("spec", "10-first.pnx")
 
