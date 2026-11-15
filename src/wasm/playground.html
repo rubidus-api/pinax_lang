@@ -188,6 +188,8 @@ function closeEditor(save) {
     editor.classList.remove("open");
     if (save)
         con.setProgram(code.value);
+    else
+        con.leaveEditor();
     input.focus();
     show();
 }

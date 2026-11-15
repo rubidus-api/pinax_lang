@@ -114,6 +114,13 @@
 
 #ex("manual", "04-leave-each.pnx")
 
+레일은 어댑터로 다듬는다: `skip N` `head N` `step N` `rev`. 쓴 차례대로 적용되고 루프는 여전히 하나다. `N` 이 식이면 쉼표로 끝낸다.
+
+#ex("manual", "04-rail-adapters.pnx")
+
+`scores skip 2 head 3` 은 셋째부터 다섯째까지이고, `scores head 3 skip 1` 은 둘째와 셋째다. 순서가 뜻을 바꾼다. 길이를 아는 레일(`range`, 배열, 목록)에만
+쓰고 `step` 은 맨 끝에 온다.
+
 == 값인 프로시저
 
 조합 낱말에 주지 않는 블록은 `def 서명 do … end` 로 쓰고, #strong[값]이다. 지역 변수에 넣거나, 돌려주거나, `proc` 타입

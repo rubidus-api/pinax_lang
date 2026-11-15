@@ -1,0 +1,4 @@
+rem refused
+def f do
+  0 10 range step 2 skip 1 do to i end each      rem step comes last: nothing follows it
+end

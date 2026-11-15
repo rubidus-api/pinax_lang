@@ -1,0 +1,12 @@
+rem run
+use io .
+use str .
+array scores int 8
+assign scores (10, 20, 30, 40, 50, 60, 70, 80)
+def show n int do " " io.print n str.to_str io.print end
+0 10 range step 3 do to i i show end each "" io.println          rem 0 3 6 9
+scores skip 2 head 3 do to s s show end each "" io.println       rem the third to the fifth
+scores head 3 skip 1 do to s s show end each "" io.println       rem the second and the third
+scores rev head 3 do to s s show end each "" io.println          rem from the last
+0 20 range skip 2 3 add, head 4 step 2 do to i i show end each "" io.println   rem N may be code, ended by a comma
+scores skip 1 head 3 sum show "" io.println                      rem 20 + 30 + 40

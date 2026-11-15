@@ -42,6 +42,8 @@ export const GUIDE = {
         [":list [N[-M]]", "the program with its line numbers"],
         [":edit N", "line N into the prompt; Enter puts it back and runs the program again"],
         [":edit", "the whole program in an editor (F2; Ctrl+S saves and runs it, Esc leaves)"],
+        [":edit NAME", "a procedure (or a record, const ...) whole, in the editor; saving puts it back in its place"],
+        [":edit N-M", "lines N to M in the editor; saving puts them back in their place"],
         [":insert N", "new lines above line N (0: at the end); an empty line ends, and the program runs (:ins)"],
         [":delete N[-M]", "removes lines N to M (:del)"],
         [":run", "RESETS: empties the stack and forgets every definition, then runs the program from line 1 (F5); the program's lines stay"],
@@ -110,6 +112,7 @@ export async function createConsole({ createPinax, bytes, print, store = null })
     let trialLog = null; // while a word is checked: what Pinax says, kept to be told or not
     let trialled = false; // a word was checked and may stand half written in the session
     let mode = null;     // { kind: "edit", at } or { kind: "insert", at, first, added }: at is a line index
+    let editRange = null; // [from, to): the lines the editor holds, put back in their place when it saves
     const history = [];
 
     const keep = () => store && store.set(lines.join("\n"));
@@ -180,7 +183,22 @@ export async function createConsole({ createPinax, bytes, print, store = null })
         keep();
     }
 
+    // the lines of the declaration NAME (a procedure, a record, a const ...) with the part they are in: [from, to) or null
+    function declaration(name) {
+        const re = new RegExp(`^\\s*(?:export\\s+|redefine\\s+)?(def|forward|extern|test|record|const|global|array|list|pool|queue|buffer|tasks|type|index)\\s+${name}\\b`);
+        let found = null;
+        for (let k = 0; k < lines.length; ++k) {
+            const m = re.exec(lines[k]);
+            if (m && (found === null || (found.kind === "forward" && m[1] !== "forward")))
+                found = { at: k, kind: m[1] };
+        }
+        if (!found)
+            return null;
+        const part = parts().find((q) => q.start <= found.at && found.at < q.end);
+        return part ? [part.start, part.end] : [found.at, found.at + 1];
+    }
     function command(line) {
+        editRange = null;
         const [name, arg] = line.slice(1).trim().split(/\s+/, 2);
         switch (name) {
         case "help":
@@ -204,9 +222,20 @@ export async function createConsole({ createPinax, bytes, print, store = null })
         case "edit": {
             if (arg === undefined)
                 return { editor: lines.join("\n") };
+            if (/^[A-Za-z_][A-Za-z_0-9]*$/.test(arg)) { // a declaration, whole, in the editor
+                const d = declaration(arg);
+                if (!d)
+                    return print("err", `no declaration of ${arg} in the program; :procs lists the procedures\n`), {};
+                editRange = d;
+                return { editor: lines.slice(d[0], d[1]).join("\n") };
+            }
             const r = range(arg);
-            if (!r || r[1] - r[0] !== 1)
+            if (!r)
                 return noLine(arg), {};
+            if (r[1] - r[0] !== 1) { // lines N-M, in the editor
+                editRange = r;
+                return { editor: lines.slice(r[0], r[1]).join("\n") };
+            }
             mode = { kind: "edit", at: r[0] };
             return { fill: lines[r[0]] };
         }
@@ -435,9 +464,15 @@ export async function createConsole({ createPinax, bytes, print, store = null })
 
     // the page's editor or a loaded file: the whole program, run again
     function setProgram(text) {
-        lines = text.replace(/\r\n?/g, "\n").replace(/\s+$/, "").split("\n");
-        if (lines.length === 1 && lines[0] === "")
-            lines = [];
+        let put = text.replace(/\r\n?/g, "\n").replace(/\s+$/, "").split("\n");
+        if (put.length === 1 && put[0] === "")
+            put = [];
+        if (editRange) { // the lines the editor was given are replaced, the others stay
+            lines = [...lines.slice(0, editRange[0]), ...put, ...lines.slice(editRange[1])];
+            editRange = null;
+        } else {
+            lines = put;
+        }
         keep();
         print("info", `the program has ${plural(lines.length, "line")}; it runs from a fresh state\n`);
         runProgram();
@@ -462,5 +497,5 @@ export async function createConsole({ createPinax, bytes, print, store = null })
         print("info", `the program of the last visit: ${plural(lines.length, "line")} (:list)\n`);
         runProgram();
     }
-    return { enter, cancel, setProgram, status, history, prompt, mode: () => mode?.kind ?? null, program: () => lines.slice(), words: () => userWords(lines.join("\n")), used: () => usedModules(lines.join("\n")) };
+    return { enter, cancel, leaveEditor: () => { editRange = null; }, setProgram, status, history, prompt, mode: () => mode?.kind ?? null, program: () => lines.slice(), words: () => userWords(lines.join("\n")), used: () => usedModules(lines.join("\n")) };
 }

@@ -175,6 +175,15 @@ block   = "do" { "to" NAME } { body } "end"
   [`n times`], [`()`], [없음. 레일 없이 `n` 번],
 )]
 
+#para("1a")[#term("어댑터", en: "adapter")는 레일을 받아 레일을 준다. `skip N` 은 처음 N 개를 건너뛰고, `head N` 은 처음 N 개만 남기고,
+`step N` 은 N 개마다 하나(첫째부터)를, `rev` 는 끝에서 처음으로 훑는다. 레일 뒤에 쓴 차례대로 적용되어 어댑터가 몇이든 루프는 하나다:
+`scores skip 2 head 3` 은 셋째부터 다섯째까지, `scores head 3 skip 1` 은 둘째와 셋째다. `N` 은 `int` 를 하나 남기는 코드이고 쉼표, `do`,
+다음 어댑터, `sum` `minimum` `maximum` 앞에서 끝난다. 루프 앞에서 한 번만 계산한다. `N` 이 음수(`step` 은 1 보다 작음)이면 결함 `range` 다.
+어댑터는 `range`, 배열, 목록, `str.bytes` 처럼 길이를 아는 레일에만 쓰고, `step` 은 맨 끝에만 온다. 한 레일에 넷까지 쓴다.
+`each_index` 는 어댑터 뒤의 레일을 아직 세지 않는다. `each` `fold` `count` `any` `all` `first` `map_into` `filter_into` `sum` `minimum` `maximum` 이 받는다.]
+#ex("spec", "10-rail-adapters.pnx")
+#ex("spec", "10-rail-adapter-step.pnx")
+
 #ex("spec", "10-combinators.pnx")
 #ex("spec", "10-first.pnx")
 

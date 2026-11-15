@@ -118,6 +118,14 @@ stops and the code after the word runs. A search that stops at the first hit is 
 
 #ex("manual", "04-leave-each.pnx")
 
+A rail is shaped with adapters: `skip N`, `head N`, `step N` and `rev`. They apply in the order written and the loop is still one.
+An `N` that is an expression ends with a comma.
+
+#ex("manual", "04-rail-adapters.pnx")
+
+`scores skip 2 head 3` is the third to the fifth, `scores head 3 skip 1` the second and the third: the order changes the meaning. They are for rails of
+known length (`range`, an array, a list), and `step` comes last.
+
 == Procedures as values
 
 A block that is not given to a combining word is written `def signature do … end` and is a #strong[value]: it can be kept in a local, returned, or given to a

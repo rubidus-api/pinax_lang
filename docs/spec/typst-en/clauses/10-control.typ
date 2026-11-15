@@ -176,6 +176,16 @@ combining word right after it shall take it. Together they make one loop. These 
   [`n times`], [`()`], [none; no rail, `n` times],
 )]
 
+#para("1a")[An #term("adapter") takes a rail and gives a rail. `skip N` drops the first N elements, `head N` keeps the first N, `step N`
+takes every N-th element (the first one first), and `rev` walks from the last to the first. They apply in the order written and
+however many there are, the loop is one: `scores skip 2 head 3` is the third to the fifth, `scores head 3 skip 1` the second and the third.
+`N` is code that leaves one `int`; it ends at a comma, at `do`, at the next adapter and before `sum`, `minimum` or `maximum`. It is worked out once, before the loop.
+A negative `N` (a `step` of less than 1) is the fault `range`. Adapters are for rails of known length (`range`, an array, a list, `str.bytes`);
+`step` comes last; a rail takes four of them. `each_index` does not count along an adapted rail yet. `each`, `fold`, `count`, `any`, `all`,
+`first`, `map_into`, `filter_into`, `sum`, `minimum` and `maximum` take them.]
+#ex("spec", "10-rail-adapters.pnx")
+#ex("spec", "10-rail-adapter-step.pnx")
+
 #ex("spec", "10-combinators.pnx")
 #ex("spec", "10-first.pnx")
 

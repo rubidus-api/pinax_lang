@@ -84,6 +84,8 @@ typedef struct entry {
     uint8_t src;     // read from this local (its number plus one): lent, or given when it reaches a taker
     uint8_t born;    // a str: the marks made before it (fn.marks then); a mark: its own number
     uint16_t lit;    // pushed by a string literal or const: its constant number plus one
+    uint8_t  nad;    // a rail: the adapters written after it (RFC-0050): kind and the register of N, in order
+    uint8_t  ad[8];
     int64_t value;   // E_CONST
 } entry;
 
@@ -196,6 +198,7 @@ typedef struct block {
     tid      acc_type;
     uint32_t floor_mark;
     name     user;       // the combining word that follows the block
+    uint8_t  stride, krev, rtmp; // rail adapters: 0xff when none
 } block;
 
 typedef struct vec {
@@ -430,6 +433,10 @@ typedef struct comp {
     uint8_t     *rx_buf;    // where rx compiles a constant pattern, PNX_REX_BUF bytes
     bool         data_only; // PINAX_LOAD_DATA: declarations, literals, stores and rows only
     bool         sink;      // the word being compiled may take an owned value off the stack
+    bool         ad_ok;     // the caller of stem_begin takes adapters (RFC-0050)
+    bool         ad_any;    // ... and the rail had some: the registers below tell what they made
+    uint8_t      ad_stride, ad_krev, ad_tmp; // a step's stride, the K of a reversed rail (index = K - cur), a place for that index
+    uint8_t      loop_stride; // for loop_back: the register to add to cur, plus one; 0: none
     bool         pool_each; // the stem about to begin is walked by each, which may walk a pool
     bool         in_defer;  // the body of a defer is being read
     bool         leaving;   // the defers run because the word fails: the stack below them is dropped (RFC-0035)
@@ -4092,8 +4099,138 @@ static bool scan_user(comp *c, name *out, name *dst, bool from_def) {
 static bool guard_op(comp *c, tid out);
 static bool found_or_fail(comp *c, tid type, uint32_t value, uint32_t flag);
 
+static local *new_local(comp *c, name n, tid type);
+// ---- rail adapters (RFC-0050): skip N, head N, step N, rev --------------------------------------
+enum { AD_SKIP = 1, AD_HEAD, AD_STEP, AD_REV };
+static int adapter_id(name n) {
+    return name_is(n, "skip") ? AD_SKIP : name_is(n, "head") ? AD_HEAD : name_is(n, "step") ? AD_STEP
+         : name_is(n, "rev") ? AD_REV : 0;
+}
+
+// The adapter word on the current token, after a rail. N is code up to a comma, a `do` or the next adapter:
+// it is kept in a register of its own, read once before the loop.
+static bool do_adapter(comp *c, int id) {
+    fn *f = c->f;
+    const uint32_t rail = f->depth - 1;
+    if (f->stack[rail].nad >= 4)
+        return syntax(c, "a chain holds four adapters at most");
+    for (uint32_t k = 0; k < f->stack[rail].nad; ++k) {
+        if (f->stack[rail].ad[2 * k] == AD_STEP)
+            return syntax(c, "step comes last in a chain: nothing follows it");
+    }
+    if (!advance(c))
+        return false;
+    uint8_t reg = 0;
+    if (id != AD_REV) {
+        const uint32_t first = f->depth, floor = f->floor, blocks = f->n_blocks;
+        f->floor = first;
+        while (c->tok.kind != PNX_T_COMMA && !is_word(c, PNX_KW_do) &&
+               !(c->tok.kind == PNX_T_NAME && f->depth > first &&
+                 (adapter_id(tok_name(c)) || name_is(tok_name(c), "sum") || name_is(tok_name(c), "minimum") ||
+                  name_is(tok_name(c), "maximum")))) {
+            if (c->tok.kind == PNX_T_END || c->tok.kind == PNX_T_DOT)
+                return syntax(c, "an adapter is followed by its N and then do: scores skip 2 do ... end each");
+            if (!body_token(c))
+                return false;
+            if (f->n_blocks != blocks)
+                return syntax(c, "N is plain code: no block opens or closes in it");
+        }
+        f->floor = floor;
+        if (f->dead || f->depth != first + 1 || f->stack[first].type != TY_INT)
+            return type_error(c, "N is one int: scores skip 2 do ... end each");
+        uint32_t src;
+        if (!reg_of(c, first, &src))
+            return false;
+        local *l = new_local(c, (name){0}, TY_INT);
+        if (!l || emit(c, PNX_ABC(PNX_MOVI, l->reg, src, 0)) == NONE)
+            return false;
+        reg = (uint8_t)l->reg;
+        --f->depth;
+        if (c->tok.kind == PNX_T_COMMA && !advance(c))
+            return false;
+    }
+    entry *e = &f->stack[rail];
+    e->ad[2 * e->nad] = (uint8_t)id;
+    e->ad[2 * e->nad + 1] = reg;
+    ++e->nad;
+    return true;
+}
+
+// The window of a sized rail is [cur, lim); the adapters change it before the loop, in the order written. A reversed
+// rail reads the element K - cur, with K = first + last of the window.
+static bool apply_adapters(comp *c, const entry *rail, uint8_t kind, uint8_t cur, uint8_t lim) {
+    fn *f = c->f;
+    if (kind != STEM_RANGE && kind != STEM_COLL && kind != STEM_ROWS && kind != STEM_STRS && kind != STEM_BYTES)
+        return type_error(c, "an adapter needs a rail of known length: a range, an array, a list, the bytes of a str");
+    bool    rev = false;
+    uint8_t stride = 0xff;
+    local  *tmp = new_local(c, (name){0}, TY_INT);
+    if (!tmp)
+        return false;
+    for (uint32_t k = 0; k < rail->nad; ++k) {
+        const uint8_t id = rail->ad[2 * k], n = rail->ad[2 * k + 1];
+        if (id == AD_REV) {
+            rev = !rev;
+            continue;
+        }
+        const bool positive = id == AD_STEP;
+        if (emit(c, PNX_ABC(PNX_JGEI, n, positive ? 1 : 0, 1)) == NONE || emit(c, PNX_ABX(PNX_FAULT, 0, PINAX_ERR_RANGE)) == NONE)
+            return false;
+        if (id == AD_STEP) {
+            stride = n;
+        } else if (id == AD_SKIP && !rev) { // cur = min(cur + N, lim)
+            if (emit(c, PNX_ABC(PNX_ADD, cur, cur, n)) == NONE || emit(c, PNX_ABC(PNX_JLE, cur, lim, 1)) == NONE ||
+                emit(c, PNX_ABC(PNX_MOVI, cur, lim, 0)) == NONE)
+                return false;
+        } else if (id == AD_SKIP) { // lim = max(lim - N, cur)
+            if (emit(c, PNX_ABC(PNX_SUB, lim, lim, n)) == NONE || emit(c, PNX_ABC(PNX_JLE, cur, lim, 1)) == NONE ||
+                emit(c, PNX_ABC(PNX_MOVI, lim, cur, 0)) == NONE)
+                return false;
+        } else if (!rev) { // head: lim = min(lim, cur + N)
+            if (emit(c, PNX_ABC(PNX_ADD, tmp->reg, cur, n)) == NONE || emit(c, PNX_ABC(PNX_JLE, lim, tmp->reg, 1)) == NONE ||
+                emit(c, PNX_ABC(PNX_MOVI, lim, tmp->reg, 0)) == NONE)
+                return false;
+        } else { // head, reversed: cur = max(cur, lim - N)
+            if (emit(c, PNX_ABC(PNX_SUB, tmp->reg, lim, n)) == NONE || emit(c, PNX_ABC(PNX_JLE, tmp->reg, cur, 1)) == NONE ||
+                emit(c, PNX_ABC(PNX_MOVI, cur, tmp->reg, 0)) == NONE)
+                return false;
+        }
+    }
+    c->ad_any = true;
+    c->ad_stride = stride;
+    c->ad_krev = 0xff;
+    c->ad_tmp = (uint8_t)tmp->reg;
+    if (rev) {
+        local *k = new_local(c, (name){0}, TY_INT);
+        if (!k || emit(c, PNX_ABC(PNX_ADD, k->reg, cur, lim)) == NONE ||
+            emit(c, PNX_ABC(PNX_ADDI, k->reg, k->reg, (uint8_t)(int8_t)-1)) == NONE)
+            return false;
+        c->ad_krev = (uint8_t)k->reg;
+    }
+    (void)f;
+    return true;
+}
+
+static local *new_local(comp *c, name n, tid type);
+static bool stem_begin_raw(comp *c, uint8_t *kind, uint8_t *cur, uint8_t *lim, uint16_t *src, uint8_t *count,
+                           tid *element);
+static bool apply_adapters(comp *c, const entry *rail, uint8_t kind, uint8_t cur, uint8_t lim);
 static bool stem_begin(comp *c, uint8_t *kind, uint8_t *cur, uint8_t *lim, uint16_t *src, uint8_t *count,
                        tid *element) {
+    fn *f = c->f;
+    const bool ok = c->ad_ok;
+    c->ad_ok = false;
+    c->ad_any = false;
+    const entry rail = f->stack[f->depth - 1];
+    if (rail.nad && !ok)
+        return type_error(c, "an adapter (skip, head, step, rev) is taken by each, fold, count, any, all, first, map_into and filter_into");
+    if (!stem_begin_raw(c, kind, cur, lim, src, count, element))
+        return false;
+    return !rail.nad || apply_adapters(c, &rail, *kind, *cur, *lim);
+}
+
+static bool stem_begin_raw(comp *c, uint8_t *kind, uint8_t *cur, uint8_t *lim, uint16_t *src, uint8_t *count,
+                           tid *element) {
     fn *f = c->f;
     const bool pool_each = c->pool_each; // set for this stem only, by the each of stem_block
     c->pool_each = false;
@@ -4226,8 +4363,14 @@ static bool stem_element(comp *c, uint8_t kind, uint32_t reg, uint32_t cur, uint
 
 static bool loop_back(comp *c, uint32_t head, uint32_t cur, int step) {
     fn *f = c->f;
-    if (step && emit(c, PNX_ABC(PNX_ADDI, cur, cur, (uint8_t)(int8_t)step)) == NONE)
+    const uint8_t stride = c->loop_stride; // the register plus one, 0 for none
+    c->loop_stride = 0;
+    if (stride && step) {
+        if (emit(c, PNX_ABC(PNX_ADD, cur, cur, stride - 1)) == NONE)
+            return false;
+    } else if (step && emit(c, PNX_ABC(PNX_ADDI, cur, cur, (uint8_t)(int8_t)step)) == NONE) {
         return false;
+    }
     uint32_t n = f->code.n - head + 2;
     if (n > 0xffffu)
         n = 0xffffu;
@@ -4562,8 +4705,11 @@ static bool do_block(comp *c) {
             return error_at(c, PINAX_ERR_TYPE, at.line, at.column,
                             "this combining word needs a stem before its block (for example lo hi range)");
         c->pool_each = use == USE_EACH;
+        c->ad_ok = true;
         if (!stem_begin(c, &kind, &cur, &lim, &src, &hidden, &element))
             return false;
+        if (c->ad_any && use == USE_EACH_INDEX)
+            return error_at(c, PINAX_ERR_TYPE, at.line, at.column, "each_index does not count along an adapted rail yet");
     } else {
         return error_at(c, PINAX_ERR_SYNTAX, at.line, at.column,
                         "this block is used by a word the compiler does not expand yet");
@@ -4730,6 +4876,9 @@ static bool do_block(comp *c) {
     b->lim = lim;
     b->n_hidden = hidden;
     b->user = user;
+    b->stride = c->ad_any ? c->ad_stride : 0xff;
+    b->krev = c->ad_any ? c->ad_krev : 0xff;
+    b->rtmp = c->ad_tmp;
     b->dst = dst;
     b->dst_name = dst_name;
     b->full = NONE;
@@ -4756,7 +4905,7 @@ static bool do_block(comp *c) {
             if (!l)
                 return false;
             reg = l->reg;
-            if (kind == STEM_RANGE)
+            if (kind == STEM_RANGE && !c->ad_any)
                 b->elem_local = (uint32_t)(l - f->locals);
         } else {
             if (!push_slot(c, element))
@@ -4772,7 +4921,13 @@ static bool do_block(comp *c) {
         if (emit(c, use == USE_TIMES ? PNX_ABC(PNX_JGEI, cur, 1, 1) : PNX_ABC(PNX_JLT, cur, lim, 1)) == NONE ||
             !jump_later(c, &b->exits))
             return false;
-        if (use != USE_TIMES && !stem_element(c, kind, reg, cur, src))
+        uint32_t at_cur = cur;
+        if (use != USE_TIMES && b->krev != 0xff) { // a reversed rail: the element of the turn is K - cur
+            if (emit(c, PNX_ABC(PNX_SUB, b->rtmp, b->krev, cur)) == NONE)
+                return false;
+            at_cur = b->rtmp;
+        }
+        if (use != USE_TIMES && !stem_element(c, kind, reg, at_cur, src))
             return false;
     }
     for (uint32_t k = 0; k < groups; ++k) { // the groups of this match
@@ -4914,6 +5069,7 @@ static bool end_do(comp *c, block *b) {
         }
         if (b->use == USE_EACH_INDEX && b->idx != b->cur && emit(c, PNX_ABC(PNX_ADDI, b->idx, b->idx, 1)) == NONE)
             return false;
+        c->loop_stride = b->stride == 0xff ? 0 : (uint8_t)(b->stride + 1);
         if (!loop_back(c, b->head, b->cur, b->use == USE_TIMES ? -1 : stem_takes(b->stem) ? 0 : 1))
             return false;
         // A range whose element is a named local the body never stores into: after the first
@@ -4994,6 +5150,18 @@ static bool found_or_fail(comp *c, tid type, uint32_t value, uint32_t flag) {
     return guard_op(c, type);
 }
 
+// After a stem_begin that took adapters: the register the element is read at (K - cur when reversed), and what loop_back adds
+typedef struct adapted { bool any; uint8_t ecur; uint8_t stride; } adapted;
+static bool adapted_cursor(comp *c, uint8_t cur, adapted *a) {
+    *a = (adapted){c->ad_any, cur, c->ad_any && c->ad_stride != 0xff ? (uint8_t)(c->ad_stride + 1) : 0};
+    if (c->ad_any && c->ad_krev != 0xff) {
+        if (emit(c, PNX_ABC(PNX_SUB, c->ad_tmp, c->ad_krev, cur)) == NONE)
+            return false;
+        a->ecur = c->ad_tmp;
+    }
+    return true;
+}
+
 // stem minimum | stem maximum : the smallest or largest int; fails on an empty stem
 static bool do_extreme(comp *c, bool largest) {
     fn *f = c->f;
@@ -5002,8 +5170,10 @@ static bool do_extreme(comp *c, bool largest) {
     uint8_t  kind, cur, lim, hidden;
     uint16_t src;
     tid     element_type;
+    c->ad_ok = true;
     if (!stem_begin(c, &kind, &cur, &lim, &src, &hidden, &element_type))
         return false;
+    adapted ad;
     if ((element_type != TY_INT && !is_dec(element_type)) || stem_takes(kind))
         return type_error(c, "this word takes a stem of int or dec(N) values");
     if (!push_slot(c, element_type) || !push_slot(c, TY_INT))
@@ -5013,17 +5183,19 @@ static bool do_extreme(comp *c, bool largest) {
     if (emit(c, PNX_ABX(PNX_LOADI, flag, 0)) == NONE || emit(c, PNX_ABX(PNX_LOADI, best, 0)) == NONE || !settle_all(c))
         return false;
     const uint32_t head = f->code.n;
-    if (emit(c, PNX_ABC(PNX_JLT, cur, lim, 1)) == NONE || !jump_later(c, &exits))
+    if (emit(c, PNX_ABC(PNX_JLT, cur, lim, 1)) == NONE || !jump_later(c, &exits) || !adapted_cursor(c, cur, &ad))
         return false;
-    if (kind == STEM_RANGE)
+    if (kind == STEM_RANGE && !ad.any)
         element = cur;
-    else if (!stem_element(c, kind, element, cur, src))
+    else if (!stem_element(c, kind, element, ad.ecur, src))
         return false;
     // the first element is taken as it is; a later one only when it beats the best so far
     if (emit(c, PNX_ABC(PNX_JEQI, flag, 0, 1)) == NONE ||
         emit(c, largest ? PNX_ABC(PNX_JLE, element, best, 1) : PNX_ABC(PNX_JLE, best, element, 1)) == NONE ||
-        emit(c, PNX_ABC(PNX_MOVI, best, element, 0)) == NONE || emit(c, PNX_ABX(PNX_LOADI, flag, 1)) == NONE ||
-        !loop_back(c, head, cur, 1))
+        emit(c, PNX_ABC(PNX_MOVI, best, element, 0)) == NONE || emit(c, PNX_ABX(PNX_LOADI, flag, 1)) == NONE)
+        return false;
+    c->loop_stride = ad.stride;
+    if (!loop_back(c, head, cur, 1))
         return false;
     land(c, &exits);
     f->depth -= (uint32_t)hidden + 2;
@@ -6044,8 +6216,10 @@ static bool do_sum(comp *c) {
     uint8_t  kind, cur, lim, hidden;
     uint16_t src;
     tid     element_type;
+    c->ad_ok = true;
     if (!stem_begin(c, &kind, &cur, &lim, &src, &hidden, &element_type))
         return false;
+    adapted ad;
     if (element_type != TY_INT && !is_dec(element_type))
         return type_error(c, "sum adds int or dec(N) values");
     if (!push_slot(c, element_type)) // a dec(N) sums to a dec(N)
@@ -6055,14 +6229,15 @@ static bool do_sum(comp *c) {
     if (emit(c, PNX_ABX(PNX_LOADI, acc, 0)) == NONE || !settle_all(c))
         return false;
     const uint32_t head = f->code.n;
-    if (emit(c, PNX_ABC(PNX_JLT, cur, lim, 1)) == NONE || !jump_later(c, &exits))
+    if (emit(c, PNX_ABC(PNX_JLT, cur, lim, 1)) == NONE || !jump_later(c, &exits) || !adapted_cursor(c, cur, &ad))
         return false;
-    if (kind == STEM_RANGE) {
+    if (kind == STEM_RANGE && !ad.any) {
         if (emit(c, PNX_ABC(PNX_ADD, acc, acc, cur)) == NONE)
             return false;
-    } else if (!stem_element(c, kind, element, cur, src) || emit(c, PNX_ABC(PNX_ADD, acc, acc, element)) == NONE) {
+    } else if (!stem_element(c, kind, element, ad.ecur, src) || emit(c, PNX_ABC(PNX_ADD, acc, acc, element)) == NONE) {
         return false;
     }
+    c->loop_stride = ad.stride;
     if (!loop_back(c, head, cur, 1))
         return false;
     land(c, &exits);
@@ -7392,6 +7567,11 @@ static bool body_name(comp *c) {
         n = (name){n.text + dot + 1, n.length - dot - 1};
         return path_word(c, module, n);
     } else {
+        if (f->depth > f->floor && adapter_id(n)) { // after a rail: skip, head, step, rev (RFC-0050)
+            const tid top = f->stack[f->depth - 1].type;
+            if (top == TY_STEM || (top == TY_COLL && !find_local(f, n) && find_global(c, n) == NONE))
+                return do_adapter(c, adapter_id(n));
+        }
         const local *l = find_local(f, n);
         if (l) {
             if (l->state == L_MOVED)
@@ -7673,7 +7853,7 @@ static bool body_token(comp *c) {
     if (f->depth > f->floor && f->stack[f->depth - 1].type == TY_STEM &&
         !(t.kind == PNX_T_RESERVED && (t.word == PNX_KW_do || t.word == PNX_KW_def)) &&
         !(t.kind == PNX_T_NAME && (name_is(tok_name(c), "sum") || name_is(tok_name(c), "minimum") ||
-                                   name_is(tok_name(c), "maximum"))) &&
+                                   name_is(tok_name(c), "maximum") || adapter_id(tok_name(c)))) &&
         !(t.kind == PNX_T_PATH && ends_with_word(tok_name(c), "join_into")))
         return type_error(c, "a stem is not a value: a block or a combining word takes it at once");
     // a pending condition survives only into the word that consumes it
