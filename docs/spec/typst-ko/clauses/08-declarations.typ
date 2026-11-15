@@ -22,8 +22,8 @@ decl        = "const"  NAME literal
             | "type"   NAME base
             | "index"  NAME NAME PATH
             | "tasks"  NAME capacity [ size [ size [ size ] ] ] [ "apart" ]
-            | "extern" c-name "(" effect ")" "from" STRING [ "as" NAME ]
-            | "test"   NAME { body } "end" ;
+            | "extern" c-name effect "from" STRING [ "as" NAME ] "end"
+            | "test"   NAME "do" { body } "end" ;
 capacity    = size | "host" ;
 size        = INT | NAME ;                         (* NAME: a const *)
 ```
@@ -32,7 +32,7 @@ size        = INT | NAME ;                         (* NAME: a const *)
 정의 밖, 소스의 맨 바깥에만 쓴다.]
 
 #para("2")[처리기는 소스를 위에서 아래로 한 번 읽는다. 이름은 쓰는 자리보다 앞에서 선언돼 있어야 한다.
-예외는 자기를 부르는 낱말과 `forward`(8.11)다.]
+예외는 자기를 부르는 프로시저와 `forward`(8.11)다.]
 
 #para("3")[한 모듈 안에서 같은 이름을 두 번 짓지 못한다. 종류가 달라도 그렇다. 핵 낱말과 타입의 이름도 다시
 짓지 못한다.]
@@ -59,7 +59,7 @@ size        = INT | NAME ;                         (* NAME: a const *)
 == 상수 <decl-const>
 
 #para("1")[`const 이름 리터럴` 은 #term("상수", en: "constant")를 만든다. 타입은 리터럴의 타입이다. 상수는
-저장소가 없다 --- 쓰는 자리에 값이 들어간다. 용량, `case` 의 가지 값, `row` 의 값에 쓸 수 있다.]
+저장소가 없다 --- 쓰는 자리에 값이 들어간다. 용량, `match` 의 가지 값, `row` 의 값에 쓸 수 있다.]
 
 #part("제약")
 
@@ -70,7 +70,7 @@ size        = INT | NAME ;                         (* NAME: a const *)
 == 전역 <decl-global>
 
 #para("1")[`global 이름 타입` 은 값 하나를 담는 #term("전역", en: "global")을 만든다. 타입은 `int` `bool`
-`err` `dec(N)` `str(N)`, 선언한 타입, 줄의 타입(표의 이름), 핸들 타입이다. `str` 는 쓰지 못한다(7.3).]
+`err` `dec N` `str N`, 선언한 타입, 줄의 타입(표의 이름), 핸들 타입이다. `str` 는 쓰지 못한다(7.3).]
 
 #para("2")[전역을 읽으려면 이름을 쓰고, 넣으려면 `v set 이름` 을 쓴다(9.4). 상태가 살아 있는 동안 값이 남는다 ---
 한 낱말의 실행이 끝나도, 다음 적재가 와도 그대로다.]
@@ -85,7 +85,7 @@ assign-item = "assign" NAME "(" value { "," value } ")" ;
 ```
 
 #para("1")[`array 이름 타입 용량` 은 칸이 용량만큼 있는 #term("배열", en: "array")을 만든다. 배열은 늘
-가득 차 있다: `len` 은 용량과 같다. 원소 타입은 `int` `bool` `err` `dec(N)` `str(N)`, 좁은 정수(7.6), 선언한 타입,
+가득 차 있다: `len` 은 용량과 같다. 원소 타입은 `int` `bool` `err` `dec N` `str N`, 좁은 정수(7.6), 선언한 타입,
 레코드의 이름, 또는 표의 이름이다. 표의 이름이면 칸은 그 표의 줄을 담는다(8.8 (5a)). 좁은 정수의 칸은 그 폭만큼의 바이트이고, 다른 값의 칸은 8 바이트다. 목록과 큐의 칸도 같다.]
 
 #para("2")[`i 배열 idx` 는 칸 `i` 의 값을 읽는다. `v i set 배열` 은 칸 `i` 에 넣는다. 모음 매개변수(9.9)의 칸도 같은 꼴로 넣는다. 번호는 0 부터 센다.
@@ -94,7 +94,7 @@ assign-item = "assign" NAME "(" value { "," value } ")" ;
 #para("3")[`assign 배열 (값, …)` 은 정의 밖에서 배열을 0 번 칸부터 채운다. 값이 칸보다 적으면 나머지 칸은
 그대로다. 같은 배열에 다시 쓰면 0 번 칸부터 다시 넣는다. 자료 적재(13.4)에서도 쓸 수 있다.]
 
-#para("4")[배열의 이름을 줄기로 쓰면 칸의 값을 0 번부터 차례로 낸다(10.6).]
+#para("4")[배열의 이름을 레일로 쓰면 칸의 값을 0 번부터 차례로 낸다(10.6).]
 
 #ex("spec", "08-array.pnx")
 
@@ -114,7 +114,7 @@ assign-item = "assign" NAME "(" value { "," value } ")" ;
 읽고 쓰는 것은 배열과 같으나, 번호는 길이 안에서만 쓴다.]
 
 #para("2")[`v 목록 push` 는 끝에 하나를 더하고, `목록 pop` 은 끝의 하나를 빼서 준다. 둘은 실패할 수 있다
-(`or fail`): 가득 찬 목록에 `push` 하면 `err.full`, 빈 목록에서 `pop` 하면 `err.range` 다. `str(N)` 목록에 너무 긴
+(`or fail`): 가득 찬 목록에 `push` 하면 `err.full`, 빈 목록에서 `pop` 하면 `err.range` 다. `str N` 목록에 너무 긴
 글을 `push` 하면 `err.range` 다(7.3 (4a)). 레코드의 목록에는
 `목록 add_row` 로 빈 줄을 더하고 그 줄을 받는다. `목록 clear` 는 길이를 0 으로 한다.]
 
@@ -148,7 +148,7 @@ assign-item = "assign" NAME "(" value { "," value } ")" ;
 == 큐 <decl-queue>
 
 #para("1")[`queue 이름 타입 용량` 은 먼저 넣은 것이 먼저 나오는 #term("큐", en: "queue")를 만든다. 원소 타입은 `int`
-`bool` `err` `dec(N)` 이다.
+`bool` `err` `dec N` 이다.
 `v 큐 put` 은 뒤에 넣고, `큐 take` 는 앞에서 빼서 주며, `큐 peek` 은 빼지 않고 앞의 것을 준다. 셋 다 실패할
 수 있다: 가득 찬 큐에 넣으면 `err.full`, 빈 큐에서 꺼내면 `err.range` 다.]
 
@@ -175,15 +175,15 @@ assign-item = "assign" NAME "(" value { "," value } ")" ;
 record   = "record" NAME { field | "big_endian" } "end" ;
 field    = NAME width ;
 width    = "u8" | "u16" | "u32" | "u64" | "i8" | "i16" | "i32" | "i64"
-         | "int" | "bool" | "varint" | "dec" "(" INT ")" | "str" "(" size ")"
+         | "int" | "bool" | "varint" | "dec" INT | "str" size
          | NAME ;                                         (* NAME: a table *)
-row-item = [ "export" ] "row" NAME [ NAME ] "(" value { "," value } ")" ;
+row-item = [ "export" ] "row" NAME [ "as" NAME ] { value } "." ;
 value    = literal | NAME ;                         (* NAME: a const, a row name, none *)
 ```
 
 #para("1")[`record 이름 … end` 는 필드의 나열인 #term("레코드", en: "record") 타입을 만든다. 필드마다 폭을
-적는다. `int` 와 `i64` 필드는 읽으면 `int`, `u8` … `i32` 필드는 그 좁은 정수(7.6), `bool` 필드는 `bool`, `dec(N)`
-필드는 `dec(N)`(8 바이트), `str(N)` 필드는 `str` 뷰가 된다. 필드에는 그 타입의 값만 넣는다. 필드의 타입에 표의
+적는다. `int` 와 `i64` 필드는 읽으면 `int`, `u8` … `i32` 필드는 그 좁은 정수(7.6), `bool` 필드는 `bool`, `dec N`
+필드는 `dec N`(8 바이트), `str N` 필드는 `str` 뷰가 된다. 필드에는 그 타입의 값만 넣는다. 필드의 타입에 표의
 이름을 쓰면 그 표의 줄을 담는다.]
 
 #para("2")[레코드는 값으로 다루지 않는다. 레코드를 원소로 하는 배열·목록·풀(#term("표", en: "table"))을
@@ -192,8 +192,8 @@ value    = literal | NAME ;                         (* NAME: a const, a row name
 
 #para("3")[필드는 경로 `레코드.필드` 로 적는다. `줄 레코드.필드` 는 읽고, `v 줄 to 레코드.필드` 는 넣는다.]
 
-#para("4")[`row 표 (값, …)` 는 정의 밖에서 목록에 줄 하나를 더한다. 값은 필드의 차례로 적고, 뒤쪽 필드는
-줄일 수 있다(0 이 된다). `row 표 이름 (…)` 은 그 줄에 이름을 붙인다. 줄의 이름은 뒤의 `row` 값과 코드에서
+#para("4")[`row 표 값… .` 는 정의 밖에서 목록에 줄 하나를 더한다. 값은 필드의 차례로 공백으로 늘어놓고(쉼표나 괄호
+없이), 뒤쪽 필드는 줄일 수 있다(0 이 된다). `row 표 as 이름 값… .` 은 그 줄에 이름을 붙인다. 줄의 이름은 뒤의 `row` 값과 코드에서
 그 줄로 쓴다.]
 
 #ex("spec", "08-record.pnx")
@@ -263,7 +263,7 @@ value    = literal | NAME ;                         (* NAME: a const, a row name
 == 찾아보기 <decl-index>
 
 #para("1")[`index 이름 표 레코드.필드` 는 레코드의 표(배열, 목록, 풀)를 한 필드로 찾는 #term("찾아보기", en: "index")를
-만든다. 키 필드는 `int` 이거나 `str(N)` 이다. 찾아보기는 표의 용량에 맞춘 고정 크기의 해시 표이고 줄의 번호만
+만든다. 키 필드는 `int` 이거나 `str N` 이다. 찾아보기는 표의 용량에 맞춘 고정 크기의 해시 표이고 줄의 번호만
 담는다. 자료는 표에 있다.]
 
 #para("2")[`키 찾아보기 lookup` 은 그 키의 줄을 준다(`or fail`, 없으면 `err.not_found`).
@@ -304,11 +304,11 @@ value    = literal | NAME ;                         (* NAME: a const, a row name
 #part("구문")
 ```ebnf
 forward = "forward" ( "array" | "list" | "pool" ) NAME
-        | "forward" "word" NAME "(" effect ")" ;
+        | "forward" NAME effect "end" ;
 ```
 
 #para("1")[`forward list 이름` 은 뒤에서 선언할 표를 미리 알린다. 레코드가 자기를 담을 표의 줄을 필드로 가질
-때 쓴다. 미리 알린 표의 이름은 타입 자리에만 쓴다. `forward word` 는 9.7 이 정한다.]
+때 쓴다. 미리 알린 표의 이름은 타입 자리에만 쓴다. 프로시저의 `forward 이름 서명 end` 는 9.7 이 정한다.]
 
 #ex("spec", "08-forward.pnx")
 
@@ -357,7 +357,7 @@ forward = "forward" ( "array" | "list" | "pool" ) NAME
 
 #para("1")[`err 이름` 은 #term("실패 코드", en: "failure code")를 만든다. `err` 타입의 새 오류 코드다(11.1). 상수(8.2)처럼
 저장소가 없고, 그 이름은 제 모듈의 이름이다. 다른 모듈은 내보낸 것을 `모듈.이름` 으로 쓴다. 다른 코드를 쓰는 자리 어디에나
-쓴다: `fail` 과 함께, `or_else (e)` 와 `eq` 로, `case` 의 가지 값으로, `err` 전역이나 모음 안에. `err_text` 는 그 이름을
+쓴다: `fail` 과 함께, `or_else to e` 와 `eq` 로, `match` 의 가지 값으로, `err` 전역이나 모음 안에. `err_text` 는 그 이름을
 준다.]
 
 #para("2")[상태가 선언한 실패 코드는 선언된 차례대로 `0x400` 부터 번호가 붙는다(19.1). 프로그램은 번호에 기대지 않는다.
@@ -376,7 +376,7 @@ forward = "forward" ( "array" | "list" | "pool" ) NAME
   ([호스트가 수를 주지 않은 `host` 용량(메시지에 선언의 이름)], "the host gave no capacity for NAME (pinax_capacity)"),
   ([정의 밖의 `to` 가 전역이 아닌 이름에], "outside a definition `to` makes no new local; a global is written with set"),
   ([`assign` 의 값이 칸보다 많음], "assign has more values than the array has cells"),
-  ([큐의 원소 타입이 `int` `bool` `err` `dec(N)` 밖], "a queue holds int, bool, err or dec(N) values"),
+  ([큐의 원소 타입이 `int` `bool` `err` `dec N` 밖], "a queue holds int, bool, err or dec N values"),
   ([`alloc` 이 막 준 줄의 `push`(8.8 (5a))], "push can fail and lose an owned row; store it with set, into a field or into a global"),
   ([`row` 의 값이 필드와 다름], "a value has another type than its field"),
   ([`owned` 줄을 넘기지 않는 경로], "an owned value in a local is not given on every path (close, free or store it)"),

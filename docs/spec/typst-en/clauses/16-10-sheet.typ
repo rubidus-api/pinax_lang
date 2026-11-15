@@ -6,7 +6,7 @@
 the buffer holds a #term("book"). It is a library, not a type, and it works as an adapter does: the program opens the book,
 makes sheets in it, chooses one by name or by number, and every other word then works on that #term("current sheet"). Every word of
 `sheet` takes the buffer, written last, as a collection parameter (9.9) does. A cell holds nothing, an `int`, a `bool`, a
-`dec(N)`, a date (Unix seconds, UTC) or a `str`, whatever the program puts there. The kind of a cell is known only to the module: a value leaves a cell
+`dec N`, a date (Unix seconds, UTC) or a `str`, whatever the program puts there. The kind of a cell is known only to the module: a value leaves a cell
 through the word of its type (`int`, `str`, ...), so every word has a fixed signature and the stack never holds a value of no
 type. How the cells, the pools and the indexes lie in the buffer is not part of the interface.]
 
@@ -57,13 +57,13 @@ is the same fault.
   [*Word*], [*Signature*], [*Meaning*],
   [`put_int` `put_bool`], [`(v int, row int, col int, b buffer or fail)` `(v bool, row int, col int, b buffer or fail)`], [puts a copy in the cell; `err.full` when a pool is full],
   [`put_date`], [`(secs int, row int, col int, b buffer or fail)`], [puts a date, the Unix seconds `secs` (UTC), in the cell; a value that does not fit 60 bits (any date of the years 1 to 9999 does) is the fault `range`],
-  [`put_dec`], [`(v dec(N), row int, col int, b buffer or fail)`], [puts a decimal with its scale],
+  [`put_dec`], [`(v dec N, row int, col int, b buffer or fail)`], [puts a decimal with its scale],
   [`put_str`], [`(s str, row int, col int, b buffer or fail)`], [puts a copy of the text; a view of this table may be given],
   [`clear_cell`], [`(row int, col int, b buffer)`], [makes the cell empty],
   [`copy_cell`], [`(row1 int, col1 int, row2 int, col2 int, b buffer)`], [copies a cell to another, sharing the value],
   [`int` `bool`], [`(row int, col int, b buffer gives int or fail)` `(... gives bool or fail)`], [the value; `err.format` when the cell holds another kind (a date too: it is read with `date`)],
   [`date`], [`(row int, col int, b buffer gives int or fail)`], [the Unix seconds of a date cell; `err.format` when the cell holds another kind],
-  [`dec`], [`(row int, col int, N int, b buffer gives dec(N) or fail)`], [a decimal with the scale `N` (a constant 0 to 18); `err.format` when the cell holds another kind or scale],
+  [`dec`], [`(row int, col int, N int, b buffer gives dec N or fail)`], [a decimal with the scale `N` (a constant 0 to 18); `err.format` when the cell holds another kind or scale],
   [`str`], [`(row int, col int, b buffer gives str or fail)`], [a view of the text in the table, good until the next write to it; `err.format` for another kind],
   [`kind` `is_empty`], [`(row int, col int, b buffer gives int)` `(... gives bool)`], [the kind (`sheet.k_empty` 0, `k_int` 1, `k_bool` 2, `k_dec` 3, `k_str` 4, `k_date` 5); is it empty],
 )]
@@ -129,7 +129,7 @@ Rows beyond `rows_max` or columns beyond the sheet are `err.full`, a text that i
 The `mode` is 0, 1 or 2 (any other is a fault).]
 #table(columns: (auto, auto, 1fr), inset: 5pt, stroke: 0.5pt + luma(170),
   [*Word*], [*Signature*], [*Meaning*],
-  [`load_csv`], [`(mode int, f buffer, b buffer gives n int or fail)`], [reads the text in `f`: lines end with LF or CRLF, fields with commas, a quoted field holds commas, line breaks and doubled quotes (it is unescaped in place), blank lines and a UTF-8 BOM are skipped. Mode 0: a field that is an integer in its canonical form (`-?(0|[1-9][0-9]*)`, fitting an int) becomes an `int`; a canonical integer with 1 to 18 digits after the point, fitting, becomes a `dec` of that many digits (`1.50` is `dec(2)`); an empty field is an empty cell; any other, `007` and `-0` too, is text. Mode 2: as mode 0, and a field that is a date, `YYYY-MM-DD`, or with `T` or a blank and `hh:mm:ss` (and perhaps a `Z`), that exists, becomes a date cell (UTC; a date alone is midnight). Mode 1: all text],
+  [`load_csv`], [`(mode int, f buffer, b buffer gives n int or fail)`], [reads the text in `f`: lines end with LF or CRLF, fields with commas, a quoted field holds commas, line breaks and doubled quotes (it is unescaped in place), blank lines and a UTF-8 BOM are skipped. Mode 0: a field that is an integer in its canonical form (`-?(0|[1-9][0-9]*)`, fitting an int) becomes an `int`; a canonical integer with 1 to 18 digits after the point, fitting, becomes a `dec` of that many digits (`1.50` is `dec 2`); an empty field is an empty cell; any other, `007` and `-0` too, is text. Mode 2: as mode 0, and a field that is a date, `YYYY-MM-DD`, or with `T` or a blank and `hh:mm:ss` (and perhaps a `Z`), that exists, becomes a date cell (UTC; a date alone is midnight). Mode 1: all text],
   [`load_xlsx`], [`(mode int, n int, f buffer, b buffer gives rows int or fail)`], [reads sheet `n` (0 first, in the order of the workbook; `err.not_found` when there is none) of the xlsx in `f`. Numbers follow the CSV rule (the digits after the point beyond 18 are rounded; an exponent is applied; a value that does not fit is text), shared, inline and formula-result strings are text (rich text is joined, phonetic runs dropped), `t="b"` is a `bool`, an error value (`#N/A`) is text, a formula gives its stored result. A cell whose number format is a date or time (built-in formats 14 to 22, 27 to 36, 45 to 47, 50 to 58, 71 to 81, or a custom format with `y`, `d`, `h`, `s` or `m` outside quotes and brackets, `[h]` and `[mm]` included) is, in mode 0, an `int` of Unix seconds (UTC, the 1900 or 1904 date system of the file, a time of day alone counted from midnight); in mode 1 it stays the serial number as a `dec`, in mode 2 it is a date cell with those seconds (the other cells as in mode 0). Rows and columns the file leaves out are empty cells],
   [`save_csv`], [`(dst buffer, b buffer gives n int or fail)`], [replaces the contents of `dst` with the current sheet as CSV (up to its last used row and column; texts quoted when they hold a comma, a quote or a line break; `dec` with its digits; `bool` as `true` and `false`; a date as `YYYY-MM-DD`, with `Thh:mm:ss` when it is not midnight, and outside the years 0 to 9999 as its seconds) and gives the bytes; `err.full` when `dst` is too small (it is then empty)],
   [`save_xlsx`], [`(dst buffer, b buffer gives n int or fail)`], [replaces the contents of `dst` with an xlsx of the current sheet (one sheet, named like it, at most 31 characters without `[]:*?/\`; texts as inline strings; numbers, `dec` and `bool` as such; a date as an Excel date, the serial number of the 1900 system with the format `yyyy-mm-dd hh:mm:ss` (a styles part is written only for a sheet that has one), read back by mode 2 with the same seconds; before 1900-03-01 or after 9999-12-31 the format cannot say it and the seconds are written as a plain number). The ZIP is stored, not compressed],
@@ -160,7 +160,7 @@ that does not fit are faults.]
 
 #part("Diagnostics")
 #diag(
-  ([A value of another type for a word of `sheet`], "this word of sheet takes int for row, column and number, str for text, bool for put_bool, dec(N) for put_dec"),
+  ([A value of another type for a word of `sheet`], "this word of sheet takes int for row, column and number, str for text, bool for put_bool, dec N for put_dec"),
   ([A word of `sheet` without a buffer last], "the words of sheet take a buffer last: v row column grid sheet.put_int"),
   ([A word of a file with a book that is a reference, or with a file that is not a buffer], "this word of sheet takes the buffer of the file, then the book: 0 file book sheet.load_csv"),
 )

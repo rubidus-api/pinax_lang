@@ -25,7 +25,7 @@ str or fail)` 이다(바이트가 모자라거나 모양이 틀리면 `err.forma
 `줄 bytes.packed_size` 는 `pack` 이 쓸 바이트 수다.]
 
 #para("4")[필드의 바이트: 정수 폭은 그 폭으로(레코드에 `big_endian` 이 있으면 큰 끝이 먼저, 없으면 작은 끝이
-먼저), `int` 는 8 바이트, `bool` 은 1 바이트, `varint` 는 LEB128, `str(N)` 은 길이(varint) 다음에 바이트, 줄을
+먼저), `int` 는 8 바이트, `bool` 은 1 바이트, `varint` 는 LEB128, `str N` 은 길이(varint) 다음에 바이트, 줄을
 담는 필드는 담긴 수(varint).]
 
 #para("5")[`pack` 이 실패하면 버퍼는 부르기 전의 길이로 돌아간다. `unpack` 은 모든 필드를 읽을 수 있을 때만 줄에

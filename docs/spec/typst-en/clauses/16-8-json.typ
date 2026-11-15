@@ -37,7 +37,7 @@ the commas in themselves.
   [`begin_object` `end_object` `begin_array` `end_array` `put_null`], [`(buf or fail)`],
   [`put_key` `put_str`], [`(s str, buf or fail)`; the word does the escaping],
   [`put_int`], [`(n int, buf or fail)`],
-  [`put_dec`], [`(d dec(N), buf or fail)`],
+  [`put_dec`], [`(d dec N, buf or fail)`],
   [`put_bool`], [`(b bool, buf or fail)`],
 )]
 
@@ -63,7 +63,7 @@ is after its escapes are decoded. The reading stops where it finds the value, so
 
 #para("6")[`row buf json.pack` appends a row of a record as an object whose keys are the field names. `s row
 json.unpack` reads an object into the fields of the same names and gives the rest after the object. Values of unknown
-keys are passed over. Numbers shall be integers that fit the field's width; a `dec(N)` field takes a number with at most
+keys are passed over. Numbers shall be integers that fit the field's width; a `dec N` field takes a number with at most
 `N` digits after the point and is written with all `N` (7.5); `null` is not accepted. The row is written
 only when everything is right; when it fails (`err.format`) the row is unchanged.]
 

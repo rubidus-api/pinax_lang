@@ -14,11 +14,11 @@ literal     = INT | DEC | CHAR | STRING | RAWSTRING | TEXT | BOOL ;
 (* 6.7, 13: a source *)
 source      = [ "pinax" INT ] { item } ;
 item        = import | order | forward | declaration | definition | row-item | assign-item | body ;
-import      = "use" NAME [ "as" NAME ] ;
-order       = "set_order" "(" [ order-one { "," order-one } ] ")" | "get_order" ;   (* 13.5 *)
+import      = "use" NAME [ "as" NAME ] "." ;
+order       = "set_order" { order-one } "." | "get_order" ;   (* 13.5 *)
 order-one   = NAME | "get_order" ;
 forward     = "forward" ( "array" | "list" | "pool" ) NAME
-            | "forward" "word" NAME "(" effect ")" ;
+            | "forward" NAME effect "end" ;
 
 (* 8: declarations *)
 declaration = [ "export" ] ( [ "bound" ] bindable | "shared" shareable | decl ) ;
@@ -28,41 +28,42 @@ decl        = "const" NAME literal
             | "err" NAME
             | "list" NAME type capacity | "queue" NAME type capacity | "pool" NAME NAME capacity
             | "record" NAME { field | "big_endian" } "end"
-            | "type" NAME ( "int" | "bool" | "str" | "dec" "(" INT ")" )
+            | "type" NAME ( "int" | "bool" | "str" | "dec" INT | "proc" effect "end" )
             | "index" NAME NAME PATH
             | "tasks" NAME capacity [ size [ size [ size ] ] ] [ "apart" ]
-            | "extern" c-name "(" effect ")" "from" STRING [ "as" NAME ]
-            | "test" NAME { body } "end" ;
+            | "extern" c-name effect "from" STRING [ "as" NAME ] "end"
+            | "test" NAME "do" { body } "end" ;
 capacity    = size | "host" ;
 size        = INT | NAME ;
-field       = NAME NAME [ "(" size ")" ] ;
+field       = NAME NAME [ size ] ;
 c-name      = NAME | reserved-word | STRING ;
-row-item    = [ "export" ] "row" NAME [ NAME ] "(" value { "," value } ")" ;
+row-item    = [ "export" ] "row" NAME [ "as" NAME ] { value } "." ;
 assign-item = "assign" NAME "(" value { "," value } ")" ;
 value       = literal | NAME ;
 
-(* 9: words *)
-definition  = [ "export" ] "word" NAME "(" effect ")" { body } "end" ;
+(* 9: procedures *)
+definition  = [ "export" ] "def" NAME effect "do" { body } "end" ;
 effect      = [ params ] [ "gives" params ] [ "or" "fail" ] ;
 params      = param { "," param } ;
 param       = [ NAME ] ( type | coll-type ) ;
-type        = [ "owned" ] ( NAME [ "(" size ")" ] | "word" "(" effect ")" ) ;
-coll-type   = ( "array" | "list" | "queue" ) NAME [ "(" size ")" ] | "buffer" ;   (* an input, 9.9 *)
+type        = [ "owned" ] ( NAME [ size ] ) ;      (* a proc type is declared by a type, 7.4 *)
+coll-type   = ( "array" | "list" | "queue" ) NAME [ size ] | "buffer" ;   (* an input, 9.9 *)
 
 (* 9 to 11: the body *)
 body        = literal | NAME | PATH | store | set | fits | block | cat | guard | control | defer
             | "," | "."                                       (* the end of a statement, 10.8 *)
-            | "return" | "fail" | ( "while" | "until" | "break" ) [ "(" NAME ")" ] ;
-store       = "to" ( NAME | PATH | "(" NAME { "," NAME } ")" ) ;   (* a local, or a field *)
+            | "return" | "fail" | ( "break" | "continue" ) [ INT ] "." ;
+store       = "to" ( NAME | PATH ) ;   (* a local, or a field *)
 set         = "set" ( NAME | PATH ) ;                         (* a global, 9.4 *)
-fits        = "fits" ( NAME | PATH ) ;                        (* a str(N) place, 7.3 *)
-block       = "do" [ "(" effect ")" ] { body } "end" ;
-cat         = "cat" "(" phrase { "," phrase } ")" ;
-phrase      = body { body } ;
-guard       = "or_fail" | "or_return" | "or_else" [ "(" NAME ")" ] { body } "end" ;
+fits        = "fits" ( NAME | PATH ) ;                        (* a str N place, 7.3 *)
+block       = "do" { "to" NAME } { body } "end"
+            | "def" effect "do" { body } "end"              (* a block value, 10.5 *)
+            | "ref" NAME ;
+cat         = "args" { body } "." "cat" ;                   (* 9.8 *)
+guard       = "or_fail" | "or_return" | "or_else" [ "to" NAME ] { body } "end" ;
 control     = "if" { body } [ "else" { body } ] "end"
-            | "loop" [ "(" NAME ")" ] { body } "end"
-            | "case" { branch } [ "otherwise" { body } "end" ] "end" ;
+            | "loop" { body } "end"
+            | "match" { branch } [ "otherwise" { body } "end" ] "end" ;
 defer       = "defer" { body } "end" ;             (* 10.7 *)
-branch      = ( case-value | "(" case-value { "," case-value } ")" ) "of" { body } "end" ;
+branch      = "when" case-value { case-value } "do" { body } "end" ;
 case-value  = literal | NAME | PATH ;</code></pre><p class="para"><span class="pn">(3)</span> A source read by data load follows <code>data-source</code> of 13.4.</p></main><nav class="bottom"><a href="index.html">Start</a> · <a href="20.html">Previous</a> · <a href="22.html">Next</a> · <a href="../html-ko/21.html">한국어</a></nav></body></html>

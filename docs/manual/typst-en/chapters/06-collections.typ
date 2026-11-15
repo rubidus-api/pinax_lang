@@ -2,7 +2,7 @@
 
 = Collections <collections>
 
-#opening[Chapter 4 (stems and blocks), chapter 5 (buffers).][
+#opening[Chapter 4 (rails and blocks), chapter 5 (buffers).][
 - What places hold several values, and how is their size decided?
 - What happens when you add to a full list or take from an empty queue?
 - How do I filter or transform an array into another place?
@@ -39,9 +39,9 @@ One `push` and one `pop`, followed on the stack. Both can fail, so a guard follo
 #trace(
   ("70", "70", [The value to put in.]),
   ("scores push", "—", [Puts it at the end. Had the list been full, it would fail and leave nothing.]),
-  ([`or_else (e) end`], "—", [Skipped, since it succeeded. On failure the body runs; it is empty, so nothing is left.]),
+  ([`or_else to e end`], "—", [Skipped, since it succeeded. On failure the body runs; it is empty, so nothing is left.]),
   ("scores pop", "90", [Takes the last value off.]),
-  ([`or_else (e) -1 end`], "90", [Success: skipped. On failure `-1` would fill the place.]),
+  ([`or_else to e -1 end`], "90", [Success: skipped. On failure `-1` would fill the place.]),
   ("str.to_str io.println", "—", [Prints it.]),
 )
 
@@ -61,7 +61,7 @@ One `push` and one `pop`, followed on the stack. Both can fail, so a guard follo
 #ex("manual", "06-list-full.pnx")
 
 Because they can fail, `push` and `pop` are always followed by a guard (chapter 8); leaving it out is refused at
-load. To ignore the failure, write `or_else (e) end`, so that the source says it is ignored.
+load. To ignore the failure, write `or_else to e end`, so that the source says it is ignored.
 
 #ex("manual", "06-push-unguarded.pnx")
 
@@ -75,13 +75,13 @@ In a `queue`, what goes in first comes out first. `put` puts in, `take` takes ou
 
 #ex("manual", "06-queue.pnx")
 
-#mistake[A queue can be walked with `each` too][Only arrays and lists are stems, and a pool for `each` alone (chapter 7).
+#mistake[A queue can be walked with `each` too][Only arrays and lists are rails, and a pool for `each` alone (chapter 7).
 Queues, buffers and indexes are not. To handle the elements of a queue in order, call `take` in a loop.
-#ex("manual", "06-queue-stem.pnx")]
+#ex("manual", "06-queue-rail.pnx")]
 
 == Filtering and mapping into a place
 
-`map_into` and `filter_into` put the results of transforming or filtering the elements of a stem with a block into a
+`map_into` and `filter_into` put the results of transforming or filtering the elements of a rail with a block into a
 #strong[place that already exists]; no new array is made. A list destination is added to at the end; an array is written
 from cell 0, and the number of cells written is given. When the destination is full, they fail.
 
@@ -90,7 +90,7 @@ from cell 0, and the number of cells written is given. When the destination is f
 == Passing a collection to a word
 
 A word can take a collection as a parameter. Write its kind and what its cells hold --- `list int`, `array city`,
-`queue int`, `list str(8)` --- or `buffer`, and give the collection's name where you call the word. Inside, the parameter
+`queue int`, `list str 8` --- or `buffer`, and give the collection's name where you call the word. Inside, the parameter
 works wherever a collection's name does (even as the destination of `map_into`). The same word now serves every list of that kind, whatever its capacity.
 
 #ex("manual", "06-coll-param.pnx")
@@ -141,7 +141,7 @@ kind than the word asks for fails with `err.format`; ask `kind` first when it ca
 - The capacity of a collection is fixed by its declaration; no storage grows while running (standard 8.1).
 - An array is always full; a list's length grows; an index out of range is a fault (8.4, 8.5).
 - `push` `pop` `put` `take` can fail: `full` when full, `range` when empty (8.5, 8.6).
-- Only arrays and lists are stems (10.6).
+- Only arrays and lists are rails (10.6).
 - `map_into` and `filter_into` write into the destination they are given (10.6).
 - `sheet` keeps rows and columns of any kind of cell in a buffer; rows grow, columns are fixed by `create`; several sheets in one book, ordered indexes, and CSV and xlsx files in and out through two buffers (standard 16.10).
 ]

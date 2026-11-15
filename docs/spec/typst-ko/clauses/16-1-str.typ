@@ -52,17 +52,17 @@
   [`repeat`], [`(s str, n int gives str)`], [`n` 번 이은 글. `n` 이 음수면 결함 `range`],
   [`replace`], [`(s str, old str, new str gives str)`], [모든 `old` 를 `new` 로],
   [`pad_left` `pad_right`], [`(s str, width int gives str)`], [스페이스로 채워 `width` 바이트로. 이미 길면 그대로. `width` 가 음수이거나 2#super[32] 이상이면 결함 `range`],
-  [`to_str`], [`(int gives str)`], [십진 글. `dec(N)` 은 점 아래 `N` 자리까지(7.5)],
-  [`to_dec`], [`(s str, N gives dec(N) or fail)`], [십진 소수로 읽기: 부호, 숫자, 점과 그 아래 `N` 자리까지(`N` 은 상수). 자리가 더 많거나 다른 꼴이면 `err.format`],
+  [`to_str`], [`(int gives str)`], [십진 글. `dec N` 은 점 아래 `N` 자리까지(7.5)],
+  [`to_dec`], [`(s str, N gives dec N or fail)`], [십진 소수로 읽기: 부호, 숫자, 점과 그 아래 `N` 자리까지(`N` 은 상수). 자리가 더 많거나 다른 꼴이면 `err.format`],
   [`to_int`], [`(str gives int or fail)`], [십진으로 읽기. 부호 하나와 숫자만 받는다(공백도 안 된다). 아니거나 64 비트를 넘으면 `err.format`],
   [`to_int_base`], [`(s str, base int gives int or fail)`], [2--36 진법으로 읽기. 그 밖의 `base` 는 결함 `range`],
 )]
 
 #ex("spec", "16-str-make.pnx")
 
-=== 줄기와 버퍼에 쓰기
+=== 레일과 버퍼에 쓰기
 
-#para("7")[줄기(10.6)를 내는 낱말:
+#para("7")[레일(10.6)를 내는 낱말:
 - `s sep str.split` --- `sep` 으로 가른 조각. 빈 조각도 낸다. `sep` 은 `str` 이거나 바이트 하나(`u8` 상수, 보통
   문자 리터럴)다. `cut` 과 `try_cut` 의 `sep` 도 같다.
 - `s str.words` --- 공백으로 가른 조각. 빈 조각은 내지 않는다.
@@ -71,11 +71,11 @@
 - `s str.chars` --- UTF-8 글자 하나씩의 뷰(`str`).]
 
 #para("8")[버퍼에 쓰는 낱말:
-- `sep buf 줄기 str.join_into` --- 줄기의 조각을 `sep` 으로 이어 버퍼에 붙인다(`or fail`). 줄기는 바로 뒤의
-  낱말이 받아야 하므로 줄기를 맨 뒤에 둔다.
+- `sep buf 레일 str.join_into` --- 레일의 조각을 `sep` 으로 이어 버퍼에 붙인다(`or fail`). 레일은 바로 뒤의
+  낱말이 받아야 하므로 레일을 맨 뒤에 둔다.
 - `s old new buf str.replace_into` --- 바꾼 글을 버퍼에 붙이고 바꾼 횟수를 준다(`gives n int or fail`).]
 
-#ex("spec", "16-str-stems.pnx")
+#ex("spec", "16-str-rails.pnx")
 
 #part("제약")
 

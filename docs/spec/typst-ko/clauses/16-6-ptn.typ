@@ -30,7 +30,7 @@
   [`is_match`], [`(s str, pat gives bool)`], [어디든 맞는 곳이 있는가],
   [`match`], [`(s str, pat gives str or fail)`], [처음 맞은 부분의 뷰. 없으면 `err.not_found`],
   [`capture`], [`(n int gives str)`], [마지막 `match` 의 갈무리 `n` (1--9). 0 은 맞은 전체],
-  [`matches`], [줄기], [맞은 부분을 차례로. 겹치지 않게 다음 자리에서 다시 찾는다],
+  [`matches`], [레일], [맞은 부분을 차례로. 겹치지 않게 다음 자리에서 다시 찾는다],
   [`replace`], [`(s str, pat, rep str gives str)`], [맞은 곳을 모두 `rep` 로 바꾼 새 글. `rep` 의 `%0`--`%9` 는 갈무리, `%%` 는 `%`],
 )]
 

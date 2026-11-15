@@ -30,7 +30,7 @@
   [`is_match`], [`(s str, pat gives bool)`], [is there a match anywhere],
   [`match`], [`(s str, pat gives str or fail)`], [a view of the first match; `err.not_found` when none],
   [`capture`], [`(n int gives str)`], [capture `n` (1--9) of the last `match`; 0 is the whole match],
-  [`matches`], [stem], [the matches in order, each search starting where the last ended],
+  [`matches`], [rail], [the matches in order, each search starting where the last ended],
   [`replace`], [`(s str, pat, rep str gives str)`], [new text with every match replaced by `rep`; in `rep`, `%0`--`%9` are captures and `%%` is `%`],
 )]
 

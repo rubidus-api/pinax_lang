@@ -170,13 +170,13 @@ fault's line and locals on stream 2, in the same form as `pnx`.
 session and gives `{ ok, error, unfinished, stack }`, `stack` the values left. A text that ends inside a definition or
 a block is `unfinished` and changes nothing: give it again with more. `reset()` starts the session again from nothing,
 and `clear()` empties its stack. `blocks(text)` of the object `createPinax` gives runs nothing: it says which
-definitions and blocks are still open at the end of a text, the outermost first (`["word sq", "loop", "if"]`).
+definitions and blocks are still open at the end of a text, the outermost first (`["def sq", "loop", "if"]`).
 
 `./nob wasm` also writes `build/dist/pinax-playground.html`, one page with the module inside it, which opens from disk
 with no server. The page is a terminal. Code runs when it is whole: it ends with `,` or `.`, or with the `end` of
-the block it opened. `use NAME`, `set_order (...)` and `get_order` need no dot: what they take is plain (the next name, one parenthesized list), so they run when typed; a dot may be written. A colon at the start of a line lists the commands, which are chosen as words are. `:words` lists the words of the program with their signatures and `:get_order` tells the search order. An empty line runs the text gathered when no block is open, the way out of a forgotten dot. After `use` the completion offers the modules not in use yet, and inside the parentheses of `set_order` the modules in use (and `get_order`), each with what it is and its words; the list opens downwards. Alt+0 offers at the place of the cursor: the word begun, or, in an empty place, ten names the program declares, the nearest and the most recent first. A loop or a block waits until its `end` is typed and then runs once, whole, and the status line
+the block it opened. `use NAME .` and `set_order … .` end with a period, and `get_order` needs none (it takes nothing, so it runs when typed). A colon at the start of a line lists the commands, which are chosen as words are. `:procs` lists the procedures of the program with their signatures and `:get_order` tells the search order. An empty line runs the text gathered when no block is open, the way out of a forgotten dot. After `use` the completion offers the modules not in use yet, and after `set_order` the modules in use (and `get_order`), each with what it is and its words; the list opens downwards. Alt+0 offers at the place of the cursor: the word begun, or, in an empty place, ten names the program declares, the nearest and the most recent first. A loop or a block waits until its `end` is typed and then runs once, whole, and the status line
 at the bottom says how deep the typing is and in what (`depth 2: loop › if`). The stack shows after each statement.
-A statement that declares something (`word`, `const`, `use`, `set_order` and the rest) is added to a program, as
+A statement that declares something (`def`, `const`, `use`, `set_order` and the rest) is added to a program, as
 GW-BASIC keeps one, and a name declared again takes the place of its lines. `:list` shows the program with line
 numbers. `:edit N` puts line N in the prompt, `:insert N` adds lines above line N (0: at the end) until an empty line,
 `:delete N` (`:del`, also `N-M`) removes lines, and `:edit` (F2) opens the whole program in an editor; after each the

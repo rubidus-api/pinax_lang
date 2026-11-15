@@ -37,18 +37,18 @@
 guard = "or_fail" | "or_return" | "or_else" [ "(" NAME ")" ] { body } "end" ;
 ```
 
-#para("1")[서명이 `or fail` 로 끝나는 낱말은 실패할 수 있다. 실패하면 결과는 없고 오류 번호만 있다.]
+#para("1")[서명이 `or fail` 로 끝나는 프로시저는 실패할 수 있다. 실패하면 결과는 없고 오류 번호만 있다.]
 
 #para("2")[실패할 수 있는 낱말을 부른 바로 다음 토큰은 #term("지킴 낱말", en: "guard")이어야 한다.
 #table(columns: (auto, 1fr), inset: 5pt, stroke: 0.5pt + luma(170),
   [*지킴*], [*실패했을 때*],
   [`or_fail`], [같은 오류로 이 낱말도 실패한다. 이 낱말의 서명에 `or fail` 이 있어야 한다],
   [`or_return`], [이 낱말을 끝낸다. 그 자리의 스택이 결과와 맞아야 한다],
-  [`or_else … end`], [몸이 대신할 결과를 만든다. `or_else (e) … end` 는 오류 번호를 지역 변수 `e` 로 받는다. 몸은 `return` `fail` `break` 로 떠나도 된다],
+  [`or_else … end`], [몸이 대신할 결과를 만든다. 몸은 오류 번호(`err`)가 스택에 놓인 채 시작하므로 쓰지 않으면 `drop` 한다. `or_else to e … end` 는 오류 번호를 지역 변수 `e` 로 받는다. 몸은 `return` `fail` `break` `continue` 로 떠나도 된다],
 )
 성공하면 지킴 낱말은 아무 일도 하지 않고 결과가 스택에 남는다.]
 
-#para("2a")[`str(N)` 자리에 넣는 일 뒤에도 지킴 낱말이 올 수 있다. 그러면 글이 너무 길 때 `range` 로 실패한다
+#para("2a")[`str N` 자리에 넣는 일 뒤에도 지킴 낱말이 올 수 있다. 그러면 글이 너무 길 때 `range` 로 실패한다
 (7.3 (4a)). 다른 넣기 뒤의 지킴 낱말은 거절된다.]
 
 #para("3")[`번호 fail` 은 이 낱말을 그 오류로 실패시킨다. 이 낱말의 서명에 `or fail` 이 있어야 한다.]
@@ -71,7 +71,7 @@ guard = "or_fail" | "or_return" | "or_else" [ "(" NAME ")" ] { body } "end" ;
 #ex("spec", "11-or-fail-needs.pnx")
 #ex("spec", "11-fail-needs.pnx")
 
-#para("7")[`or_else` 의 몸은 낱말이 성공했다면 남겼을 값을 남기거나, 떠나야 한다.]
+#para("7")[`or_else` 의 몸은 프로시저가 성공했다면 남겼을 값을 남기거나, 떠나야 한다.]
 #ex("spec", "11-or-else-stack.pnx")
 
 #para("8")[실패의 경로에서도 `owned` 값은 넘겨줘야 한다(12.4). 처리기는 `or_fail` `or_return` 자리마다
@@ -85,7 +85,7 @@ guard = "or_fail" | "or_return" | "or_else" [ "(" NAME ")" ] { body } "end" ;
 
 #para("2")[결함은 다음에서 난다.
 - 산술의 넘침(`overflow`), 0 으로 나눔(`div_zero`) --- 7.1, 15.1;
-- 배열·목록의 범위 밖 번호, 맞는 가지가 없는 `case`, 없음 줄, 지킴 낱말 없이 넣은 `str(N)` 보다 긴 글(`range`)
+- 배열·목록의 범위 밖 번호, 맞는 가지가 없는 `match`, 없음 줄, 지킴 낱말 없이 넣은 `str N` 보다 긴 글(`range`)
   --- 7.3, 8, 10.3;
 - 좁은 필드에 맞지 않는 값(`overflow`) --- 8.8;
 - 구역이나 작업 공간이 모자람(`full`) --- 12.2;

@@ -38,12 +38,12 @@ them can be raised with `fail`; some are also what the processor stops with as a
 Right after a word that can fail comes one #strong[guard]:
 - `or_fail` --- this word fails too, for the same reason; its signature needs `or fail` as well;
 - `or_return` --- this word ends quietly;
-- `or_else … end` --- makes a value in its place; `or_else (e) … end` takes the reason.
+- `or_else … end` --- makes a value in its place; `or_else to e … end` takes the reason.
 
 #ex("manual", "08-parse.pnx")
 
 `parse` can fail in three places and passes each on with `or_fail`. Its own rule (0 to 100) fails with
-`err.range fail`. `report` takes the failure with `or_else (e)`, reports it with its reason, and skips the line.
+`err.range fail`. `report` takes the failure with `or_else to e`, reports it with its reason, and skips the line.
 
 #ex("manual", "08-or-return.pnx")
 
@@ -55,7 +55,7 @@ body of `or_else … end` makes a value of the type success would have given, to
 #trace(
   ("s", "\"forty\"", [The text goes on.]),
   ("str.to_int", "—", [It does not read as a number and fails. No result.]),
-  ("or_else (e) 0 end", "0", [The way of the failure: the reason goes into `e`, and the body puts `0` on. On success the body is skipped and the number stays.]),
+  ("or_else to e 0 end", "0", [The way of the failure: the reason goes into `e`, and the body puts `0` on. On success the body is skipped and the number stays.]),
 )
 
 A body that leaves another type is refused: the code after `or_else` does not know which way it came (the same rule as
@@ -90,7 +90,7 @@ files, the network) is a failure. What goes away only by fixing the program (a m
 a fault.]
 
 #qa[My word has a new kind of failure to report. Can I make a new name?][Yes. `err NAME` declares a new failure code
-of its module. It is raised with `fail`, taken with `or_else (e)`, compared with `eq` or by `case`, and `err_text`
+of its module. It is raised with `fail`, taken with `or_else to e`, compared with `eq` or by `match`, and `err_text`
 reads its name, as with the twelve.]
 
 #ex("manual", "08-own-codes.pnx")

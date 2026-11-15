@@ -18,7 +18,7 @@ below 0 or from 2#super[32] up is the fault `range`; when the region is used up 
 
 #part("Constraints")
 
-#para("2")[The words of `fmt` take an `int`. A value of another type is refused. A `dec(N)` is written by `str.to_str`
+#para("2")[The words of `fmt` take an `int`. A value of another type is refused. A `dec N` is written by `str.to_str`
 and `cat` (7.5).]
 #ex("spec", "16-fmt-type.pnx")
 

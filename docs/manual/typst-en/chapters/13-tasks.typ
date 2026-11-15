@@ -23,7 +23,7 @@ One `spawn` line, followed, shows what a task takes and gives.
 #trace(
   ("do \"ping\" 3 count_to end", "block", [A block that takes and gives nothing goes on as a value; the literals inside belong to it.]),
   ("workers spawn", "task", [Makes one task in the set and gives it. Fails when no place is free.]),
-  ([`or_else (e) return end`], "task", [Success: skipped. On failure the word is left.]),
+  ([`or_else to e return end`], "task", [Success: skipped. On failure the word is left.]),
   ("drop", "—", [The task value serves `resume` and `cancel`; here `run_all` runs it, so it is dropped.]),
 )
 
@@ -37,7 +37,7 @@ gives its turn up at `yield`. Turn by turn, this is why the output alternates.
   [3], [ping], [`ping 2`], [`yield`],
   [4], [pong], [`pong 2`], [`yield`],
   [5], [ping], [`ping 3`], [`yield`],
-  [6], [pong], [(nothing)], [`i` is 3: `until` leaves the loop and the task ends],
+  [6], [pong], [(nothing)], [`i` is 3: `break .` leaves the loop and the task ends],
   [7], [ping], [(nothing)], [`i` is 4: the task ends. All have ended, so `run_all` returns],
 )
 

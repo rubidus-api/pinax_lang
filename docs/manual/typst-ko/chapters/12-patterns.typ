@@ -2,7 +2,7 @@
 
 = 패턴 <patterns>
 
-#opening[5장(뷰), 4장(줄기).][
+#opening[5장(뷰), 4장(레일).][
 - 글에서 모양으로 찾고 바꾸려면 무엇을 쓰는가?
 - 왜 패턴은 상수여야 하는가?
 - `ptn` 과 `rex` 는 언제 어느 것을 쓰는가?
@@ -51,8 +51,8 @@
 #ex("manual", "12-replace-by.pnx")
 
 찾는 낱말은 셋이 더 있다. #word("rex.match") 는 처음 맞은 부분을 주고 없으면 실패한다. #word("rex.matches") 는 맞은
-부분마다 블록을 돌리는 줄기이고, 블록은 맞은 전체와 묶음마다 `str` 하나를 받는다. #word("rex.split") 은 맞은 부분으로
-가른 조각의 줄기다. `ptn` 에도 같은 줄기 #word("ptn.matches") 가 있다.
+부분마다 블록을 돌리는 레일이고, 블록은 맞은 전체와 묶음마다 `str` 하나를 받는다. #word("rex.split") 은 맞은 부분으로
+가른 조각의 레일이다. `ptn` 에도 같은 레일 #word("ptn.matches") 가 있다.
 
 #ex("manual", "12-rex-words.pnx")
 #ex("manual", "12-ptn-matches.pnx")
@@ -60,7 +60,7 @@
 #trace(
   ("\"order 66, aisle 7\" r\"\\d+\" rex.rx", "\"order 66, aisle 7\" re", [글과 패턴 프로그램. `rex.rx` 는 적재 때 만든다.]),
   ("rex.match", "\"66\"", [처음 맞은 부분의 뷰. 없었다면 실패한다.]),
-  ([`or_else (e) "none" end`], "\"66\"", [성공: 건너뛴다.]),
+  ([`or_else to e "none" end`], "\"66\"", [성공: 건너뛴다.]),
   ("io.println", "—", [찍는다.]),
 )
 

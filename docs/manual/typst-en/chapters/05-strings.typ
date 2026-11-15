@@ -2,9 +2,9 @@
 
 = Strings <strings>
 
-#opening[Chapter 2 (types of values), chapter 4 (stems and blocks).][
+#opening[Chapter 2 (types of values), chapter 4 (rails and blocks).][
 - Why does cutting and splitting a string copy nothing?
-- How do `str` and `str(N)` differ, and when is each used?
+- How do `str` and `str N` differ, and when is each used?
 - Where do the bytes of new text go, and how are they given back?
 ]
 
@@ -36,7 +36,7 @@ an empty text after the separator when there is none.
 == Stored text
 
 A view cannot live longer than the bytes it points at. So places that live long --- globals, cells of arrays, fields of
-records --- cannot hold views; they use #strong[stored text], `str(N)`. A `str(N)` takes N bytes of room and copies the
+records --- cannot hold views; they use #strong[stored text], `str N`. A `str N` takes N bytes of room and copies the
 bytes put into it. Reading it gives a view of that room.
 
 #ex("manual", "05-stored.pnx")
@@ -45,18 +45,18 @@ bytes put into it. Reading it gives a view of that room.
 Which one to use depends on #strong[how long the text lives].
 
 #table(columns: (auto, 1fr, 1fr), inset: 5pt, stroke: 0.5pt + luma(170),
-  table.header([], [*`str` (view)*], [*`str(N)` (stored text)*]),
+  table.header([], [*`str` (view)*], [*`str N` (stored text)*]),
   [Where], [locals, arguments, results], [globals, cells of arrays and lists, fields of records],
   [Bytes], [none of its own: it points at bytes elsewhere], [room for N bytes of its own],
   [Storing], [copies nothing], [copies; longer than N is a fault, or with a guard the failure `range`],
   [Lives], [as long as the bytes it points at (one run, or until `release`)], [as long as its place],
 )
 
-A view in a field is refused at load, and the message says to write `str(N)`.
+A view in a field is refused at load, and the message says to write `str N`.
 
 #ex("manual", "05-field-view.pnx")
 
-#mistake[Text longer than `str(N)` is cut to fit][It is not. Putting text longer than the room stops with a fault. To
+#mistake[Text longer than `str N` is cut to fit][It is not. Putting text longer than the room stops with a fault. To
 store part of it, cut it first with `str.take`.
 #ex("manual", "05-too-long.pnx")]
 
@@ -88,12 +88,12 @@ After the release, views made in between cannot be used. The processor checks th
 
 #ex("manual", "05-release-view.pnx")
 
-#qa[How do I keep text that must outlive the release?][Put it into a `str(N)` global or cell. It is copied there, so it
+#qa[How do I keep text that must outlive the release?][Put it into a `str N` global or cell. It is copied there, so it
 survives rewinding the region. `05-stored.pnx` above does that.]
 
 #qa[A word inside `each` fails, under `defer m release`. Can I pass the failure on with `or_fail`?][Yes. On the way out
 of a failing word the release does not look at the text left on the stack: the word ends there and nothing reads it
-again. The stem stops at the first failure.
+again. The rail stops at the first failure.
 #ex("manual", "05-release-failing.pnx")]
 
 == Bytes and characters
@@ -107,7 +107,7 @@ and `str.chars`. `str.chars` yields a view of each character (not a code point n
 
 To take "as many digits as there are" off the front of a text, use #word("str.span"). The classes are the constants
 `str.digit` `str.alpha` `str.alnum` `str.space` `str.upper_case` `str.lower_case` `str.hex_digit` `str.punct` (all
-ASCII). A number with a point is read as a `dec(N)` by #word("str.to_dec") (chapter 2); more digits after the point
+ASCII). A number with a point is read as a `dec N` by #word("str.to_dec") (chapter 2); more digits after the point
 than `N` is a failure.
 
 #ex("manual", "05-classes.pnx")
@@ -118,9 +118,9 @@ than `N` is a failure.
   ("to (digits, rest)", "—", [The right-hand name takes the top value.]),
 )
 
-Two words write joined or replaced text straight into a buffer: #word("str.join_into") joins the pieces of a stem
+Two words write joined or replaced text straight into a buffer: #word("str.join_into") joins the pieces of a rail
 with a separator, #word("str.replace_into") appends the replaced text and gives the number of replacements. Both fail
-when the buffer is full. `join_into` takes the stem last, because a stem is taken by the word right after it
+when the buffer is full. `join_into` takes the rail last, because a rail is taken by the word right after it
 (chapter 4).
 
 #ex("manual", "05-join.pnx")
@@ -132,7 +132,7 @@ yourself.]
 #summary[
 - `str` is a view; cutting and splitting copy nothing (standard 7.3, 16.1).
 - A view cannot be kept in a long-lived place (global, cell, field) (7.3).
-- Long-lived places use `str(N)`; putting text there copies it, and text too long is a fault, or with a guard after
+- Long-lived places use `str N`; putting text there copies it, and text too long is a fault, or with a guard after
   the store the failure `range` (7.3).
 - New bytes go into the region; `mark`/`release` gives them back, and views made in between are refused after
   (12.2, 12.3).

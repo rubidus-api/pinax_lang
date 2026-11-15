@@ -22,8 +22,8 @@ decl        = "const"  NAME literal
             | "type"   NAME base
             | "index"  NAME NAME PATH
             | "tasks"  NAME capacity [ size [ size [ size ] ] ] [ "apart" ]
-            | "extern" c-name "(" effect ")" "from" STRING [ "as" NAME ]
-            | "test"   NAME { body } "end" ;
+            | "extern" c-name effect "from" STRING [ "as" NAME ] "end"
+            | "test"   NAME "do" { body } "end" ;
 capacity    = size | "host" ;
 size        = INT | NAME ;                         (* NAME: a const *)
 ```
@@ -61,7 +61,7 @@ there.]
 == Constants <decl-const>
 
 #para("1")[`const NAME literal` makes a #term("constant"). Its type is the literal's. A constant has no storage: its
-value goes where it is used. Constants can be capacities, `case` values and `row` values.]
+value goes where it is used. Constants can be capacities, `match` values and `row` values.]
 
 #part("Constraints")
 
@@ -73,7 +73,7 @@ refused. `set` writes globals only (9.4).]
 == Globals <decl-global>
 
 #para("1")[`global NAME type` makes a #term("global") that holds one value. The type is `int`, `bool`, `err`,
-`dec(N)`, `str(N)`, a declared type, a row type (the name of a table) or a handle type; not `str` (7.3).]
+`dec N`, `str N`, a declared type, a row type (the name of a table) or a handle type; not `str` (7.3).]
 
 #para("2")[A global is read by writing its name and stored with `v set NAME` (9.4). Its value stays as long as the state does
 --- after a word's run ends, and across later loads.]
@@ -88,7 +88,7 @@ assign-item = "assign" NAME "(" value { "," value } ")" ;
 ```
 
 #para("1")[`array NAME type capacity` makes an #term("array") with that many cells. An array is always full: `len` is
-its capacity. The element type is `int`, `bool`, `err`, `dec(N)`, `str(N)`, a narrow integer (7.6), a declared type,
+its capacity. The element type is `int`, `bool`, `err`, `dec N`, `str N`, a narrow integer (7.6), a declared type,
 the name of a record, or the name of a table, whose rows the cells then hold (8.8 (5a)). A cell of a narrow integer takes the bytes of its width, a cell of any other value 8 bytes; the
 cells of lists and queues are the same.]
 
@@ -98,7 +98,7 @@ records `idx` gives a row (8.8), not a value.]
 #para("3")[`assign ARRAY (value, …)` fills an array from cell 0, outside definitions. With fewer values than cells the
 rest stay as they are. Assigning the same array again starts from cell 0 again. It may be used in a data load (13.4).]
 
-#para("4")[The name of an array used as a stem yields its cells from 0 in order (10.6).]
+#para("4")[The name of an array used as a rail yields its cells from 0 in order (10.6).]
 
 #ex("spec", "08-array.pnx")
 
@@ -119,7 +119,7 @@ read and stored like an array's, but only indexes below the length may be used.]
 
 #para("2")[`v LIST push` adds one value at the end; `LIST pop` takes the last one off and gives it. Both can fail
 (`or fail`): a `push` into a full list fails with `err.full`, a `pop` from an empty list with `err.range`; a `push` of
-text too long for a list of `str(N)` fails with `err.range` (7.3 (4a)). A list of
+text too long for a list of `str N` fails with `err.range` (7.3 (4a)). A list of
 records gets an empty row at the end with `LIST add_row`, which gives that row. `LIST clear` sets the length to 0.]
 
 #ex("spec", "08-list.pnx")
@@ -153,7 +153,7 @@ the place cut off, they would point at the wrong row. A row held in a local is c
 == Queues <decl-queue>
 
 #para("1")[`queue NAME type capacity` makes a #term("queue"): what goes in first comes out first. The element type is
-`int`, `bool`, `err` or `dec(N)`. `v QUEUE put` puts a value at the back, `QUEUE take` takes the front one off and gives it, and
+`int`, `bool`, `err` or `dec N`. `v QUEUE put` puts a value at the back, `QUEUE take` takes the front one off and gives it, and
 `QUEUE peek` gives the front one without taking it. All three can fail: putting into a full queue is `err.full`, taking
 from an empty one `err.range`.]
 
@@ -181,15 +181,15 @@ sees.]
 record   = "record" NAME { field | "big_endian" } "end" ;
 field    = NAME width ;
 width    = "u8" | "u16" | "u32" | "u64" | "i8" | "i16" | "i32" | "i64"
-         | "int" | "bool" | "varint" | "dec" "(" INT ")" | "str" "(" size ")"
+         | "int" | "bool" | "varint" | "dec" INT | "str" size
          | NAME ;                                         (* NAME: a table *)
 row-item = [ "export" ] "row" NAME [ NAME ] "(" value { "," value } ")" ;
 value    = literal | NAME ;                         (* NAME: a const, a row name, none *)
 ```
 
 #para("1")[`record NAME … end` makes a #term("record") type, a sequence of fields, each with a width. An `int` or `i64` field
-reads as `int`, a `u8` … `i32` field as that narrow integer (7.6), a `bool` field as `bool`, a `dec(N)` field as
-`dec(N)` (8 bytes), a `str(N)` field as a `str` view. A field takes a value of its type only. A field whose type is the name of a table
+reads as `int`, a `u8` … `i32` field as that narrow integer (7.6), a `bool` field as `bool`, a `dec N` field as
+`dec N` (8 bytes), a `str N` field as a `str` view. A field takes a value of its type only. A field whose type is the name of a table
 holds a row of that table.]
 
 #para("2")[Records are not handled as values. One declares an array, list or pool of records (a #term("table")) and
@@ -198,8 +198,8 @@ checks its range (and, for a pool, its generation, 8.9).]
 
 #para("3")[Fields are written as the path `RECORD.FIELD`: `row RECORD.FIELD` reads, `v row to RECORD.FIELD` stores.]
 
-#para("4")[`row TABLE (value, …)` adds one row to a list, outside definitions. Values go in field order; trailing
-fields may be left out (they are zero). `row TABLE NAME (…)` names the row; the name stands for the row in later `row`
+#para("4")[`row TABLE values… .` adds one row to a list, outside definitions. Values go in field order, one after another
+without commas or parentheses; trailing fields may be left out (they are zero). `row TABLE as NAME values… .` names the row; the name stands for the row in later `row`
 values and in code.]
 
 #ex("spec", "08-record.pnx")
@@ -271,7 +271,7 @@ block is visited when its slot comes later. `each` is the only combining word (1
 
 #para("1")[`index NAME TABLE RECORD.FIELD` makes an #term("index") that finds rows of a table of records (an array, a
 list or a pool) by one field.
-The key field is `int` or `str(N)`. An index is a hash table of fixed size, matched to the table's capacity, that holds
+The key field is `int` or `str N`. An index is a hash table of fixed size, matched to the table's capacity, that holds
 only row numbers; the data stay in the table.]
 
 #para("2")[`key INDEX lookup` gives the row with that key (`or fail`, `err.not_found` when there is none).
@@ -313,7 +313,7 @@ give a random key: whoever knows the key can pile up collisions and make lookups
 #part("Syntax")
 ```ebnf
 forward = "forward" ( "array" | "list" | "pool" ) NAME
-        | "forward" "word" NAME "(" effect ")" ;
+        | "forward" NAME effect "end" ;
 ```
 
 #para("1")[`forward list NAME` announces a table declared further on. It is for a record that holds rows of the table
@@ -369,7 +369,7 @@ given (19.7).]
 
 #para("1")[`err NAME` makes a #term("failure code"): a new error code (11.1), of type `err`. Like a constant (8.2) it
 has no storage, and its name is a name of its module: another module writes `module.NAME`, when it is exported. It is
-used where any code is: with `fail`, with `or_else (e)` and `eq`, as a `case` value, in an `err` global or collection.
+used where any code is: with `fail`, with `or_else to e` and `eq`, as a `match` value, in an `err` global or collection.
 `err_text` gives its name.]
 
 #para("2")[The failure codes a state declares are numbered from `0x400` in the order they are declared (19.1). A
@@ -388,7 +388,7 @@ program does not depend on the number; a host reads the name (`pinax_error_text`
   ([A capacity `host` the host gave no number for (the declaration's name in the message)], "the host gave no capacity for NAME (pinax_capacity)"),
   ([`to` outside a definition into a name that is not a global], "outside a definition `to` makes no new local; a global is written with set"),
   ([More `assign` values than cells], "assign has more values than the array has cells"),
-  ([A queue of another element type than `int`, `bool`, `err`, `dec(N)`], "a queue holds int, bool, err or dec(N) values"),
+  ([A queue of another element type than `int`, `bool`, `err`, `dec N`], "a queue holds int, bool, err or dec N values"),
   ([`push` of a row `alloc` has just given (8.8 (5a))], "push can fail and lose an owned row; store it with set, into a field or into a global"),
   ([A `row` value unlike its field], "a value has another type than its field"),
   ([A path that does not hand over an `owned` row], "an owned value in a local is not given on every path (close, free or store it)"),

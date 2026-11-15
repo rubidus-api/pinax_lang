@@ -4,7 +4,7 @@
 
 #para("1")[#term("핵 낱말", en: "core word")은 `use` 없이 맨 이름으로 쓰는 낱말이다. 이 절의 표는 서명을 9.2 의
 꼴로 적는다. `T` 는 "어느 타입이든 하나" 를 뜻하며 내장 낱말의 서명에만 쓰는 표기다. 스택 낱말(`dup` `drop`
-`swap` `over` `nip`)은 9.3 이, 줄기를 쓰는 조합 낱말은 10.6 이 정한다.]
+`swap` `over` `nip`)은 9.3 이, 레일을 쓰는 조합 낱말은 10.6 이 정한다.]
 
 == 정수 <core-int>
 
@@ -17,7 +17,7 @@
   [`neg` `abs`], [`(int gives int)`], [부호 바꾸기, 절댓값. 가장 작은 `int` 에서는 넘침],
   [`min` `max`], [`(int, int gives int)`], [작은 쪽, 큰 쪽],
   [`clamp`], [`(n int, lo int, hi int gives int)`], [`n` 을 `lo` 와 `hi` 사이로],
-  [`rescale`], [`(d dec(N), M gives dec(M))`], [점 아래 `M` 자리의 소수로(`M` 은 상수). 자리가 줄면 0 에서 먼 쪽으로 반올림(7.5)],
+  [`rescale`], [`(d dec N, M gives dec M)`], [점 아래 `M` 자리의 소수로(`M` 은 상수). 자리가 줄면 0 에서 먼 쪽으로 반올림(7.5)],
 )]
 
 #para("2")[넘침을 다르게 다루는 낱말.
@@ -113,8 +113,8 @@
 #para("2")[보기는 8절에 있다.]
 
 #para("3")[`c sort` 는 배열의 칸을, 목록이면 길이까지의 칸을 가장 작은 것부터 차례로 놓는다. `c sort_desc` 는 가장 큰
-것부터 놓는다. 칸은 제자리에서 바뀌고 낱말은 아무것도 주지 않는다. 칸은 `int`, 좁은 정수, `dec(N)`, `bool`(`false` 가
-먼저), `str(N)` 이거나, 그중 하나 위에 선언한 타입이어야 한다. `u64` 칸은 부호 없이 견주고, `str(N)` 칸은 `str.compare`
+것부터 놓는다. 칸은 제자리에서 바뀌고 낱말은 아무것도 주지 않는다. 칸은 `int`, 좁은 정수, `dec N`, `bool`(`false` 가
+먼저), `str N` 이거나, 그중 하나 위에 선언한 타입이어야 한다. `u64` 칸은 부호 없이 견주고, `str N` 칸은 `str.compare`
 의 바이트 순서로 견준다(16.1). 모음 매개변수(9.9)도 똑같이 정렬한다. 레코드의 목록이나 배열은 거절된다. 찾아보기, 필드,
 전역, 이름 붙은 줄이 그 줄을 붙들고 있을 수 있기 때문이다. 그 줄은 (4)로, 줄 번호의 목록을 거쳐 차례로 놓는다.]
 #ex("spec", "15-sort.pnx")
@@ -158,11 +158,11 @@
   ([비교하는 두 값의 타입이 다름], "the two values compared must have the same type"),
   ([`select` 의 값의 타입이 다름], "select takes a bool and two values of one type: flag a b select"),
   ([레코드의 배열이나 목록의 `sort`], "rows do not move: sort a list of their numbers by a field: order table sort_by record.field"),
-  ([다른 타입의 칸의 `sort`], "sort orders cells of int, a narrow integer, dec(N), bool or str(N)"),
+  ([다른 타입의 칸의 `sort`], "sort orders cells of int, a narrow integer, dec N, bool or str N"),
   ([`int` 나 줄의 목록과 표가 없는 `sort_by`], "sort_by takes a list of rows or row numbers and a table of records: order table sort_by record.field"),
   ([다른 표의 줄을 담는 목록], "the cells are rows of another table than the one sort_by names"),
   ([뒤에 필드가 없는 `sort_by`], "sort_by is followed by the field: order table sort_by record.field"),
   ([표의 레코드가 아닌 레코드의 필드], "the field is one of the record the table holds"),
-  ([다른 타입의 필드], "sort_by orders by a field of int, a narrow integer, dec(N), bool or str(N)"),
+  ([다른 타입의 필드], "sort_by orders by a field of int, a narrow integer, dec N, bool or str N"),
   ([목록과 표가 모두 매개변수], "sort_by takes the list or the table from a parameter, not both"),
 )

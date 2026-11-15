@@ -3533,7 +3533,7 @@ static bool leave_target(comp *c, block **out, pnx_word_id which) {
         }
     }
     return error_at(c, PINAX_ERR_SYNTAX, at.line, at.column,
-                    n.length ? "no loop of this name encloses this place" : "while, until and break belong inside a loop");
+                    n.length ? "no loop of this name encloses this place" : "break and continue belong inside a loop");
 }
 
 static bool do_leave(comp *c, pnx_word_id which) {
@@ -7504,7 +7504,7 @@ static bool body_name(comp *c) {
                 return error(c, PINAX_ERR_NOT_FOUND, "a word of a module is written with the module: io.println");
         }
         if (name_is(n, "search")) // search (io, str) of 0.21 (RFC-0041)
-            return error(c, PINAX_ERR_NOT_FOUND, "search is now set_order: set_order (io, str)");
+            return error(c, PINAX_ERR_NOT_FOUND, "search is now set_order: set_order io str .");
         return error(c, PINAX_ERR_NOT_FOUND, "this name is not declared before this place");
     }
     return true;
@@ -7670,7 +7670,7 @@ static bool body_token(comp *c) {
     if (t.kind == PNX_T_RESERVED && t.word == PNX_KW_set_order)
         return syntax(c, "set_order stands at the top level, outside definitions and blocks");
     if (t.kind == PNX_T_RESERVED && t.word == PNX_KW_get_order)
-        return syntax(c, "get_order stands at the top level, or inside set_order (...)");
+        return syntax(c, "get_order stands at the top level, or inside set_order");
     if (t.kind == PNX_T_COMMA || t.kind == PNX_T_DOT) {
         if (t.kind == PNX_T_DOT && !f->dead && !c->data_only && emit(c, PNX_ABC(PNX_BARRIER, 0, 0, 0)) == NONE)
             return false;
@@ -8208,7 +8208,7 @@ static bool set_order(comp *c) {
     while (c->tok.kind != close) {
         const bool all = c->tok.kind == PNX_T_RESERVED && c->tok.word == PNX_KW_get_order;
         if (!all && c->tok.kind != PNX_T_NAME)
-            return syntax(c, "set_order names modules, separated by commas: set_order (io, str)");
+            return syntax(c, "set_order names modules, separated by spaces and ended by a period: set_order io str .");
         uint8_t  bring[16];
         uint32_t n_bring = 0;
         if (all) {
@@ -8246,7 +8246,7 @@ static bool set_order(comp *c) {
             return false;
         else if (c->tok.kind != close && c->tok.kind != PNX_T_NAME &&
                  !(c->tok.kind == PNX_T_RESERVED && c->tok.word == PNX_KW_get_order))
-            return syntax(c, "set_order names modules, separated by commas: set_order (io, str)");
+            return syntax(c, "set_order names modules, separated by spaces and ended by a period: set_order io str .");
     }
     __builtin_memcpy(c->search, order, n_order);
     c->n_search = (uint8_t)n_order;
@@ -8257,7 +8257,7 @@ static bool set_order(comp *c) {
 // set_order takes it: "order: (io, str)". It changes nothing (RFC-0041).
 static bool get_order(comp *c) {
     if (c->top_fn->n_blocks)
-        return syntax(c, "get_order stands at the top level, or inside set_order (...)");
+        return syntax(c, "get_order stands at the top level, or inside set_order");
     if (c->st->diag) {
         char   text[16 * 33 + 16] = "order: (";
         size_t n                  = 8;

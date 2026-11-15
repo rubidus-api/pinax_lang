@@ -12,7 +12,7 @@
 
 #ex("manual", "01-hello.pnx")
 
-These two lines are the whole program. The first line, `use io`, opens the module `io` for input and output. The
+These two lines are the whole program. The first line, `use io .`, opens (a statement ends with a period) the module `io` for input and output. The
 second puts a string on the stack and calls the word `io.println`, which takes the string off the top of the stack,
 writes it to standard output and ends the line.
 
@@ -69,16 +69,16 @@ Here is a program that adds up 1 to 100, three ways.
 
 #ex("manual", "01-sum.pnx")
 
-`word NAME (signature) body end` defines a word. The signature `(n int gives int)` means "takes one `int`, named `n`,
+`def NAME signature do body end` defines a procedure. The signature `n int gives int` means "takes one `int`, named `n`,
 and gives one `int`". When the body ends, the stack shall hold exactly the results the signature promises.
 
 - `sum_loop` is a loop with the locals `total` and `i`. `to NAME` puts the top value into that name. `loop … end`
-  repeats, and `i n gt until` means "leave when `i` is greater than `n`".
-- `sum_range` makes a #strong[stem] of 1 to `n` with `1 n 1 add range` and gives it to `sum`.
+  repeats, and `i n gt if break . end` means "leave when `i` is greater than `n`".
+- `sum_range` makes a #strong[rail] of 1 to `n` with `1 n 1 add range` and gives it to `sum`.
 - `sum_formula` is the formula $n(n+1)/2$ written in postfix.
 
 #qa[Why the `str.to_str`?][`io.println` takes only strings. To print an integer it has to become text first, and the
-word for that is `to_str` of the module `str` --- hence `use str`. There is no output word that takes an integer as it
+word for that is `to_str` of the module `str` --- hence `use str .`. There is no output word that takes an integer as it
 is: each word has exactly one signature.]
 
 == Taking arguments
@@ -93,8 +93,8 @@ is refused. Chapter 8 covers failures.
 
 #summary[
 - Code is values, then words. Code outside definitions runs once at load (standard 5.2).
-- Words of a module need `use MODULE` and are written `MODULE.WORD` (13.1).
+- Words of a module need `use MODULE .` and are written `MODULE.WORD` (13.1).
 - There are no characters like `+` or `;`; arithmetic is words (6.1, 6.4).
-- `word NAME (signature) … end` makes a word; when the body ends the stack shall match the results (9.2).
+- `def NAME signature do … end` makes a procedure; when the body ends the stack shall match the results (9.2).
 - A wrong program is refused before it runs (4).
 ]

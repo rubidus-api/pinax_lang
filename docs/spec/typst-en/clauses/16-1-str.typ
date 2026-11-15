@@ -54,17 +54,17 @@ The words that read numbers can fail.
   [`repeat`], [`(s str, n int gives str)`], [`n` copies joined; a negative `n` is the fault `range`],
   [`replace`], [`(s str, old str, new str gives str)`], [every `old` replaced by `new`],
   [`pad_left` `pad_right`], [`(s str, width int gives str)`], [filled with spaces to `width` bytes; as it is when longer; a `width` below 0 or from 2#super[32] up is the fault `range`],
-  [`to_str`], [`(int gives str)`], [decimal text; a `dec(N)` with its `N` digits after the point (7.5)],
-  [`to_dec`], [`(s str, N gives dec(N) or fail)`], [read a decimal: a sign, digits, and a point with at most `N` digits after it (`N` a constant); more digits, or anything else, `err.format`],
+  [`to_str`], [`(int gives str)`], [decimal text; a `dec N` with its `N` digits after the point (7.5)],
+  [`to_dec`], [`(s str, N gives dec N or fail)`], [read a decimal: a sign, digits, and a point with at most `N` digits after it (`N` a constant); more digits, or anything else, `err.format`],
   [`to_int`], [`(str gives int or fail)`], [read as decimal: one sign and digits only (no spaces); otherwise, or beyond 64 bits, `err.format`],
   [`to_int_base`], [`(s str, base int gives int or fail)`], [read in base 2--36; another `base` is the fault `range`],
 )]
 
 #ex("spec", "16-str-make.pnx")
 
-=== Stems and writing into buffers
+=== Rails and writing into buffers
 
-#para("7")[Words that make stems (10.6):
+#para("7")[Words that make rails (10.6):
 - `s sep str.split` --- the pieces between `sep`s, empty ones included; `sep` is a `str` or one byte (a `u8` constant,
   usually a character literal), as for `cut` and `try_cut`;
 - `s str.words` --- the pieces between white space, no empty ones;
@@ -73,12 +73,12 @@ The words that read numbers can fail.
 - `s str.chars` --- one view (`str`) for each UTF-8 character.]
 
 #para("8")[Words that write into a buffer:
-- `sep buf STEM str.join_into` --- appends the pieces of the stem joined by `sep` (`or fail`). The stem goes last,
-  since the word right after a stem shall take it;
+- `sep buf STEM str.join_into` --- appends the pieces of the rail joined by `sep` (`or fail`). The rail goes last,
+  since the word right after a rail shall take it;
 - `s old new buf str.replace_into` --- appends the text with replacements and gives their number
   (`gives n int or fail`).]
 
-#ex("spec", "16-str-stems.pnx")
+#ex("spec", "16-str-rails.pnx")
 
 #part("Constraints")
 

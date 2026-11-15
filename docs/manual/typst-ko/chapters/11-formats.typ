@@ -37,11 +37,11 @@ JSON 을 토큰으로 읽으면 깊이와 상관없이 필요한 것만 고를 �
 
 #trace(
   ("rest json.next", "json.object \"{\" …", [`{` 를 읽었다. 갈래 `json.object`, 남은 글은 `"name": …`.]),
-  ([`or_else (e) break end`], "json.object \"{\" …", [실패하지 않았으므로 몸을 건너뛴다.]),
+  ([`or_else to e break end`], "json.object \"{\" …", [실패하지 않았으므로 몸을 건너뛴다.]),
   ("to (kind, value, rest)", "—", [셋을 이름에 담는다. 오른쪽 `rest` 가 맨 위 값을 받는다.]),
 )
 
-갈래는 `json.object` 처럼 모듈의 상수이므로 `case` 가 아니라 `eq` 로 견준다(4장). 갈래마다 할 일만 고르면 되므로, 깊이가
+갈래는 `json.object` 처럼 모듈의 상수이므로 `match` 가 아니라 `eq` 로 견준다(4장). 갈래마다 할 일만 고르면 되므로, 깊이가
 얼마든 필요한 값만 뽑을 수 있다. `11-json-read.pnx` 는 `json.number` 만 골라 더했다.
 
 관심 없는 값은 #word("json.skip") 으로 한 번에 건너뛴다. 객체나 배열이면 그 안 전부를 건너뛰므로 깊이를 셀 필요가 없다.

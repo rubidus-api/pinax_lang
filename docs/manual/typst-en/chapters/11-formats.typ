@@ -41,11 +41,11 @@ loop.
 
 #trace(
   ("rest json.next", "json.object \"{\" …", [Reads `{`: kind `json.object`; what is left is `"name": …`.]),
-  ([`or_else (e) break end`], "json.object \"{\" …", [It did not fail, so the body is skipped.]),
+  ([`or_else to e break end`], "json.object \"{\" …", [It did not fail, so the body is skipped.]),
   ("to (kind, value, rest)", "—", [The three go into names; the rightmost, `rest`, takes the top value.]),
 )
 
-A kind is a module constant like `json.object`, so it is compared with `eq`, not `case` (chapter 4). Only the work for
+A kind is a module constant like `json.object`, so it is compared with `eq`, not `match` (chapter 4). Only the work for
 each kind has to be chosen, so the values needed can be picked out at any depth; `11-json-read.pnx` added up the
 `json.number` tokens only.
 

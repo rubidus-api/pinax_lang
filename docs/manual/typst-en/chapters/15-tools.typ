@@ -46,14 +46,14 @@ What the stack holds after each line, followed. The next line starts from it.
 #trace(
   ("2 3", "2 3", [Two values stay on the stack.]),
   ("add", "5", [The next line takes them.]),
-  ("word cube … end", "5", [A definition leaves the stack as it is.]),
+  ("def cube … end", "5", [A definition leaves the stack as it is.]),
   ("cube", "125", [Uses the definition and the value of the lines before.]),
   ("\"pinax\" str.upper", "125 \"PINAX\"", [A `str` stays too, up to 255 bytes.]),
   ("1 0 div", "125 \"PINAX\"", [A line that ends with a fault leaves the stack as it was.]),
   ("cube", "125 \"PINAX\"", [Refused: the top is a `str`, not an `int`.]),
 )
 
-A word can be defined again at any time: write `word` with its name once more. When the signature is the same, every
+A word can be defined again at any time: write `def` with its name once more. When the signature is the same, every
 word that calls it calls the new one, so a fix reaches every caller. When the signature is another, the new word takes
 the name, and the words compiled before keep calling the old body, as in Forth; `pnx repl` says which they are.
 
@@ -85,7 +85,7 @@ bare. A file that begins with `#!/usr/bin/env pnx` runs as a command.
 #ex("manual", "15-shell.pnx")
 
 A command's status is a value, not a failure: `"exit 2" run` gives 2. Only a shell that cannot start fails. To put data
-into a command, quote it first: `cat ("ls ", name sh.quote) run`. `sh.open_read` and `sh.open_write` give a pipe as a
+into a command, quote it first: `args "ls " name sh.quote . cat run`. `sh.open_read` and `sh.open_write` give a pipe as a
 `file`, read and written with the words of `file`; closing it waits for the command, and `sh.status` then tells how it
 ended. `sh.exit` ends the program with a status of its own. A host that embeds Pinax has `sh` only when it registers it
 (standard 17.5).

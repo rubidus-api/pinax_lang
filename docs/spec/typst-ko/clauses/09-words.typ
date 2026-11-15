@@ -6,15 +6,15 @@
 
 #part("구문")
 ```ebnf
-definition = [ "export" ] "word" NAME "(" effect ")" { body } "end" ;
+definition = [ "export" ] "def" NAME effect "do" { body } "end" ;
 effect     = [ params ] [ "gives" params ] [ "or" "fail" ] ;
 params     = param { "," param } ;
 param      = [ NAME ] ( type | collection-type ) ;   (* collection-type: 9.9 *)
-type       = [ "owned" ] ( NAME [ "(" size ")" ] | "word" "(" effect ")" ) ;
+type       = [ "owned" ] ( NAME [ size ] | "proc" effect "end" ) ;   (* a type NAME ... proc ... end, 7.4 *)
 ```
 
-#para("1")[`word 이름 (서명) 몸 end` 는 *낱말*을 정의한다. 낱말은 정의 밖, 소스의 맨
-바깥에서만 정의한다. 낱말 안에 낱말을 정의하지 못한다.]
+#para("1")[`def 이름 서명 do 몸 end` 는 *프로시저*(procedure)를 정의한다. 서명은 이름과 `do` 사이에 괄호 없이 적는다.
+프로시저는 정의 밖, 소스의 맨 바깥에서만 정의한다. 프로시저 안에 프로시저를 정의하지 못한다.]
 
 #para("2")[낱말을 #term("부른다", en: "call")는 것은 몸에서 그 이름을 쓰는 것이다. 부르는 자리에서 스택의 맨
 위 값들이 낱말의 입력이 되고, 낱말이 끝나면 결과가 그 자리에 놓인다. 핵 낱말, 표준 모듈의 낱말, 호스트
@@ -23,7 +23,7 @@ type       = [ "owned" ] ( NAME [ "(" size ")" ] | "word" "(" effect ")" ) ;
 == 서명 <words-signature>
 
 #para("1")[모든 낱말에는 *서명*이 있다. 입력, `gives` 와 결과, 그리고 실패할 수 있으면 `or fail` 을
-이 차례로 적는다. 입력도 결과도 없으면 `()` 다. 서명은 적재 때 검사된다: 부르는 자리의 스택은 입력과
+이 차례로 적는다. 입력도 결과도 없으면 서명을 적지 않는다(`def reset do … end`). 서명은 적재 때 검사된다: 부르는 자리의 스택은 입력과
 맞아야 하고, 몸이 끝나는 자리의 스택은 결과와 맞아야 한다.]
 
 #para("2")[입력에 이름을 쓰면(`w int`) 그 값은 그 이름의 지역 변수가 되고 몸은 빈 스택으로 시작한다. 타입만
@@ -150,7 +150,7 @@ set   = "set" ( NAME | PATH ) ;
 
 == 앞선 낱말 선언 <words-forward>
 
-#para("1")[`forward word 이름 (서명)` 은 뒤에서 정의할 낱말을 미리 알린다. 서로를 부르는 두 낱말에 쓴다.]
+#para("1")[`forward 이름 서명 end` 는 뒤에서 정의할 프로시저를 미리 알린다. 서로를 부르는 두 프로시저에 쓴다.]
 
 #ex("spec", "09-forward-word.pnx")
 
@@ -163,11 +163,11 @@ set   = "set" ( NAME | PATH ) ;
 
 #part("구문")
 ```ebnf
-cat    = "cat" "(" phrase { "," phrase } ")" ;
-phrase = body { body } ;                   (* code that leaves one value *)
+cat    = "args" { body } "." "cat" ;       (* each body leaves one value; 9.8 *)
 ```
 
-#para("1")[`cat ( … )` 은 쉼표로 가른 항목을 이어 `str` 하나를 낸다. 항목마다 값 하나를 남기는 코드다.
+#para("1")[`args 항목… . cat` 은 `args` 와 마침표 사이의 항목을 이어 `str` 하나를 낸다. 항목은 값을 하나씩 남기는
+낱말과 리터럴이고, 쉼표 없이 차례로 놓는다.
 `str` 은 그대로, `int` 는 십진으로, `bool` 은 `true` `false` 로 들어간다. 다른 모양(십육진 등)은 그 모양을
 만드는 낱말(16.2)로 먼저 `str` 을 만든다.]
 
@@ -181,13 +181,13 @@ phrase = body { body } ;                   (* code that leaves one value *)
 #part("구문")
 ```ebnf
 collection-type = ( "array" | "list" | "queue" ) cell | "buffer" ;
-cell            = NAME [ "(" size ")" ] ;   (* int, bool, err, dec(N), str(N), 레코드, 또는 표: 그 줄 *)
+cell            = NAME [ size ] ;   (* int, bool, err, dec N, str N, 레코드, 또는 표: 그 줄 *)
 ```
 
 #para("1")[타입이 `array T`, `list T`, `queue T` 나 `buffer` 인 입력은 모음을 받는다. 부르는 쪽은 그 자리에 모음의
 이름을 쓴다(`scores total`). 몸 안에서 매개변수는 그런 모음의 이름이 들어가는 모든 자리에 쓴다 --- `l len`,
 `i l idx`, `v l push`, `v i set l`, `l do … end each`, `… end l map_into`, `q take`, `s b append` 따위. 칸은 매개변수가 말하는 타입이어야
-한다: `int` `bool` `err`, `N` 이 같은 `dec(N)` 과 `str(N)`, 또는 레코드. 용량은 타입에 들지 않는다. 어떤 용량이든 받고,
+한다: `int` `bool` `err`, `N` 이 같은 `dec N` 과 `str N`, 또는 레코드. 용량은 타입에 들지 않는다. 어떤 용량이든 받고,
 `l capacity` 가 그 용량을 준다.]
 
 #ex("spec", "09-coll-param.pnx")
@@ -210,7 +210,7 @@ cell            = NAME [ "(" size ")" ] ;   (* int, bool, err, dec(N), str(N), �
 #para("4")[모음은 그 종류와 칸이 매개변수의 것과 같은 자리에 주어야 한다.]
 #ex("spec", "09-coll-param-kind.pnx")
 
-#para("5")[모음 매개변수는 값이 아니다: `to` 로 담지 못하고, 낱말의 결과가 되지 못하고, 블록(`word (…)`)의 매개변수가
+#para("5")[모음 매개변수는 값이 아니다: `to` 로 담지 못하고, 낱말의 결과가 되지 못하고, 블록(`proc … end`)의 매개변수가
 되지 못한다. 풀과 찾아보기는 받지 않는다.]
 #ex("spec", "09-coll-param-result.pnx")
 

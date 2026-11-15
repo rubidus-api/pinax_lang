@@ -18,7 +18,7 @@
 
 #part("제약")
 
-#para("2")[`fmt` 의 낱말은 `int` 를 받는다. 다른 타입의 값은 거절된다. `dec(N)` 은 `str.to_str` 과 `cat` 이 적는다(7.5).]
+#para("2")[`fmt` 의 낱말은 `int` 를 받는다. 다른 타입의 값은 거절된다. `dec N` 은 `str.to_str` 과 `cat` 이 적는다(7.5).]
 #ex("spec", "16-fmt-type.pnx")
 
 #part("결함")

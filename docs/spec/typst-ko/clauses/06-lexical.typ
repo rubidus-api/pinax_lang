@@ -88,9 +88,9 @@ TAG          = NAME ;
 #para("3")[선언 바로 앞의 주석을 도구가 그 선언의 설명으로 읽을 수 있다. 따로 문서 주석의 표시는 없다.]
 
 #para("4")[새 이름이 올 자리에서는 덩이 `rem`, `note`, `text` 가 주석도 텍스트도 열지 않는다. 그 자리에서 이들은
-언어의 낱말이고, 이름으로는 거부된다(9.5). 새 이름이 오는 자리는 이름을 선언하는 낱말(`word`, `test`, `global`,
+언어의 낱말이고, 이름으로는 거부된다(9.5). 새 이름이 오는 자리는 이름을 선언하는 낱말(`def`, `forward`, `extern`, `test`, `global`,
 `const`, `array`, `list`, `pool`, `queue`, `buffer`, `tasks`, `record`, `type`, `index`)의 뒤, `to`·`set`·`as` 의 뒤,
-그리고 서명이나 `to`·`loop`·`while`·`until`·`break`·`or_else` 의 이름 괄호에서 여는 괄호나 쉼표 바로 뒤다. 레코드의
+서명이나 `to`·`or_else to`·`do to`·`ref`·`args` 의 이름 자리에서 쉼표 바로 뒤다. 레코드의
 몸에서는 `text` 가 언제나 거부된다. `rem` 과 `note` 는 거기서도 다른 곳처럼 주석이다.]
 
 #ex("spec", "06-remark-name.pnx")
@@ -200,19 +200,22 @@ reserved = "rem" | "note" | "text" | "true" | "false" | "pinax"
          | "gives" | "or" | "fail" | "owned"
          | "to" | "do" | "end" | "if" | "else" | "loop" | "while" | "until" | "break"
          | "case" | "of" | "otherwise" | "return" | "or_fail" | "or_return" | "or_else" | "cat"
-         | "defer" | "set" | "fits" | "set_order" | "get_order" ;
+         | "defer" | "set" | "fits" | "set_order" | "get_order"
+         | "def" | "ref" | "match" | "when" | "continue" | "args" ;
 ```
 
-#para("1")[#term("예약 낱말", en: "reserved word")의 목록은 닫혀 있다. 예약 낱말은 이름으로 쓰지 못한다.]
+#para("1")[#term("예약 낱말", en: "reserved word")의 목록은 닫혀 있다. 예약 낱말은 이름으로 쓰지 못한다. 옛 형식의 낱말
+(`word` `while` `until` `case` `of` `cat`)은 쓰지 못하게 예약만 남아 있다: 그 낱말을 쓰면 거절되고, 메시지가 새 형식을
+알려 준다(부속서 B).]
 
-#para("2")[`or` 는 서명 안에서만 예약 낱말(`or fail`)이다. 낱말의 몸에서 `or` 는 핵 낱말(논리합)이다.]
+#para("2")[`or` 는 서명 안에서만 예약 낱말(`or fail`)이다. 프로시저의 몸에서 `or` 는 핵 낱말(논리합)이다.]
 
-#para("3")[구두점은 `(` `)` `,` 와 문장을 끝내는 점(6.2 (2))뿐이다. 붙여 써도 따로 토큰이다 --- `str(32)` 는 토큰
-넷이고, `7 sq.` 는 셋이다.]
+#para("3")[구두점은 `(` `)` `,` 와 문장을 끝내는 점(6.2 (2))뿐이다. 붙여 써도 따로 토큰이다 --- `7 sq.` 는 셋이다.]
 
-#para("3a")[괄호는 그 앞 낱말에 딸린 목록을 담고, 그 낱말은 컴파일될 때 목록을 읽는다: 이름(`to (a, b)`,
-`set_order (io, str)`), 서명(`word sq (n int gives int)`), 크기(`str(32)`), `cat` 의 구절. 그래서 목록은 낱말 뒤에 오고,
-낱말이 실행 때 받는 값은 낱말 앞에 온다(`2 3 add`). 목록 자체는 값이 아니고 스택에 오르지 않는다.]
+#para("3a")[컴파일될 때 읽는 목록(이름, 서명, 크기, `args` 의 항목)은 괄호로 싸지 않고 낱말 뒤에 놓는다: 이름(`to a b`,
+`set_order io str .`), 서명(`def sq n int gives int do … end`), 크기(`str 32`), 항목(`args "id=" id . cat`). 목록은
+마침표나 `do` `end` 같은 낱말로 끝난다. 낱말이 실행 때 받는 값은 낱말 앞에 온다(`2 3 add`). 괄호는 `assign` 과
+`row` 의 값 목록에만 남는다.]
 
 #para("4")[타입의 이름(`int` `str` `bool` …)과 핵 낱말의 이름(`add` `dup` …)은 예약 낱말이 아니라 미리
 선언된 이름이다. 그러나 그 이름을 다시 짓는 것은 가림 금지 규칙(9.5)이 거절한다.]

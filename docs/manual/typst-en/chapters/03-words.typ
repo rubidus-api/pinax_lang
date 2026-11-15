@@ -95,7 +95,7 @@ back, write the result in the signature: `(n int gives int)`.
 core words. Pinax does not let a visible name be hidden by another (no hiding), so parameters and locals with those
 names are refused.
 #ex("manual", "03-taken-name.pnx")
-Use other names such as `total`, `n` or `items`. Reserved words such as `of`, `end` and `text` cannot be names either.]
+Use other names such as `total`, `n` or `items`. Reserved words such as `when`, `end` and `text` cannot be names either.]
 
 == Words that call themselves
 
@@ -103,7 +103,7 @@ Use other names such as `total`, `n` or `items`. Reserved words such as `of`, `e
 
 A word may call itself without announcing it. A #strong[tail call] --- a call that is the last thing a word does, as
 in `gcd` --- reuses the place, so the depth does not grow. A call with work left after it, as in `fib`, piles up depth,
-and too deep stops with the fault `depth`. Two words that call each other announce one with `forward word`.
+and too deep stops with the fault `depth`. Two words that call each other announce one with `forward NAME signature end`.
 
 #qa[A word's body is long and I lose the stack. What do I do?][`pnx see FILE` shows the stack at the end of every line
 of a definition (chapter 15). Write the body one step per line, and name the values in the middle with `to NAME`

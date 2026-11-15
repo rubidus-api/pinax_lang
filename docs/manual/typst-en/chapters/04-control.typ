@@ -4,7 +4,7 @@
 
 #opening[Chapter 3 (signatures, named inputs).][
 - When is a local made, and how far is it visible?
-- How are `if`, `loop` and `case` written, and what must they keep about the stack?
+- How are `if`, `loop` and `match` written, and what must they keep about the stack?
 - What is the short way to write a loop over an array?
 - How is a word given as a value?
 ]
@@ -68,8 +68,8 @@ refused.
 
 == Loops
 
-`loop … end` repeats. Inside it, `condition until` leaves when the condition is true, `condition while` when it is
-false, and `break` without a condition. One turn shall leave the stack as it found it --- so the values a loop makes are
+`loop … end` repeats. Inside it, `break .` leaves the loop and `continue .` goes on to the next turn. A condition is written with `if`:
+`i n gt if break . end`. One turn shall leave the stack as it found it --- so the values a loop makes are
 gathered in locals.
 
 #ex("manual", "04-loop.pnx")
@@ -94,45 +94,45 @@ another loop. A name cannot do that.]
 
 == Choosing
 
-`case` compares an `int` or `str` with the values of its branches. Several values for one branch go in parentheses.
+`match` compares an `int` or `str` with the values of its branches. A branch is `when VALUE do … end`; several values for one branch stand after `when` one after another.
 What to do when nothing matches goes in `otherwise`; with no `otherwise` and no match, it is a fault.
 
 #ex("manual", "04-case.pnx")
 
 The values of the branches are literals or `const`s of this source. Constants of modules such as `err.full` or
-`json.key` cannot be `case` values; compare them with `eq`.
+`json.key` cannot be `match` values; compare them with `eq`.
 
-== Stems and blocks
+== Rails and blocks
 
-A loop over an array or a list is written with a #strong[stem] and a #strong[combining word] instead. The name of the
-array is the stem, and a `do … end` block after it, with a word such as `each`, `count` or `fold`, takes it. The block
+A loop over an array or a list is written with a #strong[rail] and a #strong[combining word] instead. The name of the
+array is the rail, and a `do … end` block after it, with a word such as `each`, `count` or `fold`, takes it. The block
 is expanded in place, so it can use the locals around it.
 
-#ex("manual", "04-stems.pnx")
+#ex("manual", "04-rails.pnx")
 
-`lo hi range` is a stem too (`hi` is not included). `fold` takes a first value before the stem, and its block takes
+`lo hi range` is a rail too (`hi` is not included). `fold` takes a first value before the rail, and its block takes
 (the value so far, an element) and gives the new value.
 
-The block of `each`, `each_index` or `times` is left early with `break`, `while` or `until`, as a loop is: the stem
+The block of `each`, `each_index` or `times` is left early with `break .` (and `continue .` goes to the next element), as a loop is; `do to NAME … end` takes the element into a name. The rail
 stops and the code after the word runs. A search that stops at the first hit is written so.
 
 #ex("manual", "04-leave-each.pnx")
 
-== Words as values
+== Procedures as values
 
-A block that is not given to a combining word is a #strong[value]: it can be kept in a local, returned, or given to a
-parameter of type `word (signature)`, and `call` calls it. Such a block sees no locals around it. To give a word of
-the program as a value, write `do NAME end` with no signature: the value is that word, with its signature.
+A block that is not given to a combining word is written `def signature do … end` and is a #strong[value]: it can be kept in a local, returned, or given to a
+parameter of a `proc` type (`type NAME proc signature end`), and `call` calls it. Such a block sees no locals around it. To give a procedure of
+the program as a value, write `ref NAME`: the value is that procedure, with its signature.
 
 #ex("manual", "04-word-values.pnx")
 
 #qa[How is a word of the language, such as `str.starts_with`, given as a value?][With the block's signature written
-as types only: `do (str, str gives bool) str.starts_with end`. Inputs written as types stay on the stack, so the word
+as types only: `def str, str gives bool do str.starts_with end`. Inputs written as types stay on the stack, so the word
 takes them as it is. Without a signature the block takes nothing, and the message shows both forms.]
 
-#mistake[A `case` branch can hold the word itself: `"prefix" of str.starts_with end`][A branch runs its words; it
+#mistake[A `match` branch can hold the word itself: `when "prefix" do str.starts_with end`][A branch runs its words; it
 does not make a value of them. There `str.starts_with` is called, and finds too few values on the stack. Make the
-value with a block: `"prefix" of do (str, str gives bool) str.starts_with end end`, or `do NAME end` for a word of the
+value with a block: `when "prefix" do def str, str gives bool do str.starts_with end end`, or `ref NAME` for a procedure of the
 program.
 #ex("manual", "04-word-values-branch.pnx")]
 
@@ -144,10 +144,10 @@ other has not, that is a failure (chapter 8) or a row asked with `is_none` (chap
 - `to NAME` stores into a local, `set NAME` into a global (standard 9.4).
 - A name made inside a branch is not visible outside it (9.4).
 - `to` takes the top value off into a name; using the name puts it back on (9.4).
-- The two branches of `if` and the branches of `case` leave the same stack; one turn of a loop leaves the stack it found
+- The two branches of `if` and the branches of `match` leave the same stack; one turn of a loop leaves the stack it found
   (10).
-- A named loop is left at once with `until (NAME)` (10.2).
-- Arrays and lists are walked with stems: `each` `each_index` `count` `fold` `sum` … (10.6); the block of `each`,
+- Several loops are left at once with a count, `break 2 .` (10.2).
+- Arrays and lists are walked with rails: `each` `each_index` `count` `fold` `sum` … (10.6); the block of `each`,
   `each_index` or `times` is left with `break` (10.6 (4)).
-- `do NAME end` is the word `NAME` as a value; any other word is given as `do (signature) word end` (10.5).
+- `ref NAME` is the procedure `NAME` as a value; any other word is given as `def signature do word end` (10.5).
 ]

@@ -189,8 +189,8 @@ the run, so the run stops where it happens. Either way, memory is never damaged,
 == Decimals
 
 For money and other numbers with a fixed number of digits after the point, write them with the point: `4.20` is a
-`dec(2)`, a decimal with two digits after the point. It is held as the integer 420, so sums come out exactly, and the
-same on every machine. Add and subtract it with the same `dec(N)`, multiply and divide it by an `int`; two `dec`
+`dec 2`, a decimal with two digits after the point. It is held as the integer 420, so sums come out exactly, and the
+same on every machine. Add and subtract it with the same `dec N`, multiply and divide it by an `int`; two `dec`
 multiplied keep all their digits. `rescale` sets the number of digits, rounding half away from zero.
 
 #ex("manual", "02-dec.pnx")
@@ -198,7 +198,7 @@ multiplied keep all their digits. `rescale` sets the number of digits, rounding 
 Dividing by an `int` cuts toward zero, as for integers: `9.75 3 div` is `3.25`, but `10.00 3 div` is `3.33`, and one cent
 is left over. When that matters, take the cents with `raw` and share them out yourself.
 
-#mistake[`4.20` and `0.5` can be added][They are `dec(2)` and `dec(1)`, two types. Write `0.50`, or `rescale` one.
+#mistake[`4.20` and `0.5` can be added][They are `dec 2` and `dec 1`, two types. Write `0.50`, or `rescale` one.
 #ex("manual", "02-dec-scales.pnx")]
 
 #summary[
@@ -207,6 +207,6 @@ is left over. When that matters, take the cents with `raw` and share them out yo
 - The stack words are `dup` `drop` `swap` `over` `nip` only; when values pile up, name them (9.3).
 - The processor checks the depth and types of the stack at load: too few values, the wrong type and values left over
   are refused (7.1, 9.2, 9.3).
-- A number with a point is a `dec(N)`: N digits after it, exact arithmetic, `rescale` to round (standard 7.5).
+- A number with a point is a `dec N`: N digits after it, exact arithmetic, `rescale` to round (standard 7.5).
 - Integer overflow and division by zero are faults; other arithmetic words exist (7.1, 15.1).
 ]

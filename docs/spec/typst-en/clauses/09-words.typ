@@ -6,15 +6,16 @@
 
 #part("Syntax")
 ```ebnf
-definition = [ "export" ] "word" NAME "(" effect ")" { body } "end" ;
+definition = [ "export" ] "def" NAME effect "do" { body } "end" ;
 effect     = [ params ] [ "gives" params ] [ "or" "fail" ] ;
 params     = param { "," param } ;
 param      = [ NAME ] ( type | collection-type ) ;   (* collection-type: 9.9 *)
-type       = [ "owned" ] ( NAME [ "(" size ")" ] | "word" "(" effect ")" ) ;
+type       = [ "owned" ] ( NAME [ size ] | "proc" effect "end" ) ;   (* a type NAME ... proc ... end, 7.4 *)
 ```
 
-#para("1")[`word NAME (signature) body end` defines a *word*. Words are defined only outside definitions, at the
-outermost level of a source; a word cannot be defined inside another.]
+#para("1")[`def NAME signature do body end` defines a *procedure*. The signature stands between the name and `do`, without
+parentheses. Procedures are defined only outside definitions, at the outermost level of a source; a procedure cannot be
+defined inside another.]
 
 #para("2")[To #term("call") a word is to write its name in a body. Where it is called, the topmost values of the stack
 become its inputs, and when it ends its results are in their place. Core words, words of standard modules and host
@@ -23,7 +24,7 @@ words are called the same way.]
 == Signatures <words-signature>
 
 #para("1")[Every word has a *signature*: its inputs, then `gives` and its results, then `or fail` if it can fail. A word
-with neither inputs nor results has `()`. Signatures are checked at load: the stack where a word is called shall match
+with neither inputs nor results has no signature to write (`def reset do … end`). Signatures are checked at load: the stack where a word is called shall match
 its inputs, and the stack where its body ends shall match its results.]
 
 #para("2")[An input with a name (`w int`) becomes a local of that name, and the body starts with an empty stack. An
@@ -155,7 +156,7 @@ through tail calls does not grow the depth. It needs no mark.]
 
 == Forward words <words-forward>
 
-#para("1")[`forward word NAME (signature)` announces a word defined further on, for two words that call each other.]
+#para("1")[`forward NAME signature end` announces a procedure defined further on, for two procedures that call each other.]
 
 #ex("spec", "09-forward-word.pnx")
 
@@ -168,11 +169,11 @@ through tail calls does not grow the depth. It needs no mark.]
 
 #part("Syntax")
 ```ebnf
-cat    = "cat" "(" phrase { "," phrase } ")" ;
-phrase = body { body } ;                   (* code that leaves one value *)
+cat    = "args" { body } "." "cat" ;       (* each body leaves one value; 9.8 *)
 ```
 
-#para("1")[`cat ( … )` joins the comma-separated items into one `str`. Each item is code that leaves one value. A `str`
+#para("1")[`args items… . cat` joins the items between `args` and the period into one `str`. Each item is a word or literal
+that leaves one value, written one after another without commas. A `str`
 goes in as it is, an `int` in decimal, a `bool` as `true` or `false`. Other forms (hexadecimal and so on) are made into
 a `str` first by the words that make them (16.2).]
 
@@ -186,14 +187,14 @@ processor adds up the length first and writes once.]
 #part("Syntax")
 ```ebnf
 collection-type = ( "array" | "list" | "queue" ) cell | "buffer" ;
-cell            = NAME [ "(" size ")" ] ;   (* int, bool, err, dec(N), str(N), a record, or a table: its rows *)
+cell            = NAME [ size ] ;   (* int, bool, err, dec N, str N, a record, or a table: its rows *)
 ```
 
 #para("1")[An input of type `array T`, `list T` or `queue T`, or of type `buffer`, takes a collection: the caller writes
 the collection's name there (`scores total`). In the body the parameter is used wherever the name of such a collection
 goes --- `l len`, `i l idx`, `v l push`, `v i set l`, `l do … end each`, `… end l map_into`, `q take`, `s b append` and
 so on. The cells shall
-be of the type the parameter says: `int` `bool` `err`, `dec(N)` and `str(N)` with the same `N`, or a record. The capacity is not part
+be of the type the parameter says: `int` `bool` `err`, `dec N` and `str N` with the same `N`, or a record. The capacity is not part
 of the type; any capacity is taken, and `l capacity` gives the one it has.]
 
 #ex("spec", "09-coll-param.pnx")
@@ -218,7 +219,7 @@ across `yield` and the waits of 14.3.]
 #ex("spec", "09-coll-param-kind.pnx")
 
 #para("5")[A collection parameter is not a value: it is not stored with `to`, not a result of a word, and not a
-parameter of a block (`word (…)`). Pools and indexes are not taken.]
+parameter of a block (`proc … end`). Pools and indexes are not taken.]
 #ex("spec", "09-coll-param-result.pnx")
 
 #para("6")[A word that truncates a list parameter (8.5 (2a)), or gives it to a word that does, truncates the list given

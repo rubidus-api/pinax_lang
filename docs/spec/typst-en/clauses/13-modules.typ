@@ -12,12 +12,12 @@ import = "use" NAME [ "as" NAME ] ;
 #para("1")[One source is one *module*. The name the host gave when loading the source is the module's name (`pnx` uses
 the file name without `.pnx`). Standard modules and host modules (13.3) are modules too.]
 
-#para("2")[`use MODULE` opens that module in this source; from then on its parts are written as the *path*
-`MODULE.NAME`. `use MODULE as ALIAS` makes the same module be written `ALIAS.NAME`. Only core words and what this source
+#para("2")[`use MODULE .` opens that module in this source; from then on its parts are written as the *path*
+`MODULE.NAME`. `use MODULE as ALIAS .` makes the same module be written `ALIAS.NAME`. Only core words and what this source
 declares are written as bare names, and the words of the modules a search order names (13.5).]
 
 #para("3")[A module that is used shall exist already: a standard module, a module the host registered, or a source
-loaded earlier. When `pnx` meets `use NAME` it first loads `NAME.pnx` from beside the program file.]
+loaded earlier. When `pnx` meets `use NAME .` it first loads `NAME.pnx` from beside the program file.]
 
 #ex("spec", "13-use.pnx")
 #ex("spec", "13-use-as.pnx")
@@ -73,7 +73,7 @@ data-item   = [ "export" ] ( [ "bound" ] bindable | "const" NAME literal
 data-value  = literal | NAME ;                      (* NAME: a const or a row name *)
 ```
 
-#para("1")[A source the host reads by data load accepts declarations and values only. Word definitions, calls, `use`,
+#para("1")[A source the host reads by data load accepts declarations and values only. Procedure definitions, calls, `use`,
 `extern`, `test`, control, blocks and `cat` are refused. Such a source therefore cannot run any code. It is for reading
 settings, data and other text that is not trusted.]
 
@@ -96,16 +96,16 @@ Everything a data source declares counts as exported.]
 
 #part("Syntax")
 ```ebnf
-order     = "set_order" "(" [ order-one { "," order-one } ] ")" | "get_order" ;
+order     = "set_order" { order-one } "." | "get_order" ;
 order-one = NAME | "get_order" ;
 ```
 
-#para("1")[`set_order (io, str)` gives the #term("search order"): the modules in which a bare name is looked for. Each
+#para("1")[`set_order io str .` gives the #term("search order"): the modules in which a bare name is looked for. Each
 module named is opened as by `use` (13.1 (2), (3)); `pnx` loads a file module beside the program first, as for `use`.
-`set_order ()` empties the order. Without a search order, nothing is looked for in a module.]
+`set_order .` empties the order. Without a search order, nothing is looked for in a module.]
 
-#para("1a")[Inside the parentheses, `get_order` stands for the search order as it is at that place: `set_order (json,
-get_order)` puts `json` in front of it, `set_order (get_order, csv)` behind it. A module that `get_order` brings again,
+#para("1a")[Inside `set_order`, `get_order` stands for the search order as it is at that place: `set_order json
+get_order .` puts `json` in front of it, `set_order get_order csv .` behind it. A module that `get_order` brings again,
 or that is named again after `get_order` brought it, keeps its first place.]
 
 #para("2")[A bare name in code is looked for in this order, and the first that has it is taken: the locals and
@@ -122,7 +122,7 @@ replaces the order from there to the end of the source; a session keeps it for t
 A word takes what its names found when it was compiled.]
 
 #para("3a")[`get_order` alone at the top level tells the search order at that place, written as `set_order` takes
-it, `order: (io, str)`, as a diagnostic with line 0 at `config.diag` (19.4 (1)), and changes nothing. It speaks when the source is checked: in a
+it, `order: io str`, as a diagnostic with line 0 at `config.diag` (19.4 (1)), and changes nothing. It speaks when the source is checked: in a
 file, before any of the file's code runs.]
 
 #para("4")[A name reached through the search order does not count for the rule against hiding names (9.5): a local
@@ -136,10 +136,10 @@ than 16 modules, and one that names a module that does not exist are refused.]
 #part("Diagnostics")
 #diag(
   ([`set_order` inside a definition], "set_order stands at the top level, outside definitions and blocks"),
-  ([`get_order` inside a definition], "get_order stands at the top level, or inside set_order (...)"),
-  ([No parentheses], "set_order is followed by modules in parentheses: set_order (io, str)"),
-  ([Not a module name], "set_order names modules, separated by commas: set_order (io, str)"),
+  ([`get_order` inside a definition], "get_order stands at the top level, or inside set_order"),
+  ([No period, or parentheses or commas], "set_order is written set_order io str . : no parentheses, no commas, ended by a period"),
+  ([Not a module name], "set_order names modules, separated by spaces and ended by a period: set_order io str ."),
   ([A module named twice], "this module is named twice in the order"),
   ([More than 16], "an order names at most 16 modules"),
-  ([`search (…)`, not a word of the language], "search is now set_order: set_order (io, str)"),
+  ([`search (…)`, not a word of the language], "search is now set_order: set_order io str ."),
 )

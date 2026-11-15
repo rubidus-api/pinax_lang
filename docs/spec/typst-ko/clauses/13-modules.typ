@@ -6,18 +6,18 @@
 
 #part("구문")
 ```ebnf
-import = "use" NAME [ "as" NAME ] ;
+import = "use" NAME [ "as" NAME ] "." ;
 ```
 
 #para("1")[소스 하나는 *모듈*하나다. 호스트가 소스를 적재할 때 준 이름이 모듈의 이름이다(`pnx` 는
 파일 이름에서 `.pnx` 를 뗀 것을 쓴다). 표준 모듈과 호스트 모듈(13.3)도 모듈이다.]
 
-#para("2")[`use 모듈` 은 그 모듈을 이 소스에서 연다. 그 뒤로 모듈의 것은 *경로*`모듈.이름` 으로 쓴다.
-`use 모듈 as 별명` 은 같은 모듈을 `별명.이름` 으로 쓰게 한다. 맨 이름으로 쓰는 것은 핵 낱말과 이 소스가 선언한
+#para("2")[`use 모듈 .` 은 그 모듈을 이 소스에서 연다. 그 뒤로 모듈의 것은 *경로*`모듈.이름` 으로 쓴다.
+`use 모듈 as 별명 .` 은 같은 모듈을 `별명.이름` 으로 쓰게 한다. 맨 이름으로 쓰는 것은 핵 낱말과 이 소스가 선언한
 것, 그리고 찾는 순서가 이름 붙인 모듈의 낱말(13.5)뿐이다.]
 
 #para("3")[`use` 하는 모듈은 이미 있어야 한다: 표준 모듈, 호스트가 등록한 모듈, 또는 먼저 적재된 소스.
-`pnx` 는 `use 이름` 을 만나면 프로그램 파일 옆의 `이름.pnx` 를 먼저 적재한다.]
+`pnx` 는 `use 이름 .` 을 만나면 프로그램 파일 옆의 `이름.pnx` 를 먼저 적재한다.]
 
 #ex("spec", "13-use.pnx")
 #ex("spec", "13-use-as.pnx")
@@ -74,7 +74,7 @@ data-item   = [ "export" ] ( [ "bound" ] bindable | "const" NAME literal
 data-value  = literal | NAME ;                      (* NAME: a const or a row name *)
 ```
 
-#para("1")[호스트가 자료 적재로 읽는 소스는 선언과 값만 받는다. 낱말 정의, 낱말 부르기, `use`, `extern`,
+#para("1")[호스트가 자료 적재로 읽는 소스는 선언과 값만 받는다. 프로시저 정의, 프로시저 부르기, `use`, `extern`,
 `test`, 제어, 블록, `cat` 은 거절된다. 그래서 그런 소스는 아무 코드도 돌리지 못한다. 설정과 자료처럼 믿지 못하는
 글을 읽을 때 쓴다.]
 
@@ -97,16 +97,16 @@ data-value  = literal | NAME ;                      (* NAME: a const or a row na
 
 #part("구문")
 ```ebnf
-order     = "set_order" "(" [ order-one { "," order-one } ] ")" | "get_order" ;
+order     = "set_order" { order-one } "." | "get_order" ;
 order-one = NAME | "get_order" ;
 ```
 
-#para("1")[`set_order (io, str)` 는 #term("찾는 순서", en: "search order")를 준다: 맨 이름을 찾아볼 모듈들이다. 이름 붙인
-모듈은 `use` 처럼 열린다(13.1 (2), (3)). `pnx` 는 `use` 때처럼 프로그램 옆의 파일 모듈을 먼저 적재한다. `set_order ()` 는
+#para("1")[`set_order io str .` 은 #term("찾는 순서", en: "search order")를 준다: 맨 이름을 찾아볼 모듈들이다. 이름 붙인
+모듈은 `use` 처럼 열린다(13.1 (2), (3)). `pnx` 는 `use` 때처럼 프로그램 옆의 파일 모듈을 먼저 적재한다. `set_order .` 는
 순서를 비운다. 찾는 순서가 없으면 어느 모듈에서도 찾지 않는다.]
 
-#para("1a")[괄호 안의 `get_order` 는 그 자리의 찾는 순서를 뜻한다: `set_order (json, get_order)` 는 `json` 을 그 앞에,
-`set_order (get_order, csv)` 는 그 뒤에 둔다. `get_order` 가 다시 데려온 모듈, 또는 `get_order` 가 데려온 뒤에 다시 이름
+#para("1a")[`set_order` 안의 `get_order` 는 그 자리의 찾는 순서를 뜻한다: `set_order json get_order .` 는 `json` 을 그 앞에,
+`set_order get_order csv .` 는 그 뒤에 둔다. `get_order` 가 다시 데려온 모듈, 또는 `get_order` 가 데려온 뒤에 다시 이름
 붙인 모듈은 처음 자리를 지킨다.]
 
 #para("2")[코드의 맨 이름은 이 차례로 찾고, 처음 가진 것을 쓴다: 지역 변수와 매개변수, 이 소스(또는 세션)가 선언한 것, 핵
@@ -120,7 +120,7 @@ order-one = NAME | "get_order" ;
 #para("3")[`set_order` 는 소스나 세션 줄의 맨 위 수준에 필요한 만큼 쓸 수 있다. 하나하나가 그 자리부터 소스 끝까지의 순서를
 바꾸고, 세션은 다음 순서가 나올 때까지 뒤 줄들에 그것을 지닌다. 낱말은 컴파일될 때 그 이름들이 찾은 것을 쓴다.]
 
-#para("3a")[맨 위 수준에 홀로 쓴 `get_order` 는 그 자리의 찾는 순서를 `set_order` 가 받는 꼴로, `order: (io, str)` 처럼
+#para("3a")[맨 위 수준에 홀로 쓴 `get_order` 는 그 자리의 찾는 순서를 `set_order` 가 받는 꼴로, `order: io str` 처럼
 `config.diag` 에 줄 0 의 진단으로 알리고(19.4 (1)), 아무것도 바꾸지 않는다. 소스를 검사할 때 알린다: 파일에서는 파일의 코드가 돌기 전이다.]
 
 #para("4")[찾는 순서로 닿는 이름은 이름 가리기 규칙(9.5)에 들지 않는다: 지역 변수는 순서에 있는 모듈의 낱말과 같은 이름일
@@ -134,10 +134,10 @@ order-one = NAME | "get_order" ;
 #part("진단")
 #diag(
   ([정의 안의 `set_order`], "set_order stands at the top level, outside definitions and blocks"),
-  ([정의 안의 `get_order`], "get_order stands at the top level, or inside set_order (...)"),
-  ([괄호가 없음], "set_order is followed by modules in parentheses: set_order (io, str)"),
-  ([모듈 이름이 아님], "set_order names modules, separated by commas: set_order (io, str)"),
+  ([정의 안의 `get_order`], "get_order stands at the top level, or inside set_order"),
+  ([마침표가 없거나 괄호·쉼표를 씀], "set_order is written set_order io str . : no parentheses, no commas, ended by a period"),
+  ([모듈 이름이 아님], "set_order names modules, separated by spaces and ended by a period: set_order io str ."),
   ([모듈을 두 번], "this module is named twice in the order"),
   ([16 개보다 많음], "an order names at most 16 modules"),
-  ([언어의 낱말이 아닌 `search (…)`], "search is now set_order: set_order (io, str)"),
+  ([언어의 낱말이 아닌 `search (…)`], "search is now set_order: set_order io str ."),
 )

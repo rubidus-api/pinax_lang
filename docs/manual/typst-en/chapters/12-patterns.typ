@@ -2,7 +2,7 @@
 
 = Patterns <patterns>
 
-#opening[Chapter 5 (views), chapter 4 (stems).][
+#opening[Chapter 5 (views), chapter 4 (rails).][
 - What finds and replaces text by its shape?
 - Why must patterns be constants?
 - When is `ptn` the right choice, and when `rex`?
@@ -51,8 +51,8 @@ A block can also make the text that replaces each match.
 #ex("manual", "12-replace-by.pnx")
 
 Three more words search. #word("rex.match") gives the first match and fails when there is none. #word("rex.matches") is
-a stem that runs the block once per match; the block takes the whole match and one `str` per group. #word("rex.split")
-is the stem of the pieces between matches. `ptn` has the same stem, #word("ptn.matches").
+a rail that runs the block once per match; the block takes the whole match and one `str` per group. #word("rex.split")
+is the rail of the pieces between matches. `ptn` has the same rail, #word("ptn.matches").
 
 #ex("manual", "12-rex-words.pnx")
 #ex("manual", "12-ptn-matches.pnx")
@@ -60,7 +60,7 @@ is the stem of the pieces between matches. `ptn` has the same stem, #word("ptn.m
 #trace(
   ("\"order 66, aisle 7\" r\"\\d+\" rex.rx", "\"order 66, aisle 7\" re", [The text and the pattern program; `rex.rx` builds it at load.]),
   ("rex.match", "\"66\"", [A view of the first match. With none, it fails.]),
-  ([`or_else (e) "none" end`], "\"66\"", [Success: skipped.]),
+  ([`or_else to e "none" end`], "\"66\"", [Success: skipped.]),
   ("io.println", "—", [Prints it.]),
 )
 

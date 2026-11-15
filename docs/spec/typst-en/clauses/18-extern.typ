@@ -4,11 +4,11 @@
 
 #part("Syntax")
 ```ebnf
-extern = [ "export" ] "extern" c-name "(" effect ")" "from" STRING [ "as" NAME ] ;
+extern = [ "export" ] "extern" c-name effect "from" STRING [ "as" NAME ] "end" ;
 c-name = NAME | reserved-word | STRING ;
 ```
 
-#para("1")[`extern NAME (signature) from "LIBRARY"` makes one C function a word. The processor does not open libraries
+#para("1")[`extern NAME signature from "LIBRARY" end` makes one C function a procedure. The processor does not open libraries
 itself. At load it asks the host's #term("resolver") for (library, name) and calls the function the host gives. When
 the host has set no resolver, or gives no function, the load is refused. So the C functions a script can call are the
 host's choice.]

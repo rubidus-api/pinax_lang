@@ -91,10 +91,9 @@ tag (`DOCUMENT`), does not close it.]
 documentation remarks.]
 
 #para("4")[Where a new name is due, the runs `rem`, `note` and `text` open neither a remark nor a text: they are words
-of the language there, and refused as names (9.5). A new name is due after a word that declares one (`word`, `test`,
+of the language there, and refused as names (9.5). A new name is due after a word that declares one (`def`, `forward`, `extern`, `test`,
 `global`, `const`, `array`, `list`, `pool`, `queue`, `buffer`, `tasks`, `record`, `type`, `index`), after `to`, `set`
-and `as`, and right after the opening parenthesis or a comma of a signature or of the names of `to`, `loop`, `while`,
-`until`, `break` and `or_else`. In the body of a record `text` is always refused; `rem` and `note` are remarks there,
+and `as`, and right after a comma of a signature or at the name place of `to`, `or_else to`, `do to`, `ref` and `args`. In the body of a record `text` is always refused; `rem` and `note` are remarks there,
 as everywhere else.]
 
 #ex("spec", "06-remark-name.pnx")
@@ -205,21 +204,23 @@ reserved = "rem" | "note" | "text" | "true" | "false" | "pinax"
          | "gives" | "or" | "fail" | "owned"
          | "to" | "do" | "end" | "if" | "else" | "loop" | "while" | "until" | "break"
          | "case" | "of" | "otherwise" | "return" | "or_fail" | "or_return" | "or_else" | "cat"
-         | "defer" | "set" | "fits" | "set_order" | "get_order" ;
+         | "defer" | "set" | "fits" | "set_order" | "get_order"
+         | "def" | "ref" | "match" | "when" | "continue" | "args" ;
 ```
 
-#para("1")[The list of #term("reserved word")s is closed. A reserved word cannot be a name.]
+#para("1")[The list of #term("reserved word")s is closed. A reserved word cannot be a name. The words of the old forms (`word` `while` `until` `case` `of` `cat`) stay reserved only
+so that they are refused: using one is refused with a message that names the new form (annex B).]
 
-#para("2")[`or` is a reserved word only inside a signature (`or fail`). In the body of a word `or` is a core word
+#para("2")[`or` is a reserved word only inside a signature (`or fail`). In the body of a procedure `or` is a core word
 (logical or).]
 
 #para("3")[The only punctuation is `(` `)` `,` and the dot that ends a statement (6.2 (2)). Each is a token of its own
-even when written against other text: `str(32)` is four tokens, `7 sq.` three.]
+even when written against other text: `7 sq.` is three tokens.]
 
-#para("3a")[Parentheses hold a list that belongs to the word before them, and that word reads the list when it is
-compiled: names (`to (a, b)`, `set_order (io, str)`), a signature (`word sq (n int gives int)`), a size (`str(32)`),
-the phrases of `cat`. So the list comes after its word, while the values a word takes when it runs come before it
-(`2 3 add`). The list itself is not a value and is never on the stack.]
+#para("3a")[Lists that a word reads when it is compiled (names, a signature, a size, the items of `args`) are not wrapped in
+parentheses; they follow the word: names (`to a`, `set_order io str .`), a signature (`def sq n int gives int do … end`), a size
+(`str 32`), items (`args "id=" id . cat`). A list ends with a period or with a word such as `do` or `end`. The values a word takes
+when it runs come before it (`2 3 add`). Parentheses are left only in the value lists of `assign` and `row`.]
 
 #para("4")[The names of types (`int` `str` `bool` …) and of core words (`add` `dup` …) are not reserved words but names
 declared in advance. Declaring them again is refused by the rule against hiding names (9.5).]

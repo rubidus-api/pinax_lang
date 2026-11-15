@@ -4,7 +4,7 @@
 
 #para("1")[A #term("core word") is written as a bare name, without `use`. The tables of this clause write signatures as
 in 9.2. `T` means "any one type"; it is a notation for built-in words only. The stack words (`dup` `drop` `swap` `over`
-`nip`) are in 9.3 and the combining words that take stems in 10.6.]
+`nip`) are in 9.3 and the combining words that take rails in 10.6.]
 
 == Integers <core-int>
 
@@ -17,7 +17,7 @@ in 9.2. `T` means "any one type"; it is a notation for built-in words only. The 
   [`neg` `abs`], [`(int gives int)`], [negation, absolute value; overflow for the smallest `int`],
   [`min` `max`], [`(int, int gives int)`], [the smaller, the larger],
   [`clamp`], [`(n int, lo int, hi int gives int)`], [`n` brought between `lo` and `hi`],
-  [`rescale`], [`(d dec(N), M gives dec(M))`], [the decimal with `M` digits after the point (`M` a constant); fewer digits rounded half away from zero (7.5)],
+  [`rescale`], [`(d dec N, M gives dec M)`], [the decimal with `M` digits after the point (`M` a constant); fewer digits rounded half away from zero (7.5)],
 )]
 
 #para("2")[Words that treat overflow otherwise.
@@ -114,8 +114,8 @@ plain words on an unsigned type and do not take a signed one. The bit words work
 
 #para("3")[`c sort` puts the cells of an array, or of a list up to its length, in order from the smallest; `c sort_desc`
 from the largest. The cells change in place and the word gives nothing. The cells shall be `int`, a narrow integer,
-`dec(N)`, `bool` (`false` first) or `str(N)`, or of a type declared over one of them; `u64` cells are compared unsigned,
-`str(N)` cells in the byte order of `str.compare` (16.1). A collection parameter (9.9) is sorted the same way. A list or
+`dec N`, `bool` (`false` first) or `str N`, or of a type declared over one of them; `u64` cells are compared unsigned,
+`str N` cells in the byte order of `str.compare` (16.1). A collection parameter (9.9) is sorted the same way. A list or
 array of records is refused: an index, a field, a global or a named row may keep its rows. Its rows are put in order
 through a list of their numbers, by (4).]
 #ex("spec", "15-sort.pnx")
@@ -161,11 +161,11 @@ $n dot.c ceil(log_2 n)$ instructions (19.5).]
   ([Two values of different types compared], "the two values compared must have the same type"),
   ([The values of `select` differ in type], "select takes a bool and two values of one type: flag a b select"),
   ([`sort` of an array or list of records], "rows do not move: sort a list of their numbers by a field: order table sort_by record.field"),
-  ([`sort` of cells of another type], "sort orders cells of int, a narrow integer, dec(N), bool or str(N)"),
+  ([`sort` of cells of another type], "sort orders cells of int, a narrow integer, dec N, bool or str N"),
   ([`sort_by` without a list of `int` or rows and a table], "sort_by takes a list of rows or row numbers and a table of records: order table sort_by record.field"),
   ([A list of rows of another table], "the cells are rows of another table than the one sort_by names"),
   ([`sort_by` without the field after it], "sort_by is followed by the field: order table sort_by record.field"),
   ([A field of another record than the table's], "the field is one of the record the table holds"),
-  ([A field of another type], "sort_by orders by a field of int, a narrow integer, dec(N), bool or str(N)"),
+  ([A field of another type], "sort_by orders by a field of int, a narrow integer, dec N, bool or str N"),
   ([Both the list and the table parameters], "sort_by takes the list or the table from a parameter, not both"),
 )

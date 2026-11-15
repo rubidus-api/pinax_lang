@@ -21,7 +21,7 @@ Multiplying or dividing `cents` by an integer gives `cents` (`c 3 mul`): scaling
 
 == Using a module
 
-After `use money`, its words are written as paths such as `money.of_won`; the exported type `cents` is written by its
+After `use money .`, its words are written as paths such as `money.of_won`; the exported type `cents` is written by its
 name alone. When `money` is not a registered module, `pnx` first loads `money.pnx` from beside the program.
 
 #ex("manual", "10-use.pnx")
@@ -70,17 +70,17 @@ A script that calls the same modules all the time, a shell script above all, can
 
 The order is only a last resort. A bare name is first a local, then a name of the source, then a core word; only then
 are the modules of the order asked, left to right. So `len` stays the core word even with `str` in the order, and the
-`str` word is written `str.len`. `set_order ()` empties the order again. A path works with or without it.
+`str` word is written `str.len`. `set_order .` empties the order again. A path works with or without it.
 
-#qa[How do I add one module without naming the others again?][Inside the parentheses, `get_order` stands for the
-order as it is: `set_order (get_order, str)` puts `str` behind it, `set_order (str, get_order)` in front. Alone,
+#qa[How do I add one module without naming the others again?][Inside `set_order`, `get_order` stands for the
+order as it is: `set_order get_order str .` puts `str` behind it, `set_order str get_order .` in front. Alone,
 `get_order` shows the order. It speaks while the file is checked, so its line comes before anything the file
 prints.
 #ex("manual", "10-order-add.pnx")]
 
-#qa[Why is it `set_order (io, str)` and not `(io, str) set_order`?][What a word takes when it runs comes before it,
-on the stack: `2 3 add`. What a word reads when it is compiled comes after it, in parentheses: the signature of
-`word`, the names of `to (a, b)`, the modules of `set_order`. A module is not a value, so the list could not be on
+#qa[Why is it `set_order io str .` and not `io str set_order`?][What a word takes when it runs comes before it,
+on the stack: `2 3 add`. What a word reads when it is compiled comes after it: the signature of
+`def`, the name of `to`, the modules of `set_order` (ended by a period). A module is not a value, so the list could not be on
 the stack.]
 
 == Data files
@@ -109,17 +109,17 @@ long something took; `clock.now_ms` is the calendar time, and `clock.sleep` paus
 #trace(
   ("1", "1", [Which argument.]),
   ("env.arg", "\"alpha\"", [That argument; a number past the last fails.]),
-  ([`or_else (e) "?" end`], "\"alpha\"", [Skipped on success. On failure `"?"` takes the place.]),
+  ([`or_else to e "?" end`], "\"alpha\"", [Skipped on success. On failure `"?"` takes the place.]),
   ("io.println", "—", [Prints it.]),
 )
 
-#qa[May a module file use `io.println`?][Yes, with `use io` in the module too. But when the host that loads the module
+#qa[May a module file use `io.println`?][Yes, with `use io .` in the module too. But when the host that loads the module
 has not registered `io`, the module is refused. A module meant for many hosts is better off returning results than
 depending on a host module.]
 
 #summary[
 - One file is one module, and only what is `export`ed is seen outside (standard 13.1, 13.2).
-- After `use MODULE [as ALIAS]` its parts are written `MODULE.NAME` (13.1).
+- After `use MODULE [as ALIAS] .` its parts are written `MODULE.NAME` (13.1).
 - Words, constants and globals are used by path, types and records by name alone; an exported global is stored with
   `set module.name` (13.2).
 - Values of a declared type are added and subtracted only with the same type (7.4).

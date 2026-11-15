@@ -60,9 +60,9 @@ One turn, followed. The mark that `mark` gives is an owned value too, so the way
 #trace(
   ("mark", "m", [Puts the region's current place on as a mark: an owned value.]),
   ("to m", "—", [Names it.]),
-  ("cat (…)", "\"row 1: 1\\n\"", [New text goes into the region.]),
+  ("args … . cat", "\"row 1: 1\\n\"", [New text goes into the region.]),
   ("report append", "—", [Copies it into the buffer. Fails when the buffer is full.]),
-  ([`or_else (e) m release e fail end`], "—", [The way of failure: gives the region back and fails for the same reason. On success, skipped.]),
+  ([`or_else to e m release e fail end`], "—", [The way of failure: gives the region back and fails for the same reason. On success, skipped.]),
   ("m release", "—", [The region goes back to the mark; the next turn reuses the bytes `cat` wrote.]),
 )
 

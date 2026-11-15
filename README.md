@@ -60,15 +60,15 @@ A first script, `hello.pnx`. Arguments come before the word that takes them, and
 punctuation outside literals is `.` `(` `)` `,`:
 
 ```text
-use io
+use io .
 
-word sum_to (last int gives total int)
+def sum_to last int gives total int do
   0 to total
-  1 last 1 add range do (i int) total i add to total end each
+  1 last 1 add range do to i total i add to total end each
   total
 end
 
-cat ("1 to 100 is ", 100 sum_to) io.println
+args "1 to 100 is " 100 sum_to . cat io.println
 ```
 
 ```sh

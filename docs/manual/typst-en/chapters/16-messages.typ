@@ -33,8 +33,8 @@ are exactly what the processor prints; the chapters in the right column have exa
   [The two branches of an `if` leave different counts or types. Make both leave the same.], [4],
   [`this block must leave the stack as it found it`],
   [The block of a combining word such as `each` left a value. Use it inside the block, or `drop` it.], [4],
-  [`stored text is str(N); a str view lives only in locals, arguments and results`],
-  [A `str` was put where a global, a cell or a field lives. Places that live long take `str(N)`.], [5],
+  [`stored text is str N; a str view lives only in locals, arguments and results`],
+  [A `str` was put where a global, a cell or a field lives. Places that live long take `str N`.], [5],
   [`the stack does not hold enough values for this word`],
   [The word takes more values than the stack holds. Check that the values were put on first, and in the right order.
    `pnx see` shows the stack after each line.], [2, 15],
@@ -79,17 +79,17 @@ are exactly what the processor prints; the chapters in the right column have exa
   [`the module exports nothing of this name`],
   [The module has no such name, or did not `export` it. Add `export` in the module file.], [10],
   [`this name is already defined`],
-  [A word or a declaration of that name exists already. Use another name. (In a session, `word` with the name of a word of an earlier line redefines it.)], [3, 15],
+  [A word or a declaration of that name exists already. Use another name. (In a session, `def` with the name of a procedure of an earlier line redefines it.)], [3, 15],
   [`this parameter takes one row of a table; a parameter that takes the whole table is written list RECORD or array RECORD`],
   [A table's name as a parameter type means one row. To take the whole table write `list RECORD` or `array RECORD`.], [6],
   [`the collection given here is of another kind, or holds another type, than the parameter says`],
-  [The collection given differs from the parameter in kind or element type: an `array int` or a `list str(8)` cannot
+  [The collection given differs from the parameter in kind or element type: an `array int` or a `list str 8` cannot
    stand where `list int` is asked for.], [6],
   [`this name is not declared before this place`],
   [The name does not exist, or is used before it is declared. Check the spelling and where it is declared; words that
-   call each other use `forward word`.], [1, 3],
+   call each other use `forward NAME signature end`.], [1, 3],
   [`this path names neither a module in use nor a record`],
-  [The module of `module.word` was not opened. Write `use module` at the top of the file.], [1, 10],
+  [The module of `module.word` was not opened. Write `use module .` at the top of the file.], [1, 10],
   [`this name is already visible here; a new name may not hide it`],
   [A visible name of the program (a word, a global, a constant, a local outside) was used for a new name. Choose
    another.], [3],
@@ -119,7 +119,7 @@ are exactly what the processor prints; the chapters in the right column have exa
   [A value left to `defer` was handed on (closed) in the body as well. Leave the closing to `defer` and only lend
    the value in the body.], [9],
   [`this str was made after a mark that was released since; the region may hold other bytes there now`],
-  [Text made between a mark and its `release` was read after the release. Text to keep goes into `str(N)` or a buffer
+  [Text made between a mark and its `release` was read after the release. Text to keep goes into `str N` or a buffer
    before the release.], [5, 9],
   [``or_fail passes the failure on, so this word needs `or fail` in its signature``],
   [The word using `or_fail` has no `or fail` in its signature. Add it, or handle the failure there with `or_else`.], [8],
@@ -127,15 +127,15 @@ are exactly what the processor prints; the chapters in the right column have exa
   [A list whose rows are held by something cannot be truncated. Check before adding instead.], [11],
   [`a word that can fail is followed by or_fail, or_return or or_else`],
   [A word that can fail (`push`, `str.to_int`, a word with `or fail` in its signature) has no guard after it. Even
-   to ignore the failure, write `or_else (e) end`.], [6, 8],
+   to ignore the failure, write `or_else to e end`.], [6, 8],
   [`the body of or_else must leave what the word would have given, or leave the word or the loop`],
   [The body of `or_else` leaves other values than success would. Leave a stand-in of the same type, or leave with
    `return` or `break`.], [8],
   [`an owned value is kept in a local or given on at once; this word would lose it`],
   [An `owned` value is about to be lost with `drop`, or left on the stack. Keep it in a local and close it at the end
    (`defer` makes it easy).], [9],
-  [`a field holds str(N); a str view lives only in locals, arguments and results`],
-  [A view `str` was used for a field or a global. Declare it `str(N)`.], [5],
+  [`a field holds str N; a str view lives only in locals, arguments and results`],
+  [A view `str` was used for a field or a global. Declare it `str N`.], [5],
 )
 
 == When a run stops: faults

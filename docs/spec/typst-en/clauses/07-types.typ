@@ -9,21 +9,21 @@ type while running. A program whose types do not match is refused at load.]
 #table(columns: (auto, 1fr), inset: 5pt, stroke: 0.5pt + luma(170),
   [*Type*], [*Values*],
   [`int`], [64-bit two's complement integers (7.1)],
-  [`dec(N)`], [decimals with N digits after the point, N from 0 to 18 (7.5)],
+  [`dec N`], [decimals with N digits after the point, N from 0 to 18 (7.5)],
   [`u8` `u16` `u32` `u64` `i8` `i16` `i32`], [unsigned and signed integers of that width (7.6); `u8` is a byte, `u32` a code point],
   [`bool`], [`true`, `false` (7.2)],
   [`str`], [a view of bytes (7.3); only in locals, arguments and results],
-  [`str(N)`], [stored text of up to N bytes (7.3); in globals, cells of arrays, fields of records],
+  [`str N`], [stored text of up to N bytes (7.3); in globals, cells of arrays, fields of records],
   [`err`], [the error code of a failure (11.1)],
   [declared type], [a type made with `type NAME base`: the same representation as its base, a different type (7.4)],
   [row], [one row of a table of records (array, list, pool); the type is named after the table (8.8)],
   [handle], [a number that refers to an object the host gave; the host names the type (19.6)],
-  [block], [a word value, written `word (signature)` (10.5)],
+  [block], [the type of a procedure value, named by `type NAME proc signature end` (10.5)],
   [`regex`], [a regular expression program (16.7); visible only in a source that has `use rex`],
   [`buffer`], [a parameter type: it takes a buffer the script declared (8.7, 9.9, 19.3)],
 )]
 
-#para("3")[Globals, cells of arrays and fields of records start at zero: `int` 0, `bool` `false`, `str(N)` the empty
+#para("3")[Globals, cells of arrays and fields of records start at zero: `int` 0, `bool` `false`, `str N` the empty
 text, a row "none" (8.8).]
 
 == Integers <types-int>
@@ -47,7 +47,7 @@ run.]
 
 == Booleans <types-bool>
 
-#para("1")[`bool` has two values, `true` and `false`. Comparison words (`eq` `lt` …) give them; `if`, `while`, `until`
+#para("1")[`bool` has two values, `true` and `false`. Comparison words (`eq` `lt` …) give them; `if`
 and the logical words (`and` `or` `not`) take them.]
 
 #ex("spec", "07-bool.pnx")
@@ -67,7 +67,7 @@ bytes, and words that work on characters (`str.char_count` and so on) read UTF-8
 #para("2")[There are two string types.
 - `str` is a *view*: the start and length of bytes that are somewhere (a literal, the text of a global, a buffer, the
   region). Making one copies no bytes. It lives only in locals, arguments, results and on the stack.
-- `str(N)` is #term("stored text"). It takes N bytes of room and copies the bytes put into it. It is used only in
+- `str N` is #term("stored text"). It takes N bytes of room and copies the bytes put into it. It is used only in
   globals, cells of arrays and lists, and fields of records. Reading it gives a `str` view of that room.]
 
 #ex("spec", "07-str.pnx")
@@ -80,17 +80,17 @@ before that place does.]
 
 #part("Faults")
 
-#para("4")[Putting text longer than N bytes into a `str(N)` place with no guard after the store stops with the fault
+#para("4")[Putting text longer than N bytes into a `str N` place with no guard after the store stops with the fault
 `range`. It is not cut.]
 #ex("spec", "07-str-too-long.pnx")
 
-#para("4a")[A store into a `str(N)` place (a field with `to`, a global or a cell with `set`) may be followed by a guard
+#para("4a")[A store into a `str N` place (a field with `to`, a global or a cell with `set`) may be followed by a guard
 (11.2). Then a text longer than N bytes is the failure `range`, and the place keeps what it held; a shorter text is
-stored and the guard does nothing. Under the guard of `push` onto a list of `str(N)` (8.5), a text too long is the
+stored and the guard does nothing. Under the guard of `push` onto a list of `str N` (8.5), a text too long is the
 failure `range` too, whether or not the list is full.]
 #ex("spec", "07-str-guard.pnx")
 
-#para("4b")[`fits PLACE` names a `str(N)` place as a store does: `record.field`, a global (also `MODULE.NAME`), or an
+#para("4b")[`fits PLACE` names a `str N` place as a store does: `record.field`, a global (also `MODULE.NAME`), or an
 array or a list, for its cells (also a collection parameter, 9.9). It takes the text on top of the stack and gives
 nothing; it writes nothing. A text of N bytes or fewer goes on; a longer one is the failure `range`. It is a word that
 can fail, so a guard follows it (11.2 (2)). A program asks a place with it before it does anything a text too long
@@ -105,7 +105,7 @@ rule.]
 #part("Syntax")
 ```ebnf
 type-decl = "type" NAME base ;
-base      = "int" | "bool" | "str" | "dec" "(" INT ")" ;
+base      = "int" | "bool" | "str" | "dec" INT | "proc" effect "end" ;
 ```
 
 #para("1")[`type meters int` makes the #term("declared type") `meters`. Its values are represented like `int` and cost
@@ -118,6 +118,9 @@ word `raw` turns a value of a declared type back into its base type.]
 type. Comparison words and `min` `max` also take two values of the same type. Other arithmetic is done after `raw`.]
 
 #ex("spec", "07-type.pnx")
+
+#para("2a")[`type NAME proc signature end` declares the type of procedure values that have that signature (`type Handler proc n int gives int end`).
+Parameters and locals use the type by its name (`h Handler`), and `ref NAME` or `def signature do … end` gives a value of it (10.5).]
 
 #para("3a")[A value of a declared type `D` over `int` multiplied by an `int` (`D int mul`, `int D mul`), divided by
 one or taken modulo one (`D int div`, `D int mod`) gives a `D`. `neg` and `abs` give a `D` too. Scaling a number up or
@@ -138,32 +141,32 @@ arithmetic word outside (3a) on a declared type and an `int`.]
 
 #part("Syntax")
 ```ebnf
-dec-type = "dec" "(" INT ")" ;   (* 0 to 18 *)
+dec-type = "dec" INT ;   (* 0 to 18 *)
 DEC      = [ sign ] digits "." digits ;   (* no exponent: 6.4 *)
 ```
 
-#para("1")[A value of `dec(N)` is a decimal number with `N` digits after the point. It is held as an `int` scaled by
-10#super[N]: `12.50` is a `dec(2)` held as 1250. Results are the same on every processor. The range is that of `int`
+#para("1")[A value of `dec N` is a decimal number with `N` digits after the point. It is held as an `int` scaled by
+10#super[N]: `12.50` is a `dec 2` held as 1250. Results are the same on every processor. The range is that of `int`
 divided by 10#super[N].]
 
-#para("2")[A number with a point and digits on both sides, without an exponent, is a `dec(N)` literal whose `N` is the
-count of digits after the point: `12.50` is `dec(2)`, `0.5` is `dec(1)`, `-0.05` is `dec(2)`.]
+#para("2")[A number with a point and digits on both sides, without an exponent, is a `dec N` literal whose `N` is the
+count of digits after the point: `12.50` is `dec 2`, `0.5` is `dec 1`, `-0.05` is `dec 2`.]
 
-#para("3")[`dec(N)` is a number type over `int` as a declared type is (7.4): two values of the same `dec(N)` are added,
-subtracted, compared and given to `min` and `max`; a `dec(N)` is multiplied by an `int`, divided by one (rounded toward
-zero, as `div`) and taken modulo one; `neg` and `abs` keep it. In addition `dec(A) dec(B) mul` gives `dec(A+B)`, exact,
-when `A+B` is at most 18. `sum`, `minimum` and `maximum` (10.6) take stems of `dec(N)` and give one. `chk_add`
-`chk_sub` `chk_mul` `chk_div` take a `dec(N)` as `add` `sub` `mul` `div` do. An overflow is the fault `overflow`.]
+#para("3")[`dec N` is a number type over `int` as a declared type is (7.4): two values of the same `dec N` are added,
+subtracted, compared and given to `min` and `max`; a `dec N` is multiplied by an `int`, divided by one (rounded toward
+zero, as `div`) and taken modulo one; `neg` and `abs` keep it. In addition `dec A dec B mul` gives `dec A+B`, exact,
+when `A+B` is at most 18. `sum`, `minimum` and `maximum` (10.6) take rails of `dec N` and give one. `chk_add`
+`chk_sub` `chk_mul` `chk_div` take a `dec N` as `add` `sub` `mul` `div` do. An overflow is the fault `overflow`.]
 
-#para("4")[`n dec(N)` makes the `int` `n` into `n` with `N` zeros after the point (`5 dec(2)` is `5.00`); `d raw` gives
-the scaled `int` (`12.50 raw` is 1250). `d M rescale` gives `d` as a `dec(M)`, `M` a constant from 0 to 18: more digits
+#para("4")[`n dec N` makes the `int` `n` into `n` with `N` zeros after the point (`5 dec 2` is `5.00`); `d raw` gives
+the scaled `int` (`12.50 raw` is 1250). `d M rescale` gives `d` as a `dec M`, `M` a constant from 0 to 18: more digits
 are exact; fewer are rounded half away from zero (`2.345` is `2.35`, `-2.345` is `-2.35`).]
 
 #ex("spec", "07-dec.pnx")
 #ex("spec", "07-dec-round.pnx")
 
-#para("5")[`type price dec(2)` declares a type over `dec(2)`; `9.99 price` makes one and `raw` gives the `dec(2)`.
-`dec(N)` is the type of globals, fields (8 bytes), cells of arrays and lists, values of queues and parameters (9.9) as
+#para("5")[`type price dec 2` declares a type over `dec 2`; `9.99 price` makes one and `raw` gives the `dec 2`.
+`dec N` is the type of globals, fields (8 bytes), cells of arrays and lists, values of queues and parameters (9.9) as
 `int` is. `str.to_str` and `cat` write it with all its digits (16.1); `str.to_dec` reads one.]
 
 #part("Constraints")
@@ -200,7 +203,7 @@ give an `int` (the width for 0); `byte_swap` reverses the bytes of the width. `r
 #para("5")[A narrow integer is, as `int` is, the type of globals, of cells of arrays and lists, of values of queues, of
 parameters and results and of host word signatures (19.2), and the base of a declared type (7.4), as in `type opcode
 u8`. A cell of an array, list or queue and a field of a record take the bytes of the width (`array a u8 1024` is
-1024 bytes); one global is an 8-byte place. A character literal is a `u8` or a `u32` (6.5). `case` compares a narrow
+1024 bytes); one global is an 8-byte place. A character literal is a `u8` or a `u32` (6.5). `match` compares a narrow
 integer (10.3). A host word takes and gives the value as one 64-bit integer, and a result outside the range is the fault
 `overflow` (19.2).]
 
@@ -233,13 +236,13 @@ constant outside the range converted is refused.]
   ([The two values of an arithmetic word differ in type or are not `int`], "this word takes two int values, or two of the same declared type"),
   ([Arithmetic outside (3) and (3a) on a declared type], "a declared type is added to and subtracted from its own type, and multiplied, divided or taken modulo by an int; for other arithmetic take raw"),
   ([An argument of another type than the signature], "an argument has another type than the word's signature asks for"),
-  ([`str` for a global and the like], "stored text is str(N); a str view lives only in locals, arguments and results"),
-  ([`str` for a field of a record], "a field holds str(N); a str view lives only in locals, arguments and results"),
+  ([`str` for a global and the like], "stored text is str N; a str view lives only in locals, arguments and results"),
+  ([`str` for a field of a record], "a field holds str N; a str view lives only in locals, arguments and results"),
   ([Two `dec` of different scales], "two dec values of different scales: rescale one first (d 2 rescale)"),
   ([A `dec` divided by a `dec`], "a dec is divided by an int, not by a dec; for a share, rescale first and divide by the int"),
-  ([`dec(A) dec(B) mul` beyond 18 digits], "dec(A) times dec(B) is dec(A+B), and A+B is at most 18; rescale one first"),
-  ([A scale outside 0 to 18], "dec(N) has 0 to 18 digits after the point"),
-  ([`fits` before a place that is not `str(N)`], "fits names a place of type str(N): record.field, a global, or an array or a list"),
+  ([`dec A dec B mul` beyond 18 digits], "dec A times dec B is dec A+B, and A+B is at most 18; rescale one first"),
+  ([A scale outside 0 to 18], "dec N has 0 to 18 digits after the point"),
+  ([`fits` before a place that is not `str N`], "fits names a place of type str N: record.field, a global, or an array or a list"),
   ([`fits` before a local], "fits names a place a store keeps; a local holds a text of any length"),
   ([`fits` before a name that is not declared], "fits names a declared global, array or list; there is none of this name"),
   ([`fits` with a value that is not `str`], "fits takes a text: text fits place"),

@@ -4,11 +4,11 @@
 
 #part("구문")
 ```ebnf
-extern = [ "export" ] "extern" c-name "(" effect ")" "from" STRING [ "as" NAME ] ;
+extern = [ "export" ] "extern" c-name effect "from" STRING [ "as" NAME ] "end" ;
 c-name = NAME | reserved-word | STRING ;
 ```
 
-#para("1")[`extern 이름 (서명) from "라이브러리"` 는 C 함수 하나를 낱말로 삼는다. 처리기는 라이브러리를 스스로
+#para("1")[`extern 이름 서명 from "라이브러리" end` 는 C 함수 하나를 프로시저로 삼는다. 처리기는 라이브러리를 스스로
 열지 않는다. 적재할 때 호스트의 #term("해결 함수", en: "resolver")에 (라이브러리, 이름)을 묻고, 호스트가 준
 함수를 부른다. 호스트가 해결 함수를 두지 않거나 함수를 주지 않으면 적재가 거절된다. 그래서 스크립트가 부를 수
 있는 C 함수는 호스트가 정한다.]

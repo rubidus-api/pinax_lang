@@ -49,10 +49,10 @@ both without a buffer.]
 
 #part("Syntax")
 ```ebnf
-test = "test" NAME { body } "end" ;
+test = "test" NAME "do" { body } "end" ;
 ```
 
-#para("1")[`test NAME … end` defines a #term("test"): a word that takes and gives nothing. Tests do not run at load.
+#para("1")[`test NAME do … end` defines a #term("test"): a procedure that takes and gives nothing. Tests do not run at load.
 `pnx test file.pnx` runs the tests of the file in order, writes `ok` or `FAIL` for each, and exits with 0 when all pass,
 1 otherwise. A fault inside a test (a false `assert` included) is that test's failure.]
 
@@ -67,15 +67,15 @@ what earlier lines defined and the values they left (19.4 (2a)). A line that end
 read together with the next. A line that is refused or ends with a fault leaves the stack as it was. The end of a line, Enter,
 is a dot (10.8): what the line wrote is on the screen before the prompt comes back.]
 
-#para("2")[There are tool words only for sessions: `list_words` (the words defined), `stack` (the types on the stack
+#para("2")[There are tool words only for sessions: `list_words` (the procedures defined), `stack` (the types on the stack
 there), `clear` (at the start of a line: the line starts from an empty stack), `see` (the stack after every line of
-the definitions that follow), `redefine word …` (the same as `word …` for a word that exists, (2a)). `get_order` (13.5 (3a)) tells the search
+the definitions that follow), `redefine def …` (the same as `def …` for a procedure that exists, (2a)). `get_order` (13.5 (3a)) tells the search
 order, in a session and in a file.]
 
-#para("2a")[`word NAME …` with the name of a word an earlier line of the session defined redefines it. With the same
-signature, every word that calls it calls the new one. With another signature the new word takes the name; the words
+#para("2a")[`def NAME …` with the name of a procedure an earlier line of the session defined redefines it. With the same
+signature, every procedure that calls it calls the new one. With another signature the new procedure takes the name; the procedures
 compiled before keep calling the old body, which no longer has a name, and `pnx repl` names them ("2 words still call
-the old sq: quad, cube"). One word is redefined in a line, and none while a task is alive. A word of a module loaded
+the old sq: quad, cube"). One procedure is redefined in a line, and none while a task is alive. A procedure of a module loaded
 from a file is not redefined in the session: edit the file and load it again.]
 
 #ex("spec", "20-repl.pnx")

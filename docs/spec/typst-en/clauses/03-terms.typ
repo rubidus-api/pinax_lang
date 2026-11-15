@@ -26,6 +26,8 @@ reason. No code of a refused source runs.]
 #para("8")[#term("word"): an action called by name. Core words, words of standard modules, words a script defines and
 words a host registers all look the same where they are called.]
 
+#para("8a")[#term("procedure"): a word defined with `def` (9.1). It has a signature and a body, and is called the same way as any other word.]
+
 #para("9")[#term("signature"): what a word takes from the stack, what it gives, and whether it can fail (9.2).]
 
 #para("10")[#term("stack"): where values pass from word to word. Its depth and the type of each place are fixed at

@@ -28,7 +28,7 @@ number of bytes left.]
 region to that place; every byte made after the mark can be used again. A loop that makes much text marks and releases
 in every turn.]
 
-#para("3")[Bytes put into stored text (`str(N)`) are copied there, so they survive rewinding the region.]
+#para("3")[Bytes put into stored text (`str N`) are copied there, so they survive rewinding the region.]
 
 #ex("spec", "12-region.pnx")
 
@@ -62,7 +62,7 @@ back is as in (3). A failure carries only its code (11.2), so no `str` leaves th
 
 #para("4")[The check leans to caution. String literals are not in the region and are never taken back. Every other
 `str` --- views, stored text read back, values words give --- counts as made where it appears. Where paths meet, a value
-counts as the latest and a mark as the earliest. So it may refuse a correct program; then keep the value in a `str(N)`
+counts as the latest and a mark as the earliest. So it may refuse a correct program; then keep the value in a `str N`
 or move the mark.]
 
 #para("5")[Handing an `owned` mark to a word counts as a `release` there. A word that takes a mark counts its `str`
