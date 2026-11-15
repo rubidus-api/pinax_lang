@@ -189,9 +189,11 @@ destination may be a collection parameter (9.9).]
 #para("4")[A rail and its combining word make one loop, and in the block of `each`, `each_index` or `times`, `break .`
 leaves it and `continue .` goes to the next element: the rail stops and the code after the combining word runs. The rules of leaving a loop hold: the
 stack is as it was when the block began (10.2 (2)), and the block's deferred code runs (10.7). A `break .` in a `loop` inside the
-block leaves that loop. The blocks of the other combining words, which give a result made from every element, are not left early,
-and a loop outside the block is not left from inside it (not even by `break 2 .`).]
+block leaves that loop. `break N .` and `continue N .` count such blocks and `loop`s alike as levels (10.2 (1)); the operands of the inner
+blocks leave with them. The blocks of the other combining words, which give a result made from every element, are not left early,
+and are not crossed.]
 #ex("spec", "10-leave-each.pnx")
+#ex("spec", "10-leave-two.pnx")
 
 == Deferred code <control-defer>
 

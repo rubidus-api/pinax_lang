@@ -239,7 +239,7 @@ xs minimum <span style="color: #d73948">or_else</span> <span style="color: #d739
 go <span style="color: #d73948">or_else</span> <span style="color: #d73948">to</span> e e err_text io.println <span style="color: #d73948">end</span>
 </code></pre><p class="ex-label">Output</p><pre><code data-lang="text">$ pnx 10-map-into.pnx
 squares 16, evens written 2
-</code></pre></div><p class="para"><span class="pn">(4)</span> A rail and its combining word make one loop, and in the block of <code>each</code>, <code>each_index</code> or <code>times</code>, <code>break .</code> leaves it and <code>continue .</code> goes to the next element: the rail stops and the code after the combining word runs. The rules of leaving a loop hold: the stack is as it was when the block began (10.2 (2)), and the block’s deferred code runs (10.7). A <code>break .</code> in a <code>loop</code> inside the block leaves that loop. The blocks of the other combining words, which give a result made from every element, are not left early, and a loop outside the block is not left from inside it (not even by <code>break 2 .</code>).</p><div class="example run"><p class="ex-file"><code>10-leave-each.pnx</code></p><pre><code data-lang="pinax"><span style="color: #d73948">use</span> io .
+</code></pre></div><p class="para"><span class="pn">(4)</span> A rail and its combining word make one loop, and in the block of <code>each</code>, <code>each_index</code> or <code>times</code>, <code>break .</code> leaves it and <code>continue .</code> goes to the next element: the rail stops and the code after the combining word runs. The rules of leaving a loop hold: the stack is as it was when the block began (10.2 (2)), and the block’s deferred code runs (10.7). A <code>break .</code> in a <code>loop</code> inside the block leaves that loop. <code>break N .</code> and <code>continue N .</code> count such blocks and <code>loop</code>s alike as levels (10.2 (1)); the operands of the inner blocks leave with them. The blocks of the other combining words, which give a result made from every element, are not left early, and are not crossed.</p><div class="example run"><p class="ex-file"><code>10-leave-each.pnx</code></p><pre><code data-lang="pinax"><span style="color: #d73948">use</span> io .
 <span style="color: #d73948">use</span> <span style="color: #d73948">str</span> .
 <span style="color: #d73948">def</span> until_blank s <span style="color: #d73948">str</span> <span style="color: #d73948">do</span>
   s <span style="color: #d73948">str</span>.lines <span style="color: #d73948">do</span> <span style="color: #d73948">to</span> line
@@ -253,6 +253,22 @@ squares 16, evens written 2
 &gt; first
 &gt; second
 done
+</code></pre></div><div class="example run"><p class="ex-file"><code>10-leave-two.pnx</code></p><pre><code data-lang="pinax"><span style="color: #d73948">use</span> io .
+<span style="color: #d73948">use</span> <span style="color: #d73948">str</span> .
+<span style="color: #d73948">def</span> first_pair target <span style="color: #d73948">int</span> <span style="color: #d73948">gives</span> <span style="color: #d73948">int</span> <span style="color: #d73948">do</span>         <span style="color: #74747c">rem a * b = target, the first a and b in 1..3</span>
+  <span style="color: #b60157">0</span> <span style="color: #d73948">to</span> hit
+  <span style="color: #b60157">1</span> <span style="color: #b60157">4</span> range <span style="color: #d73948">do</span> <span style="color: #d73948">to</span> a
+    <span style="color: #b60157">1</span> <span style="color: #b60157">4</span> range <span style="color: #d73948">do</span> <span style="color: #d73948">to</span> b
+      a b mul target eq <span style="color: #d73948">if</span> a <span style="color: #b60157">10</span> mul b add <span style="color: #d73948">to</span> hit <span style="color: #d73948">break</span> <span style="color: #b60157">2</span> . <span style="color: #d73948">end</span>      <span style="color: #74747c">rem leaves both blocks</span>
+    <span style="color: #d73948">end</span> each
+  <span style="color: #d73948">end</span> each
+  hit
+<span style="color: #d73948">end</span>
+<span style="color: #b60157">6</span> first_pair <span style="color: #d73948">str</span>.to_str io.println
+<span style="color: #b60157">7</span> first_pair <span style="color: #d73948">str</span>.to_str io.println
+</code></pre><p class="ex-label">Output</p><pre><code data-lang="text">$ pnx 10-leave-two.pnx
+23
+0
 </code></pre></div><h3>10.7 Deferred code</h3><h5>Syntax</h5><pre><code data-lang="ebnf">defer = "defer" { body } "end" ;</code></pre><p class="para"><span class="pn">(1)</span> <code>defer CODE end</code> writes code that runs when the enclosing block is left. The block is a word’s body, a loop’s body (at every turn) or the <code>do</code> block of a combining word (at every run). The code runs on every way out of that block: the block’s <code>end</code>, the end of a turn, <code>break</code>, <code>continue</code>, <code>return</code>, <code>or_return</code>, <code>or_fail</code> and <code>fail</code>. Several run in the reverse of the order they are written. They do not run when a fault ends the run (the state closes the handles then, 19.6).</p><div class="example run"><p class="ex-file"><code>10-defer.pnx</code></p><pre><code data-lang="pinax"><span style="color: #d73948">use</span> io .
 <span style="color: #d73948">use</span> <span style="color: #d73948">str</span> .
 <span style="color: #d73948">buffer</span> trace <span style="color: #b60157">256</span>

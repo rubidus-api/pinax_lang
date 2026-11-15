@@ -3490,6 +3490,8 @@ static bool leave_target(comp *c, block **out, pnx_word_id which) {
                 *out = b;
                 return true;
             }
+            if (leaves && !n.length && seen < want)
+                continue; // break 2 . across the block of an each: it is one of the levels (RFC-0049)
             return error_at(c, PINAX_ERR_SYNTAX, at.line, at.column,
                             leaves ? "a named loop outside this block is not left from inside it; break leaves the block"
                                    : "only the block of each, each_index or times is left early; this word gives a "
@@ -3521,9 +3523,21 @@ static bool do_leave(comp *c, pnx_word_id which) {
         cond_negate(&cond); // leave when the condition is false
     if (!settle_all(c))
         return false;
-    if (!same_stack(f, &target->in))
-        return error_at(c, PINAX_ERR_TYPE, at.line, at.column,
-                        "where a loop is left the stack must be as it was when the loop began");
+    { // across the block of a combining word its operands lie between: they are left with it
+        const uint32_t depth = f->depth;
+        for (uint32_t k = f->n_blocks; k-- > 0;) {
+            block *x = f->blocks[k];
+            if (x == target)
+                break;
+            if (x->kind == B_DO)
+                f->depth = x->in.depth > x->n_hidden ? x->in.depth - x->n_hidden : 0;
+        }
+        const bool same = same_stack(f, &target->in);
+        f->depth = depth;
+        if (!same)
+            return error_at(c, PINAX_ERR_TYPE, at.line, at.column,
+                            "where a loop is left the stack must be as it was when the loop began");
+    }
     const uint32_t from = target->depth + 1;
     if (which == PNX_KW_continue) { // to the next pass: the defers inside the body run on the way
         if (!emit_defers(c, from) || !same_owns(c, target, target->owns_in))
