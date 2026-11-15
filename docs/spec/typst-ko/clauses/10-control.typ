@@ -150,6 +150,8 @@ block   = "do" { "to" NAME } { body } "end"
 바로 뒤의 조합 낱말이 받아야 한다. 둘이 합쳐 루프 하나가 된다. 훑기 전에 길이를 알고 어느 자리의 원소든 읽을 수 있는 레일을
 #term("닫힌 레일", en: "closed rail")이라 하고(`range`, 배열, 목록, `str.bytes`), 그렇지 않은 레일을 #term("열린 레일", en: "open rail")이라 한다: 원천에서
 조각을 차례로 하나씩 꺼내고 한 번만 훑는다(`str.split` `str.lines` `str.words` `str.chars` `ptn.matches` `rex.matches` `rex.split` `csv.fields`, 풀).
+레일은 게으르게 평가된다: 루프는 훑는 차례대로 원소를 하나씩 꺼내고, 어댑터의 블록은 거기에 닿은 원소에만 돈다. 일찍 끝나는
+훑기(`head` `head_while` `first` `any` `break`)는 그 뒤를 읽지도 평가하지도 않고, 단계 사이에 저장하는 것이 없다.
 레일을 내는 것은 다음과 같다.
 #table(columns: (auto, 1fr), inset: 5pt, stroke: 0.5pt + luma(170),
   [*레일*], [*원소*],
@@ -194,6 +196,7 @@ block   = "do" { "to" NAME } { body } "end"
 이들보다 앞에 오고, 열린 레일에서는 어디에든 와서 자기에게 닿은 조각을 센다. 블록이 원소에 붙이는 이름은 마지막 블록의 이름과 같아도 된다.]
 #ex("spec", "10-rail-open.pnx")
 #ex("spec", "10-rail-open-rev.pnx")
+#ex("spec", "10-rail-lazy.pnx")
 
 #ex("spec", "10-rail-block-adapters.pnx")
 #ex("spec", "10-rail-block-late.pnx")

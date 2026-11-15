@@ -151,7 +151,9 @@ shows both forms of (2a).]
 combining word right after it shall take it. Together they make one loop. A rail is a #term("closed rail") when its length is known
 before the walk and the element at any place can be read (`range`, an array, a list, `str.bytes`), and an #term("open rail") when it is not: the
 pieces are taken one after another from a source and the walk is made once (`str.split`, `str.lines`, `str.words`, `str.chars`, `ptn.matches`,
-`rex.matches`, `rex.split`, `csv.fields`, a pool). These make rails:
+`rex.matches`, `rex.split`, `csv.fields`, a pool). A rail is evaluated lazily: the loop takes one element at a time, in the order of the walk, and the blocks of the adapters run only
+for the elements that reach them. A walk that ends early (`head`, `head_while`, `first`, `any`, `break`) reads and evaluates nothing more, and
+nothing is stored between the stages. These make rails:
 #table(columns: (auto, 1fr), inset: 5pt, stroke: 0.5pt + luma(170),
   [*Rail*], [*Elements*],
   [the name of an array or list], [the cells' values (rows, for records); a list up to its length. Queues, buffers and indexes are not rails],
@@ -197,6 +199,7 @@ call. A block adapter works on any rail, closed or open (`str.words`, `str.lines
 chain; on an open rail they may stand anywhere, and count the pieces that reach them. The name the block gives the element may be the one the final block uses.]
 #ex("spec", "10-rail-open.pnx")
 #ex("spec", "10-rail-open-rev.pnx")
+#ex("spec", "10-rail-lazy.pnx")
 
 #ex("spec", "10-rail-block-adapters.pnx")
 #ex("spec", "10-rail-block-late.pnx")

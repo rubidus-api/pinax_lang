@@ -4226,6 +4226,17 @@ static bool ab_init(comp *c, abset *a) {
     return true;
 }
 
+// At the top of a turn of an open rail, before the next piece is taken: a `head` that has let N pieces pass ends the walk,
+// so the source is not read for a piece nobody will use (the evaluation is lazy).
+static bool ab_pre(comp *c, const abset *a, uint32_t *leave) {
+    for (uint32_t k = 0; k < a->n; ++k) {
+        if (a->kind[k] == AD_HEAD &&
+            (emit(c, PNX_ABC(PNX_JLT, a->flag[k], a->idx[k], 1)) == NONE || !jump_later(c, leave)))
+            return false;
+    }
+    return true;
+}
+
 // Runs the blocks of the adapters on the element in `reg`, in the order written. `skip` is the chain of jumps to the
 // end of the turn (the element does not count), `leave` the chain that ends the loop.
 static bool ab_run(comp *c, const abset *a, uint32_t reg, tid etype, uint32_t *skip, uint32_t *leave) {
@@ -4237,9 +4248,8 @@ static bool ab_run(comp *c, const abset *a, uint32_t reg, tid etype, uint32_t *s
                 return false;
             continue;
         }
-        if (a->kind[k] == AD_HEAD) { // after N pieces the walk ends
-            if (emit(c, PNX_ABC(PNX_JLT, a->flag[k], a->idx[k], 1)) == NONE || !jump_later(c, leave) ||
-                emit(c, PNX_ABC(PNX_ADDI, a->flag[k], a->flag[k], 1)) == NONE)
+        if (a->kind[k] == AD_HEAD) { // N pieces have passed: the walk was ended before the next was taken (ab_pre)
+            if (emit(c, PNX_ABC(PNX_ADDI, a->flag[k], a->flag[k], 1)) == NONE)
                 return false;
             continue;
         }
@@ -5146,6 +5156,8 @@ static bool do_block(comp *c) {
             return false;
         zip_reg = lb->reg;
     }
+    if (stem_takes(kind) && !ab_pre(c, &ab, &b->exits))
+        return false;
     if (stem_takes(kind)) { // takes the next piece, or leaves when none is left
         if (!stem_take(c, kind, reg, src, cur, lim) || !jump_later(c, &b->exits))
             return false;
