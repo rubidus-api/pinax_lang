@@ -4108,6 +4108,7 @@ static bool guard_op(comp *c, tid out);
 static bool found_or_fail(comp *c, tid type, uint32_t value, uint32_t flag);
 
 static local *new_local(comp *c, name n, tid type);
+static bool stem_takes(uint8_t kind);
 // ---- rail adapters (RFC-0050): skip N, head N, step N, rev --------------------------------------
 enum { AD_SKIP = 1, AD_HEAD, AD_STEP, AD_REV, AD_FILTER, AD_MAP, AD_SKIPW, AD_HEADW }; // from AD_FILTER: a block adapter
 // xs ys zip : two arrays or lists of plain cells walked side by side up to the shorter (RFC-0050)
@@ -4145,7 +4146,7 @@ static bool do_adapter(comp *c, int id) {
     for (uint32_t k = 0; k < f->stack[rail].nad; ++k) {
         if (f->stack[rail].ad[2 * k] == AD_STEP)
             return syntax(c, "step comes last in a chain: nothing follows it");
-        if (f->stack[rail].ad[2 * k] >= AD_FILTER)
+        if (f->stack[rail].ad[2 * k] >= AD_FILTER && !(f->stack[rail].type == TY_STEM && stem_takes(f->stack[rail].op) && id <= AD_HEAD))
             return syntax(c, "skip, head, step and rev come before filter, map, skip_while and head_while in a chain");
     }
     if (!advance(c))
@@ -4209,6 +4210,12 @@ static bool ab_init(comp *c, abset *a) {
     for (uint32_t k = 0; k < c->ab_n; ++k) {
         a->kind[k] = c->ab_kind[k];
         a->idx[k] = c->ab_idx[k];
+        if (a->kind[k] == AD_SKIP || a->kind[k] == AD_HEAD) { // a count of the pieces seen
+            local *l = new_local(c, (name){0}, TY_INT);
+            if (!l || emit(c, PNX_ABX(PNX_LOADI, l->reg, 0)) == NONE)
+                return false;
+            a->flag[k] = (uint8_t)l->reg;
+        }
         if (a->kind[k] == AD_SKIPW) {
             local *l = new_local(c, (name){0}, TY_INT);
             if (!l || emit(c, PNX_ABX(PNX_LOADI, l->reg, 1)) == NONE)
@@ -4224,6 +4231,18 @@ static bool ab_init(comp *c, abset *a) {
 static bool ab_run(comp *c, const abset *a, uint32_t reg, tid etype, uint32_t *skip, uint32_t *leave) {
     fn *f = c->f;
     for (uint32_t k = 0; k < a->n; ++k) {
+        if (a->kind[k] == AD_SKIP) { // the first N pieces do not count
+            if (emit(c, PNX_ABC(PNX_JLE, a->idx[k], a->flag[k], 2)) == NONE ||
+                emit(c, PNX_ABC(PNX_ADDI, a->flag[k], a->flag[k], 1)) == NONE || !jump_later(c, skip))
+                return false;
+            continue;
+        }
+        if (a->kind[k] == AD_HEAD) { // after N pieces the walk ends
+            if (emit(c, PNX_ABC(PNX_JLT, a->flag[k], a->idx[k], 1)) == NONE || !jump_later(c, leave) ||
+                emit(c, PNX_ABC(PNX_ADDI, a->flag[k], a->flag[k], 1)) == NONE)
+                return false;
+            continue;
+        }
         const pnx_lexer lx = *c->lx;
         const pnx_token tok = c->tok;
         const uint32_t depth = f->depth, floor = f->floor, n_locals = f->n_locals, n_blocks = f->n_blocks;
@@ -4317,8 +4336,24 @@ static bool apply_adapters(comp *c, const entry *rail, uint8_t kind, uint8_t cur
         window = window || rail->ad[2 * k] < AD_FILTER;
     if (!window)
         return true;
+    if (stem_takes(kind)) { // an open rail: skip and head count the pieces as they come; the others need a closed one
+        c->ab_n = 0; // in the order written, the counting ones among the blocks
+        for (uint32_t k = 0; k < rail->nad; ++k) {
+            const uint8_t id = rail->ad[2 * k];
+            if (id == AD_STEP || id == AD_REV)
+                return type_error(c, "step and rev need a closed rail (a range, an array, a list, the bytes of a str); this rail is open: its length is not known before the walk");
+            if (id < AD_FILTER) {
+                if (emit(c, PNX_ABC(PNX_JGEI, rail->ad[2 * k + 1], 0, 1)) == NONE ||
+                    emit(c, PNX_ABX(PNX_FAULT, 0, PINAX_ERR_RANGE)) == NONE)
+                    return false;
+            }
+            c->ab_kind[c->ab_n] = id;
+            c->ab_idx[c->ab_n++] = rail->ad[2 * k + 1];
+        }
+        return true;
+    }
     if (kind != STEM_RANGE && kind != STEM_COLL && kind != STEM_ROWS && kind != STEM_STRS && kind != STEM_BYTES)
-        return type_error(c, "skip, head, step and rev need a rail of known length: a range, an array, a list, the bytes of a str");
+        return type_error(c, "skip, head, step and rev need a closed rail: a range, an array, a list, the bytes of a str");
     bool    rev = false;
     uint8_t stride = 0xff;
     local  *tmp = new_local(c, (name){0}, TY_INT);

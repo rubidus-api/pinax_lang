@@ -123,11 +123,11 @@ An `N` that is an expression ends with a comma.
 
 #ex("manual", "04-rail-adapters.pnx")
 
-`scores skip 2 head 3` is the third to the fifth, `scores head 3 skip 1` the second and the third: the order changes the meaning. They are for rails of
-known length (`range`, an array, a list), and `step` comes last.
+`scores skip 2 head 3` is the third to the fifth, `scores head 3 skip 1` the second and the third: the order changes the meaning. `step` and `rev` are for #strong[closed rails] (`range`, an array, a list: the length is known and any place can be read); `skip` and `head`
+also work on #strong[open rails] (`str.words`, `str.lines` ...: the pieces come one after another). `step` comes last.
 
 There are adapters with a block too: `do to s s 4 gt end filter` (keep), `skip_while`, `head_while`, `map` (change to a value of the same type). They run
-inside the loop for each element and work on rails of unknown length too: `scores do to s s 4 gt end filter do to s s 100 mul end map sum`. Two arrays are walked side by side with `xs ys zip do to y to x ... end each`.
+inside the loop for each element and work on open rails too: `scores do to s s 4 gt end filter do to s s 100 mul end map sum`. Two arrays are walked side by side with `xs ys zip do to y to x ... end each`.
 
 == Procedures as values
 

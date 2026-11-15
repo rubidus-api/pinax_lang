@@ -148,7 +148,10 @@ shows both forms of (2a).]
 == Rails and combining words <control-rails>
 
 #para("1")[A #term("rail") yields values one after another. A rail is not a value: it cannot be stored, and the
-combining word right after it shall take it. Together they make one loop. These make rails:
+combining word right after it shall take it. Together they make one loop. A rail is a #term("closed rail") when its length is known
+before the walk and the element at any place can be read (`range`, an array, a list, `str.bytes`), and an #term("open rail") when it is not: the
+pieces are taken one after another from a source and the walk is made once (`str.split`, `str.lines`, `str.words`, `str.chars`, `ptn.matches`,
+`rex.matches`, `rex.split`, `csv.fields`, a pool). These make rails:
 #table(columns: (auto, 1fr), inset: 5pt, stroke: 0.5pt + luma(170),
   [*Rail*], [*Elements*],
   [the name of an array or list], [the cells' values (rows, for records); a list up to its length. Queues, buffers and indexes are not rails],
@@ -180,7 +183,7 @@ combining word right after it shall take it. Together they make one loop. These 
 takes every N-th element (the first one first), and `rev` walks from the last to the first. They apply in the order written and
 however many there are, the loop is one: `scores skip 2 head 3` is the third to the fifth, `scores head 3 skip 1` the second and the third.
 `N` is code that leaves one `int`; it ends at a comma, at `do`, at the next adapter and before `sum`, `minimum` or `maximum`. It is worked out once, before the loop.
-A negative `N` (a `step` of less than 1) is the fault `range`. Adapters are for rails of known length (`range`, an array, a list, `str.bytes`);
+A negative `N` (a `step` of less than 1) is the fault `range`. `step` and `rev` need a closed rail. `skip` and `head` also work on an open rail, where they count the pieces as they come;
 `step` comes last; a rail takes four of them. `each_index` does not count along an adapted rail yet. `each`, `fold`, `count`, `any`, `all`,
 `first`, `map_into`, `filter_into`, `sum`, `minimum` and `maximum` take them.]
 #ex("spec", "10-rail-adapters.pnx")
@@ -190,8 +193,11 @@ A negative `N` (a `step` of less than 1) is the fault `range`. Adapters are for 
 The block takes the element and gives a `bool` (`filter` keeps the elements for which it is true, `skip_while` drops them while it is
 true, `head_while` ends the walk at the first for which it is false), or, for `map`, a value of the same type that takes the element's place. They run
 inside the loop, once for each element and in the order written, and never for an element an earlier one dropped; so there is one loop, no storage and no
-call. A block adapter works on any rail, of known length or not (`str.words`, `str.lines`, ...). `skip`, `head`, `step` and `rev` come before them in a
-chain. The name the block gives the element may be the one the final block uses.]
+call. A block adapter works on any rail, closed or open (`str.words`, `str.lines`, ...). On a closed rail `skip`, `head`, `step` and `rev` come before them in a
+chain; on an open rail they may stand anywhere, and count the pieces that reach them. The name the block gives the element may be the one the final block uses.]
+#ex("spec", "10-rail-open.pnx")
+#ex("spec", "10-rail-open-rev.pnx")
+
 #ex("spec", "10-rail-block-adapters.pnx")
 #ex("spec", "10-rail-block-late.pnx")
 

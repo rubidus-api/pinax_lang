@@ -152,7 +152,7 @@ $n dot.c ceil(log_2 n)$ instructions (19.5).]
   [`raw`], [`(D gives base)`], [a value of a declared type as its base type (7.4)],
   [`err_text`], [`(err gives str)`], [the name of an error code (11.1)],
   [`assert`], [`(bool)`], [the fault `failed` when false],
-  [`skip` `head` `step`], [`(rail, N int gives rail)`], [adapters of a rail of known length: drop the first N, keep the first N, every N-th (10.6 (1a))],
+  [`skip` `head` `step`], [`(rail, N int gives rail)`], [adapters of a closed rail (`skip` and `head` of an open one too): drop the first N, keep the first N, every N-th (10.6 (1a))],
   [`filter` `skip_while` `head_while`], [`(rail, block gives rail)`], [adapters with a block on the element: keep, drop while, end the walk when false (10.6 (1b))],
   [`map`], [`(rail, block gives rail)`], [the block's value of the element's type in place of the element (10.6 (1b))],
   [`zip`], [`(xs, ys gives rail)`], [two arrays or lists side by side, up to the shorter; `each` binds the pair (10.6 (1c))],

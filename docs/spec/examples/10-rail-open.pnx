@@ -1,0 +1,6 @@
+rem run
+use io .
+use str .
+"a b c d e f g" str.words skip 2 head 3 do to w w io.print end each "" io.println          rem cde
+"a b c d e f g" str.words do to w w "d" ne end filter head 3 do to w w io.print end each "" io.println   rem abc
+"first\nsecond\nthird" str.lines skip 1 do to l l io.println end each

@@ -1,0 +1,5 @@
+rem refused
+use str .
+def f do
+  "a b c" str.words rev do to w end each      rem rev needs a closed rail
+end

@@ -148,7 +148,7 @@
   [`call`], [블록의 서명대로], [값이 되는 블록을 부름(10.5)],
   [`raw`], [`(D gives 바탕)`], [선언한 타입의 값을 바탕 타입으로(7.4)],
   [`err_text`], [`(err gives str)`], [오류 번호의 이름(11.1)],
-  [`skip` `head` `step`], [`(rail, N int gives rail)`], [길이를 아는 레일의 어댑터: 처음 N 개를 건너뜀, 처음 N 개만, N 개마다 하나(10.6 (1a))],
+  [`skip` `head` `step`], [`(rail, N int gives rail)`], [닫힌 레일의 어댑터(`skip` `head` 는 열린 레일도): 처음 N 개를 건너뜀, 처음 N 개만, N 개마다 하나(10.6 (1a))],
   [`filter` `skip_while` `head_while`], [`(rail, block gives rail)`], [원소에 블록을 쓰는 어댑터: 남김, 참인 동안 버림, 거짓이면 끝냄(10.6 (1b))],
   [`map`], [`(rail, block gives rail)`], [원소 자리에 블록이 낸 같은 타입의 값(10.6 (1b))],
   [`zip`], [`(xs, ys gives rail)`], [배열이나 목록 둘을 짧은 쪽까지 나란히. `each` 가 쌍을 받는다(10.6 (1c))],

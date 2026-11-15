@@ -147,7 +147,10 @@ block   = "do" { "to" NAME } { body } "end"
 == 레일과 조합 낱말 <control-rails>
 
 #para("1")[#term("레일", en: "rail")는 차례로 값을 내는 것이다. 레일은 값이 아니어서 지역 변수에 넣지 못하고,
-바로 뒤의 조합 낱말이 받아야 한다. 둘이 합쳐 루프 하나가 된다. 레일을 내는 것은 다음과 같다.
+바로 뒤의 조합 낱말이 받아야 한다. 둘이 합쳐 루프 하나가 된다. 훑기 전에 길이를 알고 어느 자리의 원소든 읽을 수 있는 레일을
+#term("닫힌 레일", en: "closed rail")이라 하고(`range`, 배열, 목록, `str.bytes`), 그렇지 않은 레일을 #term("열린 레일", en: "open rail")이라 한다: 원천에서
+조각을 차례로 하나씩 꺼내고 한 번만 훑는다(`str.split` `str.lines` `str.words` `str.chars` `ptn.matches` `rex.matches` `rex.split` `csv.fields`, 풀).
+레일을 내는 것은 다음과 같다.
 #table(columns: (auto, 1fr), inset: 5pt, stroke: 0.5pt + luma(170),
   [*레일*], [*원소*],
   [배열, 목록의 이름], [칸의 값(레코드면 줄). 목록은 길이까지. 큐, 버퍼, 찾아보기는 레일이 아니다],
@@ -179,7 +182,7 @@ block   = "do" { "to" NAME } { body } "end"
 `step N` 은 N 개마다 하나(첫째부터)를, `rev` 는 끝에서 처음으로 훑는다. 레일 뒤에 쓴 차례대로 적용되어 어댑터가 몇이든 루프는 하나다:
 `scores skip 2 head 3` 은 셋째부터 다섯째까지, `scores head 3 skip 1` 은 둘째와 셋째다. `N` 은 `int` 를 하나 남기는 코드이고 쉼표, `do`,
 다음 어댑터, `sum` `minimum` `maximum` 앞에서 끝난다. 루프 앞에서 한 번만 계산한다. `N` 이 음수(`step` 은 1 보다 작음)이면 결함 `range` 다.
-어댑터는 `range`, 배열, 목록, `str.bytes` 처럼 길이를 아는 레일에만 쓰고, `step` 은 맨 끝에만 온다. 한 레일에 넷까지 쓴다.
+`step` 과 `rev` 는 닫힌 레일에만 쓴다. `skip` 과 `head` 는 열린 레일에도 쓰고, 거기서는 조각이 오는 대로 센다. `step` 은 맨 끝에만 온다. 한 레일에 넷까지 쓴다.
 `each_index` 는 어댑터 뒤의 레일을 아직 세지 않는다. `each` `fold` `count` `any` `all` `first` `map_into` `filter_into` `sum` `minimum` `maximum` 이 받는다.]
 #ex("spec", "10-rail-adapters.pnx")
 #ex("spec", "10-rail-adapter-step.pnx")
@@ -187,8 +190,11 @@ block   = "do" { "to" NAME } { body } "end"
 #para("1b")[`filter` `map` `skip_while` `head_while` 은 바로 앞에 쓴 블록을 받는다(`do to s s 4 gt end filter`). 블록은 원소를 받아
 `bool` 을 내고(`filter` 는 참인 원소만 남기고, `skip_while` 은 참인 동안 버리고, `head_while` 은 처음 거짓인 원소에서 훑기를 끝낸다),
 `map` 은 같은 타입의 값을 내어 원소 자리를 대신한다. 블록은 루프 안에서 원소마다 적은 차례로 돌고, 앞의 것이 버린 원소에는 돌지 않는다:
-루프는 하나이고 저장소도 부름도 없다. 블록 어댑터는 길이를 모르는 레일(`str.words`, `str.lines` …)에도 쓴다. `skip` `head` `step` `rev` 는
-이들보다 앞에 온다. 블록이 원소에 붙이는 이름은 마지막 블록의 이름과 같아도 된다.]
+루프는 하나이고 저장소도 부름도 없다. 블록 어댑터는 닫힌 레일에도 열린 레일(`str.words`, `str.lines` …)에도 쓴다. 닫힌 레일에서는 `skip` `head` `step` `rev` 가
+이들보다 앞에 오고, 열린 레일에서는 어디에든 와서 자기에게 닿은 조각을 센다. 블록이 원소에 붙이는 이름은 마지막 블록의 이름과 같아도 된다.]
+#ex("spec", "10-rail-open.pnx")
+#ex("spec", "10-rail-open-rev.pnx")
+
 #ex("spec", "10-rail-block-adapters.pnx")
 #ex("spec", "10-rail-block-late.pnx")
 
