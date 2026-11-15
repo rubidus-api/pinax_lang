@@ -28,6 +28,7 @@ typedef uint16_t tid;
 enum { TY_NONE, TY_INT, TY_BOOL, TY_ERR, TY_STEM, TY_COLL, TY_STR = TY_SBANK | 6, TY_MARK = 7,
        TY_BUF = 8, // a buffer handed to a host word: only in the signatures of host words
        TY_REGEX = TY_SBANK | 9, // a program of rex (RFC-0011): a view of its bytes
+       TY_ARGS = TY_SBANK | 10, // the values of `args ... .` (RFC-0049): a view of a block in the region; only a parameter holds one
        TY_FIRST_DECLARED = 16 };
 enum { BANK_I, BANK_S, BANK_NONE };
 enum { E_SLOT, E_LOCAL, E_CONST, E_COND };
@@ -795,7 +796,7 @@ static name type_name(const comp *c, tid type) {
     if (base_of(c, type) != type)
         return ((const dtype *)c->dtypes.ptr + ((type & ~TY_SBANK) - TY_DISTINCT))->name;
     return cname(type == TY_INT ? "int" : type == TY_BOOL ? "bool" : type == TY_ERR ? "err" : type == TY_MARK ? "mark"
-                 : type == TY_BUF ? "buffer" : type == TY_REGEX ? "regex" : "str");
+                 : type == TY_BUF ? "buffer" : type == TY_REGEX ? "regex" : type == TY_ARGS ? "args" : "str");
 }
 
 static tid basic_type(name n) {
@@ -896,18 +897,6 @@ static bool dec_scale(comp *c, tid *out) {
         return advance(c);
     }
     return type_error(c, "a decimal type is written dec N, N digits after the point (0 to 18)");
-    if (c->tok.kind != PNX_T_LPAREN)
-        return type_error(c, "a decimal type is written dec(N), N digits after the point (0 to 18)");
-    if (!advance(c))
-        return false;
-    if (c->tok.kind != PNX_T_INT || c->tok.integer < 0 || c->tok.integer > 18)
-        return type_error(c, "dec(N) has 0 to 18 digits after the point");
-    *out = (tid)(TY_DEC + (uint32_t)c->tok.integer);
-    if (!advance(c))
-        return false;
-    if (c->tok.kind != PNX_T_RPAREN)
-        return syntax(c, "dec(N) is closed by )");
-    return advance(c);
 }
 
 static bool ref_word(const comp *c) {
@@ -1005,7 +994,7 @@ static bool parse_sig(comp *c, sig *s, pnx_word_id stop) {
             type = tok_name(c);
             if (!advance(c))
                 return false;
-            if (c->tok.kind == PNX_T_NAME || is_word(c, PNX_KW_owned) || is_word(c, PNX_KW_word) ||
+            if (c->tok.kind == PNX_T_NAME || is_word(c, PNX_KW_owned) || is_word(c, PNX_KW_word) || is_word(c, PNX_KW_args) ||
                 (c->in_host && is_word(c, PNX_KW_buffer)) || (!c->in_host && ref_word(c))) {
                 param = type; // it was the name of the parameter
                 type = (name){0};
@@ -1019,17 +1008,14 @@ static bool parse_sig(comp *c, sig *s, pnx_word_id stop) {
             }
             if (is_word(c, PNX_KW_word)) // a block: word ( effect ), gone with RFC-0049
                 return type_error(c, "the type of a procedure is declared: type Name proc ... end");
-            if (is_word(c, PNX_KW_word)) { // a block: word ( effect )
-                sig inner;
-                if (c->sigs == MAX_SIGS) // each is a call on the C stack; a signature that deep is too long anyway
-                    return syntax(c, "the signature is longer than 71 bytes");
-                ++c->sigs;
-                const bool parsed = advance(c) && parse_sig(c, &inner, 0);
-                --c->sigs;
-                if (!parsed || !block_type(c, &inner, &t))
-                    return false;
-            } else if (c->tok.kind == PNX_T_NAME) {
+            if (c->tok.kind == PNX_T_NAME) {
                 type = tok_name(c);
+                if (!advance(c))
+                    return false;
+            } else if (is_word(c, PNX_KW_args)) { // the values of args ... . (RFC-0049)
+                if (outputs || owned || c->in_host || c->in_extern)
+                    return type_error(c, "an args is only taken by a procedure: it is not given back, owned, or passed to the host");
+                t = TY_ARGS;
                 if (!advance(c))
                     return false;
             } else if (c->in_host && !outputs && !owned && is_word(c, PNX_KW_buffer)) {
@@ -1081,7 +1067,7 @@ static bool parse_sig(comp *c, sig *s, pnx_word_id stop) {
             if (!advance(c))
                 return false;
             if (c->tok.kind != PNX_T_NAME && !is_word(c, PNX_KW_owned) && !is_word(c, PNX_KW_word) &&
-                !(!c->in_host && ref_word(c)))
+                !is_word(c, PNX_KW_args) && !(!c->in_host && ref_word(c)))
                 return name_due(c, "a parameter is expected after the comma");
         } else if (!SIG_DONE() && !is_word(c, PNX_KW_gives) && !is_word(c, PNX_KW_or)) {
             return syntax(c, "parameters are separated by commas");
@@ -2694,27 +2680,7 @@ static bool guard(comp *c, const sig *s, const uint32_t base[2], const uint32_t 
         return false;
     if (c->tok.kind == PNX_T_LPAREN)
         return syntax(c, "or_else takes the failure with to: or_else to e ... end");
-    if (c->tok.kind == PNX_T_LPAREN) {
-        if (!advance(c))
-            return false;
-        if (c->tok.kind != PNX_T_NAME)
-            return name_due(c, "a name for the error number is expected: or_else (e)");
-        const name n = tok_name(c);
-        if (!name_is_free(c, n))
-            return false;
-        if (f->n_locals == MAX_LOCALS || f->nloc[BANK_I] >= SLOT0 - 1)
-            return syntax(c, "too many local variables in this word");
-        local *l = &f->locals[f->n_locals++];
-        *l = (local){.name = n, .type = TY_ERR, .reg = f->nloc[BANK_I]++};
-        if (f->nloc[BANK_I] > f->maxloc[BANK_I])
-            f->maxloc[BANK_I] = f->nloc[BANK_I];
-        if (emit(c, PNX_ABX(PNX_GETFAIL, l->reg, 0)) == NONE || !debug_local(c, l, f->code.n) || !advance(c))
-            return false;
-        if (c->tok.kind != PNX_T_RPAREN)
-            return syntax(c, "the error name is one name in parentheses");
-        return advance(c);
-    }
-    if (is_word(c, PNX_KW_to)) { // or_else to e ... end: the failure is kept in e, as `or_else (e)` did
+    if (is_word(c, PNX_KW_to)) { // or_else to e ... end: the failure is kept in e
         if (!advance(c))
             return false;
         if (c->tok.kind != PNX_T_NAME)
@@ -2911,6 +2877,8 @@ static bool store_local(comp *c, name n) {
         return false;
     const uint32_t top = f->depth - 1;
     entry    e = f->stack[top];
+    if (e.type == TY_ARGS)
+        return type_error(c, "an args is only a parameter: it is not stored in a local or a global, and not given back");
     const int bank = bank_of(e.type);
     // `to NAME` stores into a local; a global is written with `set NAME` (D0042), which comes here
     // with path_global given
@@ -3953,59 +3921,26 @@ static bool end_of(comp *c, block *b) {
 
 static bool body_token(comp *c);
 
-// cat ( item , item ... ) : every item is code that leaves one value; the values are joined
-// into one string in the region. A cat inside an item is a call inside this one: so many deep at
-// most, or a long source would run the C stack out.
+// args a b c . : the values the code up to the period leaves (each item of one value). Written right before `cat` they
+// are joined into one string and nothing is built in the region but that string; anywhere else they become one args
+// value in the region (RFC-0049), which a procedure takes as a parameter `NAME args` and the words of the module args read.
+// A cat inside an item is a call inside this one: so many deep at most, or a long source would run the C stack out.
 enum { MAX_CATS = 32 };
-static bool cat_items(comp *c);
 static bool cat_emit(comp *c, uint32_t first);
 
+// `cat` after an args value that was made elsewhere (a parameter): its values written as args ... . cat writes them
 static bool do_cat(comp *c) {
-    if (!advance(c))
-        return false;
-    return syntax(c, "cat takes args: args a b . cat");
-    if (c->tok.kind != PNX_T_LPAREN)
-        return syntax(c, "cat is followed by its items in parentheses: cat (a, b)");
-    if (c->cats == MAX_CATS)
-        return syntax(c, "cat is nested too deeply");
-    if (!advance(c))
-        return false;
-    ++c->cats;
-    const bool done = cat_items(c);
-    --c->cats;
-    return done;
-}
-
-static bool cat_items(comp *c) {
     fn *f = c->f;
-    const uint32_t first = f->depth, floor = f->floor, blocks = f->n_blocks;
-    for (;;) {
-        const uint32_t before = f->depth;
-        f->floor = before;
-        while (c->tok.kind != PNX_T_COMMA && c->tok.kind != PNX_T_RPAREN) {
-            if (c->tok.kind == PNX_T_END)
-                return syntax(c, "the items of cat are not closed by )");
-            if (!body_token(c))
-                return false;
-            if (f->n_blocks < blocks)
-                return syntax(c, "this end closes something opened outside the cat");
-        }
-        f->floor = floor;
-        if (f->n_blocks != blocks)
-            return syntax(c, "something opened inside this item of cat is not closed");
-        if (f->dead || f->depth != before + 1)
-            return type_error(c, "each item of cat leaves exactly one value");
-        const tid type = f->stack[before].type;
-        if (type != TY_STR && type != TY_BOOL && !is_number(c, type))
-            return type_error(c, "cat joins str, int and bool values");
-        if (!settle(c, before))
-            return false;
-        if (c->tok.kind == PNX_T_RPAREN)
-            break;
-        if (!advance(c))
-            return false;
-    }
-    return cat_emit(c, first) && advance(c);
+    if (f->depth == 0 || f->stack[f->depth - 1].type != TY_ARGS)
+        return syntax(c, "cat takes args: args a b . cat, or an args parameter");
+    uint32_t ra;
+    if (!reg_of(c, f->depth - 1, &ra))
+        return false;
+    const uint32_t scratch = top_slot(c, BANK_S, 1);
+    if (emit(c, PNX_ABC(PNX_RMARK, scratch, 0, 0)) == NONE || emit(c, PNX_ABC(PNX_RCATA, scratch, ra, 0)) == NONE)
+        return false;
+    --f->depth;
+    return push_slot(c, TY_STR) && move_slot(c, TY_STR, slot_of(c, f->depth - 1), scratch) && advance(c);
 }
 
 // The values from `first` up to the top of the stack, joined into one string in the region.
@@ -4026,8 +3961,28 @@ static bool cat_emit(comp *c, uint32_t first) {
     return push_slot(c, TY_STR) && move_slot(c, TY_STR, slot_of(c, f->depth - 1), scratch);
 }
 
-// args a b c . cat (RFC-0049): the values the code up to the period leaves, joined by cat. The count and
-// the types are known where it is written, so nothing is built in the region but the string.
+// The values from `first` up to the top of the stack, put into one args value in the region.
+static bool args_emit(comp *c, uint32_t first) {
+    fn *f = c->f;
+    const uint32_t n = f->depth - first;
+    if (n > 64)
+        return syntax(c, "an args holds up to 64 values");
+    const uint32_t scratch = top_slot(c, BANK_S, 1);
+    if (emit(c, PNX_ABC(PNX_RMARK, scratch, 0, 0)) == NONE || emit(c, PNX_ABC(PNX_ARGHEAD, scratch, n, 0)) == NONE)
+        return false;
+    for (uint32_t k = first; k < f->depth; ++k) {
+        const tid type = f->stack[k].type;
+        const uint32_t word = type == TY_STR ? PNX_ABC(PNX_ARGPUTS, scratch, slot_of(c, k), 0)
+                            : type == TY_BOOL ? PNX_ABC(PNX_ARGPUTI, scratch, slot_of(c, k), 2)
+                            : is_dec(type) ? PNX_ABC(PNX_ARGPUTD, scratch, slot_of(c, k), type - TY_DEC)
+                                           : PNX_ABC(PNX_ARGPUTI, scratch, slot_of(c, k), 1);
+        if (emit(c, word) == NONE)
+            return false;
+    }
+    f->depth = first;
+    return push_slot(c, TY_ARGS) && move_slot(c, TY_ARGS, slot_of(c, f->depth - 1), scratch);
+}
+
 static bool do_args(comp *c) {
     fn *f = c->f;
     if (c->cats == MAX_CATS)
@@ -4039,7 +3994,7 @@ static bool do_args(comp *c) {
     f->floor = first;
     while (c->tok.kind != PNX_T_DOT) {
         if (c->tok.kind == PNX_T_END)
-            return syntax(c, "args is closed by a period: args a b . cat");
+            return syntax(c, "args is closed by a period: args a b .");
         if (!body_token(c))
             return false;
         if (f->n_blocks < blocks)
@@ -4051,18 +4006,23 @@ static bool do_args(comp *c) {
         return syntax(c, "something opened inside args is not closed");
     if (f->dead || f->depth == first)
         return type_error(c, "args leaves at least one value");
+    if (!advance(c)) // past the period
+        return false;
+    const bool joined = is_word(c, PNX_KW_cat);
     for (uint32_t k = first; k < f->depth; ++k) {
         const tid type = f->stack[k].type;
-        if (type != TY_STR && type != TY_BOOL && !is_number(c, type))
-            return type_error(c, "cat joins str, int and bool values");
+        if (type == TY_ARGS)
+            return type_error(c, "an args holds no args: its values are int, bool, str and dec N");
+        const bool plain = type == TY_STR || type == TY_BOOL || type == TY_INT || is_dec(type);
+        if (joined ? (type != TY_STR && type != TY_BOOL && !is_number(c, type)) : !plain)
+            return type_error(c, joined ? "cat joins str, int and bool values"
+                                        : "an args holds int, bool, str and dec N values");
         if (!settle(c, k))
             return false;
     }
-    if (!advance(c)) // past the period
-        return false;
-    if (!is_word(c, PNX_KW_cat))
-        return syntax(c, "args is followed by cat for now: args a b . cat");
-    return cat_emit(c, first) && advance(c);
+    if (joined)
+        return cat_emit(c, first) && advance(c);
+    return args_emit(c, first);
 }
 
 // ---- stems and the blocks of combining words ----------------------------------------------
@@ -5734,8 +5694,10 @@ static const pnx_txword *txw_find(uint8_t module, name n) {
 static bool txw_const(uint8_t module, name n, int64_t *value) {
     static const char *const toml[] = {"table", "tables", "string", "int", "float", "bool", "datetime", "array", "inline"};
     static const char *const md[] = {"heading", "paragraph", "code", "quote", "list", "rule", "table"};
-    const char *const *names = module == 11 ? toml : module == 12 ? md : NULL;
-    const size_t       count = module == 11 ? sizeof toml / sizeof toml[0] : module == 12 ? sizeof md / sizeof md[0] : 0;
+    static const char *const args[] = {"k_int", "k_bool", "k_str", "k_dec"};
+    const char *const *names = module == 11 ? toml : module == 12 ? md : module == 13 ? args : NULL;
+    const size_t       count = module == 11 ? sizeof toml / sizeof toml[0] : module == 12 ? sizeof md / sizeof md[0]
+                               : module == 13 ? sizeof args / sizeof args[0] : 0;
     for (size_t k = 0; k < count; ++k) {
         if (name_is(n, names[k])) {
             *value = (int64_t)k + 1;
@@ -5768,8 +5730,17 @@ static bool txw_word(comp *c, uint8_t module, name n) {
     for (uint32_t k = 0; k < k_in; ++k) { // the types, deepest first
         const entry *e = &f->stack[f->depth - k_in + k];
         const char   t = tw->in[k];
-        if (t == 's' ? e->type != TY_STR : e->type != TY_INT)
-            return type_error(c, t == 's' ? "this word takes a str (the text, and the path before it)" : "this word takes an int (the indent)");
+        if (t == 'a' ? e->type != TY_ARGS : t == 's' ? e->type != TY_STR : e->type != TY_INT)
+            return type_error(c, t == 'a' ? "this word takes the number of the value, and then the args: 0 rest args.int"
+                                 : t == 's' ? "this word takes a str (the text, and the path before it)"
+                                            : "this word takes an int (the indent, the number of a value, the digits of a dec)");
+    }
+    tid dec_type = TY_NONE; // args.dec: the scale is a constant, and the value is a dec of it
+    if (module == 13 && tw == &pnx_txwords[PNX_TXW_ARGS_DEC]) {
+        const entry *n = &f->stack[f->depth - 2];
+        if (n->kind != E_CONST || n->value < 0 || n->value > 18)
+            return type_error(c, "the digits of args.dec are a constant 0 to 18: 2 rest args.dec");
+        dec_type = (tid)(TY_DEC + (uint32_t)n->value);
     }
     for (uint32_t k = 0; k < k_in; ++k) {
         if (!settle(c, f->depth - k_in + k))
@@ -5798,7 +5769,7 @@ static bool txw_word(comp *c, uint8_t module, name n) {
     f->def_at = NONE;
     sig out = {0};
     for (const char *p = tw->out; *p; ++p)
-        out.out[out.n_out++] = *p == 's' ? TY_STR : *p == 'b' ? TY_BOOL : TY_INT;
+        out.out[out.n_out++] = *p == 's' ? TY_STR : *p == 'b' ? TY_BOOL : dec_type != TY_NONE ? dec_type : TY_INT;
     if (fails) {
         out.fails = true;
         const uint32_t zero[2] = {0, 0};
@@ -7342,6 +7313,8 @@ static bool path_word(comp *c, name module, name n) {
     }
     if (c->data_only)
         return syntax(c, "a data source calls no words and reads no fields; only literals, const names and stores");
+    if (name_is(module, "args")) // the words that read an args value (RFC-0049); the module needs no use
+        return txw_word(c, 13, n);
     name real;
     if (!module_of(c, module, &real)) // not a module in use: a field of a record
         return field_access(c, false) && advance(c);
@@ -9074,7 +9047,7 @@ static bool row_item(comp *c) {
         pnx_lexer lx = *c->lx;
         pnx_token t;
         if (!pnx_lex_next(&lx, &t))
-            return false;
+            return error_at(c, PINAX_ERR_SYNTAX, lx.error_line, lx.error_column, lx.error);
         if (t.kind == PNX_T_LPAREN)
             return syntax(c, "a row is written row list values . : no parentheses, no commas; its name goes after as");
         named = false;

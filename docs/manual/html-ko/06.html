@@ -2,11 +2,11 @@
 <html lang="ko"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>5 문자열 - Pinax 매뉴얼</title><link rel="stylesheet" href="style.css"></head><body><nav class="top"><a href="index.html">처음</a> · <a href="05.html">앞</a> · <a href="07.html">다음</a> · <a href="../html-en/06.html">English</a></nav><main><h2>5 문자열</h2><div class="box opening"><p><strong>먼저 알아야 할 것</strong>: 2장(값의 타입), 4장(레일과 블록).</p><p><strong>이 장이 답하는 물음</strong></p><ul><li>문자열을 자르고 가르는데 왜 복사가 일어나지 않는가?</li><li><code>str</code> 와 <code>str N</code> 은 무엇이 다르고, 언제 어느 것을 쓰는가?</li><li>새 글을 만드는 바이트는 어디에 놓이고, 어떻게 되돌리는가?</li></ul></div><h3>5.1 뷰: 복사하지 않는 문자열</h3><p><code>str</code> 값은 <strong>뷰</strong>(view)다. 바이트가 있는 자리와 길이만 가리키고, 바이트를 갖지 않는다. 그래서 자르기 (<code>str.take</code> <code>str.skip</code> <code>str.slice</code>), 다듬기(<code>str.trim</code>), 가르기(<code>str.cut</code> <code>str.split</code> <code>str.lines</code> <code>str.words</code>)는 바이트를 하나도 복사하지 않고 원래 글의 일부를 가리키는 새 뷰를 준다.</p><div class="example run"><p class="ex-file"><code>05-views.pnx</code></p><pre><code data-lang="pinax"><span style="color: #d73948">use</span> io .
 <span style="color: #d73948">use</span> <span style="color: #d73948">str</span> .
 <span style="color: #74747c">rem Parse "key = value" lines without copying a byte.</span>
-def parse line <span style="color: #d73948">str</span> <span style="color: #d73948">do</span>
+<span style="color: #d73948">def</span> parse line <span style="color: #d73948">str</span> <span style="color: #d73948">do</span>
   line <span style="color: #d73948">str</span>.trim <span style="color: #d73948">to</span> t
   t <span style="color: #d73948">str</span>.is_empty t <span style="color: #198810">"#"</span> <span style="color: #d73948">str</span>.starts_with <span style="color: #d73948">or</span> <span style="color: #d73948">if</span> <span style="color: #d73948">return</span> <span style="color: #d73948">end</span>      <span style="color: #74747c">rem blank lines and remarks</span>
-  t <span style="color: #198810">"="</span> <span style="color: #d73948">str</span>.try_cut <span style="color: #d73948">or_else</span> <span style="color: #d73948">to</span> e args <span style="color: #198810">"no '=' in: "</span> t . <span style="color: #d73948">cat</span> io.println <span style="color: #d73948">return</span> <span style="color: #d73948">end</span> <span style="color: #d73948">to</span> value <span style="color: #d73948">to</span> key
-  args <span style="color: #198810">"["</span> key <span style="color: #d73948">str</span>.trim <span style="color: #198810">"] = ["</span> value <span style="color: #d73948">str</span>.trim <span style="color: #198810">"]"</span> . <span style="color: #d73948">cat</span> io.println
+  t <span style="color: #198810">"="</span> <span style="color: #d73948">str</span>.try_cut <span style="color: #d73948">or_else</span> <span style="color: #d73948">to</span> e <span style="color: #d73948">args</span> <span style="color: #198810">"no '=' in: "</span> t . <span style="color: #d73948">cat</span> io.println <span style="color: #d73948">return</span> <span style="color: #d73948">end</span> <span style="color: #d73948">to</span> value <span style="color: #d73948">to</span> key
+  <span style="color: #d73948">args</span> <span style="color: #198810">"["</span> key <span style="color: #d73948">str</span>.trim <span style="color: #198810">"] = ["</span> value <span style="color: #d73948">str</span>.trim <span style="color: #198810">"]"</span> . <span style="color: #d73948">cat</span> io.println
 <span style="color: #d73948">end</span>
 <span style="color: #d73948">text</span><span style="color: #198810"> </span><span style="color: #4b69c6">END</span>
 <span style="color: #198810"># settings</span>
@@ -22,13 +22,13 @@ def parse line <span style="color: #d73948">str</span> <span style="color: #d739
 no '=' in: broken line
 </code></pre></div><p>뷰가 무엇인지 작은 예로 먼저 보자. 아래의 <code>head</code>, <code>tail</code>, <code>name</code> 은 모두 같은 리터럴의 바이트를 가리킨다. 새 바이트는 <code>cat</code> 이 출력할 글을 만들 때 처음 생긴다.</p><div class="example run"><p class="ex-file"><code>05-slices.pnx</code></p><pre><code data-lang="pinax"><span style="color: #d73948">use</span> io .
 <span style="color: #d73948">use</span> <span style="color: #d73948">str</span> .
-def show <span style="color: #d73948">do</span>
+<span style="color: #d73948">def</span> show <span style="color: #d73948">do</span>
   <span style="color: #198810">"Hello, Pinax world"</span> <span style="color: #d73948">to</span> s         <span style="color: #74747c">rem s is a view of the 18 bytes of the literal</span>
   s <span style="color: #b60157">5</span> <span style="color: #d73948">str</span>.take <span style="color: #d73948">to</span> head              <span style="color: #74747c">rem the first 5 bytes: "Hello", no copy</span>
   s <span style="color: #b60157">7</span> <span style="color: #d73948">str</span>.skip <span style="color: #d73948">to</span> tail              <span style="color: #74747c">rem all but the first 7: "Pinax world", no copy</span>
   tail <span style="color: #b60157">0</span> <span style="color: #b60157">5</span> <span style="color: #d73948">str</span>.slice <span style="color: #d73948">to</span> name        <span style="color: #74747c">rem bytes 0 up to 5 of tail: "Pinax"</span>
-  args <span style="color: #198810">"["</span> head <span style="color: #198810">"] ["</span> tail <span style="color: #198810">"] ["</span> name <span style="color: #198810">"]"</span> . <span style="color: #d73948">cat</span> io.println   <span style="color: #74747c">rem cat makes new bytes, in the region</span>
-  args <span style="color: #198810">"lengths: "</span> s <span style="color: #d73948">str</span>.len <span style="color: #198810">" "</span> head <span style="color: #d73948">str</span>.len <span style="color: #198810">" "</span> name <span style="color: #d73948">str</span>.len . <span style="color: #d73948">cat</span> io.println
+  <span style="color: #d73948">args</span> <span style="color: #198810">"["</span> head <span style="color: #198810">"] ["</span> tail <span style="color: #198810">"] ["</span> name <span style="color: #198810">"]"</span> . <span style="color: #d73948">cat</span> io.println   <span style="color: #74747c">rem cat makes new bytes, in the region</span>
+  <span style="color: #d73948">args</span> <span style="color: #198810">"lengths: "</span> s <span style="color: #d73948">str</span>.len <span style="color: #198810">" "</span> head <span style="color: #d73948">str</span>.len <span style="color: #198810">" "</span> name <span style="color: #d73948">str</span>.len . <span style="color: #d73948">cat</span> io.println
 <span style="color: #d73948">end</span>
 show
 </code></pre><p class="ex-label">출력</p><pre><code data-lang="text">$ pnx 05-slices.pnx
@@ -37,9 +37,9 @@ lengths: 18 5 5
 </code></pre></div><table><thead><tr><th><strong>뷰</strong></th><th><strong>가리키는 곳</strong></th><th><strong>길이</strong></th></tr></thead><tbody><tr><td><code>s</code></td><td>리터럴의 0 번 바이트부터</td><td>18</td></tr><tr><td><code>head</code></td><td>같은 자리, 0 번부터</td><td>5</td></tr><tr><td><code>tail</code></td><td>같은 리터럴의 7 번부터</td><td>11</td></tr><tr><td><code>name</code></td><td><code>tail</code> 의 0 번, 곧 리터럴의 7 번부터</td><td>5</td></tr></tbody></table><p>위의 <code>05-views.pnx</code> 는 설정 글을 줄로 가르고, 줄을 다듬고, <code>=</code> 에서 둘로 자른다. 바이트를 옮기는 일은 출력할 때뿐이다. <code>str.try_cut</code> 은 <code>=</code> 가 없으면 실패하므로 <code>or_else</code> 로 받았다. 실패하지 않는 <code>str.cut</code> 은 <code>=</code> 가 없으면 뒤를 빈 글로 준다.</p><h3>5.2 저장된 글</h3><p>뷰는 자기가 가리키는 바이트보다 오래 살 수 없다. 그래서 전역, 배열의 칸, 레코드의 필드처럼 오래 사는 자리에는 뷰를 둘 수 없고, <strong>저장된 글</strong> <code>str N</code> 을 쓴다. <code>str N</code> 은 N 바이트의 자리를 차지하고, 넣을 때 바이트를 복사한다. 읽으면 그 자리를 가리키는 뷰가 된다.</p><div class="example run"><p class="ex-file"><code>05-stored.pnx</code></p><pre><code data-lang="pinax"><span style="color: #d73948">use</span> io .
 <span style="color: #d73948">use</span> <span style="color: #d73948">str</span> .
 <span style="color: #d73948">global</span> longest <span style="color: #d73948">str</span> <span style="color: #b60157">16</span>                     <span style="color: #74747c">rem stored text: 16 bytes, copied in</span>
-def keep_longest w <span style="color: #d73948">str</span> <span style="color: #d73948">do</span> w <span style="color: #d73948">str</span>.len longest <span style="color: #d73948">str</span>.len gt <span style="color: #d73948">if</span> w set longest <span style="color: #d73948">end</span> <span style="color: #d73948">end</span>
+<span style="color: #d73948">def</span> keep_longest w <span style="color: #d73948">str</span> <span style="color: #d73948">do</span> w <span style="color: #d73948">str</span>.len longest <span style="color: #d73948">str</span>.len gt <span style="color: #d73948">if</span> w set longest <span style="color: #d73948">end</span> <span style="color: #d73948">end</span>
 <span style="color: #198810">"the quick brown fox jumps over the lazy dog"</span> <span style="color: #d73948">str</span>.words <span style="color: #d73948">do</span> <span style="color: #d73948">to</span> w w keep_longest <span style="color: #d73948">end</span> each
-args <span style="color: #198810">"longest word: "</span> longest . <span style="color: #d73948">cat</span> io.println
+<span style="color: #d73948">args</span> <span style="color: #198810">"longest word: "</span> longest . <span style="color: #d73948">cat</span> io.println
 </code></pre><p class="ex-label">출력</p><pre><code data-lang="text">$ pnx 05-stored.pnx
 longest word: quick
 </code></pre></div><div class="example refused"><p class="ex-file"><code>05-global-view.pnx</code></p><pre><code data-lang="pinax"><span style="color: #d73948">global</span> name <span style="color: #d73948">str</span>
@@ -53,16 +53,16 @@ longest word: quick
 </code></pre></div><div class="box mistake"><p class="box-title">흔한 오해: <code>str N</code> 보다 긴 글은 잘려서 들어간다</p>잘리지 않는다. 자리보다 긴 글을 넣으면 결함으로 멈춘다. 잘라서 넣으려면 <code>str.take</code> 로 먼저 자른다.<div class="example fault"><p class="ex-file"><code>05-too-long.pnx</code></p><pre><code data-lang="pinax"><span style="color: #d73948">use</span> io .
 <span style="color: #d73948">global</span> name <span style="color: #d73948">str</span> <span style="color: #b60157">8</span>
 <span style="color: #198810">"Pinax"</span> set name
-args <span style="color: #198810">"stored: "</span> name . <span style="color: #d73948">cat</span> io.println
+<span style="color: #d73948">args</span> <span style="color: #198810">"stored: "</span> name . <span style="color: #d73948">cat</span> io.println
 <span style="color: #198810">"an embeddable language"</span> set name
 </code></pre><p class="ex-label">결함으로 멈춤</p><pre><code data-lang="text">$ pnx 05-too-long.pnx
 stored: Pinax
 05-too-long.pnx:5: index out of range
 </code></pre></div></div><div class="box qa"><p class="box-title">문답</p><p><strong>물음. 글이 밖에서 와서 너무 길 수 있다. 길이를 먼저 비교해야 하는가?</strong></p><p>답. 아니다. 실패할 수 있는 다른 낱말처럼, 넣는 일 뒤에 지킴 낱말을 붙인다. 그러면 너무 긴 글은 실패 <code>range</code> 이고, 자리는 가졌던 것을 그대로 가진다. 지킴 낱말이 없으면 여전히 결함이다.</p><div class="example run"><p class="ex-file"><code>05-too-long-guard.pnx</code></p><pre><code data-lang="pinax"><span style="color: #d73948">use</span> io .
 <span style="color: #d73948">global</span> name <span style="color: #d73948">str</span> <span style="color: #b60157">8</span>
-def remember v <span style="color: #d73948">str</span> <span style="color: #d73948">do</span>
-  v set name <span style="color: #d73948">or_else</span> <span style="color: #d73948">to</span> e args <span style="color: #198810">"too long, kept "</span> name . <span style="color: #d73948">cat</span> io.println <span style="color: #d73948">return</span> <span style="color: #d73948">end</span>
-  args <span style="color: #198810">"stored: "</span> name . <span style="color: #d73948">cat</span> io.println
+<span style="color: #d73948">def</span> remember v <span style="color: #d73948">str</span> <span style="color: #d73948">do</span>
+  v set name <span style="color: #d73948">or_else</span> <span style="color: #d73948">to</span> e <span style="color: #d73948">args</span> <span style="color: #198810">"too long, kept "</span> name . <span style="color: #d73948">cat</span> io.println <span style="color: #d73948">return</span> <span style="color: #d73948">end</span>
+  <span style="color: #d73948">args</span> <span style="color: #198810">"stored: "</span> name . <span style="color: #d73948">cat</span> io.println
 <span style="color: #d73948">end</span>
 <span style="color: #198810">"Pinax"</span> remember
 <span style="color: #198810">"an embeddable language"</span> remember
@@ -74,11 +74,11 @@ too long, kept Pinax
   name <span style="color: #d73948">str</span> <span style="color: #b60157">8</span>
 <span style="color: #d73948">end</span>
 <span style="color: #d73948">list</span> names entry <span style="color: #b60157">4</span>
-def enter v <span style="color: #d73948">str</span> <span style="color: #d73948">do</span>
-  v <span style="color: #d73948">fits</span> entry.name <span style="color: #d73948">or_else</span> <span style="color: #d73948">to</span> e args v <span style="color: #198810">": too long, no row taken"</span> . <span style="color: #d73948">cat</span> io.println <span style="color: #d73948">return</span> <span style="color: #d73948">end</span>
+<span style="color: #d73948">def</span> enter v <span style="color: #d73948">str</span> <span style="color: #d73948">do</span>
+  v <span style="color: #d73948">fits</span> entry.name <span style="color: #d73948">or_else</span> <span style="color: #d73948">to</span> e <span style="color: #d73948">args</span> v <span style="color: #198810">": too long, no row taken"</span> . <span style="color: #d73948">cat</span> io.println <span style="color: #d73948">return</span> <span style="color: #d73948">end</span>
   names add_row <span style="color: #d73948">or_else</span> <span style="color: #d73948">to</span> e <span style="color: #198810">"full"</span> io.println <span style="color: #d73948">return</span> <span style="color: #d73948">end</span> <span style="color: #d73948">to</span> r
   v r <span style="color: #d73948">to</span> entry.name
-  args <span style="color: #198810">"added "</span> r entry.name <span style="color: #198810">", rows "</span> names len . <span style="color: #d73948">cat</span> io.println
+  <span style="color: #d73948">args</span> <span style="color: #198810">"added "</span> r entry.name <span style="color: #198810">", rows "</span> names len . <span style="color: #d73948">cat</span> io.println
 <span style="color: #d73948">end</span>
 <span style="color: #198810">"Pinax"</span> enter
 <span style="color: #198810">"an embeddable language"</span> enter
@@ -89,38 +89,38 @@ an embeddable language: too long, no row taken
 <span style="color: #d73948">use</span> <span style="color: #d73948">str</span> .
 <span style="color: #d73948">use</span> fmt .
 <span style="color: #d73948">buffer</span> out <span style="color: #b60157">64</span>
-def report <span style="color: #d73948">or</span> <span style="color: #d73948">fail</span> <span style="color: #d73948">do</span>
+<span style="color: #d73948">def</span> report <span style="color: #d73948">or</span> <span style="color: #d73948">fail</span> <span style="color: #d73948">do</span>
   <span style="color: #198810">"id: "</span> out append <span style="color: #d73948">or_fail</span>
   <span style="color: #b60157">42</span> out append_int <span style="color: #d73948">or_fail</span>
   <span style="color: #198810">", hex: 0x"</span> out append <span style="color: #d73948">or_fail</span>
   <span style="color: #b60157">255</span> out fmt.append_hex <span style="color: #d73948">or_fail</span>
   <span style="color: #b60157">'!'</span> out append_byte <span style="color: #d73948">or_fail</span>
 <span style="color: #d73948">end</span>
-report <span style="color: #d73948">or_else</span> <span style="color: #d73948">to</span> e args <span style="color: #198810">"buffer full: "</span> e err_text . <span style="color: #d73948">cat</span> io.println <span style="color: #d73948">end</span>
+report <span style="color: #d73948">or_else</span> <span style="color: #d73948">to</span> e <span style="color: #d73948">args</span> <span style="color: #198810">"buffer full: "</span> e err_text . <span style="color: #d73948">cat</span> io.println <span style="color: #d73948">end</span>
 out contents io.println
-args <span style="color: #198810">"upper: "</span> <span style="color: #198810">"pinax"</span> <span style="color: #d73948">str</span>.upper <span style="color: #198810">", repeat: "</span> <span style="color: #198810">"ab"</span> <span style="color: #b60157">3</span> <span style="color: #d73948">str</span>.repeat <span style="color: #198810">", padded: ["</span> <span style="color: #198810">"7"</span> <span style="color: #b60157">4</span> <span style="color: #d73948">str</span>.pad_left <span style="color: #198810">"]"</span> . <span style="color: #d73948">cat</span> io.println
+<span style="color: #d73948">args</span> <span style="color: #198810">"upper: "</span> <span style="color: #198810">"pinax"</span> <span style="color: #d73948">str</span>.upper <span style="color: #198810">", repeat: "</span> <span style="color: #198810">"ab"</span> <span style="color: #b60157">3</span> <span style="color: #d73948">str</span>.repeat <span style="color: #198810">", padded: ["</span> <span style="color: #198810">"7"</span> <span style="color: #b60157">4</span> <span style="color: #d73948">str</span>.pad_left <span style="color: #198810">"]"</span> . <span style="color: #d73948">cat</span> io.println
 </code></pre><p class="ex-label">출력</p><pre><code data-lang="text">$ pnx 05-build.pnx
 id: 42, hex: 0xff!
 upper: PINAX, repeat: ababab, padded: [   7]
 </code></pre></div><h3>5.4 구역을 되돌리기</h3><p>구역은 실행마다 정해진 크기다. 루프 안에서 글을 계속 만들면 구역이 찬다. <code>mark</code> 로 지금 자리를 기억하고 <code>release</code> 로 되돌리면 그 사이에 만든 바이트를 다시 쓴다.</p><div class="example run"><p class="ex-file"><code>05-region.pnx</code></p><pre><code data-lang="pinax"><span style="color: #d73948">use</span> io .
 <span style="color: #d73948">use</span> <span style="color: #d73948">str</span> .
-def line i <span style="color: #d73948">int</span> <span style="color: #d73948">gives</span> <span style="color: #d73948">str</span> <span style="color: #d73948">do</span> args <span style="color: #198810">"line "</span> i . <span style="color: #d73948">cat</span> <span style="color: #d73948">end</span>
-def lots <span style="color: #d73948">do</span>
+<span style="color: #d73948">def</span> line i <span style="color: #d73948">int</span> <span style="color: #d73948">gives</span> <span style="color: #d73948">str</span> <span style="color: #d73948">do</span> <span style="color: #d73948">args</span> <span style="color: #198810">"line "</span> i . <span style="color: #d73948">cat</span> <span style="color: #d73948">end</span>
+<span style="color: #d73948">def</span> lots <span style="color: #d73948">do</span>
   region_free <span style="color: #d73948">to</span> before
   <span style="color: #b60157">1</span> <span style="color: #b60157">10001</span> range <span style="color: #d73948">do</span> <span style="color: #d73948">to</span> i
     <span style="color: #d73948">mark</span> <span style="color: #d73948">to</span> m                               <span style="color: #74747c">rem every turn gives its bytes back</span>
     i line drop
     m release
   <span style="color: #d73948">end</span> each
-  args <span style="color: #198810">"bytes still taken after 10000 lines: "</span> before region_free sub . <span style="color: #d73948">cat</span> io.println
+  <span style="color: #d73948">args</span> <span style="color: #198810">"bytes still taken after 10000 lines: "</span> before region_free sub . <span style="color: #d73948">cat</span> io.println
 <span style="color: #d73948">end</span>
 lots
 </code></pre><p class="ex-label">출력</p><pre><code data-lang="text">$ pnx 05-region.pnx
 bytes still taken after 10000 lines: 0
 </code></pre></div><p>되돌린 뒤에는 그 사이에 만든 뷰를 쓸 수 없다. 처리기는 이것도 적재 때 검사한다.</p><div class="example refused"><p class="ex-file"><code>05-release-view.pnx</code></p><pre><code data-lang="pinax"><span style="color: #d73948">use</span> io .
-def f <span style="color: #d73948">do</span>
+<span style="color: #d73948">def</span> f <span style="color: #d73948">do</span>
   <span style="color: #d73948">mark</span> <span style="color: #d73948">to</span> m
-  args <span style="color: #198810">"made "</span> <span style="color: #198810">"after the mark"</span> . <span style="color: #d73948">cat</span> <span style="color: #d73948">to</span> s
+  <span style="color: #d73948">args</span> <span style="color: #198810">"made "</span> <span style="color: #198810">"after the mark"</span> . <span style="color: #d73948">cat</span> <span style="color: #d73948">to</span> s
   m release
   s io.println
 <span style="color: #d73948">end</span>
@@ -128,16 +128,16 @@ def f <span style="color: #d73948">do</span>
 05-release-view.pnx:6:3: this str was made after a mark that was released since; the region may hold other bytes there now
 </code></pre></div><div class="box qa"><p class="box-title">문답</p><p><strong>물음. 되돌린 뒤에도 남겨야 할 글은 어떻게 하는가?</strong></p><p>답. <code>str N</code> 전역이나 칸에 넣는다. 넣을 때 복사되므로 구역을 되돌려도 남는다. 위의 <code>05-stored.pnx</code> 가 그렇게 한다.</p></div><div class="box qa"><p class="box-title">문답</p><p><strong>물음. <code>defer m release</code> 아래에서 <code>each</code> 안의 낱말이 실패한다. <code>or_fail</code> 로 실패를 넘길 수 있는가?</strong></p><p>답. 그렇다. 실패하는 낱말이 나가는 길에서 release 는 스택에 남은 글을 보지 않는다. 낱말은 거기서 끝나고 아무도 그것을 다시 읽지 않는다. rail 은 첫 실패에서 멈춘다.</p><div class="example run"><p class="ex-file"><code>05-release-failing.pnx</code></p><pre><code data-lang="pinax"><span style="color: #d73948">use</span> io .
 <span style="color: #d73948">use</span> <span style="color: #d73948">str</span> .
-def short w <span style="color: #d73948">str</span> <span style="color: #d73948">or</span> <span style="color: #d73948">fail</span> <span style="color: #d73948">do</span>
+<span style="color: #d73948">def</span> short w <span style="color: #d73948">str</span> <span style="color: #d73948">or</span> <span style="color: #d73948">fail</span> <span style="color: #d73948">do</span>
   w <span style="color: #d73948">str</span>.len <span style="color: #b60157">5</span> gt <span style="color: #d73948">if</span> <span style="color: #d73948">err</span>.range <span style="color: #d73948">fail</span> <span style="color: #d73948">end</span>
 <span style="color: #d73948">end</span>
-def read_words line <span style="color: #d73948">str</span> <span style="color: #d73948">or</span> <span style="color: #d73948">fail</span> <span style="color: #d73948">do</span>
+<span style="color: #d73948">def</span> read_words line <span style="color: #d73948">str</span> <span style="color: #d73948">or</span> <span style="color: #d73948">fail</span> <span style="color: #d73948">do</span>
   <span style="color: #d73948">mark</span> <span style="color: #d73948">to</span> m
   defer m release <span style="color: #d73948">end</span>
   line <span style="color: #d73948">str</span>.upper <span style="color: #d73948">str</span>.words <span style="color: #d73948">do</span> <span style="color: #d73948">to</span> w w short <span style="color: #d73948">or_fail</span>  w io.println <span style="color: #d73948">end</span> each
 <span style="color: #d73948">end</span>
-<span style="color: #198810">"one two three"</span> read_words <span style="color: #d73948">or_else</span> <span style="color: #d73948">to</span> e args <span style="color: #198810">"stopped: "</span> e err_text . <span style="color: #d73948">cat</span> io.println <span style="color: #d73948">end</span>
-<span style="color: #198810">"one embeddable two"</span> read_words <span style="color: #d73948">or_else</span> <span style="color: #d73948">to</span> e args <span style="color: #198810">"stopped: "</span> e err_text . <span style="color: #d73948">cat</span> io.println <span style="color: #d73948">end</span>
+<span style="color: #198810">"one two three"</span> read_words <span style="color: #d73948">or_else</span> <span style="color: #d73948">to</span> e <span style="color: #d73948">args</span> <span style="color: #198810">"stopped: "</span> e err_text . <span style="color: #d73948">cat</span> io.println <span style="color: #d73948">end</span>
+<span style="color: #198810">"one embeddable two"</span> read_words <span style="color: #d73948">or_else</span> <span style="color: #d73948">to</span> e <span style="color: #d73948">args</span> <span style="color: #198810">"stopped: "</span> e err_text . <span style="color: #d73948">cat</span> io.println <span style="color: #d73948">end</span>
 </code></pre><p class="ex-label">출력</p><pre><code data-lang="text">$ pnx 05-release-failing.pnx
 ONE
 TWO
@@ -146,10 +146,10 @@ ONE
 stopped: range
 </code></pre></div></div><h3>5.5 바이트와 글자</h3><p>길이와 자리는 모두 바이트로 센다. 한글 한 글자는 UTF-8 로 3 바이트다. 글자 단위가 필요하면 <code>str.char_count</code> 와 <code>str.chars</code> 를 쓴다. <code>str.chars</code> 는 글자마다 그 글자의 뷰를 낸다(코드포인트 수가 아니다).</p><div class="example run"><p class="ex-file"><code>05-chars.pnx</code></p><pre><code data-lang="pinax"><span style="color: #d73948">use</span> io .
 <span style="color: #d73948">use</span> <span style="color: #d73948">str</span> .
-def show <span style="color: #d73948">do</span>
+<span style="color: #d73948">def</span> show <span style="color: #d73948">do</span>
   <span style="color: #198810">"한글 ok"</span> <span style="color: #d73948">to</span> s
-  args <span style="color: #198810">"bytes "</span> s <span style="color: #d73948">str</span>.len <span style="color: #198810">", characters "</span> s <span style="color: #d73948">str</span>.char_count . <span style="color: #d73948">cat</span> io.println
-  s <span style="color: #d73948">str</span>.chars <span style="color: #d73948">do</span> <span style="color: #d73948">to</span> c args <span style="color: #198810">"&lt;"</span> c <span style="color: #198810">"&gt;"</span> . <span style="color: #d73948">cat</span> io.print <span style="color: #d73948">end</span> each
+  <span style="color: #d73948">args</span> <span style="color: #198810">"bytes "</span> s <span style="color: #d73948">str</span>.len <span style="color: #198810">", characters "</span> s <span style="color: #d73948">str</span>.char_count . <span style="color: #d73948">cat</span> io.println
+  s <span style="color: #d73948">str</span>.chars <span style="color: #d73948">do</span> <span style="color: #d73948">to</span> c <span style="color: #d73948">args</span> <span style="color: #198810">"&lt;"</span> c <span style="color: #198810">"&gt;"</span> . <span style="color: #d73948">cat</span> io.print <span style="color: #d73948">end</span> each
   <span style="color: #198810">""</span> io.println
 <span style="color: #d73948">end</span>
 show
@@ -159,14 +159,14 @@ bytes 9, characters 5
 </code></pre></div><h3>5.6 글자 부류와 수 읽기</h3><p>글의 앞에서 “숫자가 이어지는 만큼” 을 떼려면 <code>str.span</code> 을 쓴다. 부류는 상수 <code>str.digit</code> <code>str.alpha</code> <code>str.alnum</code> <code>str.space</code> <code>str.upper_case</code> <code>str.lower_case</code> <code>str.hex_digit</code> <code>str.punct</code> 다(모두 ASCII). 소수점이 있는 수는 <code>str.to_dec</code> 가 <code>dec N</code> 으로 읽는다(2장). 점 아래 자리가 <code>N</code> 보다 많으면 실패다.</p><div class="example run"><p class="ex-file"><code>05-classes.pnx</code></p><pre><code data-lang="pinax"><span style="color: #d73948">use</span> io .
 <span style="color: #d73948">use</span> <span style="color: #d73948">str</span> .
 <span style="color: #74747c">rem span cuts off the run of one class of bytes at the front; to_dec reads a decimal.</span>
-def demo <span style="color: #d73948">do</span>
+<span style="color: #d73948">def</span> demo <span style="color: #d73948">do</span>
   <span style="color: #198810">"42abc"</span> <span style="color: #d73948">str</span>.digit <span style="color: #d73948">str</span>.span <span style="color: #d73948">to</span> rest <span style="color: #d73948">to</span> digits
-  args <span style="color: #198810">"["</span> digits <span style="color: #198810">"] ["</span> rest <span style="color: #198810">"]"</span> . <span style="color: #d73948">cat</span> io.println
+  <span style="color: #d73948">args</span> <span style="color: #198810">"["</span> digits <span style="color: #198810">"] ["</span> rest <span style="color: #198810">"]"</span> . <span style="color: #d73948">cat</span> io.println
   <span style="color: #198810">"   x"</span> <span style="color: #d73948">str</span>.space <span style="color: #d73948">str</span>.span <span style="color: #d73948">to</span> after <span style="color: #d73948">to</span> blanks
-  args blanks <span style="color: #d73948">str</span>.len <span style="color: #198810">" blanks, then "</span> after . <span style="color: #d73948">cat</span> io.println
+  <span style="color: #d73948">args</span> blanks <span style="color: #d73948">str</span>.len <span style="color: #198810">" blanks, then "</span> after . <span style="color: #d73948">cat</span> io.println
   <span style="color: #198810">"12.50"</span> <span style="color: #b60157">2</span> <span style="color: #d73948">str</span>.to_dec <span style="color: #d73948">or_else</span> <span style="color: #d73948">to</span> e <span style="color: #b60157">0</span>.00 <span style="color: #d73948">end</span> <span style="color: #d73948">to</span> price
-  args <span style="color: #198810">"price "</span> price . <span style="color: #d73948">cat</span> io.println
-  <span style="color: #198810">"12.505"</span> <span style="color: #b60157">2</span> <span style="color: #d73948">str</span>.to_dec <span style="color: #d73948">or_else</span> <span style="color: #d73948">to</span> e args <span style="color: #198810">"not a dec(2): "</span> e err_text . <span style="color: #d73948">cat</span> io.println <span style="color: #b60157">0</span>.00 <span style="color: #d73948">end</span> drop
+  <span style="color: #d73948">args</span> <span style="color: #198810">"price "</span> price . <span style="color: #d73948">cat</span> io.println
+  <span style="color: #198810">"12.505"</span> <span style="color: #b60157">2</span> <span style="color: #d73948">str</span>.to_dec <span style="color: #d73948">or_else</span> <span style="color: #d73948">to</span> e <span style="color: #d73948">args</span> <span style="color: #198810">"not a dec(2): "</span> e err_text . <span style="color: #d73948">cat</span> io.println <span style="color: #b60157">0</span>.00 <span style="color: #d73948">end</span> drop
 <span style="color: #d73948">end</span>
 demo
 </code></pre><p class="ex-label">출력</p><pre><code data-lang="text">$ pnx 05-classes.pnx
@@ -174,15 +174,15 @@ demo
 3 blanks, then x
 price 12.50
 not a dec(2): format
-</code></pre></div><table><thead><tr><th><strong>토큰</strong></th><th><strong>그 뒤의 스택</strong></th><th><strong>일어난 일</strong></th></tr></thead><tbody><tr><td><code>"42abc" str.digit</code></td><td><code>"42abc" 48</code></td><td>글과 부류(부류는 작은 정수다).</td></tr><tr><td><code>str.span</code></td><td><code>"42" "abc"</code></td><td>앞의 숫자 부분과 나머지. 둘 다 같은 글을 가리키는 뷰다.</td></tr><tr><td><code>to (digits, rest)</code></td><td><code>—</code></td><td>오른쪽 이름이 맨 위 값을 받는다.</td></tr></tbody></table><p>조각을 이어 붙이거나 바꾼 글을 버퍼에 바로 쓰는 낱말도 있다. <code>str.join_into</code> 는 레일의 조각을 사이 글로 이어 버퍼에 붙이고, <code>str.replace_into</code> 는 바꾼 글을 버퍼에 붙이며 바꾼 횟수를 준다. 둘 다 버퍼가 차면 실패한다. <code>join_into</code> 는 레일을 맨 뒤에 둔다 — 레일은 바로 뒤의 낱말이 받기 때문이다(4장).</p><div class="example run"><p class="ex-file"><code>05-join.pnx</code></p><pre><code data-lang="pinax"><span style="color: #d73948">use</span> io .
+</code></pre></div><table><thead><tr><th><strong>토큰</strong></th><th><strong>그 뒤의 스택</strong></th><th><strong>일어난 일</strong></th></tr></thead><tbody><tr><td><code>"42abc" str.digit</code></td><td><code>"42abc" 48</code></td><td>글과 부류(부류는 작은 정수다).</td></tr><tr><td><code>str.span</code></td><td><code>"42" "abc"</code></td><td>앞의 숫자 부분과 나머지. 둘 다 같은 글을 가리키는 뷰다.</td></tr><tr><td><code>to rest to digits</code></td><td><code>—</code></td><td>처음 쓴 이름이 맨 위 값을 받는다.</td></tr></tbody></table><p>조각을 이어 붙이거나 바꾼 글을 버퍼에 바로 쓰는 낱말도 있다. <code>str.join_into</code> 는 레일의 조각을 사이 글로 이어 버퍼에 붙이고, <code>str.replace_into</code> 는 바꾼 글을 버퍼에 붙이며 바꾼 횟수를 준다. 둘 다 버퍼가 차면 실패한다. <code>join_into</code> 는 레일을 맨 뒤에 둔다 — 레일은 바로 뒤의 낱말이 받기 때문이다(4장).</p><div class="example run"><p class="ex-file"><code>05-join.pnx</code></p><pre><code data-lang="pinax"><span style="color: #d73948">use</span> io .
 <span style="color: #d73948">use</span> <span style="color: #d73948">str</span> .
 <span style="color: #d73948">buffer</span> joined <span style="color: #b60157">64</span>
 <span style="color: #d73948">buffer</span> fixed <span style="color: #b60157">64</span>
-def demo <span style="color: #d73948">or</span> <span style="color: #d73948">fail</span> <span style="color: #d73948">do</span>
+<span style="color: #d73948">def</span> demo <span style="color: #d73948">or</span> <span style="color: #d73948">fail</span> <span style="color: #d73948">do</span>
   <span style="color: #198810">", "</span> joined <span style="color: #198810">"alpha beta gamma"</span> <span style="color: #d73948">str</span>.words <span style="color: #d73948">str</span>.join_into <span style="color: #d73948">or_fail</span>   <span style="color: #74747c">rem the stem comes last</span>
   joined contents io.println
   <span style="color: #198810">"hello world"</span> <span style="color: #198810">"o"</span> <span style="color: #198810">"0"</span> fixed <span style="color: #d73948">str</span>.replace_into <span style="color: #d73948">or_fail</span> <span style="color: #d73948">to</span> n
-  args n <span style="color: #198810">" replaced: "</span> fixed contents . <span style="color: #d73948">cat</span> io.println
+  <span style="color: #d73948">args</span> n <span style="color: #198810">" replaced: "</span> fixed contents . <span style="color: #d73948">cat</span> io.println
 <span style="color: #d73948">end</span>
 demo <span style="color: #d73948">or_else</span> <span style="color: #d73948">to</span> e e err_text io.println <span style="color: #d73948">end</span>
 </code></pre><p class="ex-label">출력</p><pre><code data-lang="text">$ pnx 05-join.pnx

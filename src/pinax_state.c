@@ -843,8 +843,10 @@ static const char *check_word(const pinax_state *st, uint32_t index, span range,
             ((op == PNX_CPUTI || op == PNX_CPUTIW) && b > 3 + 18) || ((op == PNX_CPUTS || op == PNX_CPUTSW) && b != 0) ||
             (op == PNX_CNEXT && c > 2) || (op == PNX_FITW && c >= PNX_W_COUNT))
             return "code: unknown kind of a json or csv instruction";
-        if (((op == PNX_RCATD || op == PNX_STODEC) && c > 18) || (op == PNX_DRESC && (c == 0 || c > 18)))
+        if (((op == PNX_RCATD || op == PNX_STODEC || op == PNX_ARGPUTD) && c > 18) || (op == PNX_DRESC && (c == 0 || c > 18)))
             return "code: a decimal scale outside 0 to 18";
+        if ((op == PNX_ARGHEAD && (b == 0 || b > 64)) || (op == PNX_ARGPUTI && (c != 1 && c != 2)))
+            return "code: an args instruction with a count or a kind that is not one";
         if ((op == PNX_NARITH && ((x & 0xffu) >= PNX_NA_COUNT || (x >> 8) >= PNX_W_COUNT)) ||
             (op == PNX_NCHK && ((x & 0xffu) >= PNX_NC_COUNT || (x >> 8) >= PNX_W_COUNT)) ||
             (op == PNX_NUN && ((x & 0xffu) >= PNX_NU_COUNT || (x >> 8) >= PNX_W_COUNT)))

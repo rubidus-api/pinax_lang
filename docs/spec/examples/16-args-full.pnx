@@ -1,0 +1,5 @@
+rem fault
+def eat do
+  loop args "text that fills the region" 1 . drop end    rem each args is made in the region
+end
+eat

@@ -56,7 +56,7 @@ a type only (`int`) stays on the stack when the body starts. One signature canno
 #ex("manual", "03-two-results.pnx")
 
 `divmod` has two results. The names `q` and `r` on the results side are for the reader only; they make no locals. The
-caller takes both at once with `to (q, r)`. The rightmost name takes the top value --- in the order of the signature.
+caller takes both with `to r to q`. The name written first takes the top value --- the reverse of the order of the signature.
 
 `bare_square` has no name for its input. Then the value does not become a name: the body starts #strong[with it still
 on the stack]. The body of `7 bare_square` starts with one `7` on the stack, and `dup mul` squares it.
@@ -109,12 +109,24 @@ and too deep stops with the fault `depth`. Two words that call each other announ
 of a definition (chapter 15). Write the body one step per line, and name the values in the middle with `to NAME`
 (chapter 4): then no more than two values are on the stack at once.]
 
+== Values of any number and kind
+
+A word takes a fixed number of values of fixed types. When the number or the kinds vary, the word takes one value of the
+type #strong[args]: a parameter `NAME args`. The caller builds it with `args … .`, any values separated only by spaces and
+ended by a period.
+
+#ex("manual", "03-args.pnx")
+
+`rest args.len` is the number of values, `i rest args.kind` the kind of value `i`, and `i rest args.int`, `args.str`,
+`args.bool` read one by its kind; a value of another kind is a failure, like an index out of range. An args is made in the
+region, and it is a parameter only: it is not stored and not returned, and it goes on to another word that takes `args`.
+
 #summary[
 - Every word has a signature, checked where it is called and in its body (standard 9.2).
 - The value put on first is the first input. The body starts with an empty stack (bare inputs stay on it) and ends with
   only its results (9.2).
 - Named inputs become locals; bare inputs stay on the stack; they do not mix (9.2).
-- Several results are taken with `to (a, b)`; the rightmost is the top (9.4).
+- Several results are taken with `to b to a`; the name written first takes the top (9.4).
 - A visible name (core words included) cannot be used for a new name (9.5).
 - Tail calls do not grow the depth (9.6).
 ]

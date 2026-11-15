@@ -1,16 +1,16 @@
 <!DOCTYPE html>
 <html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>4 Locals and flow - The Pinax Manual</title><link rel="stylesheet" href="style.css"></head><body><nav class="top"><a href="index.html">Start</a> · <a href="04.html">Previous</a> · <a href="06.html">Next</a> · <a href="../html-ko/05.html">한국어</a></nav><main><h2>4 Locals and flow</h2><div class="box opening"><p><strong>Builds on</strong>: Chapter 3 (signatures, named inputs).</p><p><strong>Questions this chapter answers</strong></p><ul><li>When is a local made, and how far is it visible?</li><li>How are <code>if</code>, <code>loop</code> and <code>match</code> written, and what must they keep about the stack?</li><li>What is the short way to write a loop over an array?</li><li>How is a word given as a value?</li></ul></div><h3>4.1 Locals</h3><p>In a body, <code>to NAME</code> puts the top value into that name. The first time a name is used, a local of the value’s type is made; there is no separate line that declares it.</p><div class="example run"><p class="ex-file"><code>04-locals.pnx</code></p><pre><code data-lang="pinax"><span style="color: #d73948">use</span> io .
-def describe a <span style="color: #d73948">int</span>, b <span style="color: #d73948">int</span>, c <span style="color: #d73948">int</span> <span style="color: #d73948">gives</span> <span style="color: #d73948">str</span> <span style="color: #d73948">do</span>
+<span style="color: #d73948">def</span> describe a <span style="color: #d73948">int</span>, b <span style="color: #d73948">int</span>, c <span style="color: #d73948">int</span> <span style="color: #d73948">gives</span> <span style="color: #d73948">str</span> <span style="color: #d73948">do</span>
   a b add c add <span style="color: #d73948">to</span> total
   total <span style="color: #b60157">3</span> div <span style="color: #d73948">to</span> mean
   a b max c max <span style="color: #d73948">to</span> top
-  args <span style="color: #198810">"total "</span> total <span style="color: #198810">", mean "</span> mean <span style="color: #198810">", largest "</span> top . <span style="color: #d73948">cat</span>
+  <span style="color: #d73948">args</span> <span style="color: #198810">"total "</span> total <span style="color: #198810">", mean "</span> mean <span style="color: #198810">", largest "</span> top . <span style="color: #d73948">cat</span>
 <span style="color: #d73948">end</span>
 <span style="color: #b60157">3</span> <span style="color: #b60157">9</span> <span style="color: #b60157">6</span> describe io.println
 </code></pre><p class="ex-label">Output</p><pre><code data-lang="text">$ pnx 04-locals.pnx
 total 18, mean 6, largest 9
 </code></pre></div><p><code>to</code> <strong>takes</strong> the top value off the stack and keeps it in the name. Using the name puts the value back on. Instead of holding values on the stack for long, keep them in names and take them out when needed.</p><table><thead><tr><th><strong>Token</strong></th><th><strong>Stack after it</strong></th><th><strong>What happened</strong></th></tr></thead><tbody><tr><td><code>a b add</code></td><td><code>12</code></td><td><code>a</code> is 3, <code>b</code> is 9.</td></tr><tr><td><code>c add</code></td><td><code>18</code></td><td><code>c</code> is 6.</td></tr><tr><td><code>to total</code></td><td><code>—</code></td><td>Takes 18 off and keeps it in a new local <code>total</code>. The stack is empty.</td></tr><tr><td><code>total 3 div</code></td><td><code>6</code></td><td>Using <code>total</code> puts 18 on; it is divided by 3.</td></tr><tr><td><code>to mean</code></td><td><code>—</code></td><td>Keeps 6 in <code>mean</code>.</td></tr></tbody></table><p>A local is visible from where it is first stored to the end of the branch, loop or block around it. A name first made inside a branch cannot be read outside it: coming by the other branch, it would hold no value.</p><div class="example refused"><p class="ex-file"><code>04-scope.pnx</code></p><pre><code data-lang="pinax"><span style="color: #d73948">use</span> io .
-def f n <span style="color: #d73948">int</span> <span style="color: #d73948">gives</span> <span style="color: #d73948">int</span> <span style="color: #d73948">do</span>
+<span style="color: #d73948">def</span> f n <span style="color: #d73948">int</span> <span style="color: #d73948">gives</span> <span style="color: #d73948">int</span> <span style="color: #d73948">do</span>
   n <span style="color: #b60157">0</span> gt <span style="color: #d73948">if</span> n <span style="color: #b60157">2</span> mul <span style="color: #d73948">to</span> doubled <span style="color: #d73948">end</span>
   doubled
 <span style="color: #d73948">end</span>
@@ -18,18 +18,18 @@ def f n <span style="color: #d73948">int</span> <span style="color: #d73948">giv
 04-scope.pnx:4:3: this name is not declared before this place
 </code></pre></div><p>A global is stored with <code>set</code>, not <code>to</code>; <code>to</code> stores only into locals.</p><div class="example run"><p class="ex-file"><code>04-store-global.pnx</code></p><pre><code data-lang="pinax"><span style="color: #d73948">use</span> io .
 <span style="color: #d73948">global</span> total <span style="color: #d73948">int</span>
-def add_to_total n <span style="color: #d73948">int</span> <span style="color: #d73948">do</span> total n add set total <span style="color: #d73948">end</span>     <span style="color: #74747c">rem set: a global is written with set</span>
+<span style="color: #d73948">def</span> add_to_total n <span style="color: #d73948">int</span> <span style="color: #d73948">do</span> total n add set total <span style="color: #d73948">end</span>     <span style="color: #74747c">rem set: a global is written with set</span>
 <span style="color: #b60157">3</span> add_to_total
 <span style="color: #b60157">4</span> add_to_total
-args <span style="color: #198810">"total "</span> total . <span style="color: #d73948">cat</span> io.println
+<span style="color: #d73948">args</span> <span style="color: #198810">"total "</span> total . <span style="color: #d73948">cat</span> io.println
 </code></pre><p class="ex-label">Output</p><pre><code data-lang="text">$ pnx 04-store-global.pnx
 total 7
 </code></pre></div><div class="box mistake"><p class="box-title">Common mistake: Storing into a global with <code>to total</code></p><code>to</code> with the name of a global is refused, and the message names <code>set</code>. A global cannot be hidden, so no local of that name can be made; the rule also keeps a <code>to</code> meant to make a local from changing a global silently.<div class="example refused"><p class="ex-file"><code>04-store-global-bare.pnx</code></p><pre><code data-lang="pinax"><span style="color: #d73948">global</span> total <span style="color: #d73948">int</span>
-def add_to_total n <span style="color: #d73948">int</span> <span style="color: #d73948">do</span> total n add <span style="color: #d73948">to</span> total <span style="color: #d73948">end</span>
+<span style="color: #d73948">def</span> add_to_total n <span style="color: #d73948">int</span> <span style="color: #d73948">do</span> total n add <span style="color: #d73948">to</span> total <span style="color: #d73948">end</span>
 </code></pre><p class="ex-label">Refused</p><pre><code data-lang="text">$ pnx 04-store-global-bare.pnx
 04-store-global-bare.pnx:2:42: this name is a global; a global is written with set: value set name
 </code></pre></div></div><h3>4.2 Branches</h3><p><code>condition if … else … end</code> looks at the <code>bool</code> on top and runs one side. Both branches shall leave the same stack; a branch that leaves with <code>return</code> does not need to match.</p><div class="example run"><p class="ex-file"><code>04-if.pnx</code></p><pre><code data-lang="pinax"><span style="color: #d73948">use</span> io .
-def grade score <span style="color: #d73948">int</span> <span style="color: #d73948">gives</span> <span style="color: #d73948">str</span> <span style="color: #d73948">do</span>
+<span style="color: #d73948">def</span> grade score <span style="color: #d73948">int</span> <span style="color: #d73948">gives</span> <span style="color: #d73948">str</span> <span style="color: #d73948">do</span>
   score <span style="color: #b60157">90</span> ge <span style="color: #d73948">if</span> <span style="color: #198810">"A"</span> <span style="color: #d73948">return</span> <span style="color: #d73948">end</span>
   score <span style="color: #b60157">80</span> ge <span style="color: #d73948">if</span> <span style="color: #198810">"B"</span> <span style="color: #d73948">return</span> <span style="color: #d73948">end</span>
   score <span style="color: #b60157">70</span> ge <span style="color: #d73948">if</span> <span style="color: #198810">"C"</span> <span style="color: #d73948">else</span> <span style="color: #198810">"F"</span> <span style="color: #d73948">end</span>
@@ -42,7 +42,7 @@ A
 B
 F
 </code></pre></div><p><code>if</code> <strong>takes</strong> the <code>bool</code> off the top and chooses the way. The two branches have to leave the same stack because the code after <code>end</code> does not know which branch it came from. Whichever way it came, the stack must be the same for the processor to check what follows.</p><div class="example run"><p class="ex-file"><code>04-sign.pnx</code></p><pre><code data-lang="pinax"><span style="color: #d73948">use</span> io .
-def sign n <span style="color: #d73948">int</span> <span style="color: #d73948">gives</span> <span style="color: #d73948">str</span> <span style="color: #d73948">do</span>
+<span style="color: #d73948">def</span> sign n <span style="color: #d73948">int</span> <span style="color: #d73948">gives</span> <span style="color: #d73948">str</span> <span style="color: #d73948">do</span>
   n <span style="color: #b60157">0</span> lt <span style="color: #d73948">if</span>                     <span style="color: #74747c">rem lt leaves a bool; if takes it off the stack</span>
     <span style="color: #198810">"negative"</span>                  <span style="color: #74747c">rem this way leaves one str</span>
   <span style="color: #d73948">else</span>
@@ -57,11 +57,11 @@ negative
 zero
 positive
 </code></pre></div><table><thead><tr><th><strong>Token</strong></th><th><strong>Stack after it</strong></th><th><strong>What happened</strong></th></tr></thead><tbody><tr><td><code>n 0 lt</code></td><td><code>true</code></td><td>With <code>n</code> at −4 the comparison leaves <code>true</code>.</td></tr><tr><td><code>if</code></td><td><code>—</code></td><td>Takes the <code>bool</code> off and goes to the first branch.</td></tr><tr><td><code>"negative"</code></td><td><code>"negative"</code></td><td>This branch leaves one <code>str</code>.</td></tr><tr><td><code>end</code></td><td><code>"negative"</code></td><td>The <code>else</code> branch also leaves one <code>str</code>, so the two ways agree.</td></tr></tbody></table><p>An <code>if</code> without <code>else</code> shall leave the stack as it was. Leaving out the <code>else</code> of an <code>if</code> that leaves a value is refused.</p><div class="example refused"><p class="ex-file"><code>04-if-unequal.pnx</code></p><pre><code data-lang="pinax"><span style="color: #d73948">use</span> io .
-def label n <span style="color: #d73948">int</span> <span style="color: #d73948">gives</span> <span style="color: #d73948">str</span> <span style="color: #d73948">do</span> n <span style="color: #b60157">0</span> lt <span style="color: #d73948">if</span> <span style="color: #198810">"negative"</span> <span style="color: #d73948">end</span> <span style="color: #d73948">end</span>
+<span style="color: #d73948">def</span> label n <span style="color: #d73948">int</span> <span style="color: #d73948">gives</span> <span style="color: #d73948">str</span> <span style="color: #d73948">do</span> n <span style="color: #b60157">0</span> lt <span style="color: #d73948">if</span> <span style="color: #198810">"negative"</span> <span style="color: #d73948">end</span> <span style="color: #d73948">end</span>
 </code></pre><p class="ex-label">Refused</p><pre><code data-lang="text">$ pnx 04-if-unequal.pnx
 04-if-unequal.pnx:2:51: an if without else must leave the stack as it found it
 </code></pre></div><h3>4.3 Loops</h3><p><code>loop … end</code> repeats. Inside it, <code>break .</code> leaves the loop and <code>continue .</code> goes on to the next turn. A condition is written with <code>if</code>: <code>i n gt if break . end</code>. One turn shall leave the stack as it found it — so the values a loop makes are gathered in locals.</p><div class="example run"><p class="ex-file"><code>04-loop.pnx</code></p><pre><code data-lang="pinax"><span style="color: #d73948">use</span> io .
-def collatz n <span style="color: #d73948">int</span> <span style="color: #d73948">gives</span> <span style="color: #d73948">int</span> <span style="color: #d73948">do</span>              <span style="color: #74747c">rem steps to reach 1</span>
+<span style="color: #d73948">def</span> collatz n <span style="color: #d73948">int</span> <span style="color: #d73948">gives</span> <span style="color: #d73948">int</span> <span style="color: #d73948">do</span>              <span style="color: #74747c">rem steps to reach 1</span>
   <span style="color: #b60157">0</span> <span style="color: #d73948">to</span> steps
   <span style="color: #d73948">loop</span>
     n <span style="color: #b60157">1</span> eq <span style="color: #d73948">if</span> <span style="color: #d73948">break</span> . <span style="color: #d73948">end</span>
@@ -70,12 +70,12 @@ def collatz n <span style="color: #d73948">int</span> <span style="color: #d7394
   <span style="color: #d73948">end</span>
   steps
 <span style="color: #d73948">end</span>
-args <span style="color: #198810">"27 takes "</span> <span style="color: #b60157">27</span> collatz <span style="color: #198810">" steps"</span> . <span style="color: #d73948">cat</span> io.println
+<span style="color: #d73948">args</span> <span style="color: #198810">"27 takes "</span> <span style="color: #b60157">27</span> collatz <span style="color: #198810">" steps"</span> . <span style="color: #d73948">cat</span> io.println
 </code></pre><p class="ex-label">Output</p><pre><code data-lang="text">$ pnx 04-loop.pnx
 27 takes 111 steps
 </code></pre></div><p>One turn leaves the stack as it found it for the same reason. The head of the loop sees the stack both when the loop is first entered and when a turn comes back, and both must be the same. If each turn piled up one more value, the processor, which cannot know how many turns there will be, could not fix the depth of the stack. So the values a loop makes are gathered in locals.</p><div class="example run"><p class="ex-file"><code>04-loop-sum.pnx</code></p><pre><code data-lang="pinax"><span style="color: #d73948">use</span> io .
 <span style="color: #d73948">use</span> <span style="color: #d73948">str</span> .
-def sum_to n <span style="color: #d73948">int</span> <span style="color: #d73948">gives</span> <span style="color: #d73948">int</span> <span style="color: #d73948">do</span>
+<span style="color: #d73948">def</span> sum_to n <span style="color: #d73948">int</span> <span style="color: #d73948">gives</span> <span style="color: #d73948">int</span> <span style="color: #d73948">do</span>
   <span style="color: #b60157">0</span> <span style="color: #d73948">to</span> total                    <span style="color: #74747c">rem what the loop builds lives in locals, not on the stack</span>
   <span style="color: #b60157">1</span> <span style="color: #d73948">to</span> i
   <span style="color: #d73948">loop</span>
@@ -88,7 +88,7 @@ def sum_to n <span style="color: #d73948">int</span> <span style="color: #d73948
 <span style="color: #b60157">10</span> sum_to <span style="color: #d73948">str</span>.to_str io.println
 </code></pre><p class="ex-label">Output</p><pre><code data-lang="text">$ pnx 04-loop-sum.pnx
 55
-</code></pre></div><div class="example refused"><p class="ex-file"><code>04-loop-leaves.pnx</code></p><pre><code data-lang="pinax">def count_up n <span style="color: #d73948">int</span> <span style="color: #d73948">gives</span> <span style="color: #d73948">int</span> <span style="color: #d73948">do</span>
+</code></pre></div><div class="example refused"><p class="ex-file"><code>04-loop-leaves.pnx</code></p><pre><code data-lang="pinax"><span style="color: #d73948">def</span> count_up n <span style="color: #d73948">int</span> <span style="color: #d73948">gives</span> <span style="color: #d73948">int</span> <span style="color: #d73948">do</span>
   <span style="color: #b60157">0</span> <span style="color: #d73948">to</span> i
   <span style="color: #d73948">loop</span>
     i n ge <span style="color: #d73948">if</span> <span style="color: #d73948">break</span> . <span style="color: #d73948">end</span>
@@ -99,7 +99,7 @@ def sum_to n <span style="color: #d73948">int</span> <span style="color: #d73948
 </code></pre><p class="ex-label">Refused</p><pre><code data-lang="text">$ pnx 04-loop-leaves.pnx
 04-loop-leaves.pnx:6:3: one turn of a loop must leave the stack as it found it
 </code></pre></div><p><code>count_up</code> makes a value with <code>i 1 add</code> every turn, and nothing takes it. With <code>to i</code> after it the value goes into <code>i</code> and the stack is as it was at the start of the turn.</p><p>A named loop can be left all at once from an inner loop.</p><div class="example run"><p class="ex-file"><code>04-named-loop.pnx</code></p><pre><code data-lang="pinax"><span style="color: #d73948">use</span> io .
-def is_prime n <span style="color: #d73948">int</span> <span style="color: #d73948">gives</span> <span style="color: #d73948">bool</span> <span style="color: #d73948">do</span>
+<span style="color: #d73948">def</span> is_prime n <span style="color: #d73948">int</span> <span style="color: #d73948">gives</span> <span style="color: #d73948">bool</span> <span style="color: #d73948">do</span>
   n <span style="color: #b60157">2</span> lt <span style="color: #d73948">if</span> <span style="color: #d73948">false</span> <span style="color: #d73948">return</span> <span style="color: #d73948">end</span>
   <span style="color: #b60157">2</span> <span style="color: #d73948">to</span> d
   <span style="color: #d73948">loop</span>
@@ -108,7 +108,7 @@ def is_prime n <span style="color: #d73948">int</span> <span style="color: #d739
     d <span style="color: #b60157">1</span> add <span style="color: #d73948">to</span> d
   <span style="color: #d73948">end</span>
 <span style="color: #d73948">end</span>
-def first_pair target <span style="color: #d73948">int</span> <span style="color: #d73948">gives</span> <span style="color: #d73948">str</span> <span style="color: #d73948">do</span>       <span style="color: #74747c">rem the first a &lt; b &lt;= 20, both prime, with a + b = target</span>
+<span style="color: #d73948">def</span> first_pair target <span style="color: #d73948">int</span> <span style="color: #d73948">gives</span> <span style="color: #d73948">str</span> <span style="color: #d73948">do</span>       <span style="color: #74747c">rem the first a &lt; b &lt;= 20, both prime, with a + b = target</span>
   <span style="color: #b60157">2</span> <span style="color: #d73948">to</span> a
   <span style="color: #b60157">0</span> <span style="color: #d73948">to</span> b
   <span style="color: #d73948">loop</span>
@@ -121,16 +121,16 @@ def first_pair target <span style="color: #d73948">int</span> <span style="color
     a <span style="color: #b60157">1</span> add <span style="color: #d73948">to</span> a
     a <span style="color: #b60157">20</span> gt <span style="color: #d73948">if</span> <span style="color: #198810">"none"</span> <span style="color: #d73948">return</span> <span style="color: #d73948">end</span>
   <span style="color: #d73948">end</span>
-  args a <span style="color: #198810">" + "</span> b . <span style="color: #d73948">cat</span>
+  <span style="color: #d73948">args</span> a <span style="color: #198810">" + "</span> b . <span style="color: #d73948">cat</span>
 <span style="color: #d73948">end</span>
 <span style="color: #b60157">26</span> first_pair io.println
 </code></pre><p class="ex-label">Output</p><pre><code data-lang="text">$ pnx 04-named-loop.pnx
 7 + 19
 </code></pre></div><div class="box qa"><p class="box-title">Q&amp;A</p><p><strong>Q. Can I give the number of loops to leave instead?</strong></p><p>A. No. With a number, wrapping a loop in one more would quietly leave another loop. A name cannot do that.</p></div><h3>4.4 Choosing</h3><p><code>match</code> compares an <code>int</code> or <code>str</code> with the values of its branches. A branch is <code>when VALUE do … end</code>; several values for one branch stand after <code>when</code> one after another. What to do when nothing matches goes in <code>otherwise</code>; with no <code>otherwise</code> and no match, it is a fault.</p><div class="example run"><p class="ex-file"><code>04-case.pnx</code></p><pre><code data-lang="pinax"><span style="color: #d73948">use</span> io .
-def day_kind day <span style="color: #d73948">str</span> <span style="color: #d73948">gives</span> <span style="color: #d73948">str</span> <span style="color: #d73948">do</span>
-  day match
-    when <span style="color: #198810">"sat"</span> <span style="color: #198810">"sun"</span> <span style="color: #d73948">do</span> <span style="color: #198810">"weekend"</span> <span style="color: #d73948">end</span>
-    when <span style="color: #198810">"mon"</span> <span style="color: #198810">"tue"</span> <span style="color: #198810">"wed"</span> <span style="color: #198810">"thu"</span> <span style="color: #198810">"fri"</span> <span style="color: #d73948">do</span> <span style="color: #198810">"weekday"</span> <span style="color: #d73948">end</span>
+<span style="color: #d73948">def</span> day_kind day <span style="color: #d73948">str</span> <span style="color: #d73948">gives</span> <span style="color: #d73948">str</span> <span style="color: #d73948">do</span>
+  day <span style="color: #d73948">match</span>
+    <span style="color: #d73948">when</span> <span style="color: #198810">"sat"</span> <span style="color: #198810">"sun"</span> <span style="color: #d73948">do</span> <span style="color: #198810">"weekend"</span> <span style="color: #d73948">end</span>
+    <span style="color: #d73948">when</span> <span style="color: #198810">"mon"</span> <span style="color: #198810">"tue"</span> <span style="color: #198810">"wed"</span> <span style="color: #198810">"thu"</span> <span style="color: #198810">"fri"</span> <span style="color: #d73948">do</span> <span style="color: #198810">"weekday"</span> <span style="color: #d73948">end</span>
     <span style="color: #d73948">otherwise</span> <span style="color: #198810">"not a day"</span> <span style="color: #d73948">end</span>
   <span style="color: #d73948">end</span>
 <span style="color: #d73948">end</span>
@@ -145,11 +145,11 @@ not a day
 <span style="color: #d73948">use</span> <span style="color: #d73948">str</span> .
 <span style="color: #d73948">array</span> temps <span style="color: #d73948">int</span> <span style="color: #b60157">7</span>
 <span style="color: #d73948">assign</span> temps (<span style="color: #b60157">12</span>, <span style="color: #b60157">15</span>, <span style="color: #b60157">9</span>, <span style="color: #b60157">21</span>, <span style="color: #b60157">18</span>, <span style="color: #b60157">7</span>, <span style="color: #b60157">14</span>)
-args <span style="color: #198810">"sum "</span> temps sum <span style="color: #198810">", above 13: "</span> temps <span style="color: #d73948">do</span> <span style="color: #d73948">to</span> t t <span style="color: #b60157">13</span> gt <span style="color: #d73948">end</span> count . <span style="color: #d73948">cat</span> io.println
-args <span style="color: #198810">"max "</span> temps maximum <span style="color: #d73948">or_else</span> <span style="color: #d73948">to</span> e <span style="color: #b60157">0</span> <span style="color: #d73948">end</span> <span style="color: #198810">", min "</span> temps minimum <span style="color: #d73948">or_else</span> <span style="color: #d73948">to</span> e <span style="color: #b60157">0</span> <span style="color: #d73948">end</span> . <span style="color: #d73948">cat</span> io.println
-temps <span style="color: #d73948">do</span> <span style="color: #d73948">to</span> i <span style="color: #d73948">to</span> t args <span style="color: #198810">"day "</span> i <span style="color: #198810">": "</span> t . <span style="color: #d73948">cat</span> io.println <span style="color: #d73948">end</span> each_index
-def spread <span style="color: #d73948">gives</span> <span style="color: #d73948">int</span> <span style="color: #d73948">do</span> <span style="color: #b60157">0</span> temps <span style="color: #d73948">do</span> <span style="color: #d73948">to</span> t <span style="color: #d73948">to</span> acc acc t <span style="color: #b60157">10</span> sub abs add <span style="color: #d73948">end</span> fold <span style="color: #d73948">end</span>
-args <span style="color: #198810">"distance from 10, added up: "</span> spread . <span style="color: #d73948">cat</span> io.println
+<span style="color: #d73948">args</span> <span style="color: #198810">"sum "</span> temps sum <span style="color: #198810">", above 13: "</span> temps <span style="color: #d73948">do</span> <span style="color: #d73948">to</span> t t <span style="color: #b60157">13</span> gt <span style="color: #d73948">end</span> count . <span style="color: #d73948">cat</span> io.println
+<span style="color: #d73948">args</span> <span style="color: #198810">"max "</span> temps maximum <span style="color: #d73948">or_else</span> <span style="color: #d73948">to</span> e <span style="color: #b60157">0</span> <span style="color: #d73948">end</span> <span style="color: #198810">", min "</span> temps minimum <span style="color: #d73948">or_else</span> <span style="color: #d73948">to</span> e <span style="color: #b60157">0</span> <span style="color: #d73948">end</span> . <span style="color: #d73948">cat</span> io.println
+temps <span style="color: #d73948">do</span> <span style="color: #d73948">to</span> i <span style="color: #d73948">to</span> t <span style="color: #d73948">args</span> <span style="color: #198810">"day "</span> i <span style="color: #198810">": "</span> t . <span style="color: #d73948">cat</span> io.println <span style="color: #d73948">end</span> each_index
+<span style="color: #d73948">def</span> spread <span style="color: #d73948">gives</span> <span style="color: #d73948">int</span> <span style="color: #d73948">do</span> <span style="color: #b60157">0</span> temps <span style="color: #d73948">do</span> <span style="color: #d73948">to</span> t <span style="color: #d73948">to</span> acc acc t <span style="color: #b60157">10</span> sub abs add <span style="color: #d73948">end</span> fold <span style="color: #d73948">end</span>
+<span style="color: #d73948">args</span> <span style="color: #198810">"distance from 10, added up: "</span> spread . <span style="color: #d73948">cat</span> io.println
 </code></pre><p class="ex-label">Output</p><pre><code data-lang="text">$ pnx 04-rails.pnx
 sum 96, above 13: 4
 max 21, min 7
@@ -163,10 +163,10 @@ day 6: 14
 distance from 10, added up: 34
 </code></pre></div><p><code>lo hi range</code> is a rail too (<code>hi</code> is not included). <code>fold</code> takes a first value before the rail, and its block takes (the value so far, an element) and gives the new value.</p><p>The block of <code>each</code>, <code>each_index</code> or <code>times</code> is left early with <code>break .</code> (and <code>continue .</code> goes to the next element), as a loop is; <code>do to NAME … end</code> takes the element into a name. The rail stops and the code after the word runs. A search that stops at the first hit is written so.</p><div class="example run"><p class="ex-file"><code>04-leave-each.pnx</code></p><pre><code data-lang="pinax"><span style="color: #d73948">use</span> io .
 <span style="color: #d73948">array</span> prices <span style="color: #d73948">int</span> <span style="color: #b60157">6</span>
-def load_prices <span style="color: #d73948">do</span>
+<span style="color: #d73948">def</span> load_prices <span style="color: #d73948">do</span>
   <span style="color: #b60157">0</span> <span style="color: #b60157">6</span> range <span style="color: #d73948">do</span> <span style="color: #d73948">to</span> i i <span style="color: #b60157">7</span> mul <span style="color: #b60157">3</span> add i set prices <span style="color: #d73948">end</span> each
 <span style="color: #d73948">end</span>
-def first_over limit <span style="color: #d73948">int</span> <span style="color: #d73948">gives</span> r <span style="color: #d73948">int</span> <span style="color: #d73948">do</span>
+<span style="color: #d73948">def</span> first_over limit <span style="color: #d73948">int</span> <span style="color: #d73948">gives</span> r <span style="color: #d73948">int</span> <span style="color: #d73948">do</span>
   <span style="color: #b60157">-1</span> <span style="color: #d73948">to</span> found
   prices <span style="color: #d73948">do</span> <span style="color: #d73948">to</span> i <span style="color: #d73948">to</span> p
     p limit gt <span style="color: #d73948">if</span> i <span style="color: #d73948">to</span> found <span style="color: #d73948">break</span> . <span style="color: #d73948">end</span>
@@ -174,35 +174,35 @@ def first_over limit <span style="color: #d73948">int</span> <span style="color:
   found
 <span style="color: #d73948">end</span>
 load_prices
-args <span style="color: #198810">"first over 20 at "</span> <span style="color: #b60157">20</span> first_over . <span style="color: #d73948">cat</span> io.println
-args <span style="color: #198810">"first over 99 at "</span> <span style="color: #b60157">99</span> first_over . <span style="color: #d73948">cat</span> io.println
+<span style="color: #d73948">args</span> <span style="color: #198810">"first over 20 at "</span> <span style="color: #b60157">20</span> first_over . <span style="color: #d73948">cat</span> io.println
+<span style="color: #d73948">args</span> <span style="color: #198810">"first over 99 at "</span> <span style="color: #b60157">99</span> first_over . <span style="color: #d73948">cat</span> io.println
 </code></pre><p class="ex-label">Output</p><pre><code data-lang="text">$ pnx 04-leave-each.pnx
 first over 20 at 3
 first over 99 at -1
 </code></pre></div><h3>4.6 Procedures as values</h3><p>A block that is not given to a combining word is written <code>def signature do … end</code> and is a <strong>value</strong>: it can be kept in a local, returned, or given to a parameter of a <code>proc</code> type (<code>type NAME proc signature end</code>), and <code>call</code> calls it. Such a block sees no locals around it. To give a procedure of the program as a value, write <code>ref NAME</code>: the value is that procedure, with its signature.</p><div class="example run"><p class="ex-file"><code>04-word-values.pnx</code></p><pre><code data-lang="pinax"><span style="color: #d73948">use</span> io .
 <span style="color: #d73948">use</span> <span style="color: #d73948">str</span> .
-def up a <span style="color: #d73948">int</span>, b <span style="color: #d73948">int</span> <span style="color: #d73948">gives</span> <span style="color: #d73948">bool</span> <span style="color: #d73948">do</span> a b lt <span style="color: #d73948">end</span>
-def down a <span style="color: #d73948">int</span>, b <span style="color: #d73948">int</span> <span style="color: #d73948">gives</span> <span style="color: #d73948">bool</span> <span style="color: #d73948">do</span> a b gt <span style="color: #d73948">end</span>
-<span style="color: #d73948">type</span> Proc1 proc <span style="color: #d73948">int</span>, <span style="color: #d73948">int</span> <span style="color: #d73948">gives</span> <span style="color: #d73948">bool</span> <span style="color: #d73948">end</span> def best before Proc1, x <span style="color: #d73948">int</span>, y <span style="color: #d73948">int</span> <span style="color: #d73948">gives</span> <span style="color: #d73948">int</span> <span style="color: #d73948">do</span> y x before call <span style="color: #d73948">if</span> y <span style="color: #d73948">else</span> x <span style="color: #d73948">end</span> <span style="color: #d73948">end</span>
-def order_named how <span style="color: #d73948">str</span> <span style="color: #d73948">gives</span> Proc1 <span style="color: #d73948">or</span> <span style="color: #d73948">fail</span> <span style="color: #d73948">do</span>
-  how match
-    when <span style="color: #198810">"up"</span> <span style="color: #d73948">do</span> ref up <span style="color: #d73948">end</span>
-    when <span style="color: #198810">"down"</span> <span style="color: #d73948">do</span> ref down <span style="color: #d73948">end</span>
+<span style="color: #d73948">def</span> up a <span style="color: #d73948">int</span>, b <span style="color: #d73948">int</span> <span style="color: #d73948">gives</span> <span style="color: #d73948">bool</span> <span style="color: #d73948">do</span> a b lt <span style="color: #d73948">end</span>
+<span style="color: #d73948">def</span> down a <span style="color: #d73948">int</span>, b <span style="color: #d73948">int</span> <span style="color: #d73948">gives</span> <span style="color: #d73948">bool</span> <span style="color: #d73948">do</span> a b gt <span style="color: #d73948">end</span>
+<span style="color: #d73948">type</span> Proc1 proc <span style="color: #d73948">int</span>, <span style="color: #d73948">int</span> <span style="color: #d73948">gives</span> <span style="color: #d73948">bool</span> <span style="color: #d73948">end</span> <span style="color: #d73948">def</span> best before Proc1, x <span style="color: #d73948">int</span>, y <span style="color: #d73948">int</span> <span style="color: #d73948">gives</span> <span style="color: #d73948">int</span> <span style="color: #d73948">do</span> y x before call <span style="color: #d73948">if</span> y <span style="color: #d73948">else</span> x <span style="color: #d73948">end</span> <span style="color: #d73948">end</span>
+<span style="color: #d73948">def</span> order_named how <span style="color: #d73948">str</span> <span style="color: #d73948">gives</span> Proc1 <span style="color: #d73948">or</span> <span style="color: #d73948">fail</span> <span style="color: #d73948">do</span>
+  how <span style="color: #d73948">match</span>
+    <span style="color: #d73948">when</span> <span style="color: #198810">"up"</span> <span style="color: #d73948">do</span> <span style="color: #d73948">ref</span> up <span style="color: #d73948">end</span>
+    <span style="color: #d73948">when</span> <span style="color: #198810">"down"</span> <span style="color: #d73948">do</span> <span style="color: #d73948">ref</span> down <span style="color: #d73948">end</span>
     <span style="color: #d73948">otherwise</span> <span style="color: #d73948">err</span>.not_found <span style="color: #d73948">fail</span> <span style="color: #d73948">end</span>
   <span style="color: #d73948">end</span>
 <span style="color: #d73948">end</span>
-def demo <span style="color: #d73948">or</span> <span style="color: #d73948">fail</span> <span style="color: #d73948">do</span>
+<span style="color: #d73948">def</span> demo <span style="color: #d73948">or</span> <span style="color: #d73948">fail</span> <span style="color: #d73948">do</span>
   <span style="color: #198810">"up"</span> order_named <span style="color: #d73948">or_fail</span> <span style="color: #d73948">to</span> smallest_first
   <span style="color: #198810">"down"</span> order_named <span style="color: #d73948">or_fail</span> <span style="color: #d73948">to</span> largest_first
-  args <span style="color: #198810">"smallest "</span> smallest_first <span style="color: #b60157">7</span> <span style="color: #b60157">3</span> best <span style="color: #198810">", largest "</span> largest_first <span style="color: #b60157">7</span> <span style="color: #b60157">3</span> best . <span style="color: #d73948">cat</span> io.println
+  <span style="color: #d73948">args</span> <span style="color: #198810">"smallest "</span> smallest_first <span style="color: #b60157">7</span> <span style="color: #b60157">3</span> best <span style="color: #198810">", largest "</span> largest_first <span style="color: #b60157">7</span> <span style="color: #b60157">3</span> best . <span style="color: #d73948">cat</span> io.println
 <span style="color: #d73948">end</span>
 demo <span style="color: #d73948">or_else</span> <span style="color: #d73948">to</span> e e err_text io.println <span style="color: #d73948">end</span>
 </code></pre><p class="ex-label">Output</p><pre><code data-lang="text">$ pnx 04-word-values.pnx
 smallest 3, largest 7
 </code></pre></div><div class="box qa"><p class="box-title">Q&amp;A</p><p><strong>Q. How is a word of the language, such as <code>str.starts_with</code>, given as a value?</strong></p><p>A. With the block’s signature written as types only: <code>def str, str gives bool do str.starts_with end</code>. Inputs written as types stay on the stack, so the word takes them as it is. Without a signature the block takes nothing, and the message shows both forms.</p></div><div class="box mistake"><p class="box-title">Common mistake: A <code>match</code> branch can hold the word itself: <code>when "prefix" do str.starts_with end</code></p>A branch runs its words; it does not make a value of them. There <code>str.starts_with</code> is called, and finds too few values on the stack. Make the value with a block: <code>when "prefix" do def str, str gives bool do str.starts_with end end</code>, or <code>ref NAME</code> for a procedure of the program.<div class="example refused"><p class="ex-file"><code>04-word-values-branch.pnx</code></p><pre><code data-lang="pinax"><span style="color: #d73948">use</span> <span style="color: #d73948">str</span> .
-<span style="color: #d73948">type</span> Proc1 proc <span style="color: #d73948">str</span>, <span style="color: #d73948">str</span> <span style="color: #d73948">gives</span> <span style="color: #d73948">bool</span> <span style="color: #d73948">end</span> def test_named how <span style="color: #d73948">str</span> <span style="color: #d73948">gives</span> Proc1 <span style="color: #d73948">or</span> <span style="color: #d73948">fail</span> <span style="color: #d73948">do</span>
-  how match
-    when <span style="color: #198810">"prefix"</span> <span style="color: #d73948">do</span> <span style="color: #d73948">str</span>.starts_with <span style="color: #d73948">end</span>
+<span style="color: #d73948">type</span> Proc1 proc <span style="color: #d73948">str</span>, <span style="color: #d73948">str</span> <span style="color: #d73948">gives</span> <span style="color: #d73948">bool</span> <span style="color: #d73948">end</span> <span style="color: #d73948">def</span> test_named how <span style="color: #d73948">str</span> <span style="color: #d73948">gives</span> Proc1 <span style="color: #d73948">or</span> <span style="color: #d73948">fail</span> <span style="color: #d73948">do</span>
+  how <span style="color: #d73948">match</span>
+    <span style="color: #d73948">when</span> <span style="color: #198810">"prefix"</span> <span style="color: #d73948">do</span> <span style="color: #d73948">str</span>.starts_with <span style="color: #d73948">end</span>
     <span style="color: #d73948">otherwise</span> <span style="color: #d73948">err</span>.not_found <span style="color: #d73948">fail</span> <span style="color: #d73948">end</span>
   <span style="color: #d73948">end</span>
 <span style="color: #d73948">end</span>

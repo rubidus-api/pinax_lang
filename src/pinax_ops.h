@@ -159,6 +159,11 @@ PNX_INLINE int pnx_tail_word(pinax_state *st, const pnx_wordrec *callee, uint32_
     X(RUN, RCATI) \
     X(RUN, RCATB) \
     X(RUN, RCATD) \
+    X(RUN, ARGHEAD) \
+    X(RUN, ARGPUTI) \
+    X(RUN, ARGPUTD) \
+    X(RUN, ARGPUTS) \
+    X(RUN, RCATA) \
     X(RUNF, STODEC) \
     X(RUN, SORT) \
     X(RUN2, SORTBY) \
@@ -906,6 +911,119 @@ PNX_OP(RCATB) {
                       : pnx_region_append(st, &S[OP_A(w)], (const uint8_t *)"false", 5);
 }
 
+// ---- args (RFC-0049): values of mixed kinds in the region ------------------------------------
+// A block of bytes in the region: a header of two u32 (the count and how many are put so far), then a slot of
+// 16 bytes for each value (kind u8, scale u8, 2 bytes, length u32, payload i64), then the bytes of the strs.
+// The payload of a str is its place from the start of the block. Everything a reader takes from a block it checks:
+// the region may have been rewound under a stale view.
+enum { PNX_ARG_INT = 1, PNX_ARG_BOOL, PNX_ARG_STR, PNX_ARG_DEC, PNX_ARG_MAX = 64 };
+
+PNX_OP(ARGHEAD) { // the string in S[A] is at the top of the region and empty
+    pnx_scell *cell = &S[OP_A(w)];
+    const uint32_t n = OP_B(w);
+    if (n == 0 || n > PNX_ARG_MAX)
+        return PINAX_ERR_STATE;
+    uint8_t head[8 + 16 * PNX_ARG_MAX] = {0};
+    __builtin_memcpy(head, &n, 4);
+    return pnx_region_append(st, cell, head, 8 + 16 * n);
+}
+// Puts the next value of the block in S[A]: kind and scale in the slot, the payload
+PNX_INLINE int pnx_arg_put(pinax_state *st, const pnx_scell *cell, uint32_t kind, uint32_t scale, uint32_t length, int64_t payload) {
+    if (cell->segment != PNX_SEG_REGION || cell->length < 8)
+        return PINAX_ERR_STATE;
+    uint8_t *block = st->region + cell->offset;
+    uint32_t count, filled;
+    __builtin_memcpy(&count, block, 4);
+    __builtin_memcpy(&filled, block + 4, 4);
+    if (filled >= count || cell->length < 8 + 16ull * count)
+        return PINAX_ERR_STATE;
+    uint8_t *slot = block + 8 + 16 * filled;
+    slot[0] = (uint8_t)kind;
+    slot[1] = (uint8_t)scale;
+    __builtin_memcpy(slot + 4, &length, 4);
+    __builtin_memcpy(slot + 8, &payload, 8);
+    ++filled;
+    __builtin_memcpy(block + 4, &filled, 4);
+    return PNX_R_OK;
+}
+PNX_OP(ARGPUTI) { return pnx_arg_put(st, &S[OP_A(w)], OP_C(w), 0, 0, R[OP_B(w)]); }
+PNX_OP(ARGPUTD) { return pnx_arg_put(st, &S[OP_A(w)], PNX_ARG_DEC, OP_C(w), 0, R[OP_B(w)]); }
+PNX_OP(ARGPUTS) {
+    pnx_scell *cell = &S[OP_A(w)];
+    const pnx_scell s = S[OP_B(w)];
+    const uint32_t at = cell->length;
+    st->charge += s.length;
+    int rc = pnx_region_append(st, cell, pnx_view_bytes(st, s), s.length);
+    if (rc != PNX_R_OK)
+        return rc;
+    return pnx_arg_put(st, cell, PNX_ARG_STR, 0, s.length, at);
+}
+// The slot `index` of the block in `a`: PNX_R_OK, or PNX_R_FAILED with st->fail (format: not a block of args; not found:
+// an index out of range)
+PNX_INLINE int pnx_arg_slot(pinax_state *st, pnx_scell a, int64_t index, const uint8_t **slot) {
+    const uint8_t *block = pnx_view_bytes(st, a);
+    uint32_t count = 0, filled = 0;
+    if (a.length >= 8) {
+        __builtin_memcpy(&count, block, 4);
+        __builtin_memcpy(&filled, block + 4, 4);
+    }
+    if (a.length < 8 || count == 0 || count > PNX_ARG_MAX || filled != count || a.length < 8 + 16ull * count) {
+        st->fail = PINAX_ERR_FORMAT;
+        return PNX_R_FAILED;
+    }
+    if (index < 0 || index >= (int64_t)count) {
+        st->fail = PINAX_ERR_NOT_FOUND;
+        return PNX_R_FAILED;
+    }
+    *slot = block + 8 + 16 * (uint32_t)index;
+    return PNX_R_OK;
+}
+// RCATA: the values of the block in S[B], written as `cat` writes them, appended to the string in S[A]
+PNX_OP(RCATA) {
+    pnx_scell *cell = &S[OP_A(w)];
+    const pnx_scell a = S[OP_B(w)];
+    const uint8_t *block = pnx_view_bytes(st, a);
+    uint32_t count = 0;
+    if (a.length >= 8)
+        __builtin_memcpy(&count, block, 4);
+    for (uint32_t k = 0; k < count && k < PNX_ARG_MAX; ++k) {
+        const uint8_t *slot;
+        int rc = pnx_arg_slot(st, a, k, &slot);
+        if (rc != PNX_R_OK)
+            return PINAX_ERR_FORMAT; // a stale view: not a block any more
+        int64_t payload;
+        uint32_t length;
+        __builtin_memcpy(&length, slot + 4, 4);
+        __builtin_memcpy(&payload, slot + 8, 8);
+        uint8_t text[24];
+        switch (slot[0]) {
+        case PNX_ARG_INT:
+            rc = pnx_region_append(st, cell, text, pnx_format_int(payload, text));
+            break;
+        case PNX_ARG_BOOL:
+            rc = payload ? pnx_region_append(st, cell, (const uint8_t *)"true", 4)
+                         : pnx_region_append(st, cell, (const uint8_t *)"false", 5);
+            break;
+        case PNX_ARG_DEC:
+            if (slot[1] > 18)
+                return PINAX_ERR_FORMAT;
+            rc = pnx_region_append(st, cell, text, pnx_format_dec(payload, slot[1], text));
+            break;
+        case PNX_ARG_STR:
+            if (payload < 0 || (uint64_t)payload + length > a.length)
+                return PINAX_ERR_FORMAT;
+            st->charge += length;
+            rc = pnx_region_append(st, cell, block + payload, length);
+            break;
+        default:
+            return PINAX_ERR_FORMAT;
+        }
+        if (rc != PNX_R_OK)
+            return rc;
+    }
+    return PNX_R_OK;
+}
+
 // ---- arrays and lists of integers ---------------------------------------------------------
 
 PNX_OP(BARRIER) { // the host writes what it holds and waits for what it started (pinax_on_barrier)
@@ -1500,6 +1618,46 @@ PNX_INLINE int pnx_text_exec(pinax_state *st, int64_t *R, pnx_scell *S, uint32_t
         r[1] = level;
         s[0] = pnx_text_slice(text, a, b);
         s[1] = pnx_text_slice(text, past, tn - past);
+        return PNX_R_OK;
+    }
+    case PNX_TXW_ARGS_LEN: {
+        uint32_t count = 0;
+        if (first.length >= 8)
+            __builtin_memcpy(&count, pnx_view_bytes(st, first), 4);
+        if (first.length < 8 || count == 0 || count > PNX_ARG_MAX || first.length < 8 + 16ull * count) {
+            st->fail = PINAX_ERR_FORMAT;
+            return PNX_R_FAILED;
+        }
+        r[0] = count;
+        return PNX_R_OK;
+    }
+    case PNX_TXW_ARGS_KIND: case PNX_TXW_ARGS_INT: case PNX_TXW_ARGS_BOOL: case PNX_TXW_ARGS_STR: case PNX_TXW_ARGS_DEC: {
+        const uint8_t *slot;
+        if ((rc = pnx_arg_slot(st, first, r[0], &slot)) != PNX_R_OK)
+            return rc;
+        int64_t  payload;
+        uint32_t length;
+        __builtin_memcpy(&length, slot + 4, 4);
+        __builtin_memcpy(&payload, slot + 8, 8);
+        const uint32_t want = OP_C(w) == PNX_TXW_ARGS_INT ? PNX_ARG_INT : OP_C(w) == PNX_TXW_ARGS_BOOL ? PNX_ARG_BOOL
+                            : OP_C(w) == PNX_TXW_ARGS_STR ? PNX_ARG_STR : OP_C(w) == PNX_TXW_ARGS_DEC ? PNX_ARG_DEC : 0;
+        if (OP_C(w) == PNX_TXW_ARGS_KIND) {
+            r[0] = slot[0];
+            return PNX_R_OK;
+        }
+        if (slot[0] != want || (want == PNX_ARG_DEC && (int64_t)slot[1] != r[1])) {
+            st->fail = PINAX_ERR_FORMAT;
+            return PNX_R_FAILED;
+        }
+        if (want == PNX_ARG_STR) {
+            if (payload < 0 || (uint64_t)payload + length > first.length) {
+                st->fail = PINAX_ERR_FORMAT;
+                return PNX_R_FAILED;
+            }
+            s[0] = (pnx_scell){first.segment, length, first.offset + (uint64_t)payload};
+            return PNX_R_OK;
+        }
+        r[0] = want == PNX_ARG_BOOL ? payload != 0 : payload;
         return PNX_R_OK;
     }
     default: break;

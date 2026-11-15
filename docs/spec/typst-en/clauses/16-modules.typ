@@ -3,8 +3,8 @@
 
 = Standard modules <std>
 
-#para("1")[The standard modules come with the processor. They are opened with `use MODULE` and written `MODULE.WORD`
-(13.1). Words of standard modules cannot reach outside without the host --- they use no files, clocks or environment.]
+#para("1")[The standard modules come with the processor. They are opened with `use MODULE .` and written `MODULE.WORD`
+(13.1); the module `args` (16.13) is part of the core and needs no `use`. Words of standard modules cannot reach outside without the host --- they use no files, clocks or environment.]
 
 #para("2")[Words of standard modules make no new storage. Their results are one of:
 - a view of the bytes they were given; nothing is copied;
@@ -24,3 +24,4 @@
 #include "16-10-sheet.typ"
 #include "16-11-toml.typ"
 #include "16-12-md.typ"
+#include "16-13-args.typ"

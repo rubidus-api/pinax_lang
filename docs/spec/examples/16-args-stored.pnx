@@ -1,0 +1,4 @@
+rem refused
+def keep rest args do
+  rest to saved                                rem an args is a parameter: it is not stored
+end

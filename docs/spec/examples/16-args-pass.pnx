@@ -1,0 +1,7 @@
+rem run
+use io .
+def inner rest args gives str do rest cat end
+def outer label str, rest args gives str do
+  args label ": " rest inner . cat             rem an args goes on to any procedure that takes one
+end
+"ids" args 1 2 3 . outer io.println

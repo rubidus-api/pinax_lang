@@ -4,14 +4,14 @@
 <span style="color: #d73948">use</span> <span style="color: #d73948">str</span> .
 <span style="color: #74747c">rem Pull fields out of log lines with a small pattern.</span>
 <span style="color: #d73948">const</span> entry <span style="color: #198810">"^(%d+):(%d+) (%u+) (.*)$"</span>
-def show line <span style="color: #d73948">str</span> <span style="color: #d73948">do</span>
-  line entry ptn.match <span style="color: #d73948">or_else</span> <span style="color: #d73948">to</span> e args <span style="color: #198810">"no match: "</span> line . <span style="color: #d73948">cat</span> io.println <span style="color: #d73948">return</span> <span style="color: #d73948">end</span> drop
-  args <span style="color: #b60157">3</span> ptn.capture <span style="color: #198810">" at "</span> <span style="color: #b60157">1</span> ptn.capture <span style="color: #198810">"h"</span> <span style="color: #b60157">2</span> ptn.capture <span style="color: #198810">": "</span> <span style="color: #b60157">4</span> ptn.capture . <span style="color: #d73948">cat</span> io.println
+<span style="color: #d73948">def</span> show line <span style="color: #d73948">str</span> <span style="color: #d73948">do</span>
+  line entry ptn.match <span style="color: #d73948">or_else</span> <span style="color: #d73948">to</span> e <span style="color: #d73948">args</span> <span style="color: #198810">"no match: "</span> line . <span style="color: #d73948">cat</span> io.println <span style="color: #d73948">return</span> <span style="color: #d73948">end</span> drop
+  <span style="color: #d73948">args</span> <span style="color: #b60157">3</span> ptn.capture <span style="color: #198810">" at "</span> <span style="color: #b60157">1</span> ptn.capture <span style="color: #198810">"h"</span> <span style="color: #b60157">2</span> ptn.capture <span style="color: #198810">": "</span> <span style="color: #b60157">4</span> ptn.capture . <span style="color: #d73948">cat</span> io.println
 <span style="color: #d73948">end</span>
 <span style="color: #198810">"09:15 INFO server started"</span> show
 <span style="color: #198810">"10:02 WARN disk 91% full"</span> show
 <span style="color: #198810">"garbage"</span> show
-<span style="color: #198810">"a1b22c333"</span> <span style="color: #198810">"%d+"</span> ptn.matches <span style="color: #d73948">do</span> <span style="color: #d73948">to</span> m args <span style="color: #198810">"["</span> m <span style="color: #198810">"]"</span> . <span style="color: #d73948">cat</span> io.print <span style="color: #d73948">end</span> each
+<span style="color: #198810">"a1b22c333"</span> <span style="color: #198810">"%d+"</span> ptn.matches <span style="color: #d73948">do</span> <span style="color: #d73948">to</span> m <span style="color: #d73948">args</span> <span style="color: #198810">"["</span> m <span style="color: #198810">"]"</span> . <span style="color: #d73948">cat</span> io.print <span style="color: #d73948">end</span> each
 <span style="color: #198810">""</span> io.println
 <span style="color: #198810">"hello world"</span> <span style="color: #198810">"(%w+)"</span> <span style="color: #198810">"&lt;%1&gt;"</span> ptn.replace io.println
 </code></pre><p class="ex-label">출력</p><pre><code data-lang="text">$ pnx 12-ptn.pnx
@@ -22,7 +22,7 @@ no match: garbage
 &lt;hello&gt; &lt;world&gt;
 </code></pre></div><p>패턴은 작은 조각을 늘어놓은 것이다. 자주 쓰는 조각은 이렇다(전체 목록은 표준 16.6).</p><table><thead><tr><th><strong>조각</strong></th><th><strong>맞는 것</strong></th></tr></thead><tbody><tr><td><code>a</code> 처럼 보통 글자</td><td>그 바이트 하나</td></tr><tr><td><code>.</code></td><td>아무 바이트 하나</td></tr><tr><td><code>%d</code> <code>%a</code> <code>%s</code> <code>%w</code></td><td>숫자, 글자, 공백, 글자나 숫자 하나. 대문자(<code>%D</code> …)는 그 밖의 것</td></tr><tr><td><code>%.</code> <code>%%</code></td><td>점, <code>%</code> 그 자체</td></tr><tr><td><code>[ae]</code> <code>[a-z]</code> <code>[^0-9]</code></td><td>넣은 것 가운데 하나, 범위 가운데 하나, 넣지 않은 것 하나</td></tr><tr><td>조각 뒤의 <code>+</code> <code>*</code> <code>?</code></td><td>한 번 이상, 0 번 이상, 0 번이나 한 번</td></tr><tr><td><code>^</code> 와 <code>$</code></td><td>패턴 처음에 쓰면 글의 처음, 끝에 쓰면 글의 끝에서만</td></tr><tr><td><code>( … )</code></td><td>맞은 부분을 갈무리한다. <code>n ptn.capture</code> 로 읽는다</td></tr></tbody></table><p>패턴 하나씩 시험해 보면 조각의 뜻이 잘 보인다.</p><div class="example run"><p class="ex-file"><code>12-ptn-steps.pnx</code></p><pre><code data-lang="pinax"><span style="color: #d73948">use</span> io .
 <span style="color: #d73948">use</span> ptn .
-def say ok <span style="color: #d73948">bool</span>, what <span style="color: #d73948">str</span> <span style="color: #d73948">do</span> args ok <span style="color: #d73948">if</span> <span style="color: #198810">"yes "</span> <span style="color: #d73948">else</span> <span style="color: #198810">"no  "</span> <span style="color: #d73948">end</span> what . <span style="color: #d73948">cat</span> io.println <span style="color: #d73948">end</span>
+<span style="color: #d73948">def</span> say ok <span style="color: #d73948">bool</span>, what <span style="color: #d73948">str</span> <span style="color: #d73948">do</span> <span style="color: #d73948">args</span> ok <span style="color: #d73948">if</span> <span style="color: #198810">"yes "</span> <span style="color: #d73948">else</span> <span style="color: #198810">"no  "</span> <span style="color: #d73948">end</span> what . <span style="color: #d73948">cat</span> io.println <span style="color: #d73948">end</span>
 <span style="color: #198810">"order 66"</span> <span style="color: #198810">"%d+"</span> ptn.is_match <span style="color: #198810">"%d+: a digit, one or more"</span> say
 <span style="color: #198810">"order 66"</span> <span style="color: #198810">"^%d+"</span> ptn.is_match <span style="color: #198810">"^%d+: digits at the start, and it starts with a letter"</span> say
 <span style="color: #198810">"order 66"</span> <span style="color: #198810">"%a+ %d+$"</span> ptn.is_match <span style="color: #198810">"%a+ %d+$: letters, a space, digits at the end"</span> say
@@ -40,7 +40,7 @@ yes x=%d* on x=: * allows none at all
 yes %d%.%d on 3.14: %. is a real point
 </code></pre></div><p><code>ptn.capture</code> 가 읽는 것은 <strong>이 실행의</strong> 마지막 맞음이다. 맞은 적이 없는데 읽으면 결함 <code>range</code> 다. 다른 실행에서 맞힌 것은 보이지 않는다 — 그 글은 이미 사라졌을 수 있기 때문이다.</p><div class="example fault"><p class="ex-file"><code>12-capture-none.pnx</code></p><pre><code data-lang="pinax"><span style="color: #d73948">use</span> io .
 <span style="color: #d73948">use</span> ptn .
-def first_number <span style="color: #d73948">gives</span> <span style="color: #d73948">str</span> <span style="color: #d73948">do</span>
+<span style="color: #d73948">def</span> first_number <span style="color: #d73948">gives</span> <span style="color: #d73948">str</span> <span style="color: #d73948">do</span>
   <span style="color: #b60157">1</span> ptn.capture                               <span style="color: #74747c">rem no match in this run yet: there is nothing to read</span>
 <span style="color: #d73948">end</span>
 first_number io.println
@@ -51,12 +51,12 @@ first_number io.println
 <span style="color: #d73948">use</span> <span style="color: #d73948">str</span> .
 <span style="color: #74747c">rem Dates in any of two forms, rewritten to one.</span>
 <span style="color: #d73948">const</span> iso <span style="color: #198810">r"(\d{4})-(\d{2})-(\d{2})"</span>
-def demo <span style="color: #d73948">do</span>
+<span style="color: #d73948">def</span> demo <span style="color: #d73948">do</span>
   <span style="color: #198810">"due 2026-10-15, paid 2026-11-02"</span> iso rex.rx <span style="color: #198810">r"\3.\2.\1"</span> rex.replace io.println
   <span style="color: #198810">"id=7, x=20; name=kim, n=3"</span> <span style="color: #198810">r"(\w+)=(\d+)"</span> rex.rx rex.matches <span style="color: #d73948">do</span> <span style="color: #d73948">to</span> value <span style="color: #d73948">to</span> key <span style="color: #d73948">to</span> whole
-    args key <span style="color: #198810">" -&gt; "</span> value . <span style="color: #d73948">cat</span> io.println
+    <span style="color: #d73948">args</span> key <span style="color: #198810">" -&gt; "</span> value . <span style="color: #d73948">cat</span> io.println
   <span style="color: #d73948">end</span> each
-  <span style="color: #198810">"a , b;c ,d"</span> <span style="color: #198810">r"\s*[,;]\s*"</span> rex.rx rex.split <span style="color: #d73948">do</span> <span style="color: #d73948">to</span> p args <span style="color: #198810">"&lt;"</span> p <span style="color: #198810">"&gt;"</span> . <span style="color: #d73948">cat</span> io.print <span style="color: #d73948">end</span> each
+  <span style="color: #198810">"a , b;c ,d"</span> <span style="color: #198810">r"\s*[,;]\s*"</span> rex.rx rex.split <span style="color: #d73948">do</span> <span style="color: #d73948">to</span> p <span style="color: #d73948">args</span> <span style="color: #198810">"&lt;"</span> p <span style="color: #198810">"&gt;"</span> . <span style="color: #d73948">cat</span> io.print <span style="color: #d73948">end</span> each
   <span style="color: #198810">""</span> io.println
 <span style="color: #d73948">end</span>
 demo
@@ -70,24 +70,24 @@ n -&gt; 3
 <span style="color: #d73948">use</span> rex .
 <span style="color: #d73948">use</span> <span style="color: #d73948">str</span> .
 <span style="color: #d73948">buffer</span> out <span style="color: #b60157">128</span>
-def title s <span style="color: #d73948">str</span> <span style="color: #d73948">gives</span> <span style="color: #d73948">int</span> <span style="color: #d73948">or</span> <span style="color: #d73948">fail</span> <span style="color: #d73948">do</span>          <span style="color: #74747c">rem capitalize every word</span>
+<span style="color: #d73948">def</span> title s <span style="color: #d73948">str</span> <span style="color: #d73948">gives</span> <span style="color: #d73948">int</span> <span style="color: #d73948">or</span> <span style="color: #d73948">fail</span> <span style="color: #d73948">do</span>          <span style="color: #74747c">rem capitalize every word</span>
   out clear
   s <span style="color: #198810">r"\b[a-z]"</span> rex.rx out <span style="color: #d73948">do</span> <span style="color: #d73948">to</span> w w <span style="color: #d73948">str</span>.upper <span style="color: #d73948">end</span> rex.replace_by <span style="color: #d73948">or_fail</span>
 <span style="color: #d73948">end</span>
-def show <span style="color: #d73948">do</span> <span style="color: #198810">"the quick brown fox"</span> title <span style="color: #d73948">or_else</span> <span style="color: #d73948">to</span> e <span style="color: #b60157">-1</span> <span style="color: #d73948">end</span> <span style="color: #d73948">to</span> n  args out contents <span style="color: #198810">" ("</span> n <span style="color: #198810">" letters)"</span> . <span style="color: #d73948">cat</span> io.println <span style="color: #d73948">end</span>
+<span style="color: #d73948">def</span> show <span style="color: #d73948">do</span> <span style="color: #198810">"the quick brown fox"</span> title <span style="color: #d73948">or_else</span> <span style="color: #d73948">to</span> e <span style="color: #b60157">-1</span> <span style="color: #d73948">end</span> <span style="color: #d73948">to</span> n  <span style="color: #d73948">args</span> out contents <span style="color: #198810">" ("</span> n <span style="color: #198810">" letters)"</span> . <span style="color: #d73948">cat</span> io.println <span style="color: #d73948">end</span>
 show
 </code></pre><p class="ex-label">출력</p><pre><code data-lang="text">$ pnx 12-replace-by.pnx
 The Quick Brown Fox (4 letters)
 </code></pre></div><p>찾는 낱말은 셋이 더 있다. <code>rex.match</code> 는 처음 맞은 부분을 주고 없으면 실패한다. <code>rex.matches</code> 는 맞은 부분마다 블록을 돌리는 레일이고, 블록은 맞은 전체와 묶음마다 <code>str</code> 하나를 받는다. <code>rex.split</code> 은 맞은 부분으로 가른 조각의 레일이다. <code>ptn</code> 에도 같은 레일 <code>ptn.matches</code> 가 있다.</p><div class="example run"><p class="ex-file"><code>12-rex-words.pnx</code></p><pre><code data-lang="pinax"><span style="color: #d73948">use</span> io .
 <span style="color: #d73948">use</span> <span style="color: #d73948">str</span> .
 <span style="color: #d73948">use</span> rex .
-def demo <span style="color: #d73948">do</span>
+<span style="color: #d73948">def</span> demo <span style="color: #d73948">do</span>
   <span style="color: #198810">"order 66, aisle 7"</span> <span style="color: #198810">r"\d+"</span> rex.rx rex.match <span style="color: #d73948">or_else</span> <span style="color: #d73948">to</span> e <span style="color: #198810">"none"</span> <span style="color: #d73948">end</span> io.println
   <span style="color: #198810">"no digits here"</span> <span style="color: #198810">r"\d+"</span> rex.rx rex.match <span style="color: #d73948">or_else</span> <span style="color: #d73948">to</span> e <span style="color: #198810">"none"</span> <span style="color: #d73948">end</span> io.println
   <span style="color: #198810">"x=1, y=22"</span> <span style="color: #198810">r"(\w)=(\d+)"</span> rex.rx rex.matches <span style="color: #d73948">do</span> <span style="color: #d73948">to</span> value <span style="color: #d73948">to</span> name <span style="color: #d73948">to</span> whole
-    args name <span style="color: #198810">" is "</span> value . <span style="color: #d73948">cat</span> io.println
+    <span style="color: #d73948">args</span> name <span style="color: #198810">" is "</span> value . <span style="color: #d73948">cat</span> io.println
   <span style="color: #d73948">end</span> each
-  <span style="color: #198810">"a;b;;c"</span> <span style="color: #198810">r";"</span> rex.rx rex.split <span style="color: #d73948">do</span> <span style="color: #d73948">to</span> p args <span style="color: #198810">"["</span> p <span style="color: #198810">"]"</span> . <span style="color: #d73948">cat</span> io.print <span style="color: #d73948">end</span> each
+  <span style="color: #198810">"a;b;;c"</span> <span style="color: #198810">r";"</span> rex.rx rex.split <span style="color: #d73948">do</span> <span style="color: #d73948">to</span> p <span style="color: #d73948">args</span> <span style="color: #198810">"["</span> p <span style="color: #198810">"]"</span> . <span style="color: #d73948">cat</span> io.print <span style="color: #d73948">end</span> each
   <span style="color: #198810">""</span> io.println
 <span style="color: #d73948">end</span>
 demo
@@ -99,34 +99,34 @@ y is 22
 [a][b][][c]
 </code></pre></div><div class="example run"><p class="ex-file"><code>12-ptn-matches.pnx</code></p><pre><code data-lang="pinax"><span style="color: #d73948">use</span> io .
 <span style="color: #d73948">use</span> ptn .
-def demo <span style="color: #d73948">do</span>
-  <span style="color: #198810">"x=1, y=22, z=333"</span> <span style="color: #198810">"%a=%d+"</span> ptn.matches <span style="color: #d73948">do</span> <span style="color: #d73948">to</span> m args <span style="color: #198810">"&lt;"</span> m <span style="color: #198810">"&gt;"</span> . <span style="color: #d73948">cat</span> io.print <span style="color: #d73948">end</span> each
+<span style="color: #d73948">def</span> demo <span style="color: #d73948">do</span>
+  <span style="color: #198810">"x=1, y=22, z=333"</span> <span style="color: #198810">"%a=%d+"</span> ptn.matches <span style="color: #d73948">do</span> <span style="color: #d73948">to</span> m <span style="color: #d73948">args</span> <span style="color: #198810">"&lt;"</span> m <span style="color: #198810">"&gt;"</span> . <span style="color: #d73948">cat</span> io.print <span style="color: #d73948">end</span> each
   <span style="color: #198810">""</span> io.println
 <span style="color: #d73948">end</span>
 demo
 </code></pre><p class="ex-label">출력</p><pre><code data-lang="text">$ pnx 12-ptn-matches.pnx
 &lt;x=1&gt;&lt;y=22&gt;&lt;z=333&gt;
 </code></pre></div><table><thead><tr><th><strong>토큰</strong></th><th><strong>그 뒤의 스택</strong></th><th><strong>일어난 일</strong></th></tr></thead><tbody><tr><td><code>"order 66, aisle 7" r"\d+" rex.rx</code></td><td><code>"order 66, aisle 7" re</code></td><td>글과 패턴 프로그램. <code>rex.rx</code> 는 적재 때 만든다.</td></tr><tr><td><code>rex.match</code></td><td><code>"66"</code></td><td>처음 맞은 부분의 뷰. 없었다면 실패한다.</td></tr><tr><td><code>or_else to e "none" end</code></td><td><code>"66"</code></td><td>성공: 건너뛴다.</td></tr><tr><td><code>io.println</code></td><td><code>—</code></td><td>찍는다.</td></tr></tbody></table><div class="box mistake"><p class="box-title">흔한 오해: 정규 표현식을 보통 문자열에 적는다</p><code>"\d+"</code> 는 거절된다. 보통 문자열에서 <code>\d</code> 는 모르는 이스케이프이기 때문이다. 더 나쁜 것은 <code>"\b"</code> 다 — 백스페이스 문자가 되어 조용히 다른 뜻이 된다. 패턴은 날 문자열 <code>r"…"</code> 에 적는다.<div class="example refused"><p class="ex-file"><code>12-escape.pnx</code></p><pre><code data-lang="pinax"><span style="color: #d73948">use</span> rex .
-def digits s <span style="color: #d73948">str</span> <span style="color: #d73948">gives</span> <span style="color: #d73948">bool</span> <span style="color: #d73948">do</span> s <span style="color: #198810">"</span><span style="color: #1d6c76">\d</span><span style="color: #198810">+"</span> rex.rx rex.is_match <span style="color: #d73948">end</span>
+<span style="color: #d73948">def</span> digits s <span style="color: #d73948">str</span> <span style="color: #d73948">gives</span> <span style="color: #d73948">bool</span> <span style="color: #d73948">do</span> s <span style="color: #198810">"</span><span style="color: #1d6c76">\d</span><span style="color: #198810">+"</span> rex.rx rex.is_match <span style="color: #d73948">end</span>
 </code></pre><p class="ex-label">거절</p><pre><code data-lang="text">$ pnx 12-escape.pnx
 12-escape.pnx:2:35: unknown escape; a raw string r"..." keeps backslashes as written
 </code></pre></div></div><h3>12.3 패턴은 상수다</h3><p><code>ptn</code> 의 패턴과 <code>rex.rx</code> 의 패턴은 리터럴이거나 <code>const</code> 여야 한다. 처리기가 적재 때 패턴을 검사하고 프로그램으로 만들기 위해서다. 틀린 패턴은 돌기 전에 거절된다.</p><div class="example refused"><p class="ex-file"><code>12-pattern-variable.pnx</code></p><pre><code data-lang="pinax"><span style="color: #d73948">use</span> rex .
-def find s <span style="color: #d73948">str</span>, p <span style="color: #d73948">str</span> <span style="color: #d73948">gives</span> <span style="color: #d73948">bool</span> <span style="color: #d73948">do</span> s p rex.rx rex.is_match <span style="color: #d73948">end</span>
+<span style="color: #d73948">def</span> find s <span style="color: #d73948">str</span>, p <span style="color: #d73948">str</span> <span style="color: #d73948">gives</span> <span style="color: #d73948">bool</span> <span style="color: #d73948">do</span> s p rex.rx rex.is_match <span style="color: #d73948">end</span>
 </code></pre><p class="ex-label">거절</p><pre><code data-lang="text">$ pnx 12-pattern-variable.pnx
 12-pattern-variable.pnx:2:41: rx takes a string literal or a const name; a pattern made while running is rex.compile
 </code></pre></div><p>돌 때 만든 패턴이 필요하면 <code>rex.compile</code> 을 쓴다. 틀린 패턴은 실패(<code>format</code>)로 온다.</p><div class="example run"><p class="ex-file"><code>12-compile.pnx</code></p><pre><code data-lang="pinax"><span style="color: #d73948">use</span> io .
 <span style="color: #d73948">use</span> rex .
 <span style="color: #d73948">use</span> env .
-def count_matches pattern <span style="color: #d73948">str</span>, s <span style="color: #d73948">str</span> <span style="color: #d73948">gives</span> <span style="color: #d73948">int</span> <span style="color: #d73948">or</span> <span style="color: #d73948">fail</span> <span style="color: #d73948">do</span>
+<span style="color: #d73948">def</span> count_matches pattern <span style="color: #d73948">str</span>, s <span style="color: #d73948">str</span> <span style="color: #d73948">gives</span> <span style="color: #d73948">int</span> <span style="color: #d73948">or</span> <span style="color: #d73948">fail</span> <span style="color: #d73948">do</span>
   pattern rex.compile <span style="color: #d73948">or_fail</span> <span style="color: #d73948">to</span> re
   <span style="color: #b60157">0</span> <span style="color: #d73948">to</span> n
   s re rex.matches <span style="color: #d73948">do</span> <span style="color: #d73948">to</span> m n <span style="color: #b60157">1</span> add <span style="color: #d73948">to</span> n <span style="color: #d73948">end</span> each
   n
 <span style="color: #d73948">end</span>
-def main <span style="color: #d73948">do</span>
+<span style="color: #d73948">def</span> main <span style="color: #d73948">do</span>
   <span style="color: #b60157">1</span> env.arg <span style="color: #d73948">or_else</span> <span style="color: #d73948">to</span> e <span style="color: #198810">"x"</span> <span style="color: #d73948">end</span> <span style="color: #d73948">to</span> p
-  args <span style="color: #198810">"matches of "</span> p <span style="color: #198810">": "</span> p <span style="color: #198810">"a1 b22 c333"</span> count_matches <span style="color: #d73948">or_else</span> <span style="color: #d73948">to</span> e <span style="color: #b60157">-1</span> <span style="color: #d73948">end</span> . <span style="color: #d73948">cat</span> io.println
-  <span style="color: #198810">"("</span> <span style="color: #198810">"a1"</span> count_matches <span style="color: #d73948">or_else</span> <span style="color: #d73948">to</span> e args <span style="color: #198810">"bad pattern: "</span> e err_text . <span style="color: #d73948">cat</span> io.println <span style="color: #b60157">-1</span> <span style="color: #d73948">end</span> drop
+  <span style="color: #d73948">args</span> <span style="color: #198810">"matches of "</span> p <span style="color: #198810">": "</span> p <span style="color: #198810">"a1 b22 c333"</span> count_matches <span style="color: #d73948">or_else</span> <span style="color: #d73948">to</span> e <span style="color: #b60157">-1</span> <span style="color: #d73948">end</span> . <span style="color: #d73948">cat</span> io.println
+  <span style="color: #198810">"("</span> <span style="color: #198810">"a1"</span> count_matches <span style="color: #d73948">or_else</span> <span style="color: #d73948">to</span> e <span style="color: #d73948">args</span> <span style="color: #198810">"bad pattern: "</span> e err_text . <span style="color: #d73948">cat</span> io.println <span style="color: #b60157">-1</span> <span style="color: #d73948">end</span> drop
 <span style="color: #d73948">end</span>
 main
 </code></pre><p class="ex-label">출력</p><pre><code data-lang="text">$ pnx 12-compile.pnx [0-9]+

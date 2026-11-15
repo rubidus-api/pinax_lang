@@ -11,14 +11,14 @@
 <span style="color: #d73948">end</span>
 <span style="color: #d73948">list</span> cities city <span style="color: #b60157">8</span>
 <span style="color: #d73948">buffer</span> out <span style="color: #b60157">512</span>
-def read_rows input <span style="color: #d73948">str</span> <span style="color: #d73948">or</span> <span style="color: #d73948">fail</span> <span style="color: #d73948">do</span>
+<span style="color: #d73948">def</span> read_rows input <span style="color: #d73948">str</span> <span style="color: #d73948">or</span> <span style="color: #d73948">fail</span> <span style="color: #d73948">do</span>
   input <span style="color: #d73948">str</span>.lines <span style="color: #d73948">do</span> <span style="color: #d73948">to</span> line
     cities len <span style="color: #d73948">to</span> before
     cities add_row <span style="color: #d73948">or_fail</span> <span style="color: #d73948">to</span> c
-    line c csv.unpack <span style="color: #d73948">or_else</span> <span style="color: #d73948">to</span> e before cities truncate  args <span style="color: #198810">"bad row: "</span> line . <span style="color: #d73948">cat</span> io.println  <span style="color: #198810">""</span> <span style="color: #d73948">end</span> drop
+    line c csv.unpack <span style="color: #d73948">or_else</span> <span style="color: #d73948">to</span> e before cities truncate  <span style="color: #d73948">args</span> <span style="color: #198810">"bad row: "</span> line . <span style="color: #d73948">cat</span> io.println  <span style="color: #198810">""</span> <span style="color: #d73948">end</span> drop
   <span style="color: #d73948">end</span> each
 <span style="color: #d73948">end</span>
-def to_json <span style="color: #d73948">or</span> <span style="color: #d73948">fail</span> <span style="color: #d73948">do</span>
+<span style="color: #d73948">def</span> to_json <span style="color: #d73948">or</span> <span style="color: #d73948">fail</span> <span style="color: #d73948">do</span>
   out json.begin_array <span style="color: #d73948">or_fail</span>
   cities <span style="color: #d73948">do</span> <span style="color: #d73948">to</span> c c out json.pack <span style="color: #d73948">or_else</span> <span style="color: #d73948">to</span> e <span style="color: #d73948">end</span> <span style="color: #d73948">end</span> each
   out json.end_array <span style="color: #d73948">or_fail</span>
@@ -38,14 +38,14 @@ bad row: Daejeon,lots,false
   name <span style="color: #d73948">str</span> <span style="color: #b60157">16</span>
 <span style="color: #d73948">end</span>
 <span style="color: #d73948">list</span> cities city <span style="color: #b60157">4</span>
-def undo <span style="color: #d73948">do</span> cities pop <span style="color: #d73948">or_else</span> <span style="color: #d73948">to</span> e cities <span style="color: #d73948">none</span> <span style="color: #d73948">end</span> drop <span style="color: #d73948">end</span>
+<span style="color: #d73948">def</span> undo <span style="color: #d73948">do</span> cities pop <span style="color: #d73948">or_else</span> <span style="color: #d73948">to</span> e cities <span style="color: #d73948">none</span> <span style="color: #d73948">end</span> drop <span style="color: #d73948">end</span>
 </code></pre><p class="ex-label">Refused</p><pre><code data-lang="text">$ pnx 11-pop-records.pnx
 11-pop-records.pnx:5:20: pop takes from a list of values; a list of records has no pop
 </code></pre></div></div><p>Reading JSON by tokens picks out just what is needed, at any depth. <code>json.next</code> gives the kind of the token, a view of its value, and the rest.</p><div class="example run"><p class="ex-file"><code>11-json-read.pnx</code></p><pre><code data-lang="pinax"><span style="color: #d73948">use</span> io .
 <span style="color: #d73948">use</span> json .
 <span style="color: #d73948">use</span> <span style="color: #d73948">str</span> .
 <span style="color: #74747c">rem Sum every number in a JSON text, at any depth, without building a tree.</span>
-def sum_numbers s <span style="color: #d73948">str</span> <span style="color: #d73948">gives</span> <span style="color: #d73948">int</span> <span style="color: #d73948">do</span>
+<span style="color: #d73948">def</span> sum_numbers s <span style="color: #d73948">str</span> <span style="color: #d73948">gives</span> <span style="color: #d73948">int</span> <span style="color: #d73948">do</span>
   <span style="color: #b60157">0</span> <span style="color: #d73948">to</span> total
   s <span style="color: #d73948">to</span> rest
   <span style="color: #d73948">loop</span>
@@ -63,7 +63,7 @@ sum_numbers <span style="color: #d73948">str</span>.to_str io.println
 </code></pre></div><p>Look at the three things <code>json.next</code> gives, one token at a time. <code>s json.next</code> gives <code>(kind int, value str, rest str)</code>: the kind of the token, its text (a view), and the text left after it. Giving what is left to <code>json.next</code> again, over and over, walks the whole text once from the front. At the end of the text <code>json.next</code> fails, and that failure ends the loop.</p><div class="example run"><p class="ex-file"><code>11-json-tokens.pnx</code></p><pre><code data-lang="pinax"><span style="color: #d73948">use</span> io .
 <span style="color: #d73948">use</span> json .
 <span style="color: #74747c">rem The tokens of a JSON text, one at a time: what json.next gives for each.</span>
-def kind_name k <span style="color: #d73948">int</span> <span style="color: #d73948">gives</span> <span style="color: #d73948">str</span> <span style="color: #d73948">do</span>       <span style="color: #74747c">rem module constants are compared with eq, not case</span>
+<span style="color: #d73948">def</span> kind_name k <span style="color: #d73948">int</span> <span style="color: #d73948">gives</span> <span style="color: #d73948">str</span> <span style="color: #d73948">do</span>       <span style="color: #74747c">rem module constants are compared with eq, not case</span>
   k json.object eq <span style="color: #d73948">if</span> <span style="color: #198810">"object"</span> <span style="color: #d73948">return</span> <span style="color: #d73948">end</span>
   k json.object_end eq <span style="color: #d73948">if</span> <span style="color: #198810">"object end"</span> <span style="color: #d73948">return</span> <span style="color: #d73948">end</span>
   k json.array eq <span style="color: #d73948">if</span> <span style="color: #198810">"array"</span> <span style="color: #d73948">return</span> <span style="color: #d73948">end</span>
@@ -73,11 +73,11 @@ def kind_name k <span style="color: #d73948">int</span> <span style="color: #d73
   k json.number eq <span style="color: #d73948">if</span> <span style="color: #198810">"number"</span> <span style="color: #d73948">return</span> <span style="color: #d73948">end</span>
   <span style="color: #198810">"other"</span>
 <span style="color: #d73948">end</span>
-def show_tokens s <span style="color: #d73948">str</span> <span style="color: #d73948">do</span>
+<span style="color: #d73948">def</span> show_tokens s <span style="color: #d73948">str</span> <span style="color: #d73948">do</span>
   s <span style="color: #d73948">to</span> rest
   <span style="color: #d73948">loop</span>
     rest json.next <span style="color: #d73948">or_else</span> <span style="color: #d73948">to</span> e <span style="color: #d73948">break</span> . <span style="color: #d73948">end</span> <span style="color: #d73948">to</span> rest <span style="color: #d73948">to</span> value <span style="color: #d73948">to</span> kind   <span style="color: #74747c">rem fails at the end: leave the loop</span>
-    args kind kind_name <span style="color: #198810">" ["</span> value <span style="color: #198810">"]"</span> . <span style="color: #d73948">cat</span> io.println
+    <span style="color: #d73948">args</span> kind kind_name <span style="color: #198810">" ["</span> value <span style="color: #198810">"]"</span> . <span style="color: #d73948">cat</span> io.println
   <span style="color: #d73948">end</span>
 <span style="color: #d73948">end</span>
 <span style="color: #198810">"{</span><span style="color: #1d6c76">\"</span><span style="color: #198810">name</span><span style="color: #1d6c76">\"</span><span style="color: #198810">: </span><span style="color: #1d6c76">\"</span><span style="color: #198810">Pinax</span><span style="color: #1d6c76">\"</span><span style="color: #198810">, </span><span style="color: #1d6c76">\"</span><span style="color: #198810">sizes</span><span style="color: #1d6c76">\"</span><span style="color: #198810">: [8, 16]}"</span> show_tokens
@@ -91,7 +91,7 @@ number [8]
 number [16]
 array end []]
 object end [}]
-</code></pre></div><table><thead><tr><th><strong>Token</strong></th><th><strong>Stack after it</strong></th><th><strong>What happened</strong></th></tr></thead><tbody><tr><td><code>rest json.next</code></td><td><code>json.object "{" …</code></td><td>Reads <code>{</code>: kind <code>json.object</code>; what is left is <code>"name": …</code>.</td></tr><tr><td><code>or_else to e break end</code></td><td><code>json.object "{" …</code></td><td>It did not fail, so the body is skipped.</td></tr><tr><td><code>to (kind, value, rest)</code></td><td><code>—</code></td><td>The three go into names; the rightmost, <code>rest</code>, takes the top value.</td></tr></tbody></table><p>A kind is a module constant like <code>json.object</code>, so it is compared with <code>eq</code>, not <code>match</code> (chapter 4). Only the work for each kind has to be chosen, so the values needed can be picked out at any depth; <code>11-json-read.pnx</code> added up the <code>json.number</code> tokens only.</p><p>A value of no interest is skipped in one go with <code>json.skip</code> an object or an array is skipped with everything inside it, so there is no depth to count. The kinds are the constants <code>json.object</code> <code>json.object_end</code> <code>json.array</code> <code>json.array_end</code> <code>json.key</code> <code>json.string</code> <code>json.number</code> <code>json.boolean</code> <code>json.null</code>. The other way round, one object fills a row of a record with <code>json.unpack</code>: the row is written only when every field fits, else it fails.</p><div class="example run"><p class="ex-file"><code>11-json-skip.pnx</code></p><pre><code data-lang="pinax"><span style="color: #d73948">use</span> io .
+</code></pre></div><table><thead><tr><th><strong>Token</strong></th><th><strong>Stack after it</strong></th><th><strong>What happened</strong></th></tr></thead><tbody><tr><td><code>rest json.next</code></td><td><code>json.object "{" …</code></td><td>Reads <code>{</code>: kind <code>json.object</code>; what is left is <code>"name": …</code>.</td></tr><tr><td><code>or_else to e break end</code></td><td><code>json.object "{" …</code></td><td>It did not fail, so the body is skipped.</td></tr><tr><td><code>to rest to value to kind</code></td><td><code>—</code></td><td>The three go into names; the first written, <code>rest</code>, takes the top value.</td></tr></tbody></table><p>A kind is a module constant like <code>json.object</code>, so it is compared with <code>eq</code>, not <code>match</code> (chapter 4). Only the work for each kind has to be chosen, so the values needed can be picked out at any depth; <code>11-json-read.pnx</code> added up the <code>json.number</code> tokens only.</p><p>A value of no interest is skipped in one go with <code>json.skip</code> an object or an array is skipped with everything inside it, so there is no depth to count. The kinds are the constants <code>json.object</code> <code>json.object_end</code> <code>json.array</code> <code>json.array_end</code> <code>json.key</code> <code>json.string</code> <code>json.number</code> <code>json.boolean</code> <code>json.null</code>. The other way round, one object fills a row of a record with <code>json.unpack</code>: the row is written only when every field fits, else it fails.</p><div class="example run"><p class="ex-file"><code>11-json-skip.pnx</code></p><pre><code data-lang="pinax"><span style="color: #d73948">use</span> io .
 <span style="color: #d73948">use</span> <span style="color: #d73948">str</span> .
 <span style="color: #d73948">use</span> json .
 <span style="color: #d73948">record</span> point
@@ -99,16 +99,16 @@ object end [}]
   y <span style="color: #d73948">int</span>
 <span style="color: #d73948">end</span>
 <span style="color: #d73948">array</span> pts point <span style="color: #b60157">1</span>
-def demo <span style="color: #d73948">or</span> <span style="color: #d73948">fail</span> <span style="color: #d73948">do</span>
+<span style="color: #d73948">def</span> demo <span style="color: #d73948">or</span> <span style="color: #d73948">fail</span> <span style="color: #d73948">do</span>
   <span style="color: #198810">"{</span><span style="color: #1d6c76">\"</span><span style="color: #198810">tags</span><span style="color: #1d6c76">\"</span><span style="color: #198810">: [1, [2, 3]], </span><span style="color: #1d6c76">\"</span><span style="color: #198810">x</span><span style="color: #1d6c76">\"</span><span style="color: #198810">: 4}"</span> json.next <span style="color: #d73948">or_fail</span> <span style="color: #d73948">to</span> rest <span style="color: #d73948">to</span> v <span style="color: #d73948">to</span> k   <span style="color: #74747c">rem the {</span>
   rest json.next <span style="color: #d73948">or_fail</span> <span style="color: #d73948">to</span> rest <span style="color: #d73948">to</span> v <span style="color: #d73948">to</span> k                                   <span style="color: #74747c">rem the key tags</span>
   rest json.skip <span style="color: #d73948">or_fail</span> <span style="color: #d73948">to</span> rest                                           <span style="color: #74747c">rem the whole array, however deep</span>
   rest json.next <span style="color: #d73948">or_fail</span> <span style="color: #d73948">to</span> rest <span style="color: #d73948">to</span> v <span style="color: #d73948">to</span> k                                   <span style="color: #74747c">rem the key x</span>
   rest json.next <span style="color: #d73948">or_fail</span> <span style="color: #d73948">to</span> rest <span style="color: #d73948">to</span> v <span style="color: #d73948">to</span> k                                   <span style="color: #74747c">rem 4</span>
-  args <span style="color: #198810">"after the skip: "</span> v <span style="color: #198810">", a number? "</span> k json.number eq . <span style="color: #d73948">cat</span> io.println
+  <span style="color: #d73948">args</span> <span style="color: #198810">"after the skip: "</span> v <span style="color: #198810">", a number? "</span> k json.number eq . <span style="color: #d73948">cat</span> io.println
   <span style="color: #198810">"{</span><span style="color: #1d6c76">\"</span><span style="color: #198810">x</span><span style="color: #1d6c76">\"</span><span style="color: #198810">: 7, </span><span style="color: #1d6c76">\"</span><span style="color: #198810">y</span><span style="color: #1d6c76">\"</span><span style="color: #198810">: 9}"</span> <span style="color: #b60157">0</span> pts idx json.unpack <span style="color: #d73948">or_fail</span> drop
-  args <span style="color: #198810">"unpacked "</span> <span style="color: #b60157">0</span> pts idx point.x <span style="color: #198810">" "</span> <span style="color: #b60157">0</span> pts idx point.y . <span style="color: #d73948">cat</span> io.println
-  <span style="color: #198810">"{</span><span style="color: #1d6c76">\"</span><span style="color: #198810">x</span><span style="color: #1d6c76">\"</span><span style="color: #198810">: true}"</span> <span style="color: #b60157">0</span> pts idx json.unpack <span style="color: #d73948">or_else</span> <span style="color: #d73948">to</span> e args <span style="color: #198810">"unpack failed: "</span> e err_text . <span style="color: #d73948">cat</span> io.println <span style="color: #198810">""</span> <span style="color: #d73948">end</span> drop
+  <span style="color: #d73948">args</span> <span style="color: #198810">"unpacked "</span> <span style="color: #b60157">0</span> pts idx point.x <span style="color: #198810">" "</span> <span style="color: #b60157">0</span> pts idx point.y . <span style="color: #d73948">cat</span> io.println
+  <span style="color: #198810">"{</span><span style="color: #1d6c76">\"</span><span style="color: #198810">x</span><span style="color: #1d6c76">\"</span><span style="color: #198810">: true}"</span> <span style="color: #b60157">0</span> pts idx json.unpack <span style="color: #d73948">or_else</span> <span style="color: #d73948">to</span> e <span style="color: #d73948">args</span> <span style="color: #198810">"unpack failed: "</span> e err_text . <span style="color: #d73948">cat</span> io.println <span style="color: #198810">""</span> <span style="color: #d73948">end</span> drop
 <span style="color: #d73948">end</span>
 demo <span style="color: #d73948">or_else</span> <span style="color: #d73948">to</span> e e err_text io.println <span style="color: #d73948">end</span>
 </code></pre><p class="ex-label">Output</p><pre><code data-lang="text">$ pnx 11-json-skip.pnx
@@ -118,7 +118,7 @@ unpack failed: format
 </code></pre></div><p>CSV is written one field at a time. <code>csv.put</code> appends text (quoted when it holds a comma, a quote or a line break), <code>csv.put_int</code> <code>csv.put_dec</code> <code>csv.put_bool</code> numbers and booleans, and <code>csv.end_line</code> the end of the line; the commas between fields are the words’ business. One row of a record as one line is <code>csv.pack</code>.</p><div class="example run"><p class="ex-file"><code>11-csv-write.pnx</code></p><pre><code data-lang="pinax"><span style="color: #d73948">use</span> io .
 <span style="color: #d73948">use</span> csv .
 <span style="color: #d73948">buffer</span> out <span style="color: #b60157">64</span>
-def demo <span style="color: #d73948">or</span> <span style="color: #d73948">fail</span> <span style="color: #d73948">do</span>
+<span style="color: #d73948">def</span> demo <span style="color: #d73948">or</span> <span style="color: #d73948">fail</span> <span style="color: #d73948">do</span>
   <span style="color: #198810">"kim"</span> out csv.put <span style="color: #d73948">or_fail</span>  <span style="color: #b60157">3</span> out csv.put_int <span style="color: #d73948">or_fail</span>  <span style="color: #d73948">true</span> out csv.put_bool <span style="color: #d73948">or_fail</span>  out csv.end_line <span style="color: #d73948">or_fail</span>
   <span style="color: #198810">"a, b"</span> out csv.put <span style="color: #d73948">or_fail</span>  <span style="color: #b60157">2</span>.50 out csv.put_dec <span style="color: #d73948">or_fail</span>  out csv.end_line <span style="color: #d73948">or_fail</span>
   out contents io.print
@@ -129,7 +129,7 @@ kim,3,true
 "a, b",2.50
 </code></pre></div><h3>11.2 Paths, settings files and Markdown</h3><p>Reading by tokens suits a stream. When the text is a document and one value is wanted, <code>json.at</code> takes a path: names joined by dots and indexes in brackets, <code>user.langs[1]</code>. It gives the kind and the text of the value; an object or an array comes whole, as written, so it can be asked again. A missing value is <code>err.not_found</code>, so <code>or_else</code> is the place for a default. <code>json.valid</code> says whether a text is JSON at all, and <code>json.minify</code> and <code>json.pretty</code> write it into a buffer without its blanks, or one value to a line.</p><div class="example run"><p class="ex-file"><code>11-json-path.pnx</code></p><pre><code data-lang="pinax"><span style="color: #d73948">use</span> io .
 <span style="color: #d73948">use</span> json .
-def main <span style="color: #d73948">or</span> <span style="color: #d73948">fail</span> <span style="color: #d73948">do</span>
+<span style="color: #d73948">def</span> main <span style="color: #d73948">or</span> <span style="color: #d73948">fail</span> <span style="color: #d73948">do</span>
 <span style="color: #198810">  </span><span style="color: #d73948">text</span><span style="color: #198810"> </span><span style="color: #4b69c6">END</span>
 <span style="color: #198810">{"user": {"name": "kim", "langs": ["ko", "en"]}, "visits": 12}</span>
 <span style="color: #4b69c6">END</span>
@@ -137,8 +137,8 @@ def main <span style="color: #d73948">or</span> <span style="color: #d73948">fai
   <span style="color: #198810">"user.name"</span> doc json.at <span style="color: #d73948">or_fail</span> io.println drop      <span style="color: #74747c">rem the value at a path</span>
   <span style="color: #198810">"user.langs[1]"</span> doc json.at <span style="color: #d73948">or_fail</span> io.println drop  <span style="color: #74747c">rem an index in brackets</span>
   <span style="color: #198810">"visits"</span> doc json.at <span style="color: #d73948">or_fail</span> drop json.number eq <span style="color: #d73948">to</span> is_number
-  args <span style="color: #198810">"visits is a number: "</span> is_number . <span style="color: #d73948">cat</span> io.println
-  <span style="color: #198810">"user.email"</span> doc json.at <span style="color: #d73948">or_else</span> <span style="color: #d73948">to</span> e args <span style="color: #198810">"no email: "</span> e err_text . <span style="color: #d73948">cat</span> io.println <span style="color: #b60157">0</span> <span style="color: #198810">""</span> <span style="color: #d73948">end</span> drop drop
+  <span style="color: #d73948">args</span> <span style="color: #198810">"visits is a number: "</span> is_number . <span style="color: #d73948">cat</span> io.println
+  <span style="color: #198810">"user.email"</span> doc json.at <span style="color: #d73948">or_else</span> <span style="color: #d73948">to</span> e <span style="color: #d73948">args</span> <span style="color: #198810">"no email: "</span> e err_text . <span style="color: #d73948">cat</span> io.println <span style="color: #b60157">0</span> <span style="color: #198810">""</span> <span style="color: #d73948">end</span> drop drop
 <span style="color: #d73948">end</span>
 main <span style="color: #d73948">or_else</span> <span style="color: #d73948">to</span> e e err_text io.println <span style="color: #d73948">end</span>
 </code></pre><p class="ex-label">Output</p><pre><code data-lang="text">$ pnx 11-json-path.pnx
@@ -148,7 +148,7 @@ visits is a number: true
 no email: not_found
 </code></pre></div><p>TOML, the format of settings files, is read the same way by the module <code>toml</code>: <code>toml.at</code> with a path (<code>server.ports[1]</code>, <code>backend[1].url</code> for the second <code>[[backend]]</code>), or <code>toml.next</code> for every statement in order, headers included. A value is given as written: a string without its quotes (and with its escapes decoded), a number as its text. <code>toml.check</code> judges a whole file before the program trusts it: a key given twice, a table opened twice, an integer that does not fit 64 bits or a date that does not exist is <code>err.format</code>. <code>toml.set</code> changes one value by its path (or adds the key at the end of its table) and <code>toml.remove</code> drops a key, each into a buffer, and everything else in the file, comments included, stays as it was.</p><div class="example run"><p class="ex-file"><code>11-toml-config.pnx</code></p><pre><code data-lang="pinax"><span style="color: #d73948">use</span> io .
 <span style="color: #d73948">use</span> toml .
-def main <span style="color: #d73948">or</span> <span style="color: #d73948">fail</span> <span style="color: #d73948">do</span>
+<span style="color: #d73948">def</span> main <span style="color: #d73948">or</span> <span style="color: #d73948">fail</span> <span style="color: #d73948">do</span>
 <span style="color: #198810">  </span><span style="color: #d73948">text</span><span style="color: #198810"> </span><span style="color: #4b69c6">END</span>
 <span style="color: #198810">name = "shop"            # the name of the service</span>
 <span style="color: #198810">[server]</span>
@@ -164,7 +164,7 @@ def main <span style="color: #d73948">or</span> <span style="color: #d73948">fai
   <span style="color: #198810">"server.ports[1]"</span> conf toml.at <span style="color: #d73948">or_fail</span> io.println drop
   <span style="color: #198810">"backend[1].url"</span> conf toml.at <span style="color: #d73948">or_fail</span> io.println drop
   conf toml.valid <span style="color: #d73948">to</span> fine
-  args <span style="color: #198810">"valid: "</span> fine . <span style="color: #d73948">cat</span> io.println
+  <span style="color: #d73948">args</span> <span style="color: #198810">"valid: "</span> fine . <span style="color: #d73948">cat</span> io.println
 <span style="color: #d73948">end</span>
 main <span style="color: #d73948">or_else</span> <span style="color: #d73948">to</span> e e err_text io.println <span style="color: #d73948">end</span>
 </code></pre><p class="ex-label">Output</p><pre><code data-lang="text">$ pnx 11-toml-config.pnx
@@ -175,7 +175,7 @@ valid: true
 </code></pre></div><p>Markdown becomes HTML with <code>md.html</code>: headings, paragraphs, emphasis, code, links, lists, quotes and tables. Raw HTML in the text is not passed on and a link to <code>javascript:</code> is written as plain text, so the result is safe to put in a page. <code>md.next</code> reads a document a block at a time, and <code>md.inline</code> writes one line without a paragraph around it. Both are a subset of CommonMark (standard 16.12 says which).</p><div class="example run"><p class="ex-file"><code>11-md-html.pnx</code></p><pre><code data-lang="pinax"><span style="color: #d73948">use</span> io .
 <span style="color: #d73948">use</span> md .
 <span style="color: #d73948">buffer</span> page <span style="color: #b60157">1024</span>
-def main <span style="color: #d73948">or</span> <span style="color: #d73948">fail</span> <span style="color: #d73948">do</span>
+<span style="color: #d73948">def</span> main <span style="color: #d73948">or</span> <span style="color: #d73948">fail</span> <span style="color: #d73948">do</span>
 <span style="color: #198810">  </span><span style="color: #d73948">text</span><span style="color: #198810"> </span><span style="color: #4b69c6">END</span>
 <span style="color: #198810">## Notes</span>
 
@@ -213,17 +213,17 @@ Raw &amp;lt;b&amp;gt;tags&amp;lt;/b&amp;gt; stay text.&lt;/p&gt;
 <span style="color: #d73948">array</span> headers header <span style="color: #b60157">2</span>
 <span style="color: #d73948">buffer</span> wire <span style="color: #b60157">32</span>
 <span style="color: #d73948">buffer</span> hex <span style="color: #b60157">64</span>
-def demo <span style="color: #d73948">or</span> <span style="color: #d73948">fail</span> <span style="color: #d73948">do</span>
+<span style="color: #d73948">def</span> demo <span style="color: #d73948">or</span> <span style="color: #d73948">fail</span> <span style="color: #d73948">do</span>
   <span style="color: #b60157">0</span> headers idx <span style="color: #d73948">to</span> h
   <span style="color: #b60157">0x50494e58</span> <span style="color: #d73948">u32</span> h <span style="color: #d73948">to</span> header.magic           <span style="color: #74747c">rem "PINX"</span>
   <span style="color: #b60157">1</span> <span style="color: #d73948">u16</span> h <span style="color: #d73948">to</span> header.version
   <span style="color: #b60157">300</span> h <span style="color: #d73948">to</span> header.length
   h wire bytes.pack <span style="color: #d73948">or_fail</span>
   wire contents hex encode.hex_encode <span style="color: #d73948">or_fail</span>
-  args <span style="color: #198810">"bytes: "</span> hex contents <span style="color: #198810">", crc32: "</span> wire contents hash.crc32 fmt.hex . <span style="color: #d73948">cat</span> io.println
+  <span style="color: #d73948">args</span> <span style="color: #198810">"bytes: "</span> hex contents <span style="color: #198810">", crc32: "</span> wire contents hash.crc32 fmt.hex . <span style="color: #d73948">cat</span> io.println
   <span style="color: #b60157">1</span> headers idx <span style="color: #d73948">to</span> back
   wire contents back bytes.unpack <span style="color: #d73948">or_fail</span> drop
-  args <span style="color: #198810">"read back: version "</span> back header.version <span style="color: #198810">", length "</span> back header.length . <span style="color: #d73948">cat</span> io.println
+  <span style="color: #d73948">args</span> <span style="color: #198810">"read back: version "</span> back header.version <span style="color: #198810">", length "</span> back header.length . <span style="color: #d73948">cat</span> io.println
 <span style="color: #d73948">end</span>
 demo <span style="color: #d73948">or_else</span> <span style="color: #d73948">to</span> e e err_text io.println <span style="color: #d73948">end</span>
 </code></pre><p class="ex-label">Output</p><pre><code data-lang="text">$ pnx 11-binary.pnx
@@ -236,7 +236,7 @@ read back: version 1, length 300
 <span style="color: #d73948">end</span>
 <span style="color: #d73948">list</span> points point <span style="color: #b60157">2</span>
 <span style="color: #d73948">buffer</span> out <span style="color: #b60157">64</span>
-def write p points <span style="color: #d73948">do</span> p out json.pack <span style="color: #d73948">end</span>   <span style="color: #74747c">rem pack fails when the buffer is full: no guard</span>
+<span style="color: #d73948">def</span> write p points <span style="color: #d73948">do</span> p out json.pack <span style="color: #d73948">end</span>   <span style="color: #74747c">rem pack fails when the buffer is full: no guard</span>
 </code></pre><p class="ex-label">Refused</p><pre><code data-lang="text">$ pnx 11-pack-unguarded.pnx
 11-pack-unguarded.pnx:8:39: a word that can fail is followed by or_fail, or_return or or_else
 </code></pre></div><div class="box qa"><p class="box-title">Q&amp;A</p><p><strong>Q. Does the record lie in memory in big-endian order too?</strong></p><p>A. No. <code>big_endian</code> sets only the order of the bytes that <code>pack</code> and <code>unpack</code> use. The layout in memory is the processor’s, and a script cannot see it.</p></div><h3>11.4 Other conversions</h3><p><code>fmt</code> turns numbers into hexadecimal, binary and zero-padded text. <code>hash</code> gives CRC-32, FNV-1a and SipHash; <code>encode</code> gives Base64, hexadecimal and URL percent-encoding. Words that write their results into a buffer fail when the buffer is full. The full lists are in clause 16 of the standard.</p><p>A hash takes text and gives an <code>int</code>. <code>hash.crc32</code> is a checksum; <code>hash.fnv1a</code> and <code>hash.hash64</code> mix keys. How many bytes one row of a record becomes under <code>bytes.pack</code> is told in advance by <code>bytes.packed_size</code>, which helps in sizing a buffer.</p><div class="example run"><p class="ex-file"><code>11-hash.pnx</code></p><pre><code data-lang="pinax"><span style="color: #d73948">use</span> io .
@@ -248,9 +248,9 @@ def write p points <span style="color: #d73948">do</span> p out json.pack <span 
   b <span style="color: #d73948">int</span>
 <span style="color: #d73948">end</span>
 <span style="color: #d73948">array</span> pairs pair <span style="color: #b60157">1</span>
-def demo <span style="color: #d73948">do</span>
-  args <span style="color: #198810">"crc32 "</span> <span style="color: #198810">"pinax"</span> hash.crc32 fmt.hex <span style="color: #198810">", fnv1a "</span> <span style="color: #198810">"pinax"</span> hash.fnv1a fmt.hex . <span style="color: #d73948">cat</span> io.println
-  args <span style="color: #198810">"a pair packs into "</span> <span style="color: #b60157">0</span> pairs idx bytes.packed_size <span style="color: #198810">" bytes"</span> . <span style="color: #d73948">cat</span> io.println
+<span style="color: #d73948">def</span> demo <span style="color: #d73948">do</span>
+  <span style="color: #d73948">args</span> <span style="color: #198810">"crc32 "</span> <span style="color: #198810">"pinax"</span> hash.crc32 fmt.hex <span style="color: #198810">", fnv1a "</span> <span style="color: #198810">"pinax"</span> hash.fnv1a fmt.hex . <span style="color: #d73948">cat</span> io.println
+  <span style="color: #d73948">args</span> <span style="color: #198810">"a pair packs into "</span> <span style="color: #b60157">0</span> pairs idx bytes.packed_size <span style="color: #198810">" bytes"</span> . <span style="color: #d73948">cat</span> io.println
 <span style="color: #d73948">end</span>
 demo
 </code></pre><p class="ex-label">Output</p><pre><code data-lang="text">$ pnx 11-hash.pnx

@@ -236,7 +236,7 @@ uint32_t pnx_md_html(const uint8_t *s, uint32_t n, uint8_t *out, uint64_t cap);
 uint32_t pnx_md_inline(const uint8_t *s, uint32_t n, uint8_t *out, uint64_t cap);
 
 // The words of json (more than json.next), toml and md that read a text and give values or write a buffer
-// (RFC-0046): id, module (8 json, 11 toml, 12 md), name, what they take in stack order (i int or bool, s str), what
+// (RFC-0046): id, module (8 json, 11 toml, 12 md, 13 args), name, what they take in stack order (i int or bool, s str, a args), what
 // they give, flags: F can fail, W writes the buffer that comes last. The ints go in the registers from A in the
 // order written, the strs from B.
 #define PNX_TEXT_WORDS(X)                                                                           \
@@ -246,7 +246,10 @@ uint32_t pnx_md_inline(const uint8_t *s, uint32_t n, uint8_t *out, uint64_t cap)
     X(TOML_NEXT, 11, "next", "s", "isss", "F") X(TOML_CHECK, 11, "check", "s", "", "F")            \
     X(TOML_SET, 11, "set", "sssi", "", "FW") X(TOML_REMOVE, 11, "remove", "ss", "", "FW")           \
     X(MD_NEXT, 12, "next", "s", "iiss", "F") X(MD_HTML, 12, "html", "s", "", "FW")                  \
-    X(MD_INLINE, 12, "inline", "s", "", "FW")
+    X(MD_INLINE, 12, "inline", "s", "", "FW")                                                       \
+    X(ARGS_LEN, 13, "len", "a", "i", "") X(ARGS_KIND, 13, "kind", "ia", "i", "F")                   \
+    X(ARGS_INT, 13, "int", "ia", "i", "F") X(ARGS_BOOL, 13, "bool", "ia", "b", "F")                 \
+    X(ARGS_STR, 13, "str", "ia", "s", "F") X(ARGS_DEC, 13, "dec", "iia", "i", "F")
 
 enum {
 #define X(id, module, name, in, out, flags) PNX_TXW_##id,
@@ -273,7 +276,7 @@ static inline bool pnx_txhas(const char *s, char c) {
 static inline void pnx_text_regs(const pnx_txword *w, uint32_t *ni, uint32_t *ri, uint32_t *si, uint32_t *ro) {
     *ni = *ri = *si = *ro = 0;
     for (const char *p = w->in; *p; ++p)
-        *(*p == 's' ? si : ni) += 1;
+        *(*p == 's' || *p == 'a' ? si : ni) += 1;
     for (const char *p = w->out; *p; ++p)
         *(*p == 's' ? ro : ri) += 1;
 }

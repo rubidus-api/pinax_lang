@@ -1,8 +1,8 @@
 <!DOCTYPE html>
 <html lang="ko"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>14 작업 - Pinax 표준</title><link rel="stylesheet" href="style.css"></head><body><nav class="top"><a href="index.html">처음</a> · <a href="13.html">앞</a> · <a href="15.html">다음</a> · <a href="../html-en/14.html">English</a></nav><main><h2>14 작업</h2><h5>구문</h5><pre><code data-lang="ebnf">tasks-decl = "tasks" NAME size [ size [ size [ size ] ] ] [ "apart" ] ;   (* count, call depth, region bytes, turn limit *)</code></pre><p class="para"><span class="pn">(1)</span> <strong>작업</strong>은 한 상태 안에서 번갈아 도는 실행 흐름이다. 작업은 스스로 양보하는 자리(<code>yield</code>, 기다리는 호스트 낱말)에서만 바뀐다. 그래서 두 작업이 같은 전역을 쓰더라도, 한 작업의 두 양보 사이에서는 다른 작업이 끼어들지 않는다. 작업은 스레드가 아니다 — 한 상태는 한 번에 한 스레드에서만 돈다(5.1).</p><p class="para"><span class="pn">(2)</span> <code>tasks 이름 수 [깊이 [구역 [차례]]]</code> 은 <strong>작업 묶음</strong>(task group)을 선언한다. 묶음은 작업을 <code>수</code> 개까지 담는다. 작업마다 자기 호출 깊이(<code>깊이</code>)와 자기 구역(<code>구역</code> 바이트)이 있다. 줄이면 처리기의 기본값이다. <code>차례</code> 를 쓰면 그것이 묶음의 차례 한도다(14.6). 묶음의 이름은 그 묶음의 작업을 가리키는 값의 타입이다. 끝에 <code>apart</code> 를 쓰면 묶음의 작업 하나에서 난 결함이 그 작업만 끝낸다(14.4 (3a)). <code>apart</code> 는 그 자리에서만 선언의 낱말이다.</p><h3>14.1 만들기와 돌리기</h3><p class="para"><span class="pn">(1)</span> <code>블록 묶음 spawn</code> 은 받는 것도 주는 것도 없는 값이 되는 블록(10.5)으로 작업 하나를 만들고 그 작업을 준다(<code>or fail</code>, 빈 자리가 없으면 <code>err.full</code>). 작업은 만들어진 채 멈춰 있고, 아직 돌지 않는다.</p><p class="para"><span class="pn">(2)</span> <code>묶음 run_all</code> 은 그 묶음의 작업을 차례로, 모두 끝날 때까지 돌린다. 한 작업은 양보하거나 끝날 때까지 돌고, 그다음 작업이 이어 돈다.</p><div class="example run"><p class="ex-file"><code>14-tasks.pnx</code></p><pre><code data-lang="pinax"><span style="color: #d73948">use</span> io .
 <span style="color: #d73948">tasks</span> workers <span style="color: #b60157">3</span>
-def say s <span style="color: #d73948">str</span> <span style="color: #d73948">do</span> s io.println <span style="color: #d73948">end</span>
-def demo <span style="color: #d73948">do</span>
+<span style="color: #d73948">def</span> say s <span style="color: #d73948">str</span> <span style="color: #d73948">do</span> s io.println <span style="color: #d73948">end</span>
+<span style="color: #d73948">def</span> demo <span style="color: #d73948">do</span>
   <span style="color: #d73948">do</span> <span style="color: #198810">"a1"</span> say yield <span style="color: #d73948">or_return</span> <span style="color: #198810">"a2"</span> say yield <span style="color: #d73948">or_return</span> <span style="color: #198810">"a3"</span> say <span style="color: #d73948">end</span> workers spawn <span style="color: #d73948">or_else</span> drop <span style="color: #d73948">return</span> <span style="color: #d73948">end</span> drop
   <span style="color: #d73948">do</span> <span style="color: #198810">"b1"</span> say yield <span style="color: #d73948">or_return</span> <span style="color: #198810">"b2"</span> say <span style="color: #d73948">end</span> workers spawn <span style="color: #d73948">or_else</span> drop <span style="color: #d73948">return</span> <span style="color: #d73948">end</span> drop
   workers run_all                          <span style="color: #74747c">rem run every task of the group until all have ended</span>
@@ -17,11 +17,11 @@ a3
 </code></pre></div><p class="para"><span class="pn">(3)</span> <code>작업 resume</code> 은 그 작업 하나를 다음 양보나 끝까지 돌리고, 끝났으면 <code>true</code> 를 준다. <code>작업 is_done</code> 은 끝났는지 묻는다. 끝난 작업의 자리는 다시 <code>spawn</code> 에 쓰인다.</p><div class="example run"><p class="ex-file"><code>14-resume.pnx</code></p><pre><code data-lang="pinax"><span style="color: #d73948">use</span> io .
 <span style="color: #d73948">use</span> <span style="color: #d73948">str</span> .
 <span style="color: #d73948">tasks</span> lone <span style="color: #b60157">1</span>
-def demo <span style="color: #d73948">do</span>
+<span style="color: #d73948">def</span> demo <span style="color: #d73948">do</span>
   <span style="color: #d73948">do</span> <span style="color: #198810">"step 1"</span> io.println yield <span style="color: #d73948">or_return</span> <span style="color: #198810">"step 2"</span> io.println <span style="color: #d73948">end</span> lone spawn <span style="color: #d73948">or_else</span> drop <span style="color: #d73948">return</span> <span style="color: #d73948">end</span> <span style="color: #d73948">to</span> t
   <span style="color: #b60157">0</span> <span style="color: #d73948">to</span> turns
   <span style="color: #d73948">loop</span> t resume <span style="color: #d73948">if</span> <span style="color: #d73948">break</span> . <span style="color: #d73948">end</span> turns <span style="color: #b60157">1</span> add <span style="color: #d73948">to</span> turns <span style="color: #d73948">end</span>     <span style="color: #74747c">rem resume gives true when the task has ended</span>
-  args <span style="color: #198810">"resumed "</span> turns <span style="color: #b60157">1</span> add <span style="color: #198810">" times, done: "</span> t is_done . <span style="color: #d73948">cat</span> io.println
+  <span style="color: #d73948">args</span> <span style="color: #198810">"resumed "</span> turns <span style="color: #b60157">1</span> add <span style="color: #198810">" times, done: "</span> t is_done . <span style="color: #d73948">cat</span> io.println
 <span style="color: #d73948">end</span>
 demo
 </code></pre><p class="ex-label">출력</p><pre><code data-lang="text">$ pnx 14-resume.pnx
@@ -30,10 +30,10 @@ step 2
 resumed 2 times, done: true
 </code></pre></div><p class="para"><span class="pn">(4)</span> 작업은 상태 안에 남는다. 호스트가 부른 한 실행이 끝나도 멈춘 작업은 그대로 있고, 다음 실행에서 이어 돌릴 수 있다.</p><div class="example run"><p class="ex-file"><code>14-full.pnx</code></p><pre><code data-lang="pinax"><span style="color: #d73948">use</span> io .
 <span style="color: #d73948">tasks</span> pair <span style="color: #b60157">2</span>
-def demo <span style="color: #d73948">do</span>
+<span style="color: #d73948">def</span> demo <span style="color: #d73948">do</span>
   <span style="color: #d73948">do</span> yield <span style="color: #d73948">or_return</span> <span style="color: #d73948">end</span> pair spawn <span style="color: #d73948">or_else</span> drop <span style="color: #d73948">return</span> <span style="color: #d73948">end</span> drop
   <span style="color: #d73948">do</span> yield <span style="color: #d73948">or_return</span> <span style="color: #d73948">end</span> pair spawn <span style="color: #d73948">or_else</span> drop <span style="color: #d73948">return</span> <span style="color: #d73948">end</span> drop
-  <span style="color: #d73948">do</span> <span style="color: #d73948">end</span> pair spawn <span style="color: #d73948">or_else</span> <span style="color: #d73948">to</span> e args <span style="color: #198810">"third spawn: "</span> e err_text . <span style="color: #d73948">cat</span> io.println <span style="color: #d73948">return</span> <span style="color: #d73948">end</span> drop
+  <span style="color: #d73948">do</span> <span style="color: #d73948">end</span> pair spawn <span style="color: #d73948">or_else</span> <span style="color: #d73948">to</span> e <span style="color: #d73948">args</span> <span style="color: #198810">"third spawn: "</span> e err_text . <span style="color: #d73948">cat</span> io.println <span style="color: #d73948">return</span> <span style="color: #d73948">end</span> drop
 <span style="color: #d73948">end</span>
 demo
 </code></pre><p class="ex-label">출력</p><pre><code data-lang="text">$ pnx 14-full.pnx
@@ -43,7 +43,7 @@ third spawn: full
 <span style="color: #d73948">tasks</span> workers <span style="color: #b60157">2</span>
 <span style="color: #d73948">queue</span> jobs <span style="color: #d73948">int</span> <span style="color: #b60157">2</span>
 <span style="color: #d73948">list</span> done <span style="color: #d73948">int</span> <span style="color: #b60157">8</span>
-def producer <span style="color: #d73948">do</span>
+<span style="color: #d73948">def</span> producer <span style="color: #d73948">do</span>
   <span style="color: #b60157">1</span> <span style="color: #d73948">to</span> i
   <span style="color: #d73948">loop</span>
     i <span style="color: #b60157">5</span> gt <span style="color: #d73948">if</span> <span style="color: #d73948">break</span> . <span style="color: #d73948">end</span>
@@ -52,7 +52,7 @@ def producer <span style="color: #d73948">do</span>
     ok <span style="color: #d73948">if</span> i <span style="color: #b60157">1</span> add <span style="color: #d73948">to</span> i <span style="color: #d73948">else</span> yield <span style="color: #d73948">or_return</span> <span style="color: #d73948">end</span>   <span style="color: #74747c">rem a full queue: let the consumer run</span>
   <span style="color: #d73948">end</span>
 <span style="color: #d73948">end</span>
-def consumer <span style="color: #d73948">do</span>
+<span style="color: #d73948">def</span> consumer <span style="color: #d73948">do</span>
   <span style="color: #b60157">0</span> <span style="color: #d73948">to</span> got
   <span style="color: #d73948">loop</span>
     got <span style="color: #b60157">5</span> ge <span style="color: #d73948">if</span> <span style="color: #d73948">break</span> . <span style="color: #d73948">end</span>
@@ -60,9 +60,9 @@ def consumer <span style="color: #d73948">do</span>
     v <span style="color: #b60157">0</span> lt <span style="color: #d73948">if</span> yield <span style="color: #d73948">or_return</span> <span style="color: #d73948">else</span> v done push <span style="color: #d73948">or_else</span> <span style="color: #d73948">to</span> e <span style="color: #d73948">end</span> got <span style="color: #b60157">1</span> add <span style="color: #d73948">to</span> got <span style="color: #d73948">end</span>
   <span style="color: #d73948">end</span>
 <span style="color: #d73948">end</span>
-def demo <span style="color: #d73948">do</span>
-  ref producer workers spawn <span style="color: #d73948">or_else</span> drop <span style="color: #d73948">return</span> <span style="color: #d73948">end</span> drop
-  ref consumer workers spawn <span style="color: #d73948">or_else</span> drop <span style="color: #d73948">return</span> <span style="color: #d73948">end</span> drop
+<span style="color: #d73948">def</span> demo <span style="color: #d73948">do</span>
+  <span style="color: #d73948">ref</span> producer workers spawn <span style="color: #d73948">or_else</span> drop <span style="color: #d73948">return</span> <span style="color: #d73948">end</span> drop
+  <span style="color: #d73948">ref</span> consumer workers spawn <span style="color: #d73948">or_else</span> drop <span style="color: #d73948">return</span> <span style="color: #d73948">end</span> drop
   workers run_all
 <span style="color: #d73948">end</span>
 demo
@@ -75,7 +75,7 @@ done <span style="color: #d73948">do</span> <span style="color: #d73948">to</spa
 <span style="color: #d73948">tasks</span> workers <span style="color: #b60157">2</span>
 <span style="color: #d73948">queue</span> jobs <span style="color: #d73948">int</span> <span style="color: #b60157">1</span>
 <span style="color: #d73948">list</span> done <span style="color: #d73948">int</span> <span style="color: #b60157">8</span>
-def producer <span style="color: #d73948">do</span>
+<span style="color: #d73948">def</span> producer <span style="color: #d73948">do</span>
   <span style="color: #b60157">1</span> <span style="color: #d73948">to</span> i
   <span style="color: #d73948">loop</span>
     i <span style="color: #b60157">5</span> gt <span style="color: #d73948">if</span> <span style="color: #d73948">break</span> . <span style="color: #d73948">end</span>
@@ -84,16 +84,16 @@ def producer <span style="color: #d73948">do</span>
   <span style="color: #d73948">end</span>
   <span style="color: #b60157">-1</span> jobs wait_put <span style="color: #d73948">or_return</span>
 <span style="color: #d73948">end</span>
-def consumer <span style="color: #d73948">do</span>
+<span style="color: #d73948">def</span> consumer <span style="color: #d73948">do</span>
   <span style="color: #d73948">loop</span>
     jobs wait_take <span style="color: #d73948">or_return</span> <span style="color: #d73948">to</span> v          <span style="color: #74747c">rem waits while the queue is empty</span>
     v <span style="color: #b60157">0</span> lt <span style="color: #d73948">if</span> <span style="color: #d73948">break</span> . <span style="color: #d73948">end</span>
     v done push <span style="color: #d73948">or_else</span> <span style="color: #d73948">to</span> e <span style="color: #d73948">end</span>
   <span style="color: #d73948">end</span>
 <span style="color: #d73948">end</span>
-def demo <span style="color: #d73948">do</span>
-  ref producer workers spawn <span style="color: #d73948">or_else</span> <span style="color: #d73948">to</span> e <span style="color: #d73948">return</span> <span style="color: #d73948">end</span> drop
-  ref consumer workers spawn <span style="color: #d73948">or_else</span> <span style="color: #d73948">to</span> e <span style="color: #d73948">return</span> <span style="color: #d73948">end</span> drop
+<span style="color: #d73948">def</span> demo <span style="color: #d73948">do</span>
+  <span style="color: #d73948">ref</span> producer workers spawn <span style="color: #d73948">or_else</span> <span style="color: #d73948">to</span> e <span style="color: #d73948">return</span> <span style="color: #d73948">end</span> drop
+  <span style="color: #d73948">ref</span> consumer workers spawn <span style="color: #d73948">or_else</span> <span style="color: #d73948">to</span> e <span style="color: #d73948">return</span> <span style="color: #d73948">end</span> drop
   workers run_all
 <span style="color: #d73948">end</span>
 demo
@@ -108,7 +108,7 @@ done <span style="color: #d73948">do</span> <span style="color: #d73948">to</spa
 <span style="color: #d73948">tasks</span> workers <span style="color: #b60157">2</span>
 <span style="color: #d73948">queue</span> asks <span style="color: #d73948">int</span> <span style="color: #b60157">1</span>
 <span style="color: #d73948">queue</span> answers <span style="color: #d73948">int</span> <span style="color: #b60157">1</span>
-def demo <span style="color: #d73948">do</span>
+<span style="color: #d73948">def</span> demo <span style="color: #d73948">do</span>
   <span style="color: #d73948">do</span> asks wait_take <span style="color: #d73948">or_return</span> drop  <span style="color: #b60157">1</span> answers wait_put <span style="color: #d73948">or_return</span> <span style="color: #d73948">end</span> workers spawn <span style="color: #d73948">or_else</span> <span style="color: #d73948">to</span> e <span style="color: #d73948">return</span> <span style="color: #d73948">end</span> drop
   <span style="color: #d73948">do</span> answers wait_take <span style="color: #d73948">or_return</span> drop  <span style="color: #b60157">1</span> asks wait_put <span style="color: #d73948">or_return</span> <span style="color: #d73948">end</span> workers spawn <span style="color: #d73948">or_else</span> <span style="color: #d73948">to</span> e <span style="color: #d73948">return</span> <span style="color: #d73948">end</span> drop
   workers run_all                          <span style="color: #74747c">rem each waits for the other: nothing can go</span>
@@ -120,7 +120,7 @@ demo
 </code></pre></div><p class="para"><span class="pn">(3)</span> 주 실행은 작업이 아니어서 차례를 넘길 데가 없다. 주 실행에서 빈 큐의 <code>wait_take</code>, 찬 큐의 <code>wait_put</code> 은 바로 결함 <code>deadlock</code> 이다.</p><div class="example fault"><p class="ex-file"><code>14-deadlock-main.pnx</code></p><pre><code data-lang="pinax"><span style="color: #d73948">use</span> io .
 <span style="color: #d73948">use</span> <span style="color: #d73948">str</span> .
 <span style="color: #d73948">queue</span> jobs <span style="color: #d73948">int</span> <span style="color: #b60157">2</span>
-def demo <span style="color: #d73948">do</span>
+<span style="color: #d73948">def</span> demo <span style="color: #d73948">do</span>
   jobs wait_take <span style="color: #d73948">or_else</span> <span style="color: #d73948">to</span> e <span style="color: #b60157">-1</span> <span style="color: #d73948">end</span> <span style="color: #d73948">str</span>.to_str io.println   <span style="color: #74747c">rem the main run is not a task: no one could fill the queue</span>
 <span style="color: #d73948">end</span>
 demo
@@ -128,11 +128,11 @@ demo
 14-deadlock-main.pnx:5: deadlock: waiting for a queue that nothing can change
 </code></pre></div><p class="para"><span class="pn">(4)</span> 교착을 보는 것은 이 두 낱말뿐이다. 스스로 도는 대기(<code>loop … yield … end</code>)나 <code>resume</code> 으로 손수 돌리는 작업은 보지 않는다. 그런 코드를 돌리는 호스트는 예산을 준다(19.5).</p><h3>14.4 취소</h3><p class="para"><span class="pn">(1)</span> <code>작업 cancel</code> 은 작업에 취소를 알린다. 그 작업의 다음 <code>yield</code> 나 큐 기다림(14.3)이 <code>err.cancelled</code> 로 실패한다. 작업은 그 실패를 받아 자기 방식으로 끝난다 — 취소는 작업을 억지로 멈추지 않는다.</p><div class="example run"><p class="ex-file"><code>14-cancel.pnx</code></p><pre><code data-lang="pinax"><span style="color: #d73948">use</span> io .
 <span style="color: #d73948">tasks</span> workers <span style="color: #b60157">1</span>
-def demo <span style="color: #d73948">do</span>
+<span style="color: #d73948">def</span> demo <span style="color: #d73948">do</span>
   <span style="color: #d73948">do</span>
     <span style="color: #d73948">loop</span>
       <span style="color: #198810">"working"</span> io.println
-      yield <span style="color: #d73948">or_else</span> <span style="color: #d73948">to</span> e args <span style="color: #198810">"stopped: "</span> e err_text . <span style="color: #d73948">cat</span> io.println <span style="color: #d73948">return</span> <span style="color: #d73948">end</span>
+      yield <span style="color: #d73948">or_else</span> <span style="color: #d73948">to</span> e <span style="color: #d73948">args</span> <span style="color: #198810">"stopped: "</span> e err_text . <span style="color: #d73948">cat</span> io.println <span style="color: #d73948">return</span> <span style="color: #d73948">end</span>
     <span style="color: #d73948">end</span>
   <span style="color: #d73948">end</span> workers spawn <span style="color: #d73948">or_else</span> drop <span style="color: #d73948">return</span> <span style="color: #d73948">end</span> <span style="color: #d73948">to</span> t
   t resume drop
@@ -146,17 +146,17 @@ working
 working
 stopped: cancelled
 </code></pre></div><h5>제약</h5><p class="para"><span class="pn">(2)</span> <code>spawn</code> 에 주는 블록은 값이 되는 블록이라 바깥의 지역 변수를 보지 못한다. 작업에 값을 주려면 전역이나 큐를 쓴다.</p><div class="example refused"><p class="ex-file"><code>14-spawn-refused.pnx</code></p><pre><code data-lang="pinax"><span style="color: #d73948">tasks</span> workers <span style="color: #b60157">2</span>
-def demo n <span style="color: #d73948">int</span> <span style="color: #d73948">do</span> <span style="color: #d73948">do</span> n drop <span style="color: #d73948">end</span> workers spawn <span style="color: #d73948">or_else</span> drop <span style="color: #d73948">return</span> <span style="color: #d73948">end</span> drop <span style="color: #d73948">end</span>
+<span style="color: #d73948">def</span> demo n <span style="color: #d73948">int</span> <span style="color: #d73948">do</span> <span style="color: #d73948">do</span> n drop <span style="color: #d73948">end</span> workers spawn <span style="color: #d73948">or_else</span> drop <span style="color: #d73948">return</span> <span style="color: #d73948">end</span> drop <span style="color: #d73948">end</span>
 </code></pre><p class="ex-label">거절</p><pre><code data-lang="text">$ pnx 14-spawn-refused.pnx
 14-spawn-refused.pnx:2:22: this name is not declared before this place
 </code></pre></div><p class="para"><span class="pn">(2a)</span> <code>spawn</code> 의 블록은 받는 것도 주는 것도 없어야 한다. 매개변수가 있는 블록은 거절된다.</p><div class="example refused"><p class="ex-file"><code>14-spawn-block.pnx</code></p><pre><code data-lang="pinax"><span style="color: #d73948">tasks</span> workers <span style="color: #b60157">2</span>
-def start <span style="color: #d73948">do</span> def n <span style="color: #d73948">int</span> <span style="color: #d73948">do</span> n drop <span style="color: #d73948">end</span> workers spawn <span style="color: #d73948">or_else</span> drop <span style="color: #d73948">return</span> <span style="color: #d73948">end</span> drop <span style="color: #d73948">end</span>
+<span style="color: #d73948">def</span> start <span style="color: #d73948">do</span> <span style="color: #d73948">def</span> n <span style="color: #d73948">int</span> <span style="color: #d73948">do</span> n drop <span style="color: #d73948">end</span> workers spawn <span style="color: #d73948">or_else</span> drop <span style="color: #d73948">return</span> <span style="color: #d73948">end</span> drop <span style="color: #d73948">end</span>
 </code></pre><p class="ex-label">거절</p><pre><code data-lang="text">$ pnx 14-spawn-block.pnx
 14-spawn-block.pnx:2:46: spawn takes a block that takes and gives nothing, and a set of tasks: do ... end workers spawn
 </code></pre></div><h5>결함</h5><p class="para"><span class="pn">(3)</span> <code>apart</code> 없는 묶음의 작업 안의 결함은 그 실행 전체와 모든 작업을 끝낸다. 결함은 주 실행의 결함처럼 호스트에게 간다. 상태는 남아 다음 실행을 받는다.</p><div class="example fault"><p class="ex-file"><code>14-fault.pnx</code></p><pre><code data-lang="pinax"><span style="color: #d73948">use</span> io .
 <span style="color: #d73948">tasks</span> workers <span style="color: #b60157">2</span>
 <span style="color: #d73948">global</span> zero <span style="color: #d73948">int</span>
-def demo <span style="color: #d73948">do</span>
+<span style="color: #d73948">def</span> demo <span style="color: #d73948">do</span>
   <span style="color: #d73948">do</span> <span style="color: #198810">"task one"</span> io.println yield <span style="color: #d73948">or_return</span> <span style="color: #198810">"task one again"</span> io.println <span style="color: #d73948">end</span> workers spawn <span style="color: #d73948">or_else</span> drop <span style="color: #d73948">return</span> <span style="color: #d73948">end</span> drop
   <span style="color: #d73948">do</span> <span style="color: #b60157">1</span> zero div drop <span style="color: #d73948">end</span> workers spawn <span style="color: #d73948">or_else</span> drop <span style="color: #d73948">return</span> <span style="color: #d73948">end</span> drop
   workers run_all
@@ -168,8 +168,8 @@ task one
 14-fault.pnx:6: division by zero
 </code></pre></div><p class="para"><span class="pn">(3a)</span> <code>apart</code> 로 선언한 묶음의 작업 안의 결함은 그 작업만 끝낸다. 그 자리는 다시 비고, 그 작업을 이어 돌린 쪽은 작업이 끝났을 때처럼 이어 간다. <code>run_all</code> 은 다음 작업을 잡고, <code>resume</code> 은 <code>true</code> 를 준다. 작업이 그때까지 저장한 것은 남는다. 실행은 계속되고, 호스트는 <code>pinax_task_faults</code> 로 그 결함을 안다(19.10 (3)).</p><div class="example run"><p class="ex-file"><code>14-apart.pnx</code></p><pre><code data-lang="pinax"><span style="color: #d73948">use</span> io .
 <span style="color: #d73948">tasks</span> workers <span style="color: #b60157">3</span> <span style="color: #b60157">16</span> <span style="color: #b60157">1024</span> apart
-def work n <span style="color: #d73948">int</span> <span style="color: #d73948">do</span> args <span style="color: #198810">"100 / "</span> n <span style="color: #198810">" = "</span> <span style="color: #b60157">100</span> n div . <span style="color: #d73948">cat</span> io.println <span style="color: #d73948">end</span>
-def demo <span style="color: #d73948">do</span>
+<span style="color: #d73948">def</span> work n <span style="color: #d73948">int</span> <span style="color: #d73948">do</span> <span style="color: #d73948">args</span> <span style="color: #198810">"100 / "</span> n <span style="color: #198810">" = "</span> <span style="color: #b60157">100</span> n div . <span style="color: #d73948">cat</span> io.println <span style="color: #d73948">end</span>
+<span style="color: #d73948">def</span> demo <span style="color: #d73948">do</span>
   <span style="color: #d73948">do</span> <span style="color: #b60157">4</span> work <span style="color: #d73948">end</span> workers spawn <span style="color: #d73948">or_else</span> <span style="color: #d73948">to</span> e <span style="color: #d73948">return</span> <span style="color: #d73948">end</span> drop
   <span style="color: #d73948">do</span> <span style="color: #b60157">0</span> work <span style="color: #d73948">end</span> workers spawn <span style="color: #d73948">or_else</span> <span style="color: #d73948">to</span> e <span style="color: #d73948">return</span> <span style="color: #d73948">end</span> drop   <span style="color: #74747c">rem this one divides by zero</span>
   <span style="color: #d73948">do</span> <span style="color: #b60157">5</span> work <span style="color: #d73948">end</span> workers spawn <span style="color: #d73948">or_else</span> <span style="color: #d73948">to</span> e <span style="color: #d73948">return</span> <span style="color: #d73948">end</span> drop
@@ -184,15 +184,15 @@ the others finished
 </code></pre></div><p class="para"><span class="pn">(4)</span> 두 작업이 같은 구역을 쓰는 일은 12.3 의 검사가 보지 않는다. 작업마다 자기 구역이 있으므로 보통은 일어나지 않는다.</p><h5>진단</h5><table><thead><tr><th><strong>조건</strong></th><th><strong>메시지</strong></th></tr></thead><tbody><tr><td>매개변수나 결과가 있는 블록을 <code>spawn</code> 에 줌</td><td><code>spawn takes a block that takes and gives nothing, and a set of tasks: do ... end workers spawn</code></td></tr><tr><td>작업이 아닌 값에 <code>resume</code> <code>is_done</code> <code>cancel</code></td><td><code>this word takes a task</code></td></tr><tr><td>작업 묶음이 아닌 모음(배열, 목록)에 <code>run_all</code></td><td><code>run_all takes a set of tasks</code></td></tr><tr><td><code>tasks</code> 의 수가 4096 을 넘음</td><td><code>a set holds at most 4096 tasks</code></td></tr><tr><td>작업의 호출 깊이가 1 부터 4096 밖</td><td><code>the call depth of a task is 1 to 4096</code></td></tr><tr><td>작업의 구역이 16 MiB 를 넘음</td><td><code>the region of a task is at most 16 MiB</code></td></tr><tr><td>자료 소스의 <code>tasks</code></td><td><code>a data source runs no code and declares no tasks</code></td></tr><tr><td><code>int</code> 가 아닌 값에 <code>task_tag</code></td><td><code>task_tag takes an int</code></td></tr><tr><td>1 보다 작은 차례 한도</td><td><code>the turn limit of a task is at least 1</code></td></tr></tbody></table><h3>14.5 작업의 이름</h3><p class="para"><span class="pn">(1)</span> <code>n task_tag</code>(<code>int gives</code>)는 도는 작업에 <strong>꼬리표</strong>(tag)를 준다. 꼬리표는 그 묶음이 <code>apart</code> 로 선언되었을 때 작업의 결함과 함께 호스트에게 알려지는 <code>int</code> 다(14.4 (3a), 19.10 (3)). 작업의 꼬리표는 작업이 주기 전까지 0 이고, 나중의 <code>task_tag</code> 가 앞의 것을 바꾼다. 작업이 아닌 주 실행에서 이 낱말은 아무것도 하지 않는다. 꼬리표는 작업의 일부이고, 상은 그것을 지닌다.</p><p class="para"><span class="pn">(2)</span> 작업은 자기가 맡을 일을 <code>spawn</code> 뒤에 큐나 전역에서 받으므로(14.4 (2)), 이름도 그때 정한다. 요청마다 번호를 주는 호스트는 작업에 그 번호를 건네고, 작업은 그것을 꼬리표로 준다.</p><div class="example run"><p class="ex-file"><code>14-tag.pnx</code></p><pre><code data-lang="pinax"><span style="color: #d73948">use</span> io .
 <span style="color: #d73948">tasks</span> workers <span style="color: #b60157">2</span> <span style="color: #b60157">16</span> <span style="color: #b60157">1024</span> apart
 <span style="color: #d73948">queue</span> jobs <span style="color: #d73948">int</span> <span style="color: #b60157">4</span>
-def work <span style="color: #d73948">do</span>
+<span style="color: #d73948">def</span> work <span style="color: #d73948">do</span>
   jobs wait_take <span style="color: #d73948">or_return</span> <span style="color: #d73948">to</span> n
   n task_tag                     <span style="color: #74747c">rem the host is told this tag if the task faults</span>
-  args <span style="color: #198810">"job "</span> n <span style="color: #198810">": "</span> <span style="color: #b60157">100</span> n div . <span style="color: #d73948">cat</span> io.println
+  <span style="color: #d73948">args</span> <span style="color: #198810">"job "</span> n <span style="color: #198810">": "</span> <span style="color: #b60157">100</span> n div . <span style="color: #d73948">cat</span> io.println
 <span style="color: #d73948">end</span>
-def demo <span style="color: #d73948">do</span>
+<span style="color: #d73948">def</span> demo <span style="color: #d73948">do</span>
   <span style="color: #b60157">4</span> jobs wait_put <span style="color: #d73948">or_return</span>  <span style="color: #b60157">5</span> jobs wait_put <span style="color: #d73948">or_return</span>
-  ref work workers spawn <span style="color: #d73948">or_else</span> <span style="color: #d73948">to</span> e <span style="color: #d73948">return</span> <span style="color: #d73948">end</span> drop
-  ref work workers spawn <span style="color: #d73948">or_else</span> <span style="color: #d73948">to</span> e <span style="color: #d73948">return</span> <span style="color: #d73948">end</span> drop
+  <span style="color: #d73948">ref</span> work workers spawn <span style="color: #d73948">or_else</span> <span style="color: #d73948">to</span> e <span style="color: #d73948">return</span> <span style="color: #d73948">end</span> drop
+  <span style="color: #d73948">ref</span> work workers spawn <span style="color: #d73948">or_else</span> <span style="color: #d73948">to</span> e <span style="color: #d73948">return</span> <span style="color: #d73948">end</span> drop
   workers run_all
 <span style="color: #d73948">end</span>
 demo
@@ -201,15 +201,15 @@ job 4: 25
 job 5: 20
 </code></pre></div><h3>14.6 차례 한도</h3><p class="para"><span class="pn">(1)</span> 작업의 <strong>차례</strong>(turn)는 작업이 실행을 얻을 때(<code>run_all</code> 이나 <code>resume</code> 에서)부터 양보하거나 기다리거나 끝날 때까지다. 차례 한도와 함께 선언한 묶음(14 (2))은 그 작업의 차례마다 명령을 많아야 그만큼 허락한다. 세는 법은 예산과 같다(19.5). 뒤로 가는 분기와 호출의 검사마다 그 비용을 세고, 훑은 바이트도 센다. 차례마다 처음부터 센다.</p><p class="para"><span class="pn">(2)</span> 차례 한도를 넘은 작업은 그 자리에서 <code>cancelled</code> 로 결함을 낸다. 거기에는 실패를 받도록 적힌 것이 없으므로, 작업은 이것을 실패로 받을 수 없다. <code>apart</code> 로 선언한 묶음에서는 그 작업만 끝나고(14.4 (3a)), 호스트는 그런 결함이 다 그렇듯 이것을 듣는다(19.10 (3a)). <code>apart</code> 없는 묶음에서는 작업 안의 다른 결함처럼 실행을 끝낸다(14.4 (3)). 그래서 양보하지 않고 도는 작업을, 다른 작업을 멈추지 않고 멈출 수 있다.</p><div class="example run"><p class="ex-file"><code>14-turns.pnx</code></p><pre><code data-lang="pinax"><span style="color: #d73948">use</span> io .
 <span style="color: #d73948">tasks</span> workers <span style="color: #b60157">2</span> <span style="color: #b60157">16</span> <span style="color: #b60157">1024</span> <span style="color: #b60157">5000</span> apart  <span style="color: #74747c">rem a turn: at most 5000 before the task yields, waits or ends</span>
-def stuck <span style="color: #d73948">do</span> <span style="color: #b60157">0</span> <span style="color: #d73948">to</span> i <span style="color: #d73948">loop</span> i <span style="color: #b60157">1</span> add <span style="color: #d73948">to</span> i <span style="color: #d73948">end</span> <span style="color: #d73948">end</span>                      <span style="color: #74747c">rem never yields</span>
-def steady <span style="color: #d73948">do</span>
+<span style="color: #d73948">def</span> stuck <span style="color: #d73948">do</span> <span style="color: #b60157">0</span> <span style="color: #d73948">to</span> i <span style="color: #d73948">loop</span> i <span style="color: #b60157">1</span> add <span style="color: #d73948">to</span> i <span style="color: #d73948">end</span> <span style="color: #d73948">end</span>                      <span style="color: #74747c">rem never yields</span>
+<span style="color: #d73948">def</span> steady <span style="color: #d73948">do</span>
   <span style="color: #b60157">0</span> <span style="color: #d73948">to</span> i
   <span style="color: #d73948">loop</span> i <span style="color: #b60157">1</span> add <span style="color: #d73948">to</span> i  i <span style="color: #b60157">100000</span> eq <span style="color: #d73948">if</span> <span style="color: #d73948">break</span> . <span style="color: #d73948">end</span>  i <span style="color: #b60157">100</span> mod <span style="color: #b60157">0</span> eq <span style="color: #d73948">if</span> yield <span style="color: #d73948">or_return</span> <span style="color: #d73948">end</span> <span style="color: #d73948">end</span>
-  args <span style="color: #198810">"steady counted to "</span> i . <span style="color: #d73948">cat</span> io.println
+  <span style="color: #d73948">args</span> <span style="color: #198810">"steady counted to "</span> i . <span style="color: #d73948">cat</span> io.println
 <span style="color: #d73948">end</span>
-def demo <span style="color: #d73948">do</span>
-  ref stuck workers spawn <span style="color: #d73948">or_else</span> <span style="color: #d73948">to</span> e <span style="color: #d73948">return</span> <span style="color: #d73948">end</span> drop
-  ref steady workers spawn <span style="color: #d73948">or_else</span> <span style="color: #d73948">to</span> e <span style="color: #d73948">return</span> <span style="color: #d73948">end</span> drop
+<span style="color: #d73948">def</span> demo <span style="color: #d73948">do</span>
+  <span style="color: #d73948">ref</span> stuck workers spawn <span style="color: #d73948">or_else</span> <span style="color: #d73948">to</span> e <span style="color: #d73948">return</span> <span style="color: #d73948">end</span> drop
+  <span style="color: #d73948">ref</span> steady workers spawn <span style="color: #d73948">or_else</span> <span style="color: #d73948">to</span> e <span style="color: #d73948">return</span> <span style="color: #d73948">end</span> drop
   workers run_all
   <span style="color: #198810">"the stuck task was stopped; the steady one finished"</span> io.println
 <span style="color: #d73948">end</span>

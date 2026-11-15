@@ -25,7 +25,7 @@ four
 </code></pre></div><p>A line break is the same as a space. The code of one call may run over two lines, and one line may hold several pieces of work. Indentation and line breaks are for the reader; <code>pnx fmt</code> evens them out (chapter 15).</p><div class="box qa"><p class="box-title">Q&amp;A</p><p><strong>Q. Why <code>rem</code> and not <code>//</code> or <code>#</code>?</strong></p><p>A. Outside literals and remarks, Pinax allows only the characters of names and <code>( ) , .</code>. So a remark also opens with a word-like <code>rem</code>. <code>rem</code> is reserved and cannot be a name.</p></div><h3>1.4 Making words</h3><p>Here is a program that adds up 1 to 100, three ways.</p><div class="example run"><p class="ex-file"><code>01-sum.pnx</code></p><pre><code data-lang="pinax"><span style="color: #d73948">use</span> io .
 <span style="color: #d73948">use</span> <span style="color: #d73948">str</span> .
 <span style="color: #74747c">rem The sum of 1 to 100, three ways.</span>
-def sum_loop n <span style="color: #d73948">int</span> <span style="color: #d73948">gives</span> <span style="color: #d73948">int</span> <span style="color: #d73948">do</span>
+<span style="color: #d73948">def</span> sum_loop n <span style="color: #d73948">int</span> <span style="color: #d73948">gives</span> <span style="color: #d73948">int</span> <span style="color: #d73948">do</span>
   <span style="color: #b60157">0</span> <span style="color: #d73948">to</span> total
   <span style="color: #b60157">1</span> <span style="color: #d73948">to</span> i
   <span style="color: #d73948">loop</span>
@@ -35,8 +35,8 @@ def sum_loop n <span style="color: #d73948">int</span> <span style="color: #d739
   <span style="color: #d73948">end</span>
   total
 <span style="color: #d73948">end</span>
-def sum_range n <span style="color: #d73948">int</span> <span style="color: #d73948">gives</span> <span style="color: #d73948">int</span> <span style="color: #d73948">do</span> <span style="color: #b60157">1</span> n <span style="color: #b60157">1</span> add range sum <span style="color: #d73948">end</span>
-def sum_formula n <span style="color: #d73948">int</span> <span style="color: #d73948">gives</span> <span style="color: #d73948">int</span> <span style="color: #d73948">do</span> n n <span style="color: #b60157">1</span> add mul <span style="color: #b60157">2</span> div <span style="color: #d73948">end</span>
+<span style="color: #d73948">def</span> sum_range n <span style="color: #d73948">int</span> <span style="color: #d73948">gives</span> <span style="color: #d73948">int</span> <span style="color: #d73948">do</span> <span style="color: #b60157">1</span> n <span style="color: #b60157">1</span> add range sum <span style="color: #d73948">end</span>
+<span style="color: #d73948">def</span> sum_formula n <span style="color: #d73948">int</span> <span style="color: #d73948">gives</span> <span style="color: #d73948">int</span> <span style="color: #d73948">do</span> n n <span style="color: #b60157">1</span> add mul <span style="color: #b60157">2</span> div <span style="color: #d73948">end</span>
 <span style="color: #b60157">100</span> sum_loop <span style="color: #d73948">str</span>.to_str io.println
 <span style="color: #b60157">100</span> sum_range <span style="color: #d73948">str</span>.to_str io.println
 <span style="color: #b60157">100</span> sum_formula <span style="color: #d73948">str</span>.to_str io.println
@@ -46,9 +46,9 @@ def sum_formula n <span style="color: #d73948">int</span> <span style="color: #d
 5050
 </code></pre></div><p><code>def NAME signature do body end</code> defines a procedure. The signature <code>n int gives int</code> means “takes one <code>int</code>, named <code>n</code>, and gives one <code>int</code>”. When the body ends, the stack shall hold exactly the results the signature promises.</p><ul><li><code>sum_loop</code> is a loop with the locals <code>total</code> and <code>i</code>. <code>to NAME</code> puts the top value into that name. <code>loop … end</code> repeats, and <code>i n gt if break . end</code> means “leave when <code>i</code> is greater than <code>n</code>”.</li><li><code>sum_range</code> makes a <strong>rail</strong> of 1 to <code>n</code> with <code>1 n 1 add range</code> and gives it to <code>sum</code>.</li><li><code>sum_formula</code> is the formula <math><mfrac><mrow><mi>𝑛</mi><mrow><mo>(</mo><mrow><mi>𝑛</mi><mo lspace="0em" rspace="0em">+</mo><mn>1</mn></mrow><mo>)</mo></mrow></mrow><mn>2</mn></mfrac></math> written in postfix.</li></ul><div class="box qa"><p class="box-title">Q&amp;A</p><p><strong>Q. Why the <code>str.to_str</code>?</strong></p><p>A. <code>io.println</code> takes only strings. To print an integer it has to become text first, and the word for that is <code>to_str</code> of the module <code>str</code> — hence <code>use str .</code>. There is no output word that takes an integer as it is: each word has exactly one signature.</p></div><h3>1.5 Taking arguments</h3><p>The arguments of <code>pnx FILE ARGUMENTS…</code> are read with the module <code>env</code>.</p><div class="example run"><p class="ex-file"><code>01-greet.pnx</code></p><pre><code data-lang="pinax"><span style="color: #d73948">use</span> io .
 <span style="color: #d73948">use</span> env .
-def main <span style="color: #d73948">do</span>
+<span style="color: #d73948">def</span> main <span style="color: #d73948">do</span>
   <span style="color: #b60157">1</span> env.arg <span style="color: #d73948">or_else</span> <span style="color: #d73948">to</span> e <span style="color: #198810">"stranger"</span> <span style="color: #d73948">end</span> <span style="color: #d73948">to</span> name      <span style="color: #74747c">rem argument 1, or a word for nobody</span>
-  args <span style="color: #198810">"Hello, "</span> name <span style="color: #198810">"!"</span> . <span style="color: #d73948">cat</span> io.println
+  <span style="color: #d73948">args</span> <span style="color: #198810">"Hello, "</span> name <span style="color: #198810">"!"</span> . <span style="color: #d73948">cat</span> io.println
 <span style="color: #d73948">end</span>
 main
 </code></pre><p class="ex-label">Output</p><pre><code data-lang="text">$ pnx 01-greet.pnx Pinax

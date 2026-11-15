@@ -1,0 +1,9 @@
+rem run
+use io .
+use str .
+def log label str, rest args do               rem rest takes any number of values, of any kinds
+  args label ": " rest args.len str.to_str " values, the first kind " 0 rest args.kind or_else to e 0 end . cat io.println
+  rest cat io.println                         rem and all of them written as cat writes them
+end
+"point" args 3 4 . log
+"user" args "kim" 30 true 1.50 . log

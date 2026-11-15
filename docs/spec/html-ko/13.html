@@ -34,8 +34,8 @@ geometry.unit <span style="color: #d73948">str</span>.to_str io.println
   x <span style="color: #d73948">int</span>
   y <span style="color: #d73948">int</span>
 <span style="color: #d73948">end</span>
-def square n <span style="color: #d73948">int</span> <span style="color: #d73948">gives</span> <span style="color: #d73948">int</span> <span style="color: #d73948">do</span> n n mul <span style="color: #d73948">end</span>
-<span style="color: #d73948">export</span> def area w <span style="color: #d73948">int</span>, h <span style="color: #d73948">int</span> <span style="color: #d73948">gives</span> <span style="color: #d73948">int</span> <span style="color: #d73948">do</span> w h mul unit square div <span style="color: #d73948">end</span>
+<span style="color: #d73948">def</span> square n <span style="color: #d73948">int</span> <span style="color: #d73948">gives</span> <span style="color: #d73948">int</span> <span style="color: #d73948">do</span> n n mul <span style="color: #d73948">end</span>
+<span style="color: #d73948">export</span> <span style="color: #d73948">def</span> area w <span style="color: #d73948">int</span>, h <span style="color: #d73948">int</span> <span style="color: #d73948">gives</span> <span style="color: #d73948">int</span> <span style="color: #d73948">do</span> w h mul unit square div <span style="color: #d73948">end</span>
 </code></pre></div><h5>제약</h5><p class="para"><span class="pn">(3)</span> 내보내지 않은 것을 쓰면 거절된다.</p><div class="example refused"><p class="ex-file"><code>13-not-exported.pnx</code></p><pre><code data-lang="pinax"><span style="color: #d73948">use</span> geometry .
 <span style="color: #b60157">4</span> geometry.square drop
 </code></pre><p class="ex-label">거절</p><pre><code data-lang="text">$ pnx 13-not-exported.pnx
@@ -100,7 +100,7 @@ set_order io .
 set_order get_order <span style="color: #d73948">str</span> .
 get_order
 <span style="color: #198810">"pinax"</span> upper println
-def shout s <span style="color: #d73948">str</span> <span style="color: #d73948">do</span> args s upper <span style="color: #198810">"!"</span> . <span style="color: #d73948">cat</span> println <span style="color: #d73948">end</span>
+<span style="color: #d73948">def</span> shout s <span style="color: #d73948">str</span> <span style="color: #d73948">do</span> <span style="color: #d73948">args</span> s upper <span style="color: #198810">"!"</span> . <span style="color: #d73948">cat</span> println <span style="color: #d73948">end</span>
 <span style="color: #198810">"hello"</span> shout
 <span style="color: #198810">"abc"</span> <span style="color: #d73948">str</span>.len <span style="color: #b60157">3</span> eq <span style="color: #d73948">if</span> <span style="color: #198810">"three bytes"</span> println <span style="color: #d73948">end</span>
 </code></pre><p class="ex-label">출력</p><pre><code data-lang="text">$ pnx 13-order.pnx
@@ -109,7 +109,7 @@ PINAX
 HELLO!
 three bytes
 </code></pre></div><div class="example refused"><p class="ex-file"><code>13-order-core.pnx</code></p><pre><code data-lang="pinax">set_order <span style="color: #d73948">str</span> .
-def size s <span style="color: #d73948">str</span> <span style="color: #d73948">gives</span> <span style="color: #d73948">int</span> <span style="color: #d73948">do</span> s len <span style="color: #d73948">end</span>
+<span style="color: #d73948">def</span> size s <span style="color: #d73948">str</span> <span style="color: #d73948">gives</span> <span style="color: #d73948">int</span> <span style="color: #d73948">do</span> s len <span style="color: #d73948">end</span>
 </code></pre><p class="ex-label">거절</p><pre><code data-lang="text">$ pnx 13-order-core.pnx
 13-order-core.pnx:2:31: this word takes the name of an array, list, queue or buffer; of a str it is str.len
 </code></pre></div><p class="para"><span class="pn">(3)</span> <code>set_order</code> 는 소스나 세션 줄의 맨 위 수준에 필요한 만큼 쓸 수 있다. 하나하나가 그 자리부터 소스 끝까지의 순서를 바꾸고, 세션은 다음 순서가 나올 때까지 뒤 줄들에 그것을 지닌다. 낱말은 컴파일될 때 그 이름들이 찾은 것을 쓴다.</p><p class="para"><span class="pn">(3a)</span> 맨 위 수준에 홀로 쓴 <code>get_order</code> 는 그 자리의 찾는 순서를 <code>set_order</code> 가 받는 꼴로, <code>order: io str</code> 처럼 <code>config.diag</code> 에 줄 0 의 진단으로 알리고(19.4 (1)), 아무것도 바꾸지 않는다. 소스를 검사할 때 알린다: 파일에서는 파일의 코드가 돌기 전이다.</p><p class="para"><span class="pn">(4)</span> 찾는 순서로 닿는 이름은 이름 가리기 규칙(9.5)에 들지 않는다: 지역 변수는 순서에 있는 모듈의 낱말과 같은 이름일 수 있고, 그 낱말 안에서는 지역 변수를 뜻한다.</p><h5>제약</h5><p class="para"><span class="pn">(5)</span> 정의나 블록 안의 <code>set_order</code> 나 <code>get_order</code>, 모듈을 두 번 이름 붙이거나 16 개보다 많이 이름 붙인 순서, 없는 모듈을 이름 붙인 순서는 거절된다.</p><h5>진단</h5><table><thead><tr><th><strong>조건</strong></th><th><strong>메시지</strong></th></tr></thead><tbody><tr><td>정의 안의 <code>set_order</code></td><td><code>set_order stands at the top level, outside definitions and blocks</code></td></tr><tr><td>정의 안의 <code>get_order</code></td><td><code>get_order stands at the top level, or inside set_order</code></td></tr><tr><td>마침표가 없거나 괄호·쉼표를 씀</td><td><code>set_order is written set_order io str . : no parentheses, no commas, ended by a period</code></td></tr><tr><td>모듈 이름이 아님</td><td><code>set_order names modules, separated by spaces and ended by a period: set_order io str .</code></td></tr><tr><td>모듈을 두 번</td><td><code>this module is named twice in the order</code></td></tr><tr><td>16 개보다 많음</td><td><code>an order names at most 16 modules</code></td></tr><tr><td>언어의 낱말이 아닌 <code>search (…)</code></td><td><code>search is now set_order: set_order io str .</code></td></tr></tbody></table></main><nav class="bottom"><a href="index.html">처음</a> · <a href="12.html">앞</a> · <a href="14.html">다음</a> · <a href="../html-en/13.html">English</a></nav></body></html>

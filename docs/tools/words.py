@@ -14,7 +14,7 @@ import glob, json, os, re, sys
 ROOT = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "..")
 CLAUSES = os.path.join(ROOT, "docs", "spec", "typst-en", "clauses")
 OUT = os.path.join(ROOT, "src", "wasm", "words.mjs")
-PAGE_MODULES = {"", "str", "fmt", "hash", "encode", "bytes", "ptn", "rex", "json", "csv", "sheet", "toml", "md", "io"}
+PAGE_MODULES = {"", "str", "fmt", "hash", "encode", "bytes", "ptn", "rex", "json", "csv", "sheet", "toml", "md", "args", "io"}
 
 
 def cells(body):
@@ -95,7 +95,7 @@ def modules_of(paths):
     out = []
     for path in paths:
         for m in re.finditer(r"^== `([a-z_0-9]+)` --- ([^<\n]+?)\s*(?:<[^>]*>)?\s*$", open(path, encoding="utf-8").read(), re.M):
-            if m.group(1) in PAGE_MODULES and m.group(1) != "":
+            if m.group(1) in PAGE_MODULES and m.group(1) not in ("", "args"): # args needs no use
                 out.append([m.group(1), plain(m.group(2))])
     return out
 

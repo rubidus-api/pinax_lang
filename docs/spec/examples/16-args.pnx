@@ -1,0 +1,20 @@
+rem run
+use io .
+use str .
+def describe rest args do                      rem one parameter takes values of any kinds
+  0 to i
+  loop
+    i rest args.len ge if break . end
+    args "value " i " is kind " i rest args.kind or_else to e 0 end . cat io.println
+    i 1 add to i
+  end
+end
+def total rest args gives int do               rem the ints of an args, the other values left out
+  0 to sum_
+  0 rest args.len range do to i
+    i rest args.int or_else drop 0 end sum_ add to sum_
+  end each
+  sum_
+end
+args 7 "seven" true 7.50 . describe
+args 1 "x" 2 3 . total str.to_str io.println

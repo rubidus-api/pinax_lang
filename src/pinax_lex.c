@@ -582,8 +582,12 @@ static bool lex_token(pnx_lexer *lx, pnx_token *t) {
         }
         const pnx_word_id word = reserved_word(lx->source + lx->at, run);
         if (word != PNX_KW_NONE) {
-            if (peek(lx, i) == '.' && !ends_here(lx, i))
+            if (peek(lx, i) == '.' && !ends_here(lx, i) && word != PNX_KW_args) // args.len: the module args (RFC-0049)
                 return fail_at(lx, i, "a reserved word is not part of a path");
+            if (word == PNX_KW_args && peek(lx, i) == '.' && !ends_here(lx, i)) {
+                t->kind = PNX_T_NAME; // falls to the path below
+                goto path;
+            }
             lx->at = i;
             if ((word == PNX_KW_rem || word == PNX_KW_note || word == PNX_KW_text) &&
                 (lx->name_next || (lx->in_record && word == PNX_KW_text))) {
@@ -613,6 +617,7 @@ static bool lex_token(pnx_lexer *lx, pnx_token *t) {
             return true;
         }
         t->kind = PNX_T_NAME;
+    path:
         while (peek(lx, i) == '.' && !ends_here(lx, i)) {
             const uint32_t part = i + 1;
             if (!is_letter(peek(lx, part)))

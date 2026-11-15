@@ -1,8 +1,8 @@
 <!DOCTYPE html>
 <html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>14 Tasks - The Pinax Standard</title><link rel="stylesheet" href="style.css"></head><body><nav class="top"><a href="index.html">Start</a> · <a href="13.html">Previous</a> · <a href="15.html">Next</a> · <a href="../html-ko/14.html">한국어</a></nav><main><h2>14 Tasks</h2><h5>Syntax</h5><pre><code data-lang="ebnf">tasks-decl = "tasks" NAME size [ size [ size [ size ] ] ] [ "apart" ] ;   (* count, call depth, region bytes, turn limit *)</code></pre><p class="para"><span class="pn">(1)</span> A <strong>task</strong> is a flow of execution that takes turns with others inside one state. Tasks change only where one gives way on its own (<code>yield</code>, or a host word that waits). So even when two tasks use the same global, no other task comes in between two yields of one task. Tasks are not threads: a state runs on one thread at a time (5.1).</p><p class="para"><span class="pn">(2)</span> <code>tasks NAME count [depth [region [turns]]]</code> declares a <strong>task group</strong> of up to <code>count</code> tasks. Each task has its own call depth (<code>depth</code>) and its own region (<code>region</code> bytes); left out, they are the processor’s defaults. <code>turns</code>, when it is written, is the group’s turn limit (14.6). The name of the group is the type of the values that refer to its tasks. Written last, <code>apart</code> makes a fault inside one of the group’s tasks end that task only (14.4 (3a)); <code>apart</code> is a word of the declaration only in that place.</p><h3>14.1 Making and running tasks</h3><p class="para"><span class="pn">(1)</span> <code>block GROUP spawn</code> makes one task from a block value (10.5) that takes and gives nothing, and gives the task (<code>or fail</code>, <code>err.full</code> when there is no free slot). A new task is stopped and has not run yet.</p><p class="para"><span class="pn">(2)</span> <code>GROUP run_all</code> runs the tasks of the group in turn until all have ended. A task runs until it yields or ends; then the next one goes on.</p><div class="example run"><p class="ex-file"><code>14-tasks.pnx</code></p><pre><code data-lang="pinax"><span style="color: #d73948">use</span> io .
 <span style="color: #d73948">tasks</span> workers <span style="color: #b60157">3</span>
-def say s <span style="color: #d73948">str</span> <span style="color: #d73948">do</span> s io.println <span style="color: #d73948">end</span>
-def demo <span style="color: #d73948">do</span>
+<span style="color: #d73948">def</span> say s <span style="color: #d73948">str</span> <span style="color: #d73948">do</span> s io.println <span style="color: #d73948">end</span>
+<span style="color: #d73948">def</span> demo <span style="color: #d73948">do</span>
   <span style="color: #d73948">do</span> <span style="color: #198810">"a1"</span> say yield <span style="color: #d73948">or_return</span> <span style="color: #198810">"a2"</span> say yield <span style="color: #d73948">or_return</span> <span style="color: #198810">"a3"</span> say <span style="color: #d73948">end</span> workers spawn <span style="color: #d73948">or_else</span> drop <span style="color: #d73948">return</span> <span style="color: #d73948">end</span> drop
   <span style="color: #d73948">do</span> <span style="color: #198810">"b1"</span> say yield <span style="color: #d73948">or_return</span> <span style="color: #198810">"b2"</span> say <span style="color: #d73948">end</span> workers spawn <span style="color: #d73948">or_else</span> drop <span style="color: #d73948">return</span> <span style="color: #d73948">end</span> drop
   workers run_all                          <span style="color: #74747c">rem run every task of the group until all have ended</span>
@@ -17,11 +17,11 @@ a3
 </code></pre></div><p class="para"><span class="pn">(3)</span> <code>TASK resume</code> runs that one task up to its next yield or its end, and gives <code>true</code> when it has ended. <code>TASK is_done</code> asks whether it has ended. The slot of an ended task is used again by <code>spawn</code>.</p><div class="example run"><p class="ex-file"><code>14-resume.pnx</code></p><pre><code data-lang="pinax"><span style="color: #d73948">use</span> io .
 <span style="color: #d73948">use</span> <span style="color: #d73948">str</span> .
 <span style="color: #d73948">tasks</span> lone <span style="color: #b60157">1</span>
-def demo <span style="color: #d73948">do</span>
+<span style="color: #d73948">def</span> demo <span style="color: #d73948">do</span>
   <span style="color: #d73948">do</span> <span style="color: #198810">"step 1"</span> io.println yield <span style="color: #d73948">or_return</span> <span style="color: #198810">"step 2"</span> io.println <span style="color: #d73948">end</span> lone spawn <span style="color: #d73948">or_else</span> drop <span style="color: #d73948">return</span> <span style="color: #d73948">end</span> <span style="color: #d73948">to</span> t
   <span style="color: #b60157">0</span> <span style="color: #d73948">to</span> turns
   <span style="color: #d73948">loop</span> t resume <span style="color: #d73948">if</span> <span style="color: #d73948">break</span> . <span style="color: #d73948">end</span> turns <span style="color: #b60157">1</span> add <span style="color: #d73948">to</span> turns <span style="color: #d73948">end</span>     <span style="color: #74747c">rem resume gives true when the task has ended</span>
-  args <span style="color: #198810">"resumed "</span> turns <span style="color: #b60157">1</span> add <span style="color: #198810">" times, done: "</span> t is_done . <span style="color: #d73948">cat</span> io.println
+  <span style="color: #d73948">args</span> <span style="color: #198810">"resumed "</span> turns <span style="color: #b60157">1</span> add <span style="color: #198810">" times, done: "</span> t is_done . <span style="color: #d73948">cat</span> io.println
 <span style="color: #d73948">end</span>
 demo
 </code></pre><p class="ex-label">Output</p><pre><code data-lang="text">$ pnx 14-resume.pnx
@@ -30,10 +30,10 @@ step 2
 resumed 2 times, done: true
 </code></pre></div><p class="para"><span class="pn">(4)</span> Tasks stay in the state. When a run the host started ends, a stopped task is still there and can go on in the next run.</p><div class="example run"><p class="ex-file"><code>14-full.pnx</code></p><pre><code data-lang="pinax"><span style="color: #d73948">use</span> io .
 <span style="color: #d73948">tasks</span> pair <span style="color: #b60157">2</span>
-def demo <span style="color: #d73948">do</span>
+<span style="color: #d73948">def</span> demo <span style="color: #d73948">do</span>
   <span style="color: #d73948">do</span> yield <span style="color: #d73948">or_return</span> <span style="color: #d73948">end</span> pair spawn <span style="color: #d73948">or_else</span> drop <span style="color: #d73948">return</span> <span style="color: #d73948">end</span> drop
   <span style="color: #d73948">do</span> yield <span style="color: #d73948">or_return</span> <span style="color: #d73948">end</span> pair spawn <span style="color: #d73948">or_else</span> drop <span style="color: #d73948">return</span> <span style="color: #d73948">end</span> drop
-  <span style="color: #d73948">do</span> <span style="color: #d73948">end</span> pair spawn <span style="color: #d73948">or_else</span> <span style="color: #d73948">to</span> e args <span style="color: #198810">"third spawn: "</span> e err_text . <span style="color: #d73948">cat</span> io.println <span style="color: #d73948">return</span> <span style="color: #d73948">end</span> drop
+  <span style="color: #d73948">do</span> <span style="color: #d73948">end</span> pair spawn <span style="color: #d73948">or_else</span> <span style="color: #d73948">to</span> e <span style="color: #d73948">args</span> <span style="color: #198810">"third spawn: "</span> e err_text . <span style="color: #d73948">cat</span> io.println <span style="color: #d73948">return</span> <span style="color: #d73948">end</span> drop
 <span style="color: #d73948">end</span>
 demo
 </code></pre><p class="ex-label">Output</p><pre><code data-lang="text">$ pnx 14-full.pnx
@@ -43,7 +43,7 @@ third spawn: full
 <span style="color: #d73948">tasks</span> workers <span style="color: #b60157">2</span>
 <span style="color: #d73948">queue</span> jobs <span style="color: #d73948">int</span> <span style="color: #b60157">2</span>
 <span style="color: #d73948">list</span> done <span style="color: #d73948">int</span> <span style="color: #b60157">8</span>
-def producer <span style="color: #d73948">do</span>
+<span style="color: #d73948">def</span> producer <span style="color: #d73948">do</span>
   <span style="color: #b60157">1</span> <span style="color: #d73948">to</span> i
   <span style="color: #d73948">loop</span>
     i <span style="color: #b60157">5</span> gt <span style="color: #d73948">if</span> <span style="color: #d73948">break</span> . <span style="color: #d73948">end</span>
@@ -52,7 +52,7 @@ def producer <span style="color: #d73948">do</span>
     ok <span style="color: #d73948">if</span> i <span style="color: #b60157">1</span> add <span style="color: #d73948">to</span> i <span style="color: #d73948">else</span> yield <span style="color: #d73948">or_return</span> <span style="color: #d73948">end</span>   <span style="color: #74747c">rem a full queue: let the consumer run</span>
   <span style="color: #d73948">end</span>
 <span style="color: #d73948">end</span>
-def consumer <span style="color: #d73948">do</span>
+<span style="color: #d73948">def</span> consumer <span style="color: #d73948">do</span>
   <span style="color: #b60157">0</span> <span style="color: #d73948">to</span> got
   <span style="color: #d73948">loop</span>
     got <span style="color: #b60157">5</span> ge <span style="color: #d73948">if</span> <span style="color: #d73948">break</span> . <span style="color: #d73948">end</span>
@@ -60,9 +60,9 @@ def consumer <span style="color: #d73948">do</span>
     v <span style="color: #b60157">0</span> lt <span style="color: #d73948">if</span> yield <span style="color: #d73948">or_return</span> <span style="color: #d73948">else</span> v done push <span style="color: #d73948">or_else</span> <span style="color: #d73948">to</span> e <span style="color: #d73948">end</span> got <span style="color: #b60157">1</span> add <span style="color: #d73948">to</span> got <span style="color: #d73948">end</span>
   <span style="color: #d73948">end</span>
 <span style="color: #d73948">end</span>
-def demo <span style="color: #d73948">do</span>
-  ref producer workers spawn <span style="color: #d73948">or_else</span> drop <span style="color: #d73948">return</span> <span style="color: #d73948">end</span> drop
-  ref consumer workers spawn <span style="color: #d73948">or_else</span> drop <span style="color: #d73948">return</span> <span style="color: #d73948">end</span> drop
+<span style="color: #d73948">def</span> demo <span style="color: #d73948">do</span>
+  <span style="color: #d73948">ref</span> producer workers spawn <span style="color: #d73948">or_else</span> drop <span style="color: #d73948">return</span> <span style="color: #d73948">end</span> drop
+  <span style="color: #d73948">ref</span> consumer workers spawn <span style="color: #d73948">or_else</span> drop <span style="color: #d73948">return</span> <span style="color: #d73948">end</span> drop
   workers run_all
 <span style="color: #d73948">end</span>
 demo
@@ -75,7 +75,7 @@ done <span style="color: #d73948">do</span> <span style="color: #d73948">to</spa
 <span style="color: #d73948">tasks</span> workers <span style="color: #b60157">2</span>
 <span style="color: #d73948">queue</span> jobs <span style="color: #d73948">int</span> <span style="color: #b60157">1</span>
 <span style="color: #d73948">list</span> done <span style="color: #d73948">int</span> <span style="color: #b60157">8</span>
-def producer <span style="color: #d73948">do</span>
+<span style="color: #d73948">def</span> producer <span style="color: #d73948">do</span>
   <span style="color: #b60157">1</span> <span style="color: #d73948">to</span> i
   <span style="color: #d73948">loop</span>
     i <span style="color: #b60157">5</span> gt <span style="color: #d73948">if</span> <span style="color: #d73948">break</span> . <span style="color: #d73948">end</span>
@@ -84,16 +84,16 @@ def producer <span style="color: #d73948">do</span>
   <span style="color: #d73948">end</span>
   <span style="color: #b60157">-1</span> jobs wait_put <span style="color: #d73948">or_return</span>
 <span style="color: #d73948">end</span>
-def consumer <span style="color: #d73948">do</span>
+<span style="color: #d73948">def</span> consumer <span style="color: #d73948">do</span>
   <span style="color: #d73948">loop</span>
     jobs wait_take <span style="color: #d73948">or_return</span> <span style="color: #d73948">to</span> v          <span style="color: #74747c">rem waits while the queue is empty</span>
     v <span style="color: #b60157">0</span> lt <span style="color: #d73948">if</span> <span style="color: #d73948">break</span> . <span style="color: #d73948">end</span>
     v done push <span style="color: #d73948">or_else</span> <span style="color: #d73948">to</span> e <span style="color: #d73948">end</span>
   <span style="color: #d73948">end</span>
 <span style="color: #d73948">end</span>
-def demo <span style="color: #d73948">do</span>
-  ref producer workers spawn <span style="color: #d73948">or_else</span> <span style="color: #d73948">to</span> e <span style="color: #d73948">return</span> <span style="color: #d73948">end</span> drop
-  ref consumer workers spawn <span style="color: #d73948">or_else</span> <span style="color: #d73948">to</span> e <span style="color: #d73948">return</span> <span style="color: #d73948">end</span> drop
+<span style="color: #d73948">def</span> demo <span style="color: #d73948">do</span>
+  <span style="color: #d73948">ref</span> producer workers spawn <span style="color: #d73948">or_else</span> <span style="color: #d73948">to</span> e <span style="color: #d73948">return</span> <span style="color: #d73948">end</span> drop
+  <span style="color: #d73948">ref</span> consumer workers spawn <span style="color: #d73948">or_else</span> <span style="color: #d73948">to</span> e <span style="color: #d73948">return</span> <span style="color: #d73948">end</span> drop
   workers run_all
 <span style="color: #d73948">end</span>
 demo
@@ -108,7 +108,7 @@ done <span style="color: #d73948">do</span> <span style="color: #d73948">to</spa
 <span style="color: #d73948">tasks</span> workers <span style="color: #b60157">2</span>
 <span style="color: #d73948">queue</span> asks <span style="color: #d73948">int</span> <span style="color: #b60157">1</span>
 <span style="color: #d73948">queue</span> answers <span style="color: #d73948">int</span> <span style="color: #b60157">1</span>
-def demo <span style="color: #d73948">do</span>
+<span style="color: #d73948">def</span> demo <span style="color: #d73948">do</span>
   <span style="color: #d73948">do</span> asks wait_take <span style="color: #d73948">or_return</span> drop  <span style="color: #b60157">1</span> answers wait_put <span style="color: #d73948">or_return</span> <span style="color: #d73948">end</span> workers spawn <span style="color: #d73948">or_else</span> <span style="color: #d73948">to</span> e <span style="color: #d73948">return</span> <span style="color: #d73948">end</span> drop
   <span style="color: #d73948">do</span> answers wait_take <span style="color: #d73948">or_return</span> drop  <span style="color: #b60157">1</span> asks wait_put <span style="color: #d73948">or_return</span> <span style="color: #d73948">end</span> workers spawn <span style="color: #d73948">or_else</span> <span style="color: #d73948">to</span> e <span style="color: #d73948">return</span> <span style="color: #d73948">end</span> drop
   workers run_all                          <span style="color: #74747c">rem each waits for the other: nothing can go</span>
@@ -120,7 +120,7 @@ demo
 </code></pre></div><p class="para"><span class="pn">(3)</span> The main run is not a task and has no one to give its turn to. In the main run, <code>wait_take</code> on an empty queue and <code>wait_put</code> on a full one are the fault <code>deadlock</code> at once.</p><div class="example fault"><p class="ex-file"><code>14-deadlock-main.pnx</code></p><pre><code data-lang="pinax"><span style="color: #d73948">use</span> io .
 <span style="color: #d73948">use</span> <span style="color: #d73948">str</span> .
 <span style="color: #d73948">queue</span> jobs <span style="color: #d73948">int</span> <span style="color: #b60157">2</span>
-def demo <span style="color: #d73948">do</span>
+<span style="color: #d73948">def</span> demo <span style="color: #d73948">do</span>
   jobs wait_take <span style="color: #d73948">or_else</span> <span style="color: #d73948">to</span> e <span style="color: #b60157">-1</span> <span style="color: #d73948">end</span> <span style="color: #d73948">str</span>.to_str io.println   <span style="color: #74747c">rem the main run is not a task: no one could fill the queue</span>
 <span style="color: #d73948">end</span>
 demo
@@ -128,11 +128,11 @@ demo
 14-deadlock-main.pnx:5: deadlock: waiting for a queue that nothing can change
 </code></pre></div><p class="para"><span class="pn">(4)</span> Only these two words are watched for a deadlock. Tasks that wait in a loop of their own (<code>loop … yield …<br>end</code>), or a task resumed by hand with <code>resume</code>, are not; a host that runs such code gives it a budget (19.5).</p><h3>14.4 Cancelling</h3><p class="para"><span class="pn">(1)</span> <code>TASK cancel</code> tells a task it is cancelled: its next <code>yield</code>, or its wait for a queue (14.3), fails with <code>err.cancelled</code>. The task takes that failure and ends in its own way. Cancelling does not stop a task by force.</p><div class="example run"><p class="ex-file"><code>14-cancel.pnx</code></p><pre><code data-lang="pinax"><span style="color: #d73948">use</span> io .
 <span style="color: #d73948">tasks</span> workers <span style="color: #b60157">1</span>
-def demo <span style="color: #d73948">do</span>
+<span style="color: #d73948">def</span> demo <span style="color: #d73948">do</span>
   <span style="color: #d73948">do</span>
     <span style="color: #d73948">loop</span>
       <span style="color: #198810">"working"</span> io.println
-      yield <span style="color: #d73948">or_else</span> <span style="color: #d73948">to</span> e args <span style="color: #198810">"stopped: "</span> e err_text . <span style="color: #d73948">cat</span> io.println <span style="color: #d73948">return</span> <span style="color: #d73948">end</span>
+      yield <span style="color: #d73948">or_else</span> <span style="color: #d73948">to</span> e <span style="color: #d73948">args</span> <span style="color: #198810">"stopped: "</span> e err_text . <span style="color: #d73948">cat</span> io.println <span style="color: #d73948">return</span> <span style="color: #d73948">end</span>
     <span style="color: #d73948">end</span>
   <span style="color: #d73948">end</span> workers spawn <span style="color: #d73948">or_else</span> drop <span style="color: #d73948">return</span> <span style="color: #d73948">end</span> <span style="color: #d73948">to</span> t
   t resume drop
@@ -146,17 +146,17 @@ working
 working
 stopped: cancelled
 </code></pre></div><h5>Constraints</h5><p class="para"><span class="pn">(2)</span> The block given to <code>spawn</code> is a block value and does not see the locals around it. Values reach a task through globals and queues.</p><div class="example refused"><p class="ex-file"><code>14-spawn-refused.pnx</code></p><pre><code data-lang="pinax"><span style="color: #d73948">tasks</span> workers <span style="color: #b60157">2</span>
-def demo n <span style="color: #d73948">int</span> <span style="color: #d73948">do</span> <span style="color: #d73948">do</span> n drop <span style="color: #d73948">end</span> workers spawn <span style="color: #d73948">or_else</span> drop <span style="color: #d73948">return</span> <span style="color: #d73948">end</span> drop <span style="color: #d73948">end</span>
+<span style="color: #d73948">def</span> demo n <span style="color: #d73948">int</span> <span style="color: #d73948">do</span> <span style="color: #d73948">do</span> n drop <span style="color: #d73948">end</span> workers spawn <span style="color: #d73948">or_else</span> drop <span style="color: #d73948">return</span> <span style="color: #d73948">end</span> drop <span style="color: #d73948">end</span>
 </code></pre><p class="ex-label">Refused</p><pre><code data-lang="text">$ pnx 14-spawn-refused.pnx
 14-spawn-refused.pnx:2:22: this name is not declared before this place
 </code></pre></div><p class="para"><span class="pn">(2a)</span> The block of <code>spawn</code> takes nothing and gives nothing. A block with parameters is refused.</p><div class="example refused"><p class="ex-file"><code>14-spawn-block.pnx</code></p><pre><code data-lang="pinax"><span style="color: #d73948">tasks</span> workers <span style="color: #b60157">2</span>
-def start <span style="color: #d73948">do</span> def n <span style="color: #d73948">int</span> <span style="color: #d73948">do</span> n drop <span style="color: #d73948">end</span> workers spawn <span style="color: #d73948">or_else</span> drop <span style="color: #d73948">return</span> <span style="color: #d73948">end</span> drop <span style="color: #d73948">end</span>
+<span style="color: #d73948">def</span> start <span style="color: #d73948">do</span> <span style="color: #d73948">def</span> n <span style="color: #d73948">int</span> <span style="color: #d73948">do</span> n drop <span style="color: #d73948">end</span> workers spawn <span style="color: #d73948">or_else</span> drop <span style="color: #d73948">return</span> <span style="color: #d73948">end</span> drop <span style="color: #d73948">end</span>
 </code></pre><p class="ex-label">Refused</p><pre><code data-lang="text">$ pnx 14-spawn-block.pnx
 14-spawn-block.pnx:2:46: spawn takes a block that takes and gives nothing, and a set of tasks: do ... end workers spawn
 </code></pre></div><h5>Faults</h5><p class="para"><span class="pn">(3)</span> A fault inside a task of a group without <code>apart</code> ends the whole run and every task. The fault goes to the host like a fault of the main run. The state remains and takes the next run.</p><div class="example fault"><p class="ex-file"><code>14-fault.pnx</code></p><pre><code data-lang="pinax"><span style="color: #d73948">use</span> io .
 <span style="color: #d73948">tasks</span> workers <span style="color: #b60157">2</span>
 <span style="color: #d73948">global</span> zero <span style="color: #d73948">int</span>
-def demo <span style="color: #d73948">do</span>
+<span style="color: #d73948">def</span> demo <span style="color: #d73948">do</span>
   <span style="color: #d73948">do</span> <span style="color: #198810">"task one"</span> io.println yield <span style="color: #d73948">or_return</span> <span style="color: #198810">"task one again"</span> io.println <span style="color: #d73948">end</span> workers spawn <span style="color: #d73948">or_else</span> drop <span style="color: #d73948">return</span> <span style="color: #d73948">end</span> drop
   <span style="color: #d73948">do</span> <span style="color: #b60157">1</span> zero div drop <span style="color: #d73948">end</span> workers spawn <span style="color: #d73948">or_else</span> drop <span style="color: #d73948">return</span> <span style="color: #d73948">end</span> drop
   workers run_all
@@ -168,8 +168,8 @@ task one
 14-fault.pnx:6: division by zero
 </code></pre></div><p class="para"><span class="pn">(3a)</span> A fault inside a task of a group declared <code>apart</code> ends that task only. Its slot is free again, and whoever resumed it goes on as after the task’s end: <code>run_all</code> takes the next task, <code>resume</code> gives <code>true</code>. What the task stored until then stays. The run goes on; the host learns of the fault through <code>pinax_task_faults</code> (19.10 (3)).</p><div class="example run"><p class="ex-file"><code>14-apart.pnx</code></p><pre><code data-lang="pinax"><span style="color: #d73948">use</span> io .
 <span style="color: #d73948">tasks</span> workers <span style="color: #b60157">3</span> <span style="color: #b60157">16</span> <span style="color: #b60157">1024</span> apart
-def work n <span style="color: #d73948">int</span> <span style="color: #d73948">do</span> args <span style="color: #198810">"100 / "</span> n <span style="color: #198810">" = "</span> <span style="color: #b60157">100</span> n div . <span style="color: #d73948">cat</span> io.println <span style="color: #d73948">end</span>
-def demo <span style="color: #d73948">do</span>
+<span style="color: #d73948">def</span> work n <span style="color: #d73948">int</span> <span style="color: #d73948">do</span> <span style="color: #d73948">args</span> <span style="color: #198810">"100 / "</span> n <span style="color: #198810">" = "</span> <span style="color: #b60157">100</span> n div . <span style="color: #d73948">cat</span> io.println <span style="color: #d73948">end</span>
+<span style="color: #d73948">def</span> demo <span style="color: #d73948">do</span>
   <span style="color: #d73948">do</span> <span style="color: #b60157">4</span> work <span style="color: #d73948">end</span> workers spawn <span style="color: #d73948">or_else</span> <span style="color: #d73948">to</span> e <span style="color: #d73948">return</span> <span style="color: #d73948">end</span> drop
   <span style="color: #d73948">do</span> <span style="color: #b60157">0</span> work <span style="color: #d73948">end</span> workers spawn <span style="color: #d73948">or_else</span> <span style="color: #d73948">to</span> e <span style="color: #d73948">return</span> <span style="color: #d73948">end</span> drop   <span style="color: #74747c">rem this one divides by zero</span>
   <span style="color: #d73948">do</span> <span style="color: #b60157">5</span> work <span style="color: #d73948">end</span> workers spawn <span style="color: #d73948">or_else</span> <span style="color: #d73948">to</span> e <span style="color: #d73948">return</span> <span style="color: #d73948">end</span> drop
@@ -184,15 +184,15 @@ the others finished
 </code></pre></div><p class="para"><span class="pn">(4)</span> Two tasks using the same region are not followed by the check of 12.3. Each task has a region of its own, so this does not normally happen.</p><h5>Diagnostics</h5><table><thead><tr><th><strong>Condition</strong></th><th><strong>Message</strong></th></tr></thead><tbody><tr><td>a block with parameters or results given to <code>spawn</code></td><td><code>spawn takes a block that takes and gives nothing, and a set of tasks: do ... end workers spawn</code></td></tr><tr><td><code>resume</code>, <code>is_done</code> or <code>cancel</code> on a value that is not a task</td><td><code>this word takes a task</code></td></tr><tr><td><code>run_all</code> on a collection that is not a task group (an array, a list)</td><td><code>run_all takes a set of tasks</code></td></tr><tr><td>a <code>tasks</code> count above 4096</td><td><code>a set holds at most 4096 tasks</code></td></tr><tr><td>a call depth of a task outside 1 to 4096</td><td><code>the call depth of a task is 1 to 4096</code></td></tr><tr><td>a region of a task above 16 MiB</td><td><code>the region of a task is at most 16 MiB</code></td></tr><tr><td><code>tasks</code> in a data source</td><td><code>a data source runs no code and declares no tasks</code></td></tr><tr><td><code>task_tag</code> on a value that is not an <code>int</code></td><td><code>task_tag takes an int</code></td></tr><tr><td>a turn limit below 1</td><td><code>the turn limit of a task is at least 1</code></td></tr></tbody></table><h3>14.5 Naming a task</h3><p class="para"><span class="pn">(1)</span> <code>n task_tag</code> (<code>int gives</code>) gives the running task a <strong>tag</strong>: an <code>int</code> the host is told with the task’s fault when its group is declared <code>apart</code> (14.4 (3a), 19.10 (3)). A task’s tag is 0 until it gives one; a later <code>task_tag</code> replaces it. In the main run, which is not a task, the word does nothing. The tag is a part of the task, and an image keeps it.</p><p class="para"><span class="pn">(2)</span> A task learns what it serves after <code>spawn</code>, from a queue or a global (14.4 (2)), so it names itself then. A host that gives each request a number tells its tasks the number, and the task gives it as its tag.</p><div class="example run"><p class="ex-file"><code>14-tag.pnx</code></p><pre><code data-lang="pinax"><span style="color: #d73948">use</span> io .
 <span style="color: #d73948">tasks</span> workers <span style="color: #b60157">2</span> <span style="color: #b60157">16</span> <span style="color: #b60157">1024</span> apart
 <span style="color: #d73948">queue</span> jobs <span style="color: #d73948">int</span> <span style="color: #b60157">4</span>
-def work <span style="color: #d73948">do</span>
+<span style="color: #d73948">def</span> work <span style="color: #d73948">do</span>
   jobs wait_take <span style="color: #d73948">or_return</span> <span style="color: #d73948">to</span> n
   n task_tag                     <span style="color: #74747c">rem the host is told this tag if the task faults</span>
-  args <span style="color: #198810">"job "</span> n <span style="color: #198810">": "</span> <span style="color: #b60157">100</span> n div . <span style="color: #d73948">cat</span> io.println
+  <span style="color: #d73948">args</span> <span style="color: #198810">"job "</span> n <span style="color: #198810">": "</span> <span style="color: #b60157">100</span> n div . <span style="color: #d73948">cat</span> io.println
 <span style="color: #d73948">end</span>
-def demo <span style="color: #d73948">do</span>
+<span style="color: #d73948">def</span> demo <span style="color: #d73948">do</span>
   <span style="color: #b60157">4</span> jobs wait_put <span style="color: #d73948">or_return</span>  <span style="color: #b60157">5</span> jobs wait_put <span style="color: #d73948">or_return</span>
-  ref work workers spawn <span style="color: #d73948">or_else</span> <span style="color: #d73948">to</span> e <span style="color: #d73948">return</span> <span style="color: #d73948">end</span> drop
-  ref work workers spawn <span style="color: #d73948">or_else</span> <span style="color: #d73948">to</span> e <span style="color: #d73948">return</span> <span style="color: #d73948">end</span> drop
+  <span style="color: #d73948">ref</span> work workers spawn <span style="color: #d73948">or_else</span> <span style="color: #d73948">to</span> e <span style="color: #d73948">return</span> <span style="color: #d73948">end</span> drop
+  <span style="color: #d73948">ref</span> work workers spawn <span style="color: #d73948">or_else</span> <span style="color: #d73948">to</span> e <span style="color: #d73948">return</span> <span style="color: #d73948">end</span> drop
   workers run_all
 <span style="color: #d73948">end</span>
 demo
@@ -201,15 +201,15 @@ job 4: 25
 job 5: 20
 </code></pre></div><h3>14.6 Turn limits</h3><p class="para"><span class="pn">(1)</span> A <strong>turn</strong> of a task lasts from the moment it gets the run (from <code>run_all</code> or <code>resume</code>) until it yields, waits or ends. A group declared with a turn limit (14 (2)) allows each turn of its tasks at most that many instructions, counted as the budget counts them (19.5): the cost of each check at a back branch or a call, and the bytes scanned. The count starts again at every turn.</p><p class="para"><span class="pn">(2)</span> A task that runs past its turn limit faults with <code>cancelled</code> at that point. It cannot take the fault as a failure, since nothing there is written to take one. In a group declared <code>apart</code> the task ends alone (14.4 (3a)), and the host is told as of any such fault (19.10 (3a)). In a group without <code>apart</code> the fault ends the run, as any fault inside a task does (14.4 (3)). So a task that loops without yielding is stopped without stopping the others.</p><div class="example run"><p class="ex-file"><code>14-turns.pnx</code></p><pre><code data-lang="pinax"><span style="color: #d73948">use</span> io .
 <span style="color: #d73948">tasks</span> workers <span style="color: #b60157">2</span> <span style="color: #b60157">16</span> <span style="color: #b60157">1024</span> <span style="color: #b60157">5000</span> apart  <span style="color: #74747c">rem a turn: at most 5000 before the task yields, waits or ends</span>
-def stuck <span style="color: #d73948">do</span> <span style="color: #b60157">0</span> <span style="color: #d73948">to</span> i <span style="color: #d73948">loop</span> i <span style="color: #b60157">1</span> add <span style="color: #d73948">to</span> i <span style="color: #d73948">end</span> <span style="color: #d73948">end</span>                      <span style="color: #74747c">rem never yields</span>
-def steady <span style="color: #d73948">do</span>
+<span style="color: #d73948">def</span> stuck <span style="color: #d73948">do</span> <span style="color: #b60157">0</span> <span style="color: #d73948">to</span> i <span style="color: #d73948">loop</span> i <span style="color: #b60157">1</span> add <span style="color: #d73948">to</span> i <span style="color: #d73948">end</span> <span style="color: #d73948">end</span>                      <span style="color: #74747c">rem never yields</span>
+<span style="color: #d73948">def</span> steady <span style="color: #d73948">do</span>
   <span style="color: #b60157">0</span> <span style="color: #d73948">to</span> i
   <span style="color: #d73948">loop</span> i <span style="color: #b60157">1</span> add <span style="color: #d73948">to</span> i  i <span style="color: #b60157">100000</span> eq <span style="color: #d73948">if</span> <span style="color: #d73948">break</span> . <span style="color: #d73948">end</span>  i <span style="color: #b60157">100</span> mod <span style="color: #b60157">0</span> eq <span style="color: #d73948">if</span> yield <span style="color: #d73948">or_return</span> <span style="color: #d73948">end</span> <span style="color: #d73948">end</span>
-  args <span style="color: #198810">"steady counted to "</span> i . <span style="color: #d73948">cat</span> io.println
+  <span style="color: #d73948">args</span> <span style="color: #198810">"steady counted to "</span> i . <span style="color: #d73948">cat</span> io.println
 <span style="color: #d73948">end</span>
-def demo <span style="color: #d73948">do</span>
-  ref stuck workers spawn <span style="color: #d73948">or_else</span> <span style="color: #d73948">to</span> e <span style="color: #d73948">return</span> <span style="color: #d73948">end</span> drop
-  ref steady workers spawn <span style="color: #d73948">or_else</span> <span style="color: #d73948">to</span> e <span style="color: #d73948">return</span> <span style="color: #d73948">end</span> drop
+<span style="color: #d73948">def</span> demo <span style="color: #d73948">do</span>
+  <span style="color: #d73948">ref</span> stuck workers spawn <span style="color: #d73948">or_else</span> <span style="color: #d73948">to</span> e <span style="color: #d73948">return</span> <span style="color: #d73948">end</span> drop
+  <span style="color: #d73948">ref</span> steady workers spawn <span style="color: #d73948">or_else</span> <span style="color: #d73948">to</span> e <span style="color: #d73948">return</span> <span style="color: #d73948">end</span> drop
   workers run_all
   <span style="color: #198810">"the stuck task was stopped; the steady one finished"</span> io.println
 <span style="color: #d73948">end</span>

@@ -314,6 +314,12 @@ enum {
     X(RCATW, 0xbd, PNX_K_S, PNX_K_I, PNX_K_I, PNX_F_ABC, PNX_X_NONE, 0, "mrr") \
     X(RCATXW, 0xbe, PNX_K_S, PNX_K_I, PNX_K_I, PNX_F_ABC, PNX_X_NONE, 0, "mrr") \
     X(RPADL, 0xbf, PNX_K_S, PNX_K_S, PNX_K_I, PNX_F_ABC, PNX_X_NONE, 0, "mrr") \
+    /* args (RFC-0049): the values of `args ... .` in the region, 8 bytes of header (count, filled) and 16 for each */ \
+    X(ARGHEAD, 0x3f, PNX_K_S, PNX_K_IMM, PNX_K_NONE, PNX_F_ABC, PNX_X_NONE, 0, "m--") \
+    X(ARGPUTI, 0x40, PNX_K_S, PNX_K_I, PNX_K_IMM, PNX_F_ABC, PNX_X_NONE, 0, "mr-") \
+    X(ARGPUTD, 0x41, PNX_K_S, PNX_K_I, PNX_K_IMM, PNX_F_ABC, PNX_X_NONE, 0, "mr-") \
+    X(ARGPUTS, 0x42, PNX_K_S, PNX_K_S, PNX_K_NONE, PNX_F_ABC, PNX_X_NONE, 0, "mr-") \
+    X(RCATA, 0x43, PNX_K_S, PNX_K_S, PNX_K_NONE, PNX_F_ABC, PNX_X_NONE, 0, "mr-") \
     X(RPADR, 0xc0, PNX_K_S, PNX_K_S, PNX_K_I, PNX_F_ABC, PNX_X_NONE, 0, "mrr") \
     X(RTOP, 0xc1, PNX_K_I, PNX_K_NONE, PNX_K_NONE, PNX_F_IMM, PNX_X_NONE, 0, "w--") \
     X(RCUT, 0xc2, PNX_K_I, PNX_K_NONE, PNX_K_NONE, PNX_F_IMM, PNX_X_NONE, 0, "r--") \

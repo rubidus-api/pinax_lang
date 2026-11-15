@@ -115,7 +115,7 @@ than `N` is a failure.
 #trace(
   ("\"42abc\" str.digit", "\"42abc\" 48", [The text and the class (a class is a small integer).]),
   ("str.span", "\"42\" \"abc\"", [The digits at the front and the rest, both views of the same text.]),
-  ("to (digits, rest)", "—", [The right-hand name takes the top value.]),
+  ("to rest to digits", "—", [The name written first takes the top value.]),
 )
 
 Two words write joined or replaced text straight into a buffer: #word("str.join_into") joins the pieces of a rail

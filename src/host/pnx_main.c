@@ -430,7 +430,7 @@ static pinax_err load_file(pinax_state *state, char *path, char *owned, const ch
     const char *slash = last_sep(path);
     const proven_u8str_view_t dir = proven_u8str_view_slice(view_of_c(path), 0, slash ? (size_t)(slash - path) + 1 : 0);
     for (size_t i = 0, at = 0, in_list = 0; i + 4 < length; ++i) {
-        // a line `use NAME`, or each NAME of a line `set_order (NAME, NAME)` (RFC-0040 part C, RFC-0041)
+        // a line `use NAME .`, or each NAME of a line `set_order NAME NAME .` (RFC-0040 part C, RFC-0041, RFC-0049)
         if (in_list) {
             at = i;
             while (at < length && (text[at] == ' ' || text[at] == '\t' || text[at] == ',' ||
@@ -441,19 +441,14 @@ static pinax_err load_file(pinax_state *state, char *path, char *owned, const ch
                 continue;
             }
         } else if ((i == 0 || text[i - 1] == '\n') && length - i > 10 && memcmp(text + i, "set_order", 9) == 0 &&
-                   (text[i + 9] == ' ' || text[i + 9] == '\t' || text[i + 9] == '(')) {
+                   (text[i + 9] == ' ' || text[i + 9] == '\t')) {
             at = i + 9;
             while (at < length && (text[at] == ' ' || text[at] == '\t'))
                 ++at;
             if (at >= length)
                 continue;
-            if (text[at] == '(') { // set_order (a, b)
-                i = at;
-                in_list = 1;
-            } else { // set_order a b . (RFC-0049): names up to a period
-                i = at - 1;
-                in_list = 2;
-            }
+            i = at - 1; // set_order a b . (RFC-0049): names up to a period
+            in_list = 2;
             continue;
         } else {
             if ((i != 0 && text[i - 1] != '\n') || memcmp(text + i, "use", 3) != 0 || (text[i + 3] != ' ' && text[i + 3] != '\t'))

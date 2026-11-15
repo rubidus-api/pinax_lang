@@ -1,0 +1,5 @@
+rem refused
+use io .
+def f do
+  args 1 args 2 . . drop                       rem an args holds int, bool, str and dec N values
+end

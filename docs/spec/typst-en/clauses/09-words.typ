@@ -100,8 +100,8 @@ set   = "set" ( NAME | PATH ) ;
 a list. A global another module exports is `set MODULE.NAME`. Inside and outside definitions alike. The rule makes the
 text show whether a store makes a local or changes a global.]
 
-#para("2")[`to (a, b, c)` stores the top three values at once. The rightmost name takes the top value --- the same
-order as in a signature.]
+#para("2")[`to c to b to a` stores the top three values one after another. The name written first takes the top value (`to` takes
+one name at a time): the reverse of the order in a signature.]
 
 #ex("spec", "09-locals.pnx")
 #ex("spec", "09-store-global.pnx")

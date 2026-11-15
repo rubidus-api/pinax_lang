@@ -1,18 +1,18 @@
 <!DOCTYPE html>
 <html lang="ko"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>10 모듈과 자료 파일 - Pinax 매뉴얼</title><link rel="stylesheet" href="style.css"></head><body><nav class="top"><a href="index.html">처음</a> · <a href="10.html">앞</a> · <a href="12.html">다음</a> · <a href="../html-en/11.html">English</a></nav><main><h2>10 모듈과 자료 파일</h2><div class="box opening"><p><strong>먼저 알아야 할 것</strong>: 1장(<code>use</code>), 3장(서명).</p><p><strong>이 장이 답하는 물음</strong></p><ul><li>프로그램을 여러 파일로 나누려면?</li><li>모듈은 무엇을 밖에 보이고 무엇을 숨기는가?</li><li>설정 파일을 코드 없이 읽으려면?</li></ul></div><h3>10.1 모듈 만들기</h3><p>파일 하나가 모듈 하나다. 모듈의 이름은 파일 이름에서 <code>.pnx</code> 를 뗀 것이다. 밖에 보일 것에는 <code>export</code> 를 붙인다.</p><div class="example module"><p class="ex-file"><code>money.pnx</code></p><pre><code data-lang="pinax"><span style="color: #74747c">rem A small module: amounts are cents, kept apart from plain numbers.</span>
 <span style="color: #d73948">export</span> <span style="color: #d73948">type</span> cents <span style="color: #d73948">int</span>
-def pad2 n <span style="color: #d73948">int</span> <span style="color: #d73948">gives</span> <span style="color: #d73948">str</span> <span style="color: #d73948">do</span> n <span style="color: #b60157">10</span> lt <span style="color: #d73948">if</span> args <span style="color: #198810">"0"</span> n . <span style="color: #d73948">cat</span> <span style="color: #d73948">else</span> args n . <span style="color: #d73948">cat</span> <span style="color: #d73948">end</span> <span style="color: #d73948">end</span>
-<span style="color: #d73948">export</span> def of_won won <span style="color: #d73948">int</span> <span style="color: #d73948">gives</span> cents <span style="color: #d73948">do</span> won <span style="color: #b60157">100</span> mul cents <span style="color: #d73948">end</span>
-<span style="color: #d73948">export</span> def show c cents <span style="color: #d73948">gives</span> <span style="color: #d73948">str</span> <span style="color: #d73948">do</span> args c raw <span style="color: #b60157">100</span> div <span style="color: #198810">"."</span> c raw <span style="color: #b60157">100</span> mod pad2 . <span style="color: #d73948">cat</span> <span style="color: #d73948">end</span>
+<span style="color: #d73948">def</span> pad2 n <span style="color: #d73948">int</span> <span style="color: #d73948">gives</span> <span style="color: #d73948">str</span> <span style="color: #d73948">do</span> n <span style="color: #b60157">10</span> lt <span style="color: #d73948">if</span> <span style="color: #d73948">args</span> <span style="color: #198810">"0"</span> n . <span style="color: #d73948">cat</span> <span style="color: #d73948">else</span> <span style="color: #d73948">args</span> n . <span style="color: #d73948">cat</span> <span style="color: #d73948">end</span> <span style="color: #d73948">end</span>
+<span style="color: #d73948">export</span> <span style="color: #d73948">def</span> of_won won <span style="color: #d73948">int</span> <span style="color: #d73948">gives</span> cents <span style="color: #d73948">do</span> won <span style="color: #b60157">100</span> mul cents <span style="color: #d73948">end</span>
+<span style="color: #d73948">export</span> <span style="color: #d73948">def</span> show c cents <span style="color: #d73948">gives</span> <span style="color: #d73948">str</span> <span style="color: #d73948">do</span> <span style="color: #d73948">args</span> c raw <span style="color: #b60157">100</span> div <span style="color: #198810">"."</span> c raw <span style="color: #b60157">100</span> mod pad2 . <span style="color: #d73948">cat</span> <span style="color: #d73948">end</span>
 </code></pre></div><p><code>cents</code> 는 <code>int</code> 위의 <strong>선언한 타입</strong>이다. 표현은 정수이지만 <code>int</code> 와 섞이지 않는다. <code>raw</code> 가 바탕의 정수를 꺼낸다. <code>cents</code> 를 정수로 곱하거나 나누면 결과도 <code>cents</code> 다(<code>c 3 mul</code>). 몇 배 해도 단위는 그대로이기 때문이다. 정수가 필요한 <code>show</code> 의 나눗셈만 <code>raw</code> 를 쓴다.</p><h3>10.2 모듈 쓰기</h3><p><code>use money .</code> 를 쓰면 <code>money.of_won</code> 처럼 경로로 쓴다. 내보낸 타입 <code>cents</code> 는 이름만으로 쓴다. <code>pnx</code> 는 <code>money</code> 가 등록된 모듈이 아니면 프로그램 옆의 <code>money.pnx</code> 를 먼저 적재한다.</p><div class="example run"><p class="ex-file"><code>10-use.pnx</code></p><pre><code data-lang="pinax"><span style="color: #d73948">use</span> io .
 <span style="color: #d73948">use</span> money .
-def total a cents, b cents <span style="color: #d73948">gives</span> cents <span style="color: #d73948">do</span> a b add <span style="color: #d73948">end</span>
-args <span style="color: #198810">"total "</span> <span style="color: #b60157">12</span> money.of_won <span style="color: #b60157">3</span> money.of_won total money.show . <span style="color: #d73948">cat</span> io.println
+<span style="color: #d73948">def</span> total a cents, b cents <span style="color: #d73948">gives</span> cents <span style="color: #d73948">do</span> a b add <span style="color: #d73948">end</span>
+<span style="color: #d73948">args</span> <span style="color: #198810">"total "</span> <span style="color: #b60157">12</span> money.of_won <span style="color: #b60157">3</span> money.of_won total money.show . <span style="color: #d73948">cat</span> io.println
 </code></pre><p class="ex-label">출력</p><pre><code data-lang="text">$ pnx 10-use.pnx
 total 15.00
 </code></pre></div><div class="example run"><p class="ex-file"><code>10-use-as.pnx</code></p><pre><code data-lang="pinax"><span style="color: #d73948">use</span> io .
 <span style="color: #d73948">use</span> money <span style="color: #d73948">as</span> m .
-args <span style="color: #198810">"price "</span> <span style="color: #b60157">7</span> m.of_won m.show . <span style="color: #d73948">cat</span> io.println
+<span style="color: #d73948">args</span> <span style="color: #198810">"price "</span> <span style="color: #b60157">7</span> m.of_won m.show . <span style="color: #d73948">cat</span> io.println
 </code></pre><p class="ex-label">출력</p><pre><code data-lang="text">$ pnx 10-use-as.pnx
 price 7.00
 </code></pre></div><p>내보내지 않은 <code>pad2</code> 는 밖에서 보이지 않는다.</p><div class="example refused"><p class="ex-file"><code>10-private.pnx</code></p><pre><code data-lang="pinax"><span style="color: #d73948">use</span> money .
@@ -22,18 +22,18 @@ price 7.00
 </code></pre></div><p>모듈은 낱말 말고도 상수, 전역, 타입, 레코드를 내보낼 수 있다. 쓰는 꼴은 이렇다.</p><table><thead><tr><th><strong>내보낸 것</strong></th><th><strong>읽기·부르기</strong></th><th><strong>비고</strong></th></tr></thead><tbody><tr><td>낱말</td><td><code>모듈.낱말</code></td><td>서명은 모듈 안과 같다</td></tr><tr><td>상수 (<code>const</code>)</td><td><code>모듈.이름</code></td><td></td></tr><tr><td>전역 (<code>global</code> 과 모음)</td><td><code>모듈.이름</code></td><td>넣을 때는 <code>값 set 모듈.이름</code></td></tr><tr><td>타입, 레코드, 표의 줄 타입</td><td>이름만</td><td><code>cents</code> 처럼 경로 없이 쓴다</td></tr></tbody></table><p>아래 모듈 <code>tally</code> 는 상수 하나, 전역 하나, 낱말 하나를 내보낸다. 전역을 바꾸는 것은 대개 모듈 자신의 낱말(<code>bump</code>)이 맡지만, 밖에서도 <code>set tally.hits</code> 로 넣을 수 있다.</p><div class="example module"><p class="ex-file"><code>tally.pnx</code></p><pre><code data-lang="pinax"><span style="color: #74747c">rem A module that keeps a count: an exported constant, an exported global and a word.</span>
 <span style="color: #d73948">export</span> <span style="color: #d73948">const</span> limit <span style="color: #b60157">3</span>
 <span style="color: #d73948">export</span> <span style="color: #d73948">global</span> hits <span style="color: #d73948">int</span>
-<span style="color: #d73948">export</span> def bump <span style="color: #d73948">gives</span> <span style="color: #d73948">bool</span> <span style="color: #d73948">do</span>          <span style="color: #74747c">rem true while hits is still under the limit</span>
+<span style="color: #d73948">export</span> <span style="color: #d73948">def</span> bump <span style="color: #d73948">gives</span> <span style="color: #d73948">bool</span> <span style="color: #d73948">do</span>          <span style="color: #74747c">rem true while hits is still under the limit</span>
   hits limit lt <span style="color: #d73948">if</span> hits <span style="color: #b60157">1</span> add set hits <span style="color: #d73948">true</span> <span style="color: #d73948">else</span> <span style="color: #d73948">false</span> <span style="color: #d73948">end</span>
 <span style="color: #d73948">end</span>
 </code></pre></div><div class="example run"><p class="ex-file"><code>10-tally.pnx</code></p><pre><code data-lang="pinax"><span style="color: #d73948">use</span> io .
 <span style="color: #d73948">use</span> tally .
-def try_once <span style="color: #d73948">do</span>
+<span style="color: #d73948">def</span> try_once <span style="color: #d73948">do</span>
   tally.bump <span style="color: #d73948">if</span> <span style="color: #198810">"counted"</span> <span style="color: #d73948">else</span> <span style="color: #198810">"limit reached"</span> <span style="color: #d73948">end</span> io.println
 <span style="color: #d73948">end</span>
 try_once try_once try_once try_once                 <span style="color: #74747c">rem the fourth time the limit is reached</span>
-args <span style="color: #198810">"hits "</span> tally.hits <span style="color: #198810">" of "</span> tally.limit . <span style="color: #d73948">cat</span> io.println   <span style="color: #74747c">rem read an exported global and constant</span>
+<span style="color: #d73948">args</span> <span style="color: #198810">"hits "</span> tally.hits <span style="color: #198810">" of "</span> tally.limit . <span style="color: #d73948">cat</span> io.println   <span style="color: #74747c">rem read an exported global and constant</span>
 <span style="color: #b60157">0</span> set tally.hits                                    <span style="color: #74747c">rem an exported global is written with set module.name</span>
-args <span style="color: #198810">"hits after reset "</span> tally.hits . <span style="color: #d73948">cat</span> io.println
+<span style="color: #d73948">args</span> <span style="color: #198810">"hits after reset "</span> tally.hits . <span style="color: #d73948">cat</span> io.println
 </code></pre><p class="ex-label">출력</p><pre><code data-lang="text">$ pnx 10-tally.pnx
 counted
 counted
@@ -100,15 +100,15 @@ refused: a data source defines no words and uses no modules
 <span style="color: #d73948">use</span> env .
 <span style="color: #d73948">use</span> random .
 <span style="color: #d73948">use</span> clock .
-def demo <span style="color: #d73948">do</span>
-  args <span style="color: #198810">"arguments: "</span> env.arg_count . <span style="color: #d73948">cat</span> io.println             <span style="color: #74747c">rem 0 is the program file</span>
+<span style="color: #d73948">def</span> demo <span style="color: #d73948">do</span>
+  <span style="color: #d73948">args</span> <span style="color: #198810">"arguments: "</span> env.arg_count . <span style="color: #d73948">cat</span> io.println             <span style="color: #74747c">rem 0 is the program file</span>
   <span style="color: #b60157">1</span> env.arg <span style="color: #d73948">or_else</span> <span style="color: #d73948">to</span> e <span style="color: #198810">"?"</span> <span style="color: #d73948">end</span> io.println
-  <span style="color: #198810">"PINAX_NO_SUCH_VARIABLE"</span> env.getenv <span style="color: #d73948">or_else</span> <span style="color: #d73948">to</span> e args <span style="color: #198810">"getenv failed: "</span> e err_text . <span style="color: #d73948">cat</span> <span style="color: #d73948">end</span> io.println
+  <span style="color: #198810">"PINAX_NO_SUCH_VARIABLE"</span> env.getenv <span style="color: #d73948">or_else</span> <span style="color: #d73948">to</span> e <span style="color: #d73948">args</span> <span style="color: #198810">"getenv failed: "</span> e err_text . <span style="color: #d73948">cat</span> <span style="color: #d73948">end</span> io.println
   <span style="color: #b60157">7</span> random.seed                                             <span style="color: #74747c">rem the same seed, the same numbers</span>
-  args <span style="color: #b60157">10</span> random.random_below <span style="color: #198810">" "</span> <span style="color: #b60157">10</span> random.random_below <span style="color: #198810">" "</span> <span style="color: #b60157">10</span> random.random_below . <span style="color: #d73948">cat</span> io.println
+  <span style="color: #d73948">args</span> <span style="color: #b60157">10</span> random.random_below <span style="color: #198810">" "</span> <span style="color: #b60157">10</span> random.random_below <span style="color: #198810">" "</span> <span style="color: #b60157">10</span> random.random_below . <span style="color: #d73948">cat</span> io.println
   clock.monotonic_ns <span style="color: #d73948">to</span> a
   clock.monotonic_ns <span style="color: #d73948">to</span> b
-  args <span style="color: #198810">"the clock does not go back: "</span> b a lt not . <span style="color: #d73948">cat</span> io.println
+  <span style="color: #d73948">args</span> <span style="color: #198810">"the clock does not go back: "</span> b a lt not . <span style="color: #d73948">cat</span> io.println
 <span style="color: #d73948">end</span>
 demo
 </code></pre><p class="ex-label">출력</p><pre><code data-lang="text">$ pnx 10-host-modules.pnx

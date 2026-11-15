@@ -1,0 +1,18 @@
+rem run
+use io .
+use str .
+def read rest args do
+  0 rest args.int or_else to e -1 end str.to_str io.println          rem 0: an int
+  1 rest args.str or_else to e "?" end io.println                    rem 1: a str
+  2 rest args.bool or_else to e false end if "yes" else "no" end io.println
+  3 2 rest args.dec or_else to e 0.00 end raw str.to_str io.println  rem a dec 2, as an int of hundredths
+  rest args.len str.to_str io.println
+end
+args 41 1 add "text" true 3.25 . read
+args "text" 5 . read                           rem another kind: err.format, so the else values
+def kinds rest args do
+  0 rest args.kind or_else to e 0 end str.to_str io.println
+  rest cat io.println                         rem the values written as cat writes them
+end
+args args.k_int args.k_str . kinds
+args "a" 2 true 1.50 . kinds

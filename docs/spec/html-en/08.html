@@ -20,7 +20,7 @@ decl        = "const"  NAME literal
 capacity    = size | "host" ;
 size        = INT | NAME ;                         (* NAME: a const *)</code></pre><p class="para"><span class="pn">(1)</span> A <strong>declaration</strong> makes a name and what it stands for (a value, storage, a type). Declarations are written only outside definitions, at the outermost level of a source.</p><p class="para"><span class="pn">(2)</span> A processor reads a source once, from top to bottom. A name shall be declared before the place where it is used. The exceptions are a word that calls itself, and <code>forward</code> (8.11).</p><p class="para"><span class="pn">(3)</span> Within one module a name cannot be made twice, not even for different kinds of things. The names of core words and types cannot be made again either.</p><p class="para"><span class="pn">(4)</span> A capacity (<code>size</code>) is a positive integer literal or a <code>const</code> of one. Capacities are fixed at load and do not change while running. All storage is placed inside the state’s block at load.</p><p class="para"><span class="pn">(4a)</span> The capacity of an array, a buffer, a list, a queue, a pool or a task group may be written <code>host</code>. Then it is the number the host gave for that declaration before the load (19.4 (1d)), and the load treats it as that number written there. A load that meets <code>host</code> for a declaration the host gave no number is refused, and the message names the declaration. <code>host</code> is a word of the declaration only in that place; a constant of that name is not looked up there.</p><div class="example refused"><p class="ex-file"><code>08-host-capacity.pnx</code></p><pre><code data-lang="pinax"><span style="color: #d73948">tasks</span> handlers host <span style="color: #b60157">32</span> <span style="color: #b60157">8192</span> apart     <span style="color: #74747c">rem as many as the host serves at once</span>
 <span style="color: #d73948">list</span> seen <span style="color: #d73948">int</span> host
-def count <span style="color: #d73948">gives</span> n <span style="color: #d73948">int</span> <span style="color: #d73948">do</span> seen len <span style="color: #d73948">end</span>
+<span style="color: #d73948">def</span> count <span style="color: #d73948">gives</span> n <span style="color: #d73948">int</span> <span style="color: #d73948">do</span> seen len <span style="color: #d73948">end</span>
 </code></pre><p class="ex-label">Refused</p><pre><code data-lang="text">$ pnx 08-host-capacity.pnx
 08-host-capacity.pnx:1:16: the host gave no capacity for handlers (pinax_capacity)
 </code></pre></div><p class="para"><span class="pn">(5)</span> Globals, cells of arrays, slots of lists, queues and pools, buffers and fields of records start at zero (7 (3)).</p><h5>Constraints</h5><p class="para"><span class="pn">(6)</span> Making a name that exists already is refused.</p><div class="example refused"><p class="ex-file"><code>08-name-twice.pnx</code></p><pre><code data-lang="pinax"><span style="color: #d73948">global</span> total <span style="color: #d73948">int</span>
@@ -28,12 +28,12 @@ def count <span style="color: #d73948">gives</span> n <span style="color: #d7394
 </code></pre><p class="ex-label">Refused</p><pre><code data-lang="text">$ pnx 08-name-twice.pnx
 08-name-twice.pnx:2:7: this name is already defined
 </code></pre></div><p class="para"><span class="pn">(7)</span> Using a name before its declaration is refused.</p><div class="example refused"><p class="ex-file"><code>08-use-before.pnx</code></p><pre><code data-lang="pinax"><span style="color: #d73948">use</span> <span style="color: #d73948">str</span> .
-def show <span style="color: #d73948">gives</span> s <span style="color: #d73948">str</span> <span style="color: #d73948">do</span> total <span style="color: #d73948">str</span>.to_str <span style="color: #d73948">end</span>
+<span style="color: #d73948">def</span> show <span style="color: #d73948">gives</span> s <span style="color: #d73948">str</span> <span style="color: #d73948">do</span> total <span style="color: #d73948">str</span>.to_str <span style="color: #d73948">end</span>
 <span style="color: #d73948">global</span> total <span style="color: #d73948">int</span>
 </code></pre><p class="ex-label">Refused</p><pre><code data-lang="text">$ pnx 08-use-before.pnx
 08-use-before.pnx:2:25: this name is not declared before this place
 </code></pre></div><h3>8.2 Constants</h3><p class="para"><span class="pn">(1)</span> <code>const NAME literal</code> makes a <strong>constant</strong>. Its type is the literal’s. A constant has no storage: its value goes where it is used. Constants can be capacities, <code>match</code> values and <code>row</code> values.</p><h5>Constraints</h5><p class="para"><span class="pn">(2)</span> Nothing can be stored into a constant. Inside a definition <code>v to CONST</code> would make a new local of the same name and is refused by the rule against hiding names (9.5); outside a definition <code>to</code> makes no local, so it is refused. <code>set</code> writes globals only (9.4).</p><div class="example refused"><p class="ex-file"><code>08-const-store.pnx</code></p><pre><code data-lang="pinax"><span style="color: #d73948">const</span> limit <span style="color: #b60157">3</span>
-def raise <span style="color: #d73948">do</span> <span style="color: #b60157">4</span> <span style="color: #d73948">to</span> limit <span style="color: #d73948">end</span>
+<span style="color: #d73948">def</span> raise <span style="color: #d73948">do</span> <span style="color: #b60157">4</span> <span style="color: #d73948">to</span> limit <span style="color: #d73948">end</span>
 </code></pre><p class="ex-label">Refused</p><pre><code data-lang="text">$ pnx 08-const-store.pnx
 08-const-store.pnx:2:19: this name is already visible here; a new name may not hide it
 </code></pre></div><h3>8.3 Globals</h3><p class="para"><span class="pn">(1)</span> <code>global NAME type</code> makes a <strong>global</strong> that holds one value. The type is <code>int</code>, <code>bool</code>, <code>err</code>, <code>dec N</code>, <code>str N</code>, a declared type, a row type (the name of a table) or a handle type; not <code>str</code> (7.3).</p><p class="para"><span class="pn">(2)</span> A global is read by writing its name and stored with <code>v set NAME</code> (9.4). Its value stays as long as the state does — after a word’s run ends, and across later loads.</p><div class="example run"><p class="ex-file"><code>08-const-global.pnx</code></p><pre><code data-lang="pinax"><span style="color: #d73948">use</span> io .
@@ -47,7 +47,7 @@ hits <span style="color: #d73948">str</span>.to_str io.println           <span s
 limit set hits
 greeting set last
 <span style="color: #d73948">true</span> set seen
-args last <span style="color: #198810">" "</span> hits <span style="color: #198810">" "</span> seen . <span style="color: #d73948">cat</span> io.println
+<span style="color: #d73948">args</span> last <span style="color: #198810">" "</span> hits <span style="color: #198810">" "</span> seen . <span style="color: #d73948">cat</span> io.println
 </code></pre><p class="ex-label">Output</p><pre><code data-lang="text">$ pnx 08-const-global.pnx
 0
 hello 3 true
@@ -58,7 +58,7 @@ hello 3 true
 <span style="color: #b60157">11</span> <span style="color: #b60157">4</span> set primes                            <span style="color: #74747c">rem v i to array: store into cell i</span>
 primes <span style="color: #d73948">do</span> <span style="color: #d73948">to</span> p p <span style="color: #d73948">str</span>.to_str io.print <span style="color: #198810">" "</span> io.print <span style="color: #d73948">end</span> each
 <span style="color: #198810">""</span> io.println
-args <span style="color: #198810">"len "</span> primes len <span style="color: #198810">", cell 2 is "</span> <span style="color: #b60157">2</span> primes idx . <span style="color: #d73948">cat</span> io.println
+<span style="color: #d73948">args</span> <span style="color: #198810">"len "</span> primes len <span style="color: #198810">", cell 2 is "</span> <span style="color: #b60157">2</span> primes idx . <span style="color: #d73948">cat</span> io.println
 </code></pre><p class="ex-label">Output</p><pre><code data-lang="text">$ pnx 08-array.pnx
 2 3 5 7 11 0 
 len 6, cell 2 is 5
@@ -76,14 +76,14 @@ reading cell 4 of 4
 </code></pre></div><h3>8.5 Lists</h3><p class="para"><span class="pn">(1)</span> <code>list NAME type capacity</code> makes a <strong>list</strong> whose length grows from 0 up to its capacity. Its cells are read and stored like an array’s, but only indexes below the length may be used.</p><p class="para"><span class="pn">(2)</span> <code>v LIST push</code> adds one value at the end; <code>LIST pop</code> takes the last one off and gives it. Both can fail (<code>or fail</code>): a <code>push</code> into a full list fails with <code>err.full</code>, a <code>pop</code> from an empty list with <code>err.range</code>; a <code>push</code> of text too long for a list of <code>str N</code> fails with <code>err.range</code> (7.3 (4a)). A list of records gets an empty row at the end with <code>LIST add_row</code>, which gives that row. <code>LIST clear</code> sets the length to 0.</p><div class="example run"><p class="ex-file"><code>08-list.pnx</code></p><pre><code data-lang="pinax"><span style="color: #d73948">use</span> io .
 <span style="color: #d73948">use</span> <span style="color: #d73948">str</span> .
 <span style="color: #d73948">list</span> stack <span style="color: #d73948">int</span> <span style="color: #b60157">3</span>
-def fill <span style="color: #d73948">or</span> <span style="color: #d73948">fail</span> <span style="color: #d73948">do</span>
+<span style="color: #d73948">def</span> fill <span style="color: #d73948">or</span> <span style="color: #d73948">fail</span> <span style="color: #d73948">do</span>
   <span style="color: #b60157">1</span> stack push <span style="color: #d73948">or_fail</span>
   <span style="color: #b60157">2</span> stack push <span style="color: #d73948">or_fail</span>
 <span style="color: #d73948">end</span>
 fill <span style="color: #d73948">or_else</span> <span style="color: #d73948">to</span> e <span style="color: #198810">"fill failed"</span> io.println <span style="color: #d73948">end</span>
-args <span style="color: #198810">"len "</span> stack len <span style="color: #198810">" of "</span> stack capacity . <span style="color: #d73948">cat</span> io.println
+<span style="color: #d73948">args</span> <span style="color: #198810">"len "</span> stack len <span style="color: #198810">" of "</span> stack capacity . <span style="color: #d73948">cat</span> io.println
 stack pop <span style="color: #d73948">or_else</span> <span style="color: #d73948">to</span> e <span style="color: #b60157">-1</span> <span style="color: #d73948">end</span> <span style="color: #d73948">str</span>.to_str io.println
-args <span style="color: #198810">"len "</span> stack len . <span style="color: #d73948">cat</span> io.println
+<span style="color: #d73948">args</span> <span style="color: #198810">"len "</span> stack len . <span style="color: #d73948">cat</span> io.println
 </code></pre><p class="ex-label">Output</p><pre><code data-lang="text">$ pnx 08-list.pnx
 len 2 of 3
 2
@@ -92,7 +92,7 @@ len 1
 <span style="color: #d73948">list</span> two <span style="color: #d73948">int</span> <span style="color: #b60157">2</span>
 <span style="color: #b60157">1</span> two push <span style="color: #d73948">or_else</span> <span style="color: #d73948">to</span> e <span style="color: #d73948">end</span>
 <span style="color: #b60157">2</span> two push <span style="color: #d73948">or_else</span> <span style="color: #d73948">to</span> e <span style="color: #d73948">end</span>
-<span style="color: #b60157">3</span> two push <span style="color: #d73948">or_else</span> <span style="color: #d73948">to</span> e args <span style="color: #198810">"third push failed: "</span> e err_text . <span style="color: #d73948">cat</span> io.println <span style="color: #d73948">end</span>
+<span style="color: #b60157">3</span> two push <span style="color: #d73948">or_else</span> <span style="color: #d73948">to</span> e <span style="color: #d73948">args</span> <span style="color: #198810">"third push failed: "</span> e err_text . <span style="color: #d73948">cat</span> io.println <span style="color: #d73948">end</span>
 </code></pre><p class="ex-label">Output</p><pre><code data-lang="text">$ pnx 08-list-full.pnx
 third push failed: full
 </code></pre></div><p class="para"><span class="pn">(2a)</span> <code>n LIST truncate</code> cuts the length to <code>n</code>, for lists of integers, of text and of records alike. It takes back a row added with <code>add_row</code> whose values turn out to be wrong.</p><div class="example run"><p class="ex-file"><code>08-list-truncate.pnx</code></p><pre><code data-lang="pinax"><span style="color: #d73948">use</span> io .
@@ -102,7 +102,7 @@ third push failed: full
 <span style="color: #d73948">end</span>
 <span style="color: #d73948">list</span> cities city <span style="color: #b60157">4</span>
 <span style="color: #74747c">rem Add a row, and take it back when its values turn out wrong.</span>
-def add_city name <span style="color: #d73948">str</span>, people <span style="color: #d73948">int</span> <span style="color: #d73948">or</span> <span style="color: #d73948">fail</span> <span style="color: #d73948">do</span>
+<span style="color: #d73948">def</span> add_city name <span style="color: #d73948">str</span>, people <span style="color: #d73948">int</span> <span style="color: #d73948">or</span> <span style="color: #d73948">fail</span> <span style="color: #d73948">do</span>
   cities len <span style="color: #d73948">to</span> before
   cities add_row <span style="color: #d73948">or_fail</span> <span style="color: #d73948">to</span> c
   name c <span style="color: #d73948">to</span> city.name
@@ -110,8 +110,8 @@ def add_city name <span style="color: #d73948">str</span>, people <span style="c
   people c <span style="color: #d73948">to</span> city.people
 <span style="color: #d73948">end</span>
 <span style="color: #198810">"Seoul"</span> <span style="color: #b60157">9411000</span> add_city <span style="color: #d73948">or_else</span> <span style="color: #d73948">to</span> e <span style="color: #d73948">end</span>
-<span style="color: #198810">"Nowhere"</span> <span style="color: #b60157">-1</span> add_city <span style="color: #d73948">or_else</span> <span style="color: #d73948">to</span> e args <span style="color: #198810">"refused: "</span> e err_text . <span style="color: #d73948">cat</span> io.println <span style="color: #d73948">end</span>
-args cities len <span style="color: #198810">" rows"</span> . <span style="color: #d73948">cat</span> io.println
+<span style="color: #198810">"Nowhere"</span> <span style="color: #b60157">-1</span> add_city <span style="color: #d73948">or_else</span> <span style="color: #d73948">to</span> e <span style="color: #d73948">args</span> <span style="color: #198810">"refused: "</span> e err_text . <span style="color: #d73948">cat</span> io.println <span style="color: #d73948">end</span>
+<span style="color: #d73948">args</span> cities len <span style="color: #198810">" rows"</span> . <span style="color: #d73948">cat</span> io.println
 </code></pre><p class="ex-label">Output</p><pre><code data-lang="text">$ pnx 08-list-truncate.pnx
 refused: format
 1 rows
@@ -120,7 +120,7 @@ refused: format
 <span style="color: #d73948">end</span>
 <span style="color: #d73948">list</span> cities city <span style="color: #b60157">4</span>
 <span style="color: #d73948">index</span> by_name cities city.name
-def forget <span style="color: #d73948">do</span> <span style="color: #b60157">0</span> cities truncate <span style="color: #d73948">end</span>
+<span style="color: #d73948">def</span> forget <span style="color: #d73948">do</span> <span style="color: #b60157">0</span> cities truncate <span style="color: #d73948">end</span>
 </code></pre><p class="ex-label">Refused</p><pre><code data-lang="text">$ pnx 08-list-truncate-kept.pnx
 08-list-truncate-kept.pnx:6:24: this list's rows are kept by a field, a global, a collection, a named row or an index; it cannot be truncated
 </code></pre></div><h5>Faults</h5><p class="para"><span class="pn">(3)</span> An index past the length is the fault <code>range</code>, even when it is below the capacity. So is a number for <code>truncate</code> larger than the length, or below zero.</p><div class="example fault"><p class="ex-file"><code>08-list-past-len.pnx</code></p><pre><code data-lang="pinax"><span style="color: #d73948">list</span> items <span style="color: #d73948">int</span> <span style="color: #b60157">8</span>
@@ -131,13 +131,13 @@ def forget <span style="color: #d73948">do</span> <span style="color: #b60157">0
 </code></pre></div><h5>Diagnostics</h5><table><thead><tr><th><strong>Condition</strong></th><th><strong>Message</strong></th></tr></thead><tbody><tr><td><code>truncate</code> on a list whose rows are kept</td><td><code>this list's rows are kept by a field, a global, a collection, a named row or an index; it cannot be truncated</code></td></tr></tbody></table><h3>8.6 Queues</h3><p class="para"><span class="pn">(1)</span> <code>queue NAME type capacity</code> makes a <strong>queue</strong>: what goes in first comes out first. The element type is <code>int</code>, <code>bool</code>, <code>err</code> or <code>dec N</code>. <code>v QUEUE put</code> puts a value at the back, <code>QUEUE take</code> takes the front one off and gives it, and <code>QUEUE peek</code> gives the front one without taking it. All three can fail: putting into a full queue is <code>err.full</code>, taking from an empty one <code>err.range</code>.</p><div class="example run"><p class="ex-file"><code>08-queue.pnx</code></p><pre><code data-lang="pinax"><span style="color: #d73948">use</span> io .
 <span style="color: #d73948">use</span> <span style="color: #d73948">str</span> .
 <span style="color: #d73948">queue</span> jobs <span style="color: #d73948">int</span> <span style="color: #b60157">4</span>
-def show <span style="color: #d73948">gives</span> s <span style="color: #d73948">str</span> <span style="color: #d73948">or</span> <span style="color: #d73948">fail</span> <span style="color: #d73948">do</span> jobs take <span style="color: #d73948">or_fail</span> <span style="color: #d73948">str</span>.to_str <span style="color: #d73948">end</span>
+<span style="color: #d73948">def</span> show <span style="color: #d73948">gives</span> s <span style="color: #d73948">str</span> <span style="color: #d73948">or</span> <span style="color: #d73948">fail</span> <span style="color: #d73948">do</span> jobs take <span style="color: #d73948">or_fail</span> <span style="color: #d73948">str</span>.to_str <span style="color: #d73948">end</span>
 <span style="color: #b60157">10</span> jobs put <span style="color: #d73948">or_else</span> <span style="color: #d73948">to</span> e <span style="color: #d73948">end</span>
 <span style="color: #b60157">20</span> jobs put <span style="color: #d73948">or_else</span> <span style="color: #d73948">to</span> e <span style="color: #d73948">end</span>
 jobs peek <span style="color: #d73948">or_else</span> <span style="color: #d73948">to</span> e <span style="color: #b60157">0</span> <span style="color: #d73948">end</span> <span style="color: #d73948">str</span>.to_str io.println
 show <span style="color: #d73948">or_else</span> <span style="color: #d73948">to</span> e <span style="color: #198810">"?"</span> <span style="color: #d73948">end</span> io.println
 show <span style="color: #d73948">or_else</span> <span style="color: #d73948">to</span> e <span style="color: #198810">"?"</span> <span style="color: #d73948">end</span> io.println
-show <span style="color: #d73948">or_else</span> <span style="color: #d73948">to</span> e args <span style="color: #198810">"empty: "</span> e err_text . <span style="color: #d73948">cat</span> <span style="color: #d73948">end</span> io.println
+show <span style="color: #d73948">or_else</span> <span style="color: #d73948">to</span> e <span style="color: #d73948">args</span> <span style="color: #198810">"empty: "</span> e err_text . <span style="color: #d73948">cat</span> <span style="color: #d73948">end</span> io.println
 </code></pre><p class="ex-label">Output</p><pre><code data-lang="text">$ pnx 08-queue.pnx
 10
 10
@@ -145,7 +145,7 @@ show <span style="color: #d73948">or_else</span> <span style="color: #d73948">to
 empty: range
 </code></pre></div><h3>8.7 Buffers</h3><p class="para"><span class="pn">(1)</span> <code>buffer NAME capacity</code> makes a <strong>buffer</strong> of that many bytes: a sequence of bytes that can be changed, for building text piece by piece.</p><p class="para"><span class="pn">(2)</span> <code>s BUF append</code>, <code>n BUF append_int</code> (decimal; <code>n</code> an <code>int</code> or a narrow integer) and <code>b BUF append_byte</code> (<code>b</code> a <code>u8</code>) add at the end; when there is not enough room they fail with <code>err.full</code> and add nothing. <code>BUF contents</code> gives a <code>str</code> view of what it holds now. <code>n BUF truncate</code> cuts the length to <code>n</code>. <code>BUF clear</code> sets the length to 0.</p><div class="example run"><p class="ex-file"><code>08-buffer.pnx</code></p><pre><code data-lang="pinax"><span style="color: #d73948">use</span> io .
 <span style="color: #d73948">buffer</span> out <span style="color: #b60157">32</span>
-def build <span style="color: #d73948">or</span> <span style="color: #d73948">fail</span> <span style="color: #d73948">do</span>
+<span style="color: #d73948">def</span> build <span style="color: #d73948">or</span> <span style="color: #d73948">fail</span> <span style="color: #d73948">do</span>
   <span style="color: #198810">"x="</span> out append <span style="color: #d73948">or_fail</span>
   <span style="color: #b60157">42</span> out append_int <span style="color: #d73948">or_fail</span>
   <span style="color: #b60157">'!'</span> out append_byte <span style="color: #d73948">or_fail</span>
@@ -172,7 +172,7 @@ value    = literal | NAME ;                         (* NAME: a const, a row name
 <span style="color: #d73948">list</span> users user <span style="color: #b60157">8</span>
 <span style="color: #d73948">row</span> users <span style="color: #198810">"kim"</span> <span style="color: #b60157">30</span> <span style="color: #d73948">true</span> .
 <span style="color: #d73948">row</span> users <span style="color: #d73948">as</span> lee <span style="color: #198810">"lee"</span> <span style="color: #b60157">25</span> .                  <span style="color: #74747c">rem a named row; the fields left out stay zero</span>
-def show u users <span style="color: #d73948">do</span> args u user.name <span style="color: #198810">" "</span> u user.age <span style="color: #198810">" "</span> u user.admin . <span style="color: #d73948">cat</span> io.println <span style="color: #d73948">end</span>
+<span style="color: #d73948">def</span> show u users <span style="color: #d73948">do</span> <span style="color: #d73948">args</span> u user.name <span style="color: #198810">" "</span> u user.age <span style="color: #198810">" "</span> u user.admin . <span style="color: #d73948">cat</span> io.println <span style="color: #d73948">end</span>
 users <span style="color: #d73948">do</span> <span style="color: #d73948">to</span> u u show <span style="color: #d73948">end</span> each
 <span style="color: #b60157">26</span> <span style="color: #d73948">u8</span> lee <span style="color: #d73948">to</span> user.age                         <span style="color: #74747c">rem v row to record.field</span>
 lee show
@@ -208,7 +208,7 @@ Oslo
   level <span style="color: #d73948">u8</span>
 <span style="color: #d73948">end</span>
 <span style="color: #d73948">array</span> image pixel <span style="color: #b60157">4</span>
-def set_level n <span style="color: #d73948">int</span> <span style="color: #d73948">do</span> n <span style="color: #d73948">u8</span> <span style="color: #b60157">0</span> image idx <span style="color: #d73948">to</span> pixel.level <span style="color: #d73948">end</span>     <span style="color: #74747c">rem the conversion checks the range</span>
+<span style="color: #d73948">def</span> set_level n <span style="color: #d73948">int</span> <span style="color: #d73948">do</span> n <span style="color: #d73948">u8</span> <span style="color: #b60157">0</span> image idx <span style="color: #d73948">to</span> pixel.level <span style="color: #d73948">end</span>     <span style="color: #74747c">rem the conversion checks the range</span>
 <span style="color: #b60157">300</span> set_level                                                   <span style="color: #74747c">rem 300 does not fit in u8</span>
 </code></pre><p class="ex-label">Fault</p><pre><code data-lang="text">$ pnx 08-record-narrow.pnx
 08-record-narrow.pnx:5: integer overflow
@@ -219,13 +219,13 @@ def set_level n <span style="color: #d73948">int</span> <span style="color: #d73
 <span style="color: #d73948">end</span>
 <span style="color: #d73948">pool</span> nodes node <span style="color: #b60157">2</span>
 <span style="color: #d73948">global</span> kept nodes
-def demo <span style="color: #d73948">or</span> <span style="color: #d73948">fail</span> <span style="color: #d73948">do</span>
+<span style="color: #d73948">def</span> demo <span style="color: #d73948">or</span> <span style="color: #d73948">fail</span> <span style="color: #d73948">do</span>
   nodes alloc <span style="color: #d73948">or_fail</span> <span style="color: #d73948">to</span> a                 <span style="color: #74747c">rem an owned row: it must be stored or freed</span>
   <span style="color: #b60157">7</span> a <span style="color: #d73948">to</span> node.value
   a set kept                                <span style="color: #74747c">rem stored: the global holds the row now</span>
-  args <span style="color: #198810">"value "</span> kept node.value <span style="color: #198810">", alive: "</span> kept nodes is_alive . <span style="color: #d73948">cat</span> io.println
+  <span style="color: #d73948">args</span> <span style="color: #198810">"value "</span> kept node.value <span style="color: #198810">", alive: "</span> kept nodes is_alive . <span style="color: #d73948">cat</span> io.println
   kept nodes free
-  args <span style="color: #198810">"alive after free: "</span> kept nodes is_alive . <span style="color: #d73948">cat</span> io.println
+  <span style="color: #d73948">args</span> <span style="color: #198810">"alive after free: "</span> kept nodes is_alive . <span style="color: #d73948">cat</span> io.println
 <span style="color: #d73948">end</span>
 demo <span style="color: #d73948">or_else</span> <span style="color: #d73948">to</span> e <span style="color: #198810">"no room"</span> io.println <span style="color: #d73948">end</span>
 </code></pre><p class="ex-label">Output</p><pre><code data-lang="text">$ pnx 08-pool.pnx
@@ -235,7 +235,7 @@ alive after free: false
   value <span style="color: #d73948">int</span>
 <span style="color: #d73948">end</span>
 <span style="color: #d73948">pool</span> nodes node <span style="color: #b60157">2</span>
-def leak <span style="color: #d73948">or</span> <span style="color: #d73948">fail</span> <span style="color: #d73948">do</span>
+<span style="color: #d73948">def</span> leak <span style="color: #d73948">or</span> <span style="color: #d73948">fail</span> <span style="color: #d73948">do</span>
   nodes alloc <span style="color: #d73948">or_fail</span> <span style="color: #d73948">to</span> a
   <span style="color: #b60157">7</span> a <span style="color: #d73948">to</span> node.value
 <span style="color: #d73948">end</span>
@@ -245,7 +245,7 @@ def leak <span style="color: #d73948">or</span> <span style="color: #d73948">fai
   value <span style="color: #d73948">int</span>
 <span style="color: #d73948">end</span>
 <span style="color: #d73948">pool</span> nodes node <span style="color: #b60157">4</span>
-def live <span style="color: #d73948">gives</span> n <span style="color: #d73948">int</span> <span style="color: #d73948">do</span>
+<span style="color: #d73948">def</span> live <span style="color: #d73948">gives</span> n <span style="color: #d73948">int</span> <span style="color: #d73948">do</span>
   nodes <span style="color: #d73948">do</span> <span style="color: #d73948">to</span> r <span style="color: #d73948">true</span> <span style="color: #d73948">end</span> count
 <span style="color: #d73948">end</span>
 </code></pre><p class="ex-label">Refused</p><pre><code data-lang="text">$ pnx 08-pool-walk.pnx
@@ -255,7 +255,7 @@ def live <span style="color: #d73948">gives</span> n <span style="color: #d73948
 <span style="color: #d73948">end</span>
 <span style="color: #d73948">pool</span> nodes node <span style="color: #b60157">2</span>
 <span style="color: #d73948">global</span> keep nodes
-def demo <span style="color: #d73948">or</span> <span style="color: #d73948">fail</span> <span style="color: #d73948">do</span>
+<span style="color: #d73948">def</span> demo <span style="color: #d73948">or</span> <span style="color: #d73948">fail</span> <span style="color: #d73948">do</span>
   nodes alloc <span style="color: #d73948">or_fail</span> <span style="color: #d73948">to</span> a
   a set keep                                 <span style="color: #74747c">rem stored: the row is handed over</span>
   keep nodes free
@@ -275,7 +275,7 @@ demo <span style="color: #d73948">or_else</span> <span style="color: #d73948">to
 <span style="color: #d73948">index</span> by_name users user.name
 <span style="color: #d73948">row</span> users <span style="color: #198810">"kim"</span> <span style="color: #b60157">30</span> .
 <span style="color: #d73948">row</span> users <span style="color: #198810">"lee"</span> <span style="color: #b60157">25</span> .
-def find_age name <span style="color: #d73948">str</span> <span style="color: #d73948">gives</span> age <span style="color: #d73948">int</span> <span style="color: #d73948">or</span> <span style="color: #d73948">fail</span> <span style="color: #d73948">do</span> name by_name lookup <span style="color: #d73948">or_fail</span> user.age raw <span style="color: #d73948">end</span>
+<span style="color: #d73948">def</span> find_age name <span style="color: #d73948">str</span> <span style="color: #d73948">gives</span> age <span style="color: #d73948">int</span> <span style="color: #d73948">or</span> <span style="color: #d73948">fail</span> <span style="color: #d73948">do</span> name by_name lookup <span style="color: #d73948">or_fail</span> user.age raw <span style="color: #d73948">end</span>
 <span style="color: #198810">"lee"</span> find_age <span style="color: #d73948">or_else</span> <span style="color: #d73948">to</span> e <span style="color: #b60157">-1</span> <span style="color: #d73948">end</span> <span style="color: #d73948">str</span>.to_str io.println
 <span style="color: #198810">"park"</span> find_age <span style="color: #d73948">or_else</span> <span style="color: #d73948">to</span> e <span style="color: #b60157">-1</span> <span style="color: #d73948">end</span> <span style="color: #d73948">str</span>.to_str io.println
 </code></pre><p class="ex-label">Output</p><pre><code data-lang="text">$ pnx 08-index.pnx
@@ -289,13 +289,13 @@ def find_age name <span style="color: #d73948">str</span> <span style="color: #d
 <span style="color: #d73948">end</span>
 <span style="color: #d73948">list</span> users user <span style="color: #b60157">4</span>
 <span style="color: #d73948">index</span> by_name users user.name
-def add_user name <span style="color: #d73948">str</span>, age <span style="color: #d73948">int</span>, indexed <span style="color: #d73948">bool</span> <span style="color: #d73948">or</span> <span style="color: #d73948">fail</span> <span style="color: #d73948">do</span>
+<span style="color: #d73948">def</span> add_user name <span style="color: #d73948">str</span>, age <span style="color: #d73948">int</span>, indexed <span style="color: #d73948">bool</span> <span style="color: #d73948">or</span> <span style="color: #d73948">fail</span> <span style="color: #d73948">do</span>
   users add_row <span style="color: #d73948">or_fail</span> <span style="color: #d73948">to</span> r
   name r <span style="color: #d73948">to</span> user.name
   age r <span style="color: #d73948">to</span> user.age
   indexed <span style="color: #d73948">if</span> r by_name insert <span style="color: #d73948">or_fail</span> <span style="color: #d73948">end</span>  <span style="color: #74747c">rem a row added while running is indexed by insert</span>
 <span style="color: #d73948">end</span>
-def age_of name <span style="color: #d73948">str</span> <span style="color: #d73948">gives</span> <span style="color: #d73948">int</span> <span style="color: #d73948">or</span> <span style="color: #d73948">fail</span> <span style="color: #d73948">do</span> name by_name lookup <span style="color: #d73948">or_fail</span> user.age <span style="color: #d73948">end</span>
+<span style="color: #d73948">def</span> age_of name <span style="color: #d73948">str</span> <span style="color: #d73948">gives</span> <span style="color: #d73948">int</span> <span style="color: #d73948">or</span> <span style="color: #d73948">fail</span> <span style="color: #d73948">do</span> name by_name lookup <span style="color: #d73948">or_fail</span> user.age <span style="color: #d73948">end</span>
 <span style="color: #198810">"kim"</span> <span style="color: #b60157">30</span> <span style="color: #d73948">true</span> add_user <span style="color: #d73948">or_else</span> <span style="color: #d73948">to</span> e <span style="color: #d73948">end</span>
 <span style="color: #198810">"lee"</span> <span style="color: #b60157">25</span> <span style="color: #d73948">false</span> add_user <span style="color: #d73948">or_else</span> <span style="color: #d73948">to</span> e <span style="color: #d73948">end</span>
 <span style="color: #198810">"kim"</span> age_of <span style="color: #d73948">or_else</span> <span style="color: #d73948">to</span> e <span style="color: #b60157">-1</span> <span style="color: #d73948">end</span> <span style="color: #d73948">str</span>.to_str io.println
@@ -310,23 +310,23 @@ def age_of name <span style="color: #d73948">str</span> <span style="color: #d73
 <span style="color: #d73948">end</span>
 <span style="color: #d73948">pool</span> users user <span style="color: #b60157">4</span>
 <span style="color: #d73948">index</span> by_name users user.name
-def add_user name <span style="color: #d73948">str</span>, age <span style="color: #d73948">int</span> <span style="color: #d73948">or</span> <span style="color: #d73948">fail</span> <span style="color: #d73948">do</span>
+<span style="color: #d73948">def</span> add_user name <span style="color: #d73948">str</span>, age <span style="color: #d73948">int</span> <span style="color: #d73948">or</span> <span style="color: #d73948">fail</span> <span style="color: #d73948">do</span>
   users alloc <span style="color: #d73948">or_fail</span> <span style="color: #d73948">to</span> r
   name r <span style="color: #d73948">to</span> user.name
   age r <span style="color: #d73948">to</span> user.age
   r by_name insert <span style="color: #d73948">or_fail</span>                <span style="color: #74747c">rem hands the row over to the index</span>
 <span style="color: #d73948">end</span>
-def forget name <span style="color: #d73948">str</span> <span style="color: #d73948">do</span>
+<span style="color: #d73948">def</span> forget name <span style="color: #d73948">str</span> <span style="color: #d73948">do</span>
   name by_name lookup <span style="color: #d73948">or_else</span> <span style="color: #d73948">to</span> e <span style="color: #d73948">return</span> <span style="color: #d73948">end</span> <span style="color: #d73948">to</span> r
   r users free                            <span style="color: #74747c">rem out of by_name too</span>
 <span style="color: #d73948">end</span>
 <span style="color: #198810">"kim"</span> <span style="color: #b60157">30</span> add_user <span style="color: #d73948">or_else</span> <span style="color: #d73948">to</span> e <span style="color: #d73948">end</span>
 <span style="color: #198810">"lee"</span> <span style="color: #b60157">25</span> add_user <span style="color: #d73948">or_else</span> <span style="color: #d73948">to</span> e <span style="color: #d73948">end</span>
-<span style="color: #198810">"kim"</span> <span style="color: #b60157">41</span> add_user <span style="color: #d73948">or_else</span> <span style="color: #d73948">to</span> e args <span style="color: #198810">"kim again: "</span> e err_text . <span style="color: #d73948">cat</span> io.println <span style="color: #d73948">end</span>
-args <span style="color: #198810">"kim: "</span> <span style="color: #198810">"kim"</span> by_name has <span style="color: #198810">", park: "</span> <span style="color: #198810">"park"</span> by_name has . <span style="color: #d73948">cat</span> io.println
+<span style="color: #198810">"kim"</span> <span style="color: #b60157">41</span> add_user <span style="color: #d73948">or_else</span> <span style="color: #d73948">to</span> e <span style="color: #d73948">args</span> <span style="color: #198810">"kim again: "</span> e err_text . <span style="color: #d73948">cat</span> io.println <span style="color: #d73948">end</span>
+<span style="color: #d73948">args</span> <span style="color: #198810">"kim: "</span> <span style="color: #198810">"kim"</span> by_name has <span style="color: #198810">", park: "</span> <span style="color: #198810">"park"</span> by_name has . <span style="color: #d73948">cat</span> io.println
 <span style="color: #198810">"kim"</span> forget
-args <span style="color: #198810">"kim after free: "</span> <span style="color: #198810">"kim"</span> by_name has . <span style="color: #d73948">cat</span> io.println
-users <span style="color: #d73948">do</span> <span style="color: #d73948">to</span> r args r user.name <span style="color: #198810">" "</span> r user.age . <span style="color: #d73948">cat</span> io.println <span style="color: #d73948">end</span> each
+<span style="color: #d73948">args</span> <span style="color: #198810">"kim after free: "</span> <span style="color: #198810">"kim"</span> by_name has . <span style="color: #d73948">cat</span> io.println
+users <span style="color: #d73948">do</span> <span style="color: #d73948">to</span> r <span style="color: #d73948">args</span> r user.name <span style="color: #198810">" "</span> r user.age . <span style="color: #d73948">cat</span> io.println <span style="color: #d73948">end</span> each
 </code></pre><p class="ex-label">Output</p><pre><code data-lang="text">$ pnx 08-index-pool.pnx
 kim again: failed
 kim: true, park: false
@@ -366,21 +366,21 @@ the chain ends at b
   people <span style="color: #d73948">int</span>
 <span style="color: #d73948">end</span>
 <span style="color: #d73948">shared</span> <span style="color: #d73948">list</span> cities city <span style="color: #b60157">1000</span>
-def grow r cities <span style="color: #d73948">do</span> r city.people <span style="color: #b60157">1</span> add r <span style="color: #d73948">to</span> city.people <span style="color: #d73948">end</span>
+<span style="color: #d73948">def</span> grow r cities <span style="color: #d73948">do</span> r city.people <span style="color: #b60157">1</span> add r <span style="color: #d73948">to</span> city.people <span style="color: #d73948">end</span>
 </code></pre><p class="ex-label">Refused</p><pre><code data-lang="text">$ pnx 08-shared-write.pnx
 08-shared-write.pnx:6:47: a shared global is read-only: nothing here may change it
 </code></pre></div><p class="para"><span class="pn">(3)</span> A shared collection may be passed as a collection parameter (9.9) of a word that only reads that parameter. A word changes its parameter when it uses an instruction that changes it, or passes it to a word that changes that parameter or to a host word’s <code>buffer</code> parameter. The processor decides once the whole source is read, so the same holds for a word announced with <code>forward</code> and for a word of an earlier load.</p><div class="example run"><p class="ex-file"><code>08-shared-param.pnx</code></p><pre><code data-lang="pinax"><span style="color: #d73948">use</span> io .
 <span style="color: #d73948">use</span> <span style="color: #d73948">str</span> .
 <span style="color: #d73948">shared</span> <span style="color: #d73948">list</span> scores <span style="color: #d73948">int</span> <span style="color: #b60157">100</span>
-def total l <span style="color: #d73948">list</span> <span style="color: #d73948">int</span> <span style="color: #d73948">gives</span> <span style="color: #d73948">int</span> <span style="color: #d73948">do</span> l sum <span style="color: #d73948">end</span>       <span style="color: #74747c">rem reads its parameter only</span>
-def everyone <span style="color: #d73948">gives</span> <span style="color: #d73948">int</span> <span style="color: #d73948">do</span> scores total <span style="color: #d73948">end</span>        <span style="color: #74747c">rem so a shared list may be given to it</span>
+<span style="color: #d73948">def</span> total l <span style="color: #d73948">list</span> <span style="color: #d73948">int</span> <span style="color: #d73948">gives</span> <span style="color: #d73948">int</span> <span style="color: #d73948">do</span> l sum <span style="color: #d73948">end</span>       <span style="color: #74747c">rem reads its parameter only</span>
+<span style="color: #d73948">def</span> everyone <span style="color: #d73948">gives</span> <span style="color: #d73948">int</span> <span style="color: #d73948">do</span> scores total <span style="color: #d73948">end</span>        <span style="color: #74747c">rem so a shared list may be given to it</span>
 scores total <span style="color: #d73948">str</span>.to_str io.println                <span style="color: #74747c">rem not given yet: empty</span>
 </code></pre><p class="ex-label">Output</p><pre><code data-lang="text">$ pnx 08-shared-param.pnx
 0
 </code></pre></div><div class="example refused"><p class="ex-file"><code>08-shared-change.pnx</code></p><pre><code data-lang="pinax"><span style="color: #d73948">shared</span> <span style="color: #d73948">list</span> scores <span style="color: #d73948">int</span> <span style="color: #b60157">100</span>
-def reset l <span style="color: #d73948">list</span> <span style="color: #d73948">int</span> <span style="color: #d73948">do</span> l clear <span style="color: #d73948">end</span>
-def keep l <span style="color: #d73948">list</span> <span style="color: #d73948">int</span> <span style="color: #d73948">do</span> l reset <span style="color: #d73948">end</span>                <span style="color: #74747c">rem gives it to a word that changes it</span>
-def start <span style="color: #d73948">do</span> scores keep <span style="color: #d73948">end</span>
+<span style="color: #d73948">def</span> reset l <span style="color: #d73948">list</span> <span style="color: #d73948">int</span> <span style="color: #d73948">do</span> l clear <span style="color: #d73948">end</span>
+<span style="color: #d73948">def</span> keep l <span style="color: #d73948">list</span> <span style="color: #d73948">int</span> <span style="color: #d73948">do</span> l reset <span style="color: #d73948">end</span>                <span style="color: #74747c">rem gives it to a word that changes it</span>
+<span style="color: #d73948">def</span> start <span style="color: #d73948">do</span> scores keep <span style="color: #d73948">end</span>
 </code></pre><p class="ex-label">Refused</p><pre><code data-lang="text">$ pnx 08-shared-change.pnx
 08-shared-change.pnx:4:21: a shared collection is read-only: the word it is given to changes this parameter
 </code></pre></div><p class="para"><span class="pn">(3a)</span> A shared collection is not passed as a host word’s <code>buffer</code> parameter or as a parameter of the word a block value names (<code>call</code>), since what the receiver does is not known at load. <code>redefine</code> cannot make a word change a parameter it only read.</p><p class="para"><span class="pn">(4)</span> <code>shared</code> does not stand before <code>queue</code>, <code>pool</code>, <code>tasks</code>, <code>const</code> or <code>record</code>.</p><div class="example refused"><p class="ex-file"><code>08-shared-queue.pnx</code></p><pre><code data-lang="pinax"><span style="color: #d73948">shared</span> <span style="color: #d73948">queue</span> jobs <span style="color: #d73948">int</span> <span style="color: #b60157">8</span>
@@ -390,15 +390,15 @@ def start <span style="color: #d73948">do</span> scores keep <span style="color:
 <span style="color: #d73948">use</span> <span style="color: #d73948">str</span> .
 <span style="color: #d73948">err</span> key_too_long
 <span style="color: #d73948">err</span> value_too_long
-def check k <span style="color: #d73948">str</span>, v <span style="color: #d73948">str</span> <span style="color: #d73948">or</span> <span style="color: #d73948">fail</span> <span style="color: #d73948">do</span>
+<span style="color: #d73948">def</span> check k <span style="color: #d73948">str</span>, v <span style="color: #d73948">str</span> <span style="color: #d73948">or</span> <span style="color: #d73948">fail</span> <span style="color: #d73948">do</span>
   k <span style="color: #d73948">str</span>.len <span style="color: #b60157">8</span> gt <span style="color: #d73948">if</span> key_too_long <span style="color: #d73948">fail</span> <span style="color: #d73948">end</span>
   v <span style="color: #d73948">str</span>.len <span style="color: #b60157">16</span> gt <span style="color: #d73948">if</span> value_too_long <span style="color: #d73948">fail</span> <span style="color: #d73948">end</span>
 <span style="color: #d73948">end</span>
-def try k <span style="color: #d73948">str</span>, v <span style="color: #d73948">str</span> <span style="color: #d73948">do</span>
+<span style="color: #d73948">def</span> try k <span style="color: #d73948">str</span>, v <span style="color: #d73948">str</span> <span style="color: #d73948">do</span>
   k v check <span style="color: #d73948">or_else</span> <span style="color: #d73948">to</span> e
-    e match
-      when key_too_long <span style="color: #d73948">do</span> <span style="color: #198810">"the key is too long"</span> <span style="color: #d73948">end</span>
-      when value_too_long <span style="color: #d73948">do</span> <span style="color: #198810">"the value is too long"</span> <span style="color: #d73948">end</span>
+    e <span style="color: #d73948">match</span>
+      <span style="color: #d73948">when</span> key_too_long <span style="color: #d73948">do</span> <span style="color: #198810">"the key is too long"</span> <span style="color: #d73948">end</span>
+      <span style="color: #d73948">when</span> value_too_long <span style="color: #d73948">do</span> <span style="color: #198810">"the value is too long"</span> <span style="color: #d73948">end</span>
       <span style="color: #d73948">otherwise</span> e err_text <span style="color: #d73948">end</span>
     <span style="color: #d73948">end</span> io.println
     <span style="color: #d73948">return</span>
