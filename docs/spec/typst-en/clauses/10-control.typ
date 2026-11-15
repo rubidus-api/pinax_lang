@@ -195,6 +195,12 @@ chain. The name the block gives the element may be the one the final block uses.
 #ex("spec", "10-rail-block-adapters.pnx")
 #ex("spec", "10-rail-block-late.pnx")
 
+#para("1c")[`xs ys zip` walks two arrays or lists side by side, up to the shorter. A pass gives the pair, and the block of `each` binds
+two names, the last pushed first: `do to y to x … end each`, with `x` from `xs` and `y` from `ys`. Their cells are `int`, `bool`, `err` or `dec N`. Only `each` takes a
+zipped pair, and neither adapters nor ranges are zipped yet.]
+#ex("spec", "10-rail-zip.pnx")
+#ex("spec", "10-rail-zip-range.pnx")
+
 #ex("spec", "10-combinators.pnx")
 #ex("spec", "10-first.pnx")
 

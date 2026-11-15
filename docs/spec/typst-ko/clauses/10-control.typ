@@ -192,6 +192,12 @@ block   = "do" { "to" NAME } { body } "end"
 #ex("spec", "10-rail-block-adapters.pnx")
 #ex("spec", "10-rail-block-late.pnx")
 
+#para("1c")[`xs ys zip` 은 배열이나 목록 둘을 나란히 짧은 쪽까지 훑는다. 한 바퀴가 쌍을 주고, `each` 의 블록은 이름 둘을 맨 위부터 받는다:
+`do to y to x … end each` 에서 `x` 는 `xs` 의, `y` 는 `ys` 의 칸이다. 칸은 `int` `bool` `err` `dec N` 이다. 쌍은 `each` 만 받고, 어댑터가 붙은 레일이나
+범위는 아직 묶지 못한다.]
+#ex("spec", "10-rail-zip.pnx")
+#ex("spec", "10-rail-zip-range.pnx")
+
 #ex("spec", "10-combinators.pnx")
 #ex("spec", "10-first.pnx")
 

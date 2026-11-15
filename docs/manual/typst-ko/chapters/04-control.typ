@@ -122,7 +122,7 @@
 쓰고 `step` 은 맨 끝에 온다.
 
 블록이 든 어댑터도 있다: `do to s s 4 gt end filter`(남김), `skip_while`, `head_while`, `map`(같은 타입의 값으로 바꿈). 루프 안에서 원소마다 돌고, 길이를 모르는 레일에도 쓴다.
-`scores do to s s 4 gt end filter do to s s 100 mul end map sum` 처럼 이어 붙인다.
+`scores do to s s 4 gt end filter do to s s 100 mul end map sum` 처럼 이어 붙인다. 배열 둘은 `xs ys zip do to y to x … end each` 로 나란히 훑는다.
 
 == 값인 프로시저
 

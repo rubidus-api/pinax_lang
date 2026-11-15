@@ -239,6 +239,28 @@ four
 <span style="color: #d73948">end</span>
 </code></pre><p class="ex-label">Refused</p><pre><code data-lang="text">$ pnx 10-rail-block-late.pnx
 10-rail-block-late.pnx:2:40: skip, head, step and rev come before filter, map, skip_while and head_while in a chain
+</code></pre></div><p class="para"><span class="pn">(1c)</span> <code>xs ys zip</code> walks two arrays or lists side by side, up to the shorter. A pass gives the pair, and the block of <code>each</code> binds two names, the last pushed first: <code>do to y to x … end each</code>, with <code>x</code> from <code>xs</code> and <code>y</code> from <code>ys</code>. Their cells are <code>int</code>, <code>bool</code>, <code>err</code> or <code>dec N</code>. Only <code>each</code> takes a zipped pair, and neither adapters nor ranges are zipped yet.</p><div class="example run"><p class="ex-file"><code>10-rail-zip.pnx</code></p><pre><code data-lang="pinax"><span style="color: #d73948">use</span> io .
+<span style="color: #d73948">use</span> <span style="color: #d73948">str</span> .
+<span style="color: #d73948">list</span> extra <span style="color: #d73948">int</span> <span style="color: #b60157">5</span>
+<span style="color: #d73948">row</span> extra <span style="color: #b60157">1</span> .
+<span style="color: #d73948">row</span> extra <span style="color: #b60157">2</span> .
+<span style="color: #d73948">array</span> xs <span style="color: #d73948">int</span> <span style="color: #b60157">4</span>
+<span style="color: #d73948">array</span> ys <span style="color: #d73948">int</span> <span style="color: #b60157">3</span>
+<span style="color: #d73948">assign</span> xs (<span style="color: #b60157">1</span>, <span style="color: #b60157">2</span>, <span style="color: #b60157">3</span>, <span style="color: #b60157">4</span>)
+<span style="color: #d73948">assign</span> ys (<span style="color: #b60157">10</span>, <span style="color: #b60157">20</span>, <span style="color: #b60157">30</span>)
+xs ys zip <span style="color: #d73948">do</span> <span style="color: #d73948">to</span> y <span style="color: #d73948">to</span> x <span style="color: #d73948">args</span> x <span style="color: #198810">" + "</span> y <span style="color: #198810">" = "</span> x y add . <span style="color: #d73948">cat</span> io.println <span style="color: #d73948">end</span> each     <span style="color: #74747c">rem the shorter ends it</span>
+xs extra zip <span style="color: #d73948">do</span> <span style="color: #d73948">to</span> e <span style="color: #d73948">to</span> a a e mul <span style="color: #d73948">str</span>.to_str io.println <span style="color: #d73948">end</span> each                  <span style="color: #74747c">rem a list too</span>
+</code></pre><p class="ex-label">Output</p><pre><code data-lang="text">$ pnx 10-rail-zip.pnx
+1 + 10 = 11
+2 + 20 = 22
+3 + 30 = 33
+1
+4
+</code></pre></div><div class="example refused"><p class="ex-file"><code>10-rail-zip-range.pnx</code></p><pre><code data-lang="pinax"><span style="color: #d73948">def</span> f <span style="color: #d73948">do</span>
+  <span style="color: #b60157">0</span> <span style="color: #b60157">3</span> range <span style="color: #b60157">0</span> <span style="color: #b60157">3</span> range zip <span style="color: #d73948">do</span> <span style="color: #d73948">to</span> y <span style="color: #d73948">to</span> x <span style="color: #d73948">end</span> each      <span style="color: #74747c">rem zip takes two arrays or lists</span>
+<span style="color: #d73948">end</span>
+</code></pre><p class="ex-label">Refused</p><pre><code data-lang="text">$ pnx 10-rail-zip-range.pnx
+10-rail-zip-range.pnx:2:13: a stem is not a value: a block or a combining word takes it at once
 </code></pre></div><div class="example run"><p class="ex-file"><code>10-combinators.pnx</code></p><pre><code data-lang="pinax"><span style="color: #d73948">use</span> io .
 <span style="color: #d73948">use</span> <span style="color: #d73948">str</span> .
 <span style="color: #d73948">array</span> scores <span style="color: #d73948">int</span> <span style="color: #b60157">6</span>

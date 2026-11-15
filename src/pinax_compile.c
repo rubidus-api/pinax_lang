@@ -39,7 +39,8 @@ enum {
     STEM_CHARS, STEM_PTN, // ptn.matches: the string and its pattern, like STEM_SPLIT
     STEM_REX, STEM_RSPLIT, // rex.matches and rex.split: the string and its program
     STEM_CSV, // csv.fields: like STEM_WORDS
-    STEM_POOL // the live rows of a pool, taken slot by slot (RFC-0038)
+    STEM_POOL, // the live rows of a pool, taken slot by slot (RFC-0038)
+    STEM_ZIP // two arrays or lists side by side (RFC-0050): entry.value is the first, c->zip_b the second
 };
 enum { GK_SCALAR, GK_ARRAY, GK_LIST, GK_BUFFER, GK_INDEX, GK_QUEUE, GK_POOL, GK_TASKS };
 enum { L_PLAIN, L_OWNS, L_MOVED }; // what a local holds of a value that must be given exactly once
@@ -437,6 +438,8 @@ typedef struct comp {
     struct { uint32_t at, line, line_start; } adpos[16]; // where the blocks of rail adapters begin (RFC-0050)
     uint32_t     n_adpos;
     uint8_t      ab_n, ab_kind[4], ab_idx[4]; // the block adapters of the rail stem_begin took: kind and place in adpos
+    uint16_t     zip_b;     // zip: the second collection, and the type of its cells
+    tid          zip_t;
     bool         ad_ok;     // the caller of stem_begin takes adapters (RFC-0050)
     bool         ad_any;    // ... and the rail had some: the registers below tell what they made
     uint8_t      ad_stride, ad_krev, ad_tmp; // a step's stride, the K of a reversed rail (index = K - cur), a place for that index
@@ -4107,6 +4110,22 @@ static bool found_or_fail(comp *c, tid type, uint32_t value, uint32_t flag);
 static local *new_local(comp *c, name n, tid type);
 // ---- rail adapters (RFC-0050): skip N, head N, step N, rev --------------------------------------
 enum { AD_SKIP = 1, AD_HEAD, AD_STEP, AD_REV, AD_FILTER, AD_MAP, AD_SKIPW, AD_HEADW }; // from AD_FILTER: a block adapter
+// xs ys zip : two arrays or lists of plain cells walked side by side up to the shorter (RFC-0050)
+static bool do_zip(comp *c) {
+    fn *f = c->f;
+    if (f->depth < f->floor + 2 || f->stack[f->depth - 1].type != TY_COLL || f->stack[f->depth - 2].type != TY_COLL)
+        return type_error(c, "zip takes two arrays or lists: xs ys zip do to y to x ... end each");
+    const globalsym *a = gsym(c, f->stack[f->depth - 2].value), *b = gsym(c, f->stack[f->depth - 1].value);
+    if (f->stack[f->depth - 2].value >= REF_GLOBAL || f->stack[f->depth - 1].value >= REF_GLOBAL ||
+        (a->kind != GK_ARRAY && a->kind != GK_LIST) || (b->kind != GK_ARRAY && b->kind != GK_LIST) || a->record != NONE ||
+        b->record != NONE || a->strcap || b->strcap)
+        return type_error(c, "zip takes two arrays or lists of int, bool, err or dec N cells");
+    const int64_t first = f->stack[f->depth - 2].value, second = f->stack[f->depth - 1].value;
+    c->zip_b = (uint16_t)second;
+    c->zip_t = b->type;
+    f->depth -= 2;
+    return push(c, (entry){.type = TY_STEM, .kind = E_SLOT, .op = STEM_ZIP, .value = first}) && advance(c);
+}
 static int block_adapter_id(name n) {
     return name_is(n, "filter") ? AD_FILTER : name_is(n, "map") ? AD_MAP : name_is(n, "skip_while") ? AD_SKIPW
          : name_is(n, "head_while") ? AD_HEADW : 0;
@@ -4385,6 +4404,20 @@ static bool stem_begin_raw(comp *c, uint8_t *kind, uint8_t *cur, uint8_t *lim, u
     *kind = stem.op;
     *src = 0;
     *element = TY_INT;
+    if (stem.type == TY_STEM && stem.op == STEM_ZIP) { // an index, and the shorter length
+        if (!push_slot(c, TY_INT) || !push_slot(c, TY_INT))
+            return false;
+        f->stack[f->depth - 2].hidden = f->stack[f->depth - 1].hidden = true;
+        *src = (uint16_t)stem.value;
+        *cur = (uint8_t)slot_of(c, f->depth - 2);
+        *lim = (uint8_t)slot_of(c, f->depth - 1);
+        *count = 2;
+        *element = gsym(c, stem.value)->type;
+        const uint32_t other = top_slot(c, BANK_I, 1);
+        return emit(c, PNX_ABX(PNX_LOADI, *cur, 0)) != NONE && emit(c, PNX_ABX(PNX_GLEN, *lim, (uint32_t)stem.value)) != NONE &&
+               emit(c, PNX_ABX(PNX_GLEN, other, c->zip_b)) != NONE && emit(c, PNX_ABC(PNX_JLE, *lim, other, 1)) != NONE &&
+               emit(c, PNX_ABC(PNX_MOVI, *lim, other, 0)) != NONE;
+    }
     if (stem.type == TY_COLL) { // an array or list: an index and the length
         const globalsym *g = gsym(c, stem.value);
         if (g->kind == GK_POOL) { // RFC-0038: a slot counter; the next live row is taken from it
@@ -4501,7 +4534,7 @@ static bool stem_element(comp *c, uint8_t kind, uint32_t reg, uint32_t cur, uint
         return emit(c, PNX_ABC(PNX_ADDI, row, cur, 1)) != NONE && emit(c, PNX_ABC(PNX_FGETS, reg, row, 0)) != NONE &&
                emit(c, PNX_FIELD(src, 0, g->strcap)) != NONE;
     }
-    if (kind == STEM_COLL)
+    if (kind == STEM_COLL || kind == STEM_ZIP)
         return emit_g(c, PNX_AGET, reg, cur, src) != NONE;
     return emit(c, kind == STEM_RANGE  ? PNX_ABC(PNX_MOVI, reg, cur, 0)
                    : kind == STEM_ROWS ? PNX_ABC(PNX_ADDI, reg, cur, 1) // the row of index cur
@@ -4858,6 +4891,8 @@ static bool do_block(comp *c) {
         c->ad_ok = true;
         if (!stem_begin(c, &kind, &cur, &lim, &src, &hidden, &element))
             return false;
+        if (kind == STEM_ZIP && (use != USE_EACH || c->ab_n))
+            return error_at(c, PINAX_ERR_TYPE, at.line, at.column, "a zipped pair is taken by each: xs ys zip do to y to x ... end each");
         if ((c->ad_any || c->ab_n) && use == USE_EACH_INDEX)
             return error_at(c, PINAX_ERR_TYPE, at.line, at.column, "each_index does not count along an adapted rail yet");
     } else {
@@ -4865,7 +4900,7 @@ static bool do_block(comp *c) {
                         "this block is used by a word the compiler does not expand yet");
     }
     if (bare && use != USE_TIMES) {
-        const uint32_t base = use == USE_EACH_INDEX || use == USE_FOLD ? 2u : 1u;
+        const uint32_t base = use == USE_EACH_INDEX || use == USE_FOLD || kind == STEM_ZIP ? 2u : 1u;
         const bool     rex  = kind == STEM_REX && use != USE_EACH_INDEX;
         // a block of fold or each_index must name what it takes; the others may leave the element on the stack
         if (n_binders ? (n_binders < base || (rex ? n_binders > base + PNX_PTN_CAPS : n_binders != base))
@@ -4880,6 +4915,8 @@ static bool do_block(comp *c) {
         if (n_binders) {
             if (use == USE_EACH_INDEX) {
                 in[0] = element, in[1] = TY_INT;
+            } else if (kind == STEM_ZIP) {
+                in[0] = element, in[1] = c->zip_t;
             } else if (use == USE_FOLD) {
                 in[0] = acc, in[1] = element;
             } else {
@@ -4957,7 +4994,8 @@ static bool do_block(comp *c) {
                             use == USE_MAP ? "the block of map_into is (x T gives U): T the element's type, U the list's"
                                            : "the block of filter_into is (x T gives bool), and the list holds T");
     } else if (use == USE_EACH) {
-        if (bs.n_out || bs.n_in > 1 || (bs.n_in == 1 && bs.in[0] != element))
+        if (bs.n_out || bs.n_in > (kind == STEM_ZIP ? 2u : 1u) || (bs.n_in >= 1 && bs.in[0] != element) ||
+            (kind == STEM_ZIP && bs.n_in != 2))
             return error_at(c, PINAX_ERR_TYPE, at.line, at.column, "the block of each takes one element and gives nothing");
     } else if (use == USE_FOLD) {
         init = f->depth - hidden - 1;
@@ -5066,6 +5104,13 @@ static bool do_block(comp *c) {
             reg = slot_of(c, f->depth - 1);
         }
     }
+    uint32_t zip_reg = 0;
+    if (kind == STEM_ZIP) { // the second cell of the pair: the second name
+        const local *lb = new_local(c, sig_in_name(&bs, 1), c->zip_t);
+        if (!lb)
+            return false;
+        zip_reg = lb->reg;
+    }
     if (stem_takes(kind)) { // takes the next piece, or leaves when none is left
         if (!stem_take(c, kind, reg, src, cur, lim) || !jump_later(c, &b->exits))
             return false;
@@ -5081,6 +5126,8 @@ static bool do_block(comp *c) {
             at_cur = b->rtmp;
         }
         if (use != USE_TIMES && !stem_element(c, kind, reg, at_cur, src))
+            return false;
+        if (kind == STEM_ZIP && emit_g(c, PNX_AGET, zip_reg, cur, c->zip_b) == NONE)
             return false;
     }
     if (ab.n && !ab_run(c, &ab, reg, element, &b->nexts, &b->exits))
@@ -7743,6 +7790,9 @@ static bool body_name(comp *c) {
         n = (name){n.text + dot + 1, n.length - dot - 1};
         return path_word(c, module, n);
     } else {
+        if (name_is(n, "zip") && f->depth >= f->floor + 2 && f->stack[f->depth - 1].type == TY_COLL &&
+            f->stack[f->depth - 2].type == TY_COLL && !find_local(f, n) && find_global(c, n) == NONE)
+            return do_zip(c);
         if (f->depth > f->floor && adapter_id(n)) { // after a rail: skip, head, step, rev (RFC-0050)
             const tid top = f->stack[f->depth - 1].type;
             if (top == TY_STEM || (top == TY_COLL && !find_local(f, n) && find_global(c, n) == NONE))

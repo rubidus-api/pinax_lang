@@ -69,6 +69,7 @@ export const WORDS = [
   ["", "skip_while", "(rail, block gives rail)", "adapters with a block on the element: keep, drop while, end the walk when false (10.6 (1b))"],
   ["", "head_while", "(rail, block gives rail)", "adapters with a block on the element: keep, drop while, end the walk when false (10.6 (1b))"],
   ["", "map", "(rail, block gives rail)", "the block's value of the element's type in place of the element (10.6 (1b))"],
+  ["", "zip", "(xs, ys gives rail)", "two arrays or lists side by side, up to the shorter; each binds the pair (10.6 (1c))"],
   ["", "rev", "(rail gives rail)", "the adapter that walks a rail from the last to the first (10.6 (1a))"],
   ["", "spawn", "", "tasks"],
   ["", "run_all", "", "tasks"],
