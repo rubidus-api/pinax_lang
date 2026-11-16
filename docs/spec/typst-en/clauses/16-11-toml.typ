@@ -62,12 +62,18 @@ not statements of their own), or when the text is malformed; `err.full` as for `
   [`valid`], [`(s str gives bool)`], [whether every statement of `s` is well formed],
   [`check`], [`(s str gives or fail)`], [the rules of the whole document; `err.format`, `err.full`],
   [`at`], [`(path str, s str gives kind int, value str or fail)`], [the value `path` names in `s`; `err.not_found`, `err.format`],
+  [`items`], [`(s str gives rail)`], [a rail over the statements of `s` (10)],
   [`next`], [`(s str gives kind int, key str, value str, rest str or fail)`], [the first statement of `s` and what is left after it; `err.not_found` at the end, `err.format`],
   [`set`], [`(path str, s str, value str, kind int, b buffer or fail)`], [appends `s` with the value of `path` set; the rules above],
   [`remove`], [`(path str, s str, b buffer or fail)`], [appends `s` without the statement of the key `path`],
 )
 
 #ex("spec", "16-toml.pnx")
+
+#para("10")[`s toml.items` is a rail (10.6) over the statements of `s`: each turn gives `(kind int, key str, value str)` as `toml.next` does, and the block of `each`
+binds them the last pushed first (`do to v to k to kind`). A statement that is damaged fails with `err.format` at its turn, after the good ones; like every rail that
+can fail it is taken by `each` and followed by a guard.]
+#ex("spec", "16-toml-rails.pnx")
 
 #ex("spec", "16-toml-check.pnx")
 

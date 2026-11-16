@@ -1534,6 +1534,95 @@ PNX_INLINE int pnx_text_toml_value(pinax_state *st, pnx_scell *out, pnx_scell ba
     return pnx_text_decoded(st, out, base, off + a, n, true);
 }
 
+// RFC-0051: the rails json.items and json.members. ENTER: the array (object) the path names in the text, `rest` just past its
+// opening bracket. ELEMENT: the next element (member) of the container `rest` is in, and `rest` past it; at its closing bracket
+// the walk is over: PNX_R_FAILED with the fail code 0 (a failure of the text has a code).
+PNX_INLINE int pnx_json_enter(pinax_state *st, pnx_scell path, pnx_scell text, bool object, pnx_scell *out) {
+    const uint8_t *tb = pnx_view_bytes(st, text);
+    int            kind = 0;
+    uint32_t       a = 0, b = 0;
+    bool           escaped = false;
+    st->charge += text.length + path.length;
+    const int rc = pnx_json_at(tb, text.length, pnx_view_bytes(st, path), path.length, &kind, &a, &b, &escaped);
+    if (rc <= 0) {
+        st->fail = rc == 0 ? PINAX_ERR_NOT_FOUND : PINAX_ERR_FORMAT;
+        return PNX_R_FAILED;
+    }
+    if (kind != (object ? PNX_JSON_OBJECT : PNX_JSON_ARRAY)) {
+        st->fail = PINAX_ERR_FORMAT;
+        return PNX_R_FAILED;
+    }
+    uint32_t start = 0, len = 0, past = 0;
+    bool     esc = false;
+    if (pnx_json_next(tb + a, b, &start, &len, &esc, &past) <= 0) {
+        st->fail = PINAX_ERR_FORMAT;
+        return PNX_R_FAILED;
+    }
+    *out = pnx_text_slice(text, a + past, b - past);
+    return PNX_R_OK;
+}
+PNX_INLINE int pnx_json_element(pinax_state *st, pnx_scell rest, bool member, int *kind_out, pnx_scell *key, pnx_scell *value,
+                                pnx_scell *after) {
+    const uint8_t *tb = pnx_view_bytes(st, rest);
+    const uint32_t n = rest.length;
+    uint32_t       start = 0, len = 0, past = 0, off = 0;
+    bool           esc = false;
+    int            kind = pnx_json_next(tb, n, &start, &len, &esc, &past);
+    st->charge += past;
+    if (kind <= 0) {
+        st->fail = PINAX_ERR_FORMAT; // the container is not closed
+        return PNX_R_FAILED;
+    }
+    if (kind == (member ? PNX_JSON_OBJECT_END : PNX_JSON_ARRAY_END)) {
+        *after = pnx_text_slice(rest, past, n - past);
+        st->fail = 0;
+        return PNX_R_FAILED;
+    }
+    if (member) {
+        if (kind != PNX_JSON_KEY) {
+            st->fail = PINAX_ERR_FORMAT;
+            return PNX_R_FAILED;
+        }
+        *key = pnx_text_slice(rest, start, len);
+        if (esc) {
+            const int rc = pnx_text_decoded(st, key, rest, start, len, false);
+            if (rc != PNX_R_OK)
+                return rc;
+        }
+        off = past;
+        kind = pnx_json_next(tb + off, n - off, &start, &len, &esc, &past);
+        st->charge += past;
+        if (kind <= 0 || kind == PNX_JSON_KEY || kind == PNX_JSON_OBJECT_END || kind == PNX_JSON_ARRAY_END) {
+            st->fail = PINAX_ERR_FORMAT;
+            return PNX_R_FAILED;
+        }
+    }
+    if (kind == PNX_JSON_OBJECT_END || kind == PNX_JSON_ARRAY_END || kind == PNX_JSON_KEY) {
+        st->fail = PINAX_ERR_FORMAT;
+        return PNX_R_FAILED;
+    }
+    uint32_t reach = past;
+    if (kind == PNX_JSON_OBJECT || kind == PNX_JSON_ARRAY) { // the whole value, as written
+        uint32_t whole = 0;
+        if (pnx_json_skip(tb + off, n - off, &whole) <= 0) {
+            st->fail = PINAX_ERR_FORMAT;
+            return PNX_R_FAILED;
+        }
+        st->charge += whole;
+        len = off + whole - (off + start);
+        reach = whole;
+    }
+    *value = pnx_text_slice(rest, off + start, len);
+    if (esc && kind == PNX_JSON_STRING) {
+        const int rc = pnx_text_decoded(st, value, rest, off + start, len, false);
+        if (rc != PNX_R_OK)
+            return rc;
+    }
+    *kind_out = kind;
+    *after = pnx_text_slice(rest, off + reach, n - off - reach);
+    return PNX_R_OK;
+}
+
 PNX_INLINE int pnx_text_exec(pinax_state *st, int64_t *R, pnx_scell *S, uint32_t w, uint32_t x, bool buffered) {
     if (OP_C(w) >= PNX_TXW_COUNT)
         return PINAX_ERR_STATE;
@@ -1618,6 +1707,30 @@ PNX_INLINE int pnx_text_exec(pinax_state *st, int64_t *R, pnx_scell *S, uint32_t
         r[1] = level;
         s[0] = pnx_text_slice(text, a, b);
         s[1] = pnx_text_slice(text, past, tn - past);
+        return PNX_R_OK;
+    }
+    case PNX_TXW_JSON_ENTER_A: case PNX_TXW_JSON_ENTER_O: {
+        pnx_scell out;
+        if ((rc = pnx_json_enter(st, first, text, OP_C(w) == PNX_TXW_JSON_ENTER_O, &out)) != PNX_R_OK)
+            return rc;
+        s[0] = out;
+        return PNX_R_OK;
+    }
+    case PNX_TXW_JSON_ITEM: case PNX_TXW_JSON_MEMBER: {
+        const bool member = OP_C(w) == PNX_TXW_JSON_MEMBER;
+        pnx_scell  after = {0}, k = {0}, v = {0};
+        int        kd = 0;
+        if ((rc = pnx_json_element(st, text, member, &kd, &k, &v, &after)) != PNX_R_OK)
+            return rc;
+        r[0] = kd;
+        if (member) {
+            s[0] = k;
+            s[1] = v;
+            s[2] = after;
+        } else {
+            s[0] = v;
+            s[1] = after;
+        }
         return PNX_R_OK;
     }
     case PNX_TXW_ARGS_LEN: {

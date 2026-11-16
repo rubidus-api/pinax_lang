@@ -152,6 +152,7 @@ is the handle `sqlite` and a statement the handle `stmt`; both are `owned` when 
   [`sqlite.bind_null`], [`(i int, s stmt or fail)`], [binds place `i`, counted from 0. A place that is not there is `err.range`; a statement that is running (not reset since its last row or its end) is `err.state`],
   [`sqlite.bind_int` `sqlite.bind_str` `sqlite.bind_blob`], [`(v int, i int, s stmt or fail)` and `(v str, i int, s stmt or fail)`], [bind an integer, a text or bytes (copied)],
   [`sqlite.bind_name`], [`(name str, s stmt gives i int or fail)`], [the place of `:name`, `@name` or `$name` (written with its mark); `err.not_found` when there is none],
+  [`sqlite.rows`], [`(s stmt gives rail)`], [a rail: each turn takes a step and gives the number of the row, from 0; it ends when there is no row (10.6 (1e))],
   [`sqlite.step`], [`(s stmt gives more bool or fail)`], [takes one step: `true` when a row is there, `false` at the end],
   [`sqlite.col_count`], [`(s stmt gives n int)`], [the columns of the result],
   [`sqlite.col_name`], [`(i int, s stmt gives name str or fail)`], [the name of column `i` (from 0); `err.range` outside],
@@ -165,6 +166,7 @@ is the handle `sqlite` and a statement the handle `stmt`; both are `owned` when 
 )]
 
 #ex("spec", "17-sqlite.pnx")
+#ex("spec", "17-sqlite-rows.pnx")
 
 #para("2")[A refusal of SQLite is a failure with one of these codes: `err.full` (out of memory, the disk full, a value too
 large), `err.not_found` (a file that cannot be opened, no row), `err.range` (a place that is not there), `err.format` (a

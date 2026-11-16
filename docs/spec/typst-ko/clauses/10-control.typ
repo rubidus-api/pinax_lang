@@ -207,6 +207,12 @@ block   = "do" { "to" NAME } { body } "end"
 #ex("spec", "10-rail-zip.pnx")
 #ex("spec", "10-rail-zip-range.pnx")
 
+#para("1e")[레일은 한 바퀴에 값 여럿을 줄 수 있고(`zip` `json.items` `json.members` `toml.items` `md.blocks`) `each` 의 블록은 레일이 주는 수만큼 이름을
+맨 위부터 받는다. `skip` 과 `head` 는 쓸 수 있고 블록이 든 어댑터는 쓰지 못한다. 훑는 도중 실패하는 레일이 있다(`json` `toml` `md` 의 레일과 `sqlite.rows`):
+좋은 원소 몇 개 뒤에 글이 깨질 수 있고 엔진이 실패할 수 있다. 실패는 루프를 끝내고 낱말 `each` 의 실패가 되어 여느 실패처럼 다룬다: `each` 뒤에 `or_fail`
+`or_return` `or_else` 가 온다. 원소가 끝난 것은 실패가 아니다. `sheet` 책의 줄은 레일이 따로 필요 없다: `0 g sheet.rows range` 와 `0 g sheet.cols range` 가 번호를
+훑는다.]
+
 #ex("spec", "10-combinators.pnx")
 #ex("spec", "10-first.pnx")
 

@@ -1,0 +1,10 @@
+rem run
+use io .
+use toml .
+def show s str or fail do
+  s toml.items do to v to k to kind                     rem a statement: its kind, its key, its value
+    args kind " " k "=" v . cat io.println
+  end each or_fail
+end
+"title = \"x\"\n[server]\nport = 8080\n" show or_else to e "bad" io.println end
+"a = 1\nb = = 2\n" show or_else to e "stopped: " io.print e err_text io.println end

@@ -210,6 +210,12 @@ zipped pair, and neither adapters nor ranges are zipped yet.]
 #ex("spec", "10-rail-zip.pnx")
 #ex("spec", "10-rail-zip-range.pnx")
 
+#para("1e")[A rail may give several values at a turn (`zip`, `json.items`, `json.members`, `toml.items`, `md.blocks`); the block of `each` binds as many
+names as the rail gives, the last pushed first, and `skip` and `head` apply to it but the adapters with a block do not. Some rails can fail while they are
+walked (the rails of `json`, `toml`, `md` and `sqlite.rows`): the text may be damaged after some good elements, the engine may fail. The failure ends the loop and is the
+failure of the word `each`, so it is taken as every failure is: `each` is followed by `or_fail`, `or_return` or `or_else`. The end of the elements is not a failure.
+The rows of a book of `sheet` need no rail of their own: `0 g sheet.rows range` and `0 g sheet.cols range` walk their numbers.]
+
 #ex("spec", "10-combinators.pnx")
 #ex("spec", "10-first.pnx")
 

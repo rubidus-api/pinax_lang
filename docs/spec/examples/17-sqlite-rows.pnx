@@ -1,0 +1,21 @@
+rem run
+use sqlite .
+use io .
+use str .
+def listing db sqlite or fail do
+  "create table t (id integer primary key, name text)" db sqlite.exec or_fail
+  "insert into t (name) values ('a'), ('b'), ('c'), ('d')" db sqlite.exec or_fail
+  "select id, name from t order by id" db sqlite.prepare or_fail to q
+  defer q sqlite.finalize end
+  q sqlite.rows do to n                                  rem the number of the row; the columns are read on the statement
+    args n " " 0 q sqlite.col_int or_fail " " 1 q sqlite.col_str or_fail . cat io.println
+  end each or_fail
+  q sqlite.reset or_fail
+  q sqlite.rows head 2 do to n n str.to_str io.println end each or_fail     rem lazy: no third step
+end
+def main or fail do
+  ":memory:" sqlite.open or_fail to db
+  defer db sqlite.close end
+  db listing or_fail
+end
+main or_else to e "failed" io.println end

@@ -162,6 +162,7 @@
 )]
 
 #ex("spec", "17-sqlite.pnx")
+#ex("spec", "17-sqlite-rows.pnx")
 
 #para("2")[SQLite 의 거절은 다음 코드의 실패다: `err.full`(메모리 부족, 디스크 가득, 너무 큰 값), `err.not_found`(열 수 없는
 파일, 줄 없음), `err.range`(없는 자리), `err.format`(데이터베이스가 아닌 파일, 해석되지 않는 문장, 다른 종류의 열),

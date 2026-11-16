@@ -42,12 +42,18 @@
   [`valid`], [`(s str gives bool)`], [`s` 의 모든 문장이 꼴이 맞는지],
   [`check`], [`(s str gives or fail)`], [문서 전체의 규칙, `err.format`, `err.full`],
   [`at`], [`(path str, s str gives kind int, value str or fail)`], [`s` 에서 `path` 가 가리키는 값. `err.not_found`, `err.format`],
+  [`items`], [`(s str gives rail)`], [`s` 의 문장을 훑는 레일(10)],
   [`next`], [`(s str gives kind int, key str, value str, rest str or fail)`], [`s` 의 첫 문장과 그 뒤의 나머지. 끝에서 `err.not_found`, `err.format`],
   [`set`], [`(path str, s str, value str, kind int, b buffer or fail)`], [`s` 에서 `path` 의 값을 정한 글을 덧붙인다, 위의 규칙],
   [`remove`], [`(path str, s str, b buffer or fail)`], [`s` 에서 키 `path` 의 문장을 뺀 글을 덧붙인다],
 )
 
 #ex("spec", "16-toml.pnx")
+
+#para("10")[`s toml.items` 는 `s` 의 문장을 훑는 레일(10.6)이다: 한 바퀴가 `toml.next` 처럼 `(kind int, key str, value str)` 을 주고 `each` 의 블록은
+맨 위부터 받는다(`do to v to k to kind`). 깨진 문장은 좋은 문장 뒤 자기 바퀴에서 `err.format` 으로 실패하고, 실패하는 레일이 다 그렇듯 `each` 가 받고 가드가
+뒤따른다.]
+#ex("spec", "16-toml-rails.pnx")
 
 #ex("spec", "16-toml-check.pnx")
 

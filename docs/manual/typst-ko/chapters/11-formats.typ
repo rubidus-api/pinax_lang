@@ -75,6 +75,12 @@ Markdown 은 #word("md.html") 로 HTML 이 된다: 제목, 문단, 강조, 코�
 
 #ex("manual", "11-md-html.pnx")
 
+루프만 필요하면 조각을 레일로 훑는다: `s json.items` 는 배열의 원소를, `s json.members` 는 객체의 멤버를(`path s json.items_at` 은 경로가 가리키는 것을),
+`s toml.items` 는 TOML 글의 문장을, `s md.blocks` 는 Markdown 의 블록을 준다. 한 바퀴가 값 여럿을 주고 `do to v to k to key` 로 받는다(맨 위부터).
+레일은 열려 있고 게으르므로 `head 2` 는 둘까지만 읽는다. 좋은 원소 몇 개 뒤에 글이 깨지면 그 바퀴에서 실패하므로 루프 뒤에 가드가 온다.
+
+#ex("manual", "11-json-rails.pnx")
+
 #qa[`json.at` 뒤에 나무가 남는가?][아니다. 호출마다 글을 앞에서부터 원하는 값까지 다시 읽는다. 큰 문서에서 값을 많이 뽑으려면 한 번만 읽는 토큰 낱말이 더 싸다.]
 
 == 바이트

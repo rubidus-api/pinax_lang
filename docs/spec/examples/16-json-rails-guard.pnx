@@ -1,0 +1,5 @@
+rem refused
+use json .
+def f s str do
+  s json.items do to v to k end each      rem a rail that can fail is followed by a guard
+end

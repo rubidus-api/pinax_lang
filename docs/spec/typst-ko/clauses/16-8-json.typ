@@ -50,10 +50,22 @@
   [*말*], [*서명*], [*뜻*],
   [`valid`], [`(s str gives bool)`], [`s` 가 JSON 값 하나와 그 둘레의 공백뿐인지],
   [`at`], [`(path str, s str gives kind int, value str or fail)`], [`s` 에서 `path` 가 가리키는 값: 종류(위의 상수, `json.key` 는 없다)와 글. 글은 `json.next` 가 주는 그대로이되, 객체와 배열은 적힌 대로 통째로 주어 `json.next` 나 `json.at` 으로 다시 읽을 수 있다. 그런 값이 없으면(없는 이름, 끝을 넘은 번호, 배열에 이름을 묻거나 객체에 번호를 묻기) `err.not_found`, 경로가 잘못됐거나 읽은 곳의 글이 잘못됐으면 `err.format`],
+  [`items` `members`], [`(s str gives rail)`], [배열의 원소, 객체의 멤버를 훑는 레일(5b)],
+  [`items_at` `members_at`], [`(path str, s str gives rail)`], [`path` 가 가리키는 배열이나 객체를 훑는 레일(5b)],
   [`minify`], [`(s str, b buffer or fail)`], [토큰 사이의 공백을 뺀 `s` 를 덧붙인다. `s` 가 유효하지 않으면 `err.format`, 자리가 모자라면 `err.full`(버퍼는 그대로)],
   [`pretty`], [`(s str, indent int, b buffer or fail)`], [멤버와 요소마다 한 줄, 한 단에 `indent` 칸(0에서 16, 그 밖은 결함), 키 뒤에 `": "` 로 덧붙인다. 빈 객체와 배열은 그대로 둔다. 실패는 `minify` 와 같다],
 )]
 #ex("spec", "16-json-path.pnx")
+
+#para("5b")[레일(10.6): `s json.items` 는 배열 `s` 의 원소를, `s json.members` 는 객체 `s` 의 멤버를 훑고, `path s json.items_at` 과
+`path s json.members_at` 은 경로가 가리키는 배열이나 객체를 훑는다(낱말 하나에는 서명이 하나라 경로가 있는 꼴은 따로 낱말이다). 한 바퀴는
+원소를 `(kind int, value str)`, 멤버를 `(key str, kind int, value str)` 로 주고 `each` 의 블록은 맨 위부터 받는다(`do to v to k`,
+`do to v to k to key`). kind 와 value 는 `json.next` 의 것이고 객체나 배열만 다시 훑을 수 있게 적힌 그대로 통째로 준다. 그 자리가 배열(객체)이
+아닌 글은 `err.format`, 아무것도 가리키지 않는 경로는 `err.not_found` 이고, 좋은 원소 몇 개 뒤에 깨진 글은 깨진 곳에 닿은 바퀴에서 `err.format`
+으로 실패한다. 글은 한 번만 읽고 일찍 끝나는 훑기는 그 뒤를 읽지 않는다. 실패할 수 있는 레일은 `each` 가 받고 가드(`or_fail` `or_return`
+`or_else`)가 뒤따르며, 그 블록 안에는 `defer` 를 쓰지 않는다.]
+#ex("spec", "16-json-rails.pnx")
+#ex("spec", "16-json-rails-guard.pnx")
 
 === 레코드
 

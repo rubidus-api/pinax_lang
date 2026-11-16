@@ -1,0 +1,24 @@
+rem run
+use io .
+use str .
+use json .
+def total s str gives int or fail do                  rem the numbers of an array; the others are passed over
+  0 to acc
+  s json.items do to v to k
+    k json.number eq if v str.to_int or_fail acc add to acc end
+  end each or_fail
+  acc
+end
+def show s str or fail do
+  s json.members do to v to k to key                   rem the last pushed first: the value, the kind, the key
+    args key " (" k ") = " v . cat io.println
+  end each or_fail
+end
+"[1, 2, \"x\", 3, [4, 5]]" total or_else to e -1 end str.to_str io.println
+"{\"a\": 1, \"b\": [1,2], \"c\": {\"d\": null}}" show or_else to e "bad" io.println end
+def langs s str or fail do                             rem a path names the array
+  "user.langs" s json.items_at do to v to k v io.println end each or_fail
+end
+"{\"user\": {\"langs\": [\"lua\", \"c\"]}}" langs or_else to e "bad" io.println end
+"[1, 2" total or_else to e e err_text io.println 0 end drop      rem damaged after two good elements
+"[1,2,3,4,5]" json.items head 2 do to v to k v io.println end each or_else to e end   rem lazy: the text is read no further

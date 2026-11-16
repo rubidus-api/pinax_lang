@@ -249,7 +249,9 @@ uint32_t pnx_md_inline(const uint8_t *s, uint32_t n, uint8_t *out, uint64_t cap)
     X(MD_INLINE, 12, "inline", "s", "", "FW")                                                       \
     X(ARGS_LEN, 13, "len", "a", "i", "") X(ARGS_KIND, 13, "kind", "ia", "i", "F")                   \
     X(ARGS_INT, 13, "int", "ia", "i", "F") X(ARGS_BOOL, 13, "bool", "ia", "b", "F")                 \
-    X(ARGS_STR, 13, "str", "ia", "s", "F") X(ARGS_DEC, 13, "dec", "iia", "i", "F")
+    X(ARGS_STR, 13, "str", "ia", "s", "F") X(ARGS_DEC, 13, "dec", "iia", "i", "F")                  \
+    X(JSON_ENTER_A, 99, "enter_a", "ss", "s", "F") X(JSON_ENTER_O, 99, "enter_o", "ss", "s", "F")    \
+    X(JSON_ITEM, 99, "item", "s", "iss", "F") X(JSON_MEMBER, 99, "member", "s", "isss", "F")
 
 enum {
 #define X(id, module, name, in, out, flags) PNX_TXW_##id,

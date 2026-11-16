@@ -1,0 +1,9 @@
+rem run
+use io .
+use md .
+def outline s str or fail do
+  s md.blocks do to body to level to kind              rem a block: its kind, its level, its text
+    kind md.heading eq if args level " " body . cat io.println end
+  end each or_fail
+end
+"# Title\n\nSome text\n\n## Part\n\nMore\n" outline or_else to e "bad" io.println end

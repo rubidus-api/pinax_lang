@@ -36,10 +36,15 @@
   [*말*], [*서명*], [*뜻*],
   [`html`], [`(s str, b buffer or fail)`], [Markdown 글 `s` 의 HTML 을 덧붙인다. `err.full`],
   [`inline`], [`(s str, b buffer or fail)`], [한 줄이나 한 문단의 글의 HTML 을 덧붙인다. `err.full`],
+  [`blocks`], [`(s str gives rail)`], [`s` 의 블록을 훑는 레일(6)],
   [`next`], [`(s str gives kind int, level int, text str, rest str or fail)`], [`s` 의 첫 블록과 그 뒤의 나머지. 끝에서 `err.not_found`],
 )
 
 #ex("spec", "16-md.pnx")
+
+#para("6")[`s md.blocks` 는 `s` 의 블록을 훑는 레일(10.6)이다: 한 바퀴가 `md.next` 처럼 `(kind int, level int, text str)` 을 주고 `each` 의 블록이 맨 위부터
+받는다(`do to body to level to kind`). 실패하는 레일이라 `each` 가 받고 가드가 뒤따른다.]
+#ex("spec", "16-md-rails.pnx")
 
 #part("제약")
 

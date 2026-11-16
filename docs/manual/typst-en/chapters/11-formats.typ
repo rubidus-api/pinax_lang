@@ -83,6 +83,13 @@ and `md.inline` writes one line without a paragraph around it. Both are a subset
 
 #ex("manual", "11-md-html.pnx")
 
+When the loop is all you want, walk the pieces as a rail: `s json.items` gives the elements of an array, `s json.members` the members of an object (`path s json.items_at`
+for the one a path names), `s toml.items` the statements of a TOML text and `s md.blocks` the blocks of Markdown. Each turn gives several values, bound by
+`do to v to k to key` (the last pushed first), and the rail is open and lazy, so `head 2` reads no more than two. A text that is damaged after some good elements fails at
+that turn, so the loop is followed by a guard.
+
+#ex("manual", "11-json-rails.pnx")
+
 #qa[Is there a tree after `json.at`?][No. Each call reads the text again from the front up to the value it wants, so for many values from one large
 document the token words, which read it once, are cheaper.]
 

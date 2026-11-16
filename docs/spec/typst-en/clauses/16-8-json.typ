@@ -54,10 +54,22 @@ is after its escapes are decoded. The reading stops where it finds the value, so
   [*Word*], [*Signature*], [*Meaning*],
   [`valid`], [`(s str gives bool)`], [whether `s` is one JSON value, with only white space around it],
   [`at`], [`(path str, s str gives kind int, value str or fail)`], [the value `path` names in `s`: its kind (the constants above, never `json.key`) and its text, as `json.next` gives it, except that an object or an array is given whole, as written, to be read again by `json.next` or `json.at`. `err.not_found` when there is no such value (a name missing, an index past the end, a name asked of an array or an index of an object); `err.format` when the path is malformed or the text is malformed where it was read],
+  [`items` `members`], [`(s str gives rail)`], [rails over the elements of an array, the members of an object (5b)],
+  [`items_at` `members_at`], [`(path str, s str gives rail)`], [the same for the array or object `path` names (5b)],
   [`minify`], [`(s str, b buffer or fail)`], [appends `s` without the white space between its tokens; `err.format` when `s` is not valid, `err.full` when it does not fit (the buffer is then as it was)],
   [`pretty`], [`(s str, indent int, b buffer or fail)`], [appends `s` with each member and element on a line of its own, `indent` blanks (0 to 16; any other number is a fault) to a level, `": "` after a key; an empty object or array stays as it is. The failures are those of `minify`],
 )]
 #ex("spec", "16-json-path.pnx")
+
+#para("5b")[Rails (10.6): `s json.items` walks the elements of the array `s` and `s json.members` the members of the object `s`; `path s json.items_at`
+and `path s json.members_at` walk the array or object the path names (a word has one signature, so the path has words of its own). Each turn gives the
+next element as the values `(kind int, value str)` for an element and `(key str, kind int, value str)` for a member; the block of `each` binds them the last
+pushed first (`do to v to k`, `do to v to k to key`). The kind and the value are those of `json.next`, except that an object or an array is given whole, as
+written, to be walked again. A text that is not an array (an object) at the place is `err.format`, a path that names nothing is `err.not_found`; a text that is
+damaged after some good elements fails with `err.format` at the turn that reaches the damage. The walk reads the text once, and a walk that ends early reads no
+further. A rail that can fail is taken by `each` and is followed by a guard (`or_fail`, `or_return`, `or_else`); no `defer` is written in its block.]
+#ex("spec", "16-json-rails.pnx")
+#ex("spec", "16-json-rails-guard.pnx")
 
 === Records
 

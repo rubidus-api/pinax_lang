@@ -199,6 +199,39 @@ Raw &amp;lt;b&amp;gt;tags&amp;lt;/b&amp;gt; stay text.&lt;/p&gt;
 &lt;li&gt;second&lt;/li&gt;
 &lt;/ol&gt;
 
+</code></pre></div><p>루프만 필요하면 조각을 레일로 훑는다: <code>s json.items</code> 는 배열의 원소를, <code>s json.members</code> 는 객체의 멤버를(<code>path s json.items_at</code> 은 경로가 가리키는 것을), <code>s toml.items</code> 는 TOML 글의 문장을, <code>s md.blocks</code> 는 Markdown 의 블록을 준다. 한 바퀴가 값 여럿을 주고 <code>do to v to k to key</code> 로 받는다(맨 위부터). 레일은 열려 있고 게으르므로 <code>head 2</code> 는 둘까지만 읽는다. 좋은 원소 몇 개 뒤에 글이 깨지면 그 바퀴에서 실패하므로 루프 뒤에 가드가 온다.</p><div class="example run"><p class="ex-file"><code>11-json-rails.pnx</code></p><pre><code data-lang="pinax"><span style="color: #d73948">use</span> io .
+<span style="color: #d73948">use</span> <span style="color: #d73948">str</span> .
+<span style="color: #d73948">use</span> json .
+<span style="color: #d73948">def</span> total s <span style="color: #d73948">str</span> <span style="color: #d73948">gives</span> <span style="color: #d73948">int</span> <span style="color: #d73948">or</span> <span style="color: #d73948">fail</span> <span style="color: #d73948">do</span>                  <span style="color: #74747c">rem the numbers of an array; the others are passed over</span>
+  <span style="color: #b60157">0</span> <span style="color: #d73948">to</span> acc
+  s json.items <span style="color: #d73948">do</span> <span style="color: #d73948">to</span> v <span style="color: #d73948">to</span> k
+    k json.number eq <span style="color: #d73948">if</span> v <span style="color: #d73948">str</span>.to_int <span style="color: #d73948">or_fail</span> acc add <span style="color: #d73948">to</span> acc <span style="color: #d73948">end</span>
+  <span style="color: #d73948">end</span> each <span style="color: #d73948">or_fail</span>
+  acc
+<span style="color: #d73948">end</span>
+<span style="color: #d73948">def</span> show s <span style="color: #d73948">str</span> <span style="color: #d73948">or</span> <span style="color: #d73948">fail</span> <span style="color: #d73948">do</span>
+  s json.members <span style="color: #d73948">do</span> <span style="color: #d73948">to</span> v <span style="color: #d73948">to</span> k <span style="color: #d73948">to</span> key                   <span style="color: #74747c">rem the last pushed first: the value, the kind, the key</span>
+    <span style="color: #d73948">args</span> key <span style="color: #198810">" ("</span> k <span style="color: #198810">") = "</span> v . <span style="color: #d73948">cat</span> io.println
+  <span style="color: #d73948">end</span> each <span style="color: #d73948">or_fail</span>
+<span style="color: #d73948">end</span>
+<span style="color: #198810">"[1, 2, </span><span style="color: #1d6c76">\"</span><span style="color: #198810">x</span><span style="color: #1d6c76">\"</span><span style="color: #198810">, 3, [4, 5]]"</span> total <span style="color: #d73948">or_else</span> <span style="color: #d73948">to</span> e <span style="color: #b60157">-1</span> <span style="color: #d73948">end</span> <span style="color: #d73948">str</span>.to_str io.println
+<span style="color: #198810">"{</span><span style="color: #1d6c76">\"</span><span style="color: #198810">a</span><span style="color: #1d6c76">\"</span><span style="color: #198810">: 1, </span><span style="color: #1d6c76">\"</span><span style="color: #198810">b</span><span style="color: #1d6c76">\"</span><span style="color: #198810">: [1,2], </span><span style="color: #1d6c76">\"</span><span style="color: #198810">c</span><span style="color: #1d6c76">\"</span><span style="color: #198810">: {</span><span style="color: #1d6c76">\"</span><span style="color: #198810">d</span><span style="color: #1d6c76">\"</span><span style="color: #198810">: null}}"</span> show <span style="color: #d73948">or_else</span> <span style="color: #d73948">to</span> e <span style="color: #198810">"bad"</span> io.println <span style="color: #d73948">end</span>
+<span style="color: #d73948">def</span> langs s <span style="color: #d73948">str</span> <span style="color: #d73948">or</span> <span style="color: #d73948">fail</span> <span style="color: #d73948">do</span>                             <span style="color: #74747c">rem a path names the array</span>
+  <span style="color: #198810">"user.langs"</span> s json.items_at <span style="color: #d73948">do</span> <span style="color: #d73948">to</span> v <span style="color: #d73948">to</span> k v io.println <span style="color: #d73948">end</span> each <span style="color: #d73948">or_fail</span>
+<span style="color: #d73948">end</span>
+<span style="color: #198810">"{</span><span style="color: #1d6c76">\"</span><span style="color: #198810">user</span><span style="color: #1d6c76">\"</span><span style="color: #198810">: {</span><span style="color: #1d6c76">\"</span><span style="color: #198810">langs</span><span style="color: #1d6c76">\"</span><span style="color: #198810">: [</span><span style="color: #1d6c76">\"</span><span style="color: #198810">lua</span><span style="color: #1d6c76">\"</span><span style="color: #198810">, </span><span style="color: #1d6c76">\"</span><span style="color: #198810">c</span><span style="color: #1d6c76">\"</span><span style="color: #198810">]}}"</span> langs <span style="color: #d73948">or_else</span> <span style="color: #d73948">to</span> e <span style="color: #198810">"bad"</span> io.println <span style="color: #d73948">end</span>
+<span style="color: #198810">"[1, 2"</span> total <span style="color: #d73948">or_else</span> <span style="color: #d73948">to</span> e e err_text io.println <span style="color: #b60157">0</span> <span style="color: #d73948">end</span> drop      <span style="color: #74747c">rem damaged after two good elements</span>
+<span style="color: #198810">"[1,2,3,4,5]"</span> json.items head <span style="color: #b60157">2</span> <span style="color: #d73948">do</span> <span style="color: #d73948">to</span> v <span style="color: #d73948">to</span> k v io.println <span style="color: #d73948">end</span> each <span style="color: #d73948">or_else</span> <span style="color: #d73948">to</span> e <span style="color: #d73948">end</span>   <span style="color: #74747c">rem lazy: the text is read no further</span>
+</code></pre><p class="ex-label">출력</p><pre><code data-lang="text">$ pnx 11-json-rails.pnx
+6
+a (7) = 1
+b (3) = [1,2]
+c (1) = {"d": null}
+lua
+c
+format
+1
+2
 </code></pre></div><div class="box qa"><p class="box-title">문답</p><p><strong>물음. <code>json.at</code> 뒤에 나무가 남는가?</strong></p><p>답. 아니다. 호출마다 글을 앞에서부터 원하는 값까지 다시 읽는다. 큰 문서에서 값을 많이 뽑으려면 한 번만 읽는 토큰 낱말이 더 싸다.</p></div><h3>11.3 바이트</h3><p>모듈 <code>bytes</code> 는 정해진 폭과 바이트 순서로 쓰고 읽는다. 레코드에 <code>big_endian</code> 을 적으면 <code>bytes.pack</code> 이 큰 끝부터 쓴다. <code>varint</code> 필드는 작은 수를 적은 바이트로 쓴다.</p><div class="example run"><p class="ex-file"><code>11-binary.pnx</code></p><pre><code data-lang="pinax"><span style="color: #d73948">use</span> io .
 <span style="color: #d73948">use</span> bytes .
 <span style="color: #d73948">use</span> encode .

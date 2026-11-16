@@ -42,10 +42,15 @@ with `err.not_found`. Nothing is copied: `text` is a view of `s`. `kind` is one 
   [*Word*], [*Signature*], [*Meaning*],
   [`html`], [`(s str, b buffer or fail)`], [appends the HTML of the Markdown text `s`; `err.full`],
   [`inline`], [`(s str, b buffer or fail)`], [appends the HTML of the text of one line or paragraph; `err.full`],
+  [`blocks`], [`(s str gives rail)`], [a rail over the blocks of `s` (6)],
   [`next`], [`(s str gives kind int, level int, text str, rest str or fail)`], [the first block of `s` and what is left after it; `err.not_found` at the end],
 )
 
 #ex("spec", "16-md.pnx")
+
+#para("6")[`s md.blocks` is a rail (10.6) over the blocks of `s`: each turn gives `(kind int, level int, text str)` as `md.next` does, bound by the block of `each` the last
+pushed first (`do to body to level to kind`). It is taken by `each` and followed by a guard, as a rail that can fail is.]
+#ex("spec", "16-md-rails.pnx")
 
 #part("Constraints")
 

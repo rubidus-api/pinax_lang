@@ -40,6 +40,9 @@ enum {
     STEM_REX, STEM_RSPLIT, // rex.matches and rex.split: the string and its program
     STEM_CSV, // csv.fields: like STEM_WORDS
     STEM_POOL, // the live rows of a pool, taken slot by slot (RFC-0038)
+    STEM_JSON_I, STEM_JSON_M, // json.items, json.members (RFC-0051)
+    STEM_SQL, // MODULE.rows of a host module (RFC-0051)
+    STEM_TOML, STEM_MD, // toml.items, md.blocks (RFC-0051): open rails of several values, can fail
     STEM_ZIP // two arrays or lists side by side (RFC-0050): entry.value is the first, c->zip_b the second
 };
 enum { GK_SCALAR, GK_ARRAY, GK_LIST, GK_BUFFER, GK_INDEX, GK_QUEUE, GK_POOL, GK_TASKS };
@@ -200,6 +203,10 @@ typedef struct block {
     uint32_t floor_mark;
     name     user;       // the combining word that follows the block
     uint8_t  stride, krev, rtmp; // rail adapters: 0xff when none
+    uint32_t stubs;              // a rail that can fail: the jumps taken when its take failed
+    bool     fails_rail;
+    uint8_t  fl, ft, ft2;
+    bool     end_zero;           // the failure code that ends the walk is 0 (json); not_found for toml and md        // ... a flag and two temporaries of the end of its loop
 } block;
 
 typedef struct vec {
@@ -438,6 +445,11 @@ typedef struct comp {
     struct { uint32_t at, line, line_start; } adpos[16]; // where the blocks of rail adapters begin (RFC-0050)
     uint32_t     n_adpos;
     uint8_t      ab_n, ab_kind[4], ab_idx[4]; // the block adapters of the rail stem_begin took: kind and place in adpos
+    uint32_t     sql_host;   // MODULE.rows: the host word step
+    uint8_t      json_path;  // json.items_at: the slot of the path
+    bool         json_has_path;
+    uint8_t      el_n;      // the values an element of the rail has, and their types (RFC-0051)
+    tid          el_t[3];
     uint16_t     zip_b;     // zip: the second collection, and the type of its cells
     tid          zip_t;
     bool         ad_ok;     // the caller of stem_begin takes adapters (RFC-0050)
@@ -4425,6 +4437,7 @@ static bool stem_begin(comp *c, uint8_t *kind, uint8_t *cur, uint8_t *lim, uint1
     const bool ok = c->ad_ok;
     c->ad_ok = false;
     c->ad_any = false;
+    c->el_n = 1;
     const entry rail = f->stack[f->depth - 1];
     if (rail.nad && !ok)
         return type_error(c, "an adapter (skip, head, step, rev, filter, map ...) is taken by each, fold, count, any, all, first, map_into, filter_into, sum, minimum and maximum");
@@ -4458,6 +4471,9 @@ static bool stem_begin_raw(comp *c, uint8_t *kind, uint8_t *cur, uint8_t *lim, u
         *lim = (uint8_t)slot_of(c, f->depth - 1);
         *count = 2;
         *element = gsym(c, stem.value)->type;
+        c->el_n = 2;
+        c->el_t[0] = *element;
+        c->el_t[1] = c->zip_t;
         const uint32_t other = top_slot(c, BANK_I, 1);
         return emit(c, PNX_ABX(PNX_LOADI, *cur, 0)) != NONE && emit(c, PNX_ABX(PNX_GLEN, *lim, (uint32_t)stem.value)) != NONE &&
                emit(c, PNX_ABX(PNX_GLEN, other, c->zip_b)) != NONE && emit(c, PNX_ABC(PNX_JLE, *lim, other, 1)) != NONE &&
@@ -4491,6 +4507,50 @@ static bool stem_begin_raw(comp *c, uint8_t *kind, uint8_t *cur, uint8_t *lim, u
         *count = 2;
         *element = g->type;
         return emit(c, PNX_ABX(PNX_LOADI, *cur, 0)) != NONE && emit(c, PNX_ABX(PNX_GLEN, *lim, (uint32_t)stem.value)) != NONE;
+    }
+    if (stem.op == STEM_JSON_I || stem.op == STEM_JSON_M) { // the text, with the path under it when there is one
+        f->stack[f->depth - 1].hidden = true;
+        *src = (uint16_t)slot_of(c, f->depth - 1);
+        *cur = 0;
+        *lim = 0;
+        *count = 1;
+        if (stem.a) {
+            f->stack[f->depth - 2].hidden = true;
+            c->json_path = (uint8_t)slot_of(c, f->depth - 2);
+            *count = 2;
+        }
+        c->json_has_path = stem.a;
+        c->el_n = stem.op == STEM_JSON_I ? 2 : 3;
+        c->el_t[0] = stem.op == STEM_JSON_I ? TY_INT : TY_STR;
+        c->el_t[1] = stem.op == STEM_JSON_I ? TY_STR : TY_INT;
+        c->el_t[2] = TY_STR;
+        *element = c->el_t[0];
+        return true;
+    }
+    if (stem.op == STEM_SQL) { // the statement, and a count of the rows given
+        f->stack[f->depth - 1].hidden = true;
+        *src = (uint16_t)slot_of(c, f->depth - 1);
+        if (!push_slot(c, TY_INT))
+            return false;
+        f->stack[f->depth - 1].hidden = true;
+        *cur = (uint8_t)slot_of(c, f->depth - 1);
+        *lim = 0;
+        *count = 2;
+        *element = TY_INT;
+        return emit(c, PNX_ABX(PNX_LOADI, *cur, 0)) != NONE;
+    }
+    if (stem.op == STEM_TOML || stem.op == STEM_MD) { // the text is the rest still to read
+        f->stack[f->depth - 1].hidden = true;
+        *src = (uint16_t)slot_of(c, f->depth - 1);
+        *cur = 0;
+        *lim = 0;
+        *count = 1;
+        *element = TY_INT;
+        c->el_n = 3;
+        c->el_t[0] = TY_INT;
+        c->el_t[1] = stem.op == STEM_TOML ? TY_STR : TY_INT;
+        c->el_t[2] = TY_STR;
+        return true;
     }
     if (stem.op == STEM_WORDS || stem.op == STEM_LINES || stem.op == STEM_SPLIT_BYTE || stem.op == STEM_CHARS ||
         stem.op == STEM_CSV) {
@@ -4548,7 +4608,7 @@ static bool stem_begin_raw(comp *c, uint8_t *kind, uint8_t *cur, uint8_t *lim, u
 static bool stem_takes(uint8_t kind) {
     return kind == STEM_WORDS || kind == STEM_LINES || kind == STEM_SPLIT || kind == STEM_SPLIT_BYTE ||
            kind == STEM_CHARS || kind == STEM_PTN || kind == STEM_REX || kind == STEM_RSPLIT || kind == STEM_CSV ||
-           kind == STEM_POOL;
+           kind == STEM_POOL || kind == STEM_SQL || kind == STEM_TOML || kind == STEM_MD || kind == STEM_JSON_I || kind == STEM_JSON_M;
 }
 
 // Takes the next piece into `reg`; the instruction after it runs when there is none.
@@ -4936,8 +4996,12 @@ static bool do_block(comp *c) {
         c->ad_ok = true;
         if (!stem_begin(c, &kind, &cur, &lim, &src, &hidden, &element))
             return false;
-        if (kind == STEM_ZIP && (use != USE_EACH || c->ab_n))
-            return error_at(c, PINAX_ERR_TYPE, at.line, at.column, "a zipped pair is taken by each: xs ys zip do to y to x ... end each");
+        bool block_adapter = false;
+        for (uint32_t k = 0; k < c->ab_n; ++k)
+            block_adapter = block_adapter || c->ab_kind[k] >= AD_FILTER;
+        if (c->el_n > 1 && (use != USE_EACH || block_adapter))
+            return error_at(c, PINAX_ERR_TYPE, at.line, at.column,
+                            "a rail of several values at a time (zip, toml.items, md.blocks ...) is taken by each, with no block adapter: ... do to b to a ... end each");
         if ((c->ad_any || c->ab_n) && use == USE_EACH_INDEX)
             return error_at(c, PINAX_ERR_TYPE, at.line, at.column, "each_index does not count along an adapted rail yet");
     } else {
@@ -4945,7 +5009,7 @@ static bool do_block(comp *c) {
                         "this block is used by a word the compiler does not expand yet");
     }
     if (bare && use != USE_TIMES) {
-        const uint32_t base = use == USE_EACH_INDEX || use == USE_FOLD || kind == STEM_ZIP ? 2u : 1u;
+        const uint32_t base = c->el_n > 1 ? c->el_n : use == USE_EACH_INDEX || use == USE_FOLD ? 2u : 1u;
         const bool     rex  = kind == STEM_REX && use != USE_EACH_INDEX;
         // a block of fold or each_index must name what it takes; the others may leave the element on the stack
         if (n_binders ? (n_binders < base || (rex ? n_binders > base + PNX_PTN_CAPS : n_binders != base))
@@ -4960,8 +5024,9 @@ static bool do_block(comp *c) {
         if (n_binders) {
             if (use == USE_EACH_INDEX) {
                 in[0] = element, in[1] = TY_INT;
-            } else if (kind == STEM_ZIP) {
-                in[0] = element, in[1] = c->zip_t;
+            } else if (c->el_n > 1) {
+                for (uint32_t k = 0; k < c->el_n; ++k)
+                    in[k] = c->el_t[k];
             } else if (use == USE_FOLD) {
                 in[0] = acc, in[1] = element;
             } else {
@@ -5039,8 +5104,8 @@ static bool do_block(comp *c) {
                             use == USE_MAP ? "the block of map_into is (x T gives U): T the element's type, U the list's"
                                            : "the block of filter_into is (x T gives bool), and the list holds T");
     } else if (use == USE_EACH) {
-        if (bs.n_out || bs.n_in > (kind == STEM_ZIP ? 2u : 1u) || (bs.n_in >= 1 && bs.in[0] != element) ||
-            (kind == STEM_ZIP && bs.n_in != 2))
+        if (bs.n_out || bs.n_in > (c->el_n > 1 ? c->el_n : 1u) || (bs.n_in >= 1 && bs.in[0] != element) ||
+            (c->el_n > 1 && bs.n_in != c->el_n))
             return error_at(c, PINAX_ERR_TYPE, at.line, at.column, "the block of each takes one element and gives nothing");
     } else if (use == USE_FOLD) {
         init = f->depth - hidden - 1;
@@ -5129,6 +5194,13 @@ static bool do_block(comp *c) {
     abset ab;
     if (!ab_init(c, &ab))
         return false;
+    uint32_t ent_reg = 0; // json: whether the container has been entered
+    if (kind == STEM_JSON_I || kind == STEM_JSON_M) {
+        local *e = new_local(c, (name){0}, TY_INT);
+        if (!e || emit(c, PNX_ABX(PNX_LOADI, e->reg, 0)) == NONE)
+            return false;
+        ent_reg = e->reg;
+    }
     b->head = f->code.n;
     b->elem_local = NONE;
     f->def_at = NONE;
@@ -5149,16 +5221,116 @@ static bool do_block(comp *c) {
             reg = slot_of(c, f->depth - 1);
         }
     }
-    uint32_t zip_reg = 0;
-    if (kind == STEM_ZIP) { // the second cell of the pair: the second name
-        const local *lb = new_local(c, sig_in_name(&bs, 1), c->zip_t);
+    uint32_t zip_reg = 0, xreg[3] = {0, 0, 0}; // the other values of an element: their names
+    for (uint32_t k = 1; k < c->el_n; ++k) {
+        const local *lb = new_local(c, sig_in_name(&bs, k), c->el_t[k]);
         if (!lb)
             return false;
-        zip_reg = lb->reg;
+        xreg[k] = lb->reg;
+    }
+    zip_reg = xreg[1];
+    b->stubs = NONE;
+    b->fails_rail = kind == STEM_TOML || kind == STEM_MD || kind == STEM_JSON_I || kind == STEM_JSON_M || kind == STEM_SQL;
+    b->end_zero = kind == STEM_JSON_I || kind == STEM_JSON_M || kind == STEM_SQL;
+    if (b->fails_rail) {
+        local *l1 = new_local(c, (name){0}, TY_INT), *l2 = new_local(c, (name){0}, TY_INT), *l3 = new_local(c, (name){0}, TY_INT);
+        if (!l1 || !l2 || !l3)
+            return false;
+        b->fl = (uint8_t)l1->reg;
+        b->ft = (uint8_t)l2->reg;
+        b->ft2 = (uint8_t)l3->reg;
     }
     if (stem_takes(kind) && !ab_pre(c, &ab, &b->exits))
         return false;
-    if (stem_takes(kind)) { // takes the next piece, or leaves when none is left
+    if (kind == STEM_SQL) { // a step of the statement: a row, or the end of the rows; the engine's failure is the rail's
+        if (use != USE_EACH)
+            return error_at(c, PINAX_ERR_TYPE, at.line, at.column, "a rail that can fail is taken by each: ... end each or_fail");
+        sig s;
+        if (!host_sig(c, &c->st->hosts[c->sql_host], &s))
+            return false;
+        uint32_t import = NONE;
+        const uint32_t *all = c->imports.ptr;
+        for (uint32_t k = 0; k < c->imports.n; ++k)
+            import = all[k] == c->sql_host ? k : import;
+        if (import == NONE) {
+            uint32_t *slot = vec_push(c, &c->imports, sizeof(uint32_t));
+            if (!slot)
+                return false;
+            *slot = c->sql_host;
+            import = c->imports.n - 1;
+        }
+        if (!push_slot(c, s.in[0]) || !move_slot(c, s.in[0], slot_of(c, f->depth - 1), src))
+            return false;
+        uint32_t base[2], in[2], out[2];
+        if (!call_args(c, &s, base, false) || !settle_all(c))
+            return false;
+        count_sig(&s, in, out);
+        (void)top_slot(c, BANK_I, in[0] + out[0]);
+        (void)top_slot(c, BANK_S, in[1] + out[1]);
+        if (!check_before_call(c) || emit(c, PNX_ABC(PNX_HCALLF, base[BANK_I], base[BANK_S], 0)) == NONE ||
+            emit(c, import) == NONE || !jump_later(c, &b->stubs) || !push_results(c, &s, base, in, true))
+            return false;
+        entry verdict;
+        if (!pop_cond(c, &verdict) || !settle_all(c) || !cond_jump(c, &verdict, 1) || !jump_later(c, &b->exits) ||
+            emit(c, PNX_ABC(PNX_MOVI, reg, cur, 0)) == NONE || emit(c, PNX_ABC(PNX_ADDI, cur, cur, 1)) == NONE)
+            return false;
+    } else if (kind == STEM_JSON_I || kind == STEM_JSON_M) {
+        if (use != USE_EACH)
+            return error_at(c, PINAX_ERR_TYPE, at.line, at.column, "a rail that can fail is taken by each: ... end each or_fail");
+        const bool members = kind == STEM_JSON_M;
+        local *ia = new_local(c, (name){0}, TY_INT);
+        local *s0 = new_local(c, (name){0}, TY_STR), *s1 = new_local(c, (name){0}, TY_STR);
+        local *s2 = members ? new_local(c, (name){0}, TY_STR) : s1;
+        if (!ia || !s0 || !s1 || !s2)
+            return false;
+        uint32_t over = NONE;
+        // the first turn enters the container the path names; the later ones go on from `src`
+        if (emit(c, PNX_ABC(PNX_JEQI, ent_reg, 0, 1)) == NONE || !jump_later(c, &over))
+            return false;
+        if ((c->json_has_path ? emit(c, PNX_ABC(PNX_MOVS, s0->reg, c->json_path, 0)) : emit(c, PNX_ABC(PNX_RMARK, s0->reg, 0, 0))) == NONE ||
+            emit(c, PNX_ABC(PNX_MOVS, s1->reg, src, 0)) == NONE ||
+            emit(c, PNX_ABC(PNX_TXTF, ia->reg, s0->reg, members ? PNX_TXW_JSON_ENTER_O : PNX_TXW_JSON_ENTER_A)) == NONE ||
+            !jump_later(c, &b->stubs) || emit(c, PNX_ABC(PNX_MOVS, src, s0->reg, 0)) == NONE ||
+            emit(c, PNX_ABX(PNX_LOADI, ent_reg, 1)) == NONE)
+            return false;
+        land(c, &over);
+        if (emit(c, PNX_ABC(PNX_MOVS, s0->reg, src, 0)) == NONE ||
+            emit(c, PNX_ABC(PNX_TXTF, ia->reg, s0->reg, members ? PNX_TXW_JSON_MEMBER : PNX_TXW_JSON_ITEM)) == NONE ||
+            !jump_later(c, &b->stubs))
+            return false;
+        if (members) { // key, kind, value; the rest
+            if (emit(c, PNX_ABC(PNX_MOVS, reg, s0->reg, 0)) == NONE || emit(c, PNX_ABC(PNX_MOVI, xreg[1], ia->reg, 0)) == NONE ||
+                emit(c, PNX_ABC(PNX_MOVS, xreg[2], s1->reg, 0)) == NONE || emit(c, PNX_ABC(PNX_MOVS, src, s2->reg, 0)) == NONE)
+                return false;
+        } else { // kind, value; the rest
+            if (emit(c, PNX_ABC(PNX_MOVI, reg, ia->reg, 0)) == NONE || emit(c, PNX_ABC(PNX_MOVS, xreg[1], s0->reg, 0)) == NONE ||
+                emit(c, PNX_ABC(PNX_MOVS, src, s1->reg, 0)) == NONE)
+                return false;
+        }
+    } else if (kind == STEM_TOML || kind == STEM_MD) {
+        if (use != USE_EACH)
+            return error_at(c, PINAX_ERR_TYPE, at.line, at.column, "a rail that can fail is taken by each: ... end each or_fail");
+        const bool toml = kind == STEM_TOML;
+        local *ia = new_local(c, (name){0}, TY_INT);
+        local *ib = toml ? ia : new_local(c, (name){0}, TY_INT); // md: kind and level, in two registers
+        local *s0 = new_local(c, (name){0}, TY_STR), *s1 = new_local(c, (name){0}, TY_STR);
+        local *s2 = toml ? new_local(c, (name){0}, TY_STR) : s1;
+        if (!ia || !ib || !s0 || !s1 || !s2)
+            return false;
+        const uint32_t sub = toml ? PNX_TXW_TOML_NEXT : PNX_TXW_MD_NEXT;
+        if (emit(c, PNX_ABC(PNX_MOVS, s0->reg, src, 0)) == NONE || emit(c, PNX_ABC(PNX_TXTF, ia->reg, s0->reg, sub)) == NONE ||
+            !jump_later(c, &b->stubs))
+            return false;
+        if (toml) { // kind, key, value; the rest stays in the text
+            if (emit(c, PNX_ABC(PNX_MOVI, reg, ia->reg, 0)) == NONE || emit(c, PNX_ABC(PNX_MOVS, xreg[1], s0->reg, 0)) == NONE ||
+                emit(c, PNX_ABC(PNX_MOVS, xreg[2], s1->reg, 0)) == NONE || emit(c, PNX_ABC(PNX_MOVS, src, s2->reg, 0)) == NONE)
+                return false;
+        } else { // kind, level, text; the rest
+            if (emit(c, PNX_ABC(PNX_MOVI, reg, ia->reg, 0)) == NONE || emit(c, PNX_ABC(PNX_MOVI, xreg[1], ia->reg + 1, 0)) == NONE ||
+                emit(c, PNX_ABC(PNX_MOVS, xreg[2], s0->reg, 0)) == NONE || emit(c, PNX_ABC(PNX_MOVS, src, s1->reg, 0)) == NONE)
+                return false;
+        }
+    } else if (stem_takes(kind)) { // takes the next piece, or leaves when none is left
         if (!stem_take(c, kind, reg, src, cur, lim) || !jump_later(c, &b->exits))
             return false;
     } else {
@@ -5333,7 +5505,22 @@ static bool end_do(comp *c, block *b) {
             *code_at(f, end - 1) = PNX_ABC(PNX_JLT, reg, b->lim, (uint8_t)(int8_t)(OP_SC_OF(back) + 1));
         }
     }
-    land(c, &b->exits);
+    if (b->fails_rail) { // the take failed: the end of the text is the end of the walk, any other failure is the loop's
+        uint32_t join = NONE;
+        if (!jump_later(c, &b->exits))
+            return false;
+        land(c, &b->stubs);
+        if (emit(c, PNX_ABX(PNX_GETFAIL, b->ft, 0)) == NONE || emit(c, PNX_ABX(PNX_LOADI, b->ft2, b->end_zero ? 0 : PINAX_ERR_NOT_FOUND)) == NONE ||
+            emit(c, PNX_ABC(PNX_JNE, b->ft, b->ft2, 1)) == NONE || !jump_later(c, &b->exits) ||
+            emit(c, PNX_ABX(PNX_LOADI, b->fl, 0)) == NONE || !jump_later(c, &join))
+            return false;
+        land(c, &b->exits);
+        if (emit(c, PNX_ABX(PNX_LOADI, b->fl, 1)) == NONE)
+            return false;
+        land(c, &join);
+    } else {
+        land(c, &b->exits);
+    }
     if (b->full != NONE) { // the list was full: the word fails
         uint32_t over = NONE;
         if (!jump_later(c, &over))
@@ -5385,6 +5572,12 @@ static bool end_do(comp *c, block *b) {
         return syntax(c, "the word that uses the block is expected right after its end");
     if (done.use == USE_FIRST) // the element found, or the failure not_found
         return found_or_fail(c, done.element, done.val, done.acc);
+    if (done.fails_rail) { // success skips the jump of the guard; a failure of the walk takes it
+        if (emit(c, PNX_ABC(PNX_JNEI, done.fl, 0, 1)) == NONE)
+            return false;
+        f->def_at = NONE;
+        return guard_op(c, TY_NONE);
+    }
     return advance(c);
 }
 
@@ -5920,6 +6113,17 @@ static bool txw_word(comp *c, uint8_t module, name n);
 
 static bool json_word(comp *c, name n) {
     fn *f = c->f;
+    const bool at = name_is(n, "items_at") || name_is(n, "members_at");
+    if (at || name_is(n, "items") || name_is(n, "members")) { // the rails (RFC-0051)
+        const uint32_t k = at ? 2 : 1;
+        if (!need(c, k) || f->stack[f->depth - 1].type != TY_STR || (at && f->stack[f->depth - 2].type != TY_STR))
+            return type_error(c, at ? "this word takes the path and the text: path s json.items_at" : "this word takes a str: the JSON text");
+        const bool members = name_is(n, "members") || name_is(n, "members_at");
+        if (!settle(c, f->depth - 1) || (at && !settle(c, f->depth - 2)))
+            return false;
+        return push(c, (entry){.type = TY_STEM, .kind = E_SLOT, .op = members ? STEM_JSON_M : STEM_JSON_I, .a = at}) &&
+               advance(c);
+    }
     static const struct {
         const char *name;
         int64_t     value;
@@ -6158,6 +6362,12 @@ static bool txw_word(comp *c, uint8_t module, name n) {
     int64_t constant;
     if (txw_const(module, n, &constant))
         return push(c, (entry){.type = TY_INT, .kind = E_CONST, .value = constant}) && advance(c);
+    if ((module == 11 && name_is(n, "items")) || (module == 12 && name_is(n, "blocks"))) { // the rails (RFC-0051)
+        if (!need(c, 1) || f->stack[f->depth - 1].type != TY_STR)
+            return type_error(c, module == 11 ? "toml.items takes a str: the TOML text" : "md.blocks takes a str: the Markdown text");
+        return settle(c, f->depth - 1) &&
+               push(c, (entry){.type = TY_STEM, .kind = E_SLOT, .op = module == 11 ? STEM_TOML : STEM_MD}) && advance(c);
+    }
     const pnx_txword *tw = txw_find(module, n);
     if (!tw)
         return error(c, PINAX_ERR_NOT_FOUND, "the module has no word of this name");
@@ -7750,7 +7960,8 @@ static bool module_has(comp *c, name real, name n) {
     if (standard == 10)
         return sheet_find(n) != NULL || sheet_const(n, &(int64_t){0});
     if (standard == 11 || standard == 12)
-        return txw_find(standard, n) != NULL || txw_const(standard, n, &(int64_t){0});
+        return txw_find(standard, n) != NULL || txw_const(standard, n, &(int64_t){0}) ||
+               (standard == 11 && name_is(n, "items")) || (standard == 12 && name_is(n, "blocks"));
     if (standard == 8 && txw_find(8, n))
         return true;
     if (standard == 5)
@@ -7763,6 +7974,9 @@ static bool module_has(comp *c, name real, name n) {
 
 // A word, a constant or a field named by a path: module.name, or record.field when module is no
 // module in use; also a bare name found through the search order (RFC-0040 part C).
+static tid f_top_type(const comp *c) {
+    return c->f->stack[c->f->depth - 1].type;
+}
 static bool path_word(comp *c, name module, name n) {
     if (name_is(module, "err")) {
         int64_t value;
@@ -7820,6 +8034,16 @@ static bool path_word(comp *c, name module, name n) {
     }
     if (c->data_only)
         return syntax(c, "a data source calls no words; only literals, const names and stores");
+    if (name_is(n, "rows") && find_host(c, module, n) == NONE) { // st MODULE.rows : the rows of a statement, one a turn (RFC-0051)
+        const uint32_t step = find_host(c, module, cname("step"));
+        sig            ss;
+        if (step == NONE || !host_sig(c, &c->st->hosts[step], &ss))
+            return error(c, PINAX_ERR_NOT_FOUND, "the module has no word of this name");
+        if (!need(c, 1) || f_top_type(c) != ss.in[0])
+            return type_error(c, "rows takes the statement of a host module that has a step word: st MODULE.rows do to n ... end each or_fail");
+        return settle(c, c->f->depth - 1) && (c->sql_host = step, true) &&
+               push(c, (entry){.type = TY_STEM, .kind = E_SLOT, .op = STEM_SQL}) && advance(c);
+    }
     const uint32_t host = find_host(c, module, n);
     if (host == NONE)
         return error(c, PINAX_ERR_NOT_FOUND, "the module has no word of this name");
@@ -8080,6 +8304,10 @@ static bool do_defer(comp *c) {
         return syntax(c, "defer belongs inside a definition");
     if (f->n_blocks && f->blocks[f->n_blocks - 1]->kind != B_LOOP && f->blocks[f->n_blocks - 1]->kind != B_DO)
         return syntax(c, "defer is written right in a word's body, a loop's body or a do block, not in a branch");
+    for (uint32_t k = 0; k < f->n_blocks; ++k) {
+        if (f->blocks[k]->fails_rail)
+            return syntax(c, "a defer is not written inside the block of a rail that can fail yet");
+    }
     if (f->n_defers == MAX_DEFERS)
         return syntax(c, "a word has at most 16 defers");
     if (!advance(c))
