@@ -14808,7 +14808,7 @@ const GUIDE = {
         "`use io .` and `set_order io str .` end with a period, as `row` does; `get_order` needs none and runs when typed.",
         "An empty line runs the text gathered, outside any block: the way out of a forgotten dot.",
         "A loop or a block runs once, when its end is typed; the status line shows the blocks open.",
-        "A statement that declares something (def, const, global, use, set_order, ...) is added to the program.",
+        "A statement that runs without a fault is added to the program (:list), as a declaration (def, const, global, use, ...) replaces the one of its name.",
     ],
     commands: [
         [":list [N[-M]]", "the program with its line numbers"],
@@ -15103,8 +15103,13 @@ async function createConsole({ createPinax, bytes, print, store = null }) {
 
     function remember(text) {
         const key = declared(text);
-        if (key === null)
+        if (key === null) { // not a declaration: a statement of the program too, at its end (tool words are not)
+            if (!/^\s*(stack|clear|see|list_words)\s*[.,]?\s*$/.test(text)) {
+                lines.push(...text.split("\n"));
+                keep();
+            }
             return;
+        }
         const at = key === "" ? undefined : parts().find(({ start, end }) => declared(lines.slice(start, end).join("\n")) === key);
         const found = /^\s*def\s+([A-Za-z_][A-Za-z_0-9]*)/.exec(text);
         if (found)
