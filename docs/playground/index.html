@@ -14762,6 +14762,7 @@ const GUIDE = {
         [":edit N-M", "lines N to M in the editor; saving puts them back in their place"],
         [":insert N", "new lines above line N (0: at the end); an empty line ends, and the program runs (:ins)"],
         [":delete N[-M]", "removes lines N to M (:del)"],
+        [":trace", "RESETS like :run, then runs the program one statement at a time (up to its period, or a block's end), showing the line and the stack after each"],
         [":run", "RESETS: empties the stack and forgets every definition, then runs the program from line 1 (F5); the program's lines stay"],
         [":new", "no program, and a fresh state"],
         [":stack", "the values on the stack, the first pushed first (:s); it may be typed inside a block"],
@@ -14869,12 +14870,16 @@ async function createConsole({ createPinax, bytes, print, store = null }) {
     const noLine = (arg) => print("err", `no line ${arg ?? ""}: the program has ${plural(lines.length, "line")}; :list shows them\n`);
 
     // a fresh state, then the program from its first line; it stops at the first part that fails
-    function runProgram() {
+    function runProgram(trace = false) {
         session.reset();
         for (const { start, end } of parts()) {
             offset = start;
+            if (trace)
+                print("echo", `${start + 1}: ${lines.slice(start, end).join("\n   ")}\n`);
             const r = session.eval(lines.slice(start, end).join("\n"));
             offset = 0;
+            if (trace && r.ok)
+                print("stack", `   stack: ${session.stack().join(" ") || "(empty)"}\n`);
             if (!r.ok) {
                 const at = end - start === 1 ? `line ${start + 1}` : `lines ${start + 1}-${end}`;
                 print("info", r.unfinished ? `${at}: a definition or a block is not closed by the program's end\n`
@@ -14882,7 +14887,8 @@ async function createConsole({ createPinax, bytes, print, store = null }) {
                 return false;
             }
         }
-        showStack(session.stack());
+        if (!trace)
+            showStack(session.stack());
         return true;
     }
 
@@ -14989,6 +14995,10 @@ async function createConsole({ createPinax, bytes, print, store = null }) {
         case "run":
             print("info", "reset: the stack is emptied and every definition forgotten; the program runs from line 1\n");
             runProgram();
+            return {};
+        case "trace":
+            print("info", "reset; the program runs one statement at a time\n");
+            runProgram(true);
             return {};
         case "new":
             lines = [];
