@@ -14762,7 +14762,7 @@ const GUIDE = {
         [":edit N-M", "lines N to M in the editor; saving puts them back in their place"],
         [":insert N", "new lines above line N (0: at the end); an empty line ends, and the program runs (:ins)"],
         [":delete N[-M]", "removes lines N to M (:del)"],
-        [":trace", "RESETS like :run, then runs the program one statement at a time (up to its period, or a block's end), showing the line and the stack after each"],
+        [":trace", "RESETS like :run, then runs the program one statement at a time (one period each), showing the line and the stack after each"],
         [":run", "RESETS: empties the stack and forgets every definition, then runs the program from line 1 (F5); the program's lines stay"],
         [":new", "no program, and a fresh state"],
         [":stack", "the values on the stack, the first pushed first (:s); it may be typed inside a block"],
@@ -14870,16 +14870,53 @@ async function createConsole({ createPinax, bytes, print, store = null }) {
     const noLine = (arg) => print("err", `no line ${arg ?? ""}: the program has ${plural(lines.length, "line")}; :list shows them\n`);
 
     // a fresh state, then the program from its first line; it stops at the first part that fails
+    // a part cut at each period that closes a whole statement: `1 . 2 .` is two, three lines ending in one period are one
+    function statements(start, end) {
+        const text = lines.slice(start, end).join("\n");
+        const out = [];
+        let from = 0;
+        const lineAt = (at) => start + (text.slice(0, at).match(/\n/g)?.length ?? 0);
+        const first = (at) => at + (text.slice(at).length - text.slice(at).trimStart().length);
+        for (let i = 0; i < text.length; ++i) {
+            if (text[i] !== "." || (i > 0 && !/\s/.test(text[i - 1])) || (i + 1 < text.length && !/\s/.test(text[i + 1])))
+                continue;
+            const piece = text.slice(from, i + 1);
+            if (piece.trim() !== "" && whole(piece) && !/^\s*rem\b/.test(piece.split("\n").pop())) {
+                out.push({ text: piece.trim(), line: lineAt(first(from)) });
+                from = i + 1;
+            }
+        }
+        if (text.slice(from).trim() !== "")
+            out.push({ text: text.slice(from).trim(), line: lineAt(first(from)) });
+        return out;
+    }
+
     function runProgram(trace = false) {
         session.reset();
         for (const { start, end } of parts()) {
             offset = start;
-            if (trace)
-                print("echo", `${start + 1}: ${lines.slice(start, end).join("\n   ")}\n`);
+            if (trace) {
+                const pieces = statements(start, end);
+                let failed = false;
+                for (const { text, line } of pieces) {
+                    offset = line;
+                    print("echo", `${line + 1}: ${text.split("\n").join("\n   ")}\n`);
+                    const q = session.eval(text);
+                    if (!q.ok)
+                        failed = true;
+                    else
+                        print("stack", `   stack: ${session.stack().join(" ") || "(empty)"}\n`);
+                    if (failed) {
+                        offset = 0;
+                        print("info", `the program stops in line ${line + 1} (:list ${line + 1})\n`);
+                        return false;
+                    }
+                }
+                offset = 0;
+                continue;
+            }
             const r = session.eval(lines.slice(start, end).join("\n"));
             offset = 0;
-            if (trace && r.ok)
-                print("stack", `   stack: ${session.stack().join(" ") || "(empty)"}\n`);
             if (!r.ok) {
                 const at = end - start === 1 ? `line ${start + 1}` : `lines ${start + 1}-${end}`;
                 print("info", r.unfinished ? `${at}: a definition or a block is not closed by the program's end\n`
