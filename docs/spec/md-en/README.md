@@ -1,6 +1,6 @@
 # The Pinax Standard
 
-The definition of the embeddable scripting language Pinax — Edition 0.34.0, October 2026
+The definition of the embeddable scripting language Pinax — Edition 0.34.1, October 2026
 
 ## Contents
 
@@ -12,13 +12,13 @@ The definition of the embeddable scripting language Pinax — Edition 0.34.0, Oc
 6. [6 Lexical elements](06.md)
 7. [7 Types and values](07.md)
 8. [8 Declarations](08.md)
-9. [9 Words](09.md)
+9. [9 Procedures](09.md)
 10. [10 Control](10.md)
 11. [11 Failures and faults](11.md)
 12. [12 Memory](12.md)
 13. [13 Modules](13.md)
 14. [14 Tasks](14.md)
-15. [15 Core words](15.md)
+15. [15 Core procedures](15.md)
 16. [16 Standard modules](16.md)
 17. [17 Standard host modules](17.md)
 18. [18 Calling C functions](18.md)

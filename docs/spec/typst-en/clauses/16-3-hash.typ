@@ -3,9 +3,9 @@
 == `hash` --- hashes <std-hash>
 
 #para("1")[The module `hash` gives hashes of bytes as an `int`. There are no cryptographic hashes; a host gives those as
-host words.
+host procedures.
 #table(columns: (auto, auto, 1fr), inset: 5pt, stroke: 0.5pt + luma(170),
-  [*Word*], [*Signature*], [*Meaning*],
+  [*Procedure*], [*Signature*], [*Meaning*],
   [`crc32`], [`(str gives u32)`], [CRC-32 (IEEE 802.3, as zlib)],
   [`fnv1a`], [`(str gives u64)`], [64-bit FNV-1a],
   [`hash64`], [`(str gives u64)`], [SipHash-2-4 with the key 0],

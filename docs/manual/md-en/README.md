@@ -1,13 +1,13 @@
 # The Pinax Manual
 
-Learning and using the embeddable scripting language Pinax — Edition 0.34.0, October 2026
+Learning and using the embeddable scripting language Pinax — Edition 0.34.1, October 2026
 
 ## Contents
 
 1. [About this book](01.md)
 2. [1 The first program](02.md)
 3. [2 Values and the stack](03.md)
-4. [3 Words and signatures](04.md)
+4. [3 Procedures and signatures](04.md)
 5. [4 Locals and flow](05.md)
 6. [5 Strings](06.md)
 7. [6 Collections](07.md)

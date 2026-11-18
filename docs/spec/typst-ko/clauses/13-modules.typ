@@ -13,8 +13,8 @@ import = "use" NAME [ "as" NAME ] "." ;
 파일 이름에서 `.pnx` 를 뗀 것을 쓴다). 표준 모듈과 호스트 모듈(13.3)도 모듈이다.]
 
 #para("2")[`use 모듈 .` 은 그 모듈을 이 소스에서 연다. 그 뒤로 모듈의 것은 *경로*`모듈.이름` 으로 쓴다.
-`use 모듈 as 별명 .` 은 같은 모듈을 `별명.이름` 으로 쓰게 한다. 맨 이름으로 쓰는 것은 핵 낱말과 이 소스가 선언한
-것, 그리고 찾는 순서가 이름 붙인 모듈의 낱말(13.5)뿐이다.]
+`use 모듈 as 별명 .` 은 같은 모듈을 `별명.이름` 으로 쓰게 한다. 맨 이름으로 쓰는 것은 핵 프로시저와 이 소스가 선언한
+것, 그리고 찾는 순서가 이름 붙인 모듈의 프로시저(13.5)뿐이다.]
 
 #para("3")[`use` 하는 모듈은 이미 있어야 한다: 표준 모듈, 호스트가 등록한 모듈, 또는 먼저 적재된 소스.
 `pnx` 는 `use 이름 .` 을 만나면 프로그램 파일 옆의 `이름.pnx` 를 먼저 적재한다.]
@@ -27,14 +27,14 @@ import = "use" NAME [ "as" NAME ] "." ;
 #para("4")[없는 모듈을 `use` 하면 거절된다.]
 #ex("spec", "13-unknown-module.pnx")
 
-#para("5")[모듈의 낱말을 맨 이름으로 쓰면 거절된다. 찾는 순서(13.5)가 그 모듈을 이름 붙였으면 그렇지 않다. 열지 않은 모듈의
+#para("5")[모듈의 프로시저를 맨 이름으로 쓰면 거절된다. 찾는 순서(13.5)가 그 모듈을 이름 붙였으면 그렇지 않다. 열지 않은 모듈의
 경로도 거절된다.]
 #ex("spec", "13-bare-name.pnx")
 #ex("spec", "13-no-use.pnx")
 
 == 내보내기 <modules-export>
 
-#para("1")[다른 소스가 쓸 수 있는 것은 `export` 를 붙여 선언하거나 정의한 것뿐이다. 낱말, 상수, 전역은
+#para("1")[다른 소스가 쓸 수 있는 것은 `export` 를 붙여 선언하거나 정의한 것뿐이다. 프로시저, 상수, 전역은
 `모듈.이름` 으로 쓰고(내보낸 전역에 넣을 때는 `set 모듈.이름`), 내보낸 `record` 와 `type` 과 표의 줄 타입은 이름만으로
 쓴다.]
 
@@ -52,8 +52,8 @@ import = "use" NAME [ "as" NAME ] "." ;
 #para("1")[#term("표준 모듈", en: "standard module")은 처리기에 들어 있는 언어의 일부다: `str` `fmt` `hash`
 `encode` `bytes` `ptn` `rex` `json` `csv`(16절). `use` 해야 보인다.]
 
-#para("2")[#term("호스트 모듈", en: "host module")은 호스트가 등록한 낱말의 묶음이다. 호스트가 등록하지 않은
-모듈은 없다. 스크립트가 할 수 있는 바깥일(파일, 시계, 환경)은 호스트가 등록한 낱말이 전부다. `pnx` 는 표준
+#para("2")[#term("호스트 모듈", en: "host module")은 호스트가 등록한 프로시저의 묶음이다. 호스트가 등록하지 않은
+모듈은 없다. 스크립트가 할 수 있는 바깥일(파일, 시계, 환경)은 호스트가 등록한 프로시저가 전부다. `pnx` 는 표준
 호스트 모듈 `io` `file` `clock` `random` `env` 를 등록한다(17절).]
 
 #para("3")[`err` 는 `use` 없이 경로로 쓰는 상수의 묶음이다(11.1).]
@@ -90,7 +90,7 @@ data-value  = literal | NAME ;                      (* NAME: a const or a row na
   ([열지 않은 모듈이나 없는 레코드의 경로], "this path names neither a module in use nor a record"),
   ([내보내지 않은 이름], "the module exports nothing of this name"),
   ([자료 적재의 정의나 `use`], "a data source defines no words and uses no modules"),
-  ([자료 적재의 낱말 부르기], "a data source calls no words; only literals, const names and stores"),
+  ([자료 적재의 프로시저 부르기], "a data source calls no words; only literals, const names and stores"),
 )
 
 == 찾는 순서 <modules-search>
@@ -110,21 +110,21 @@ order-one = NAME | "get_order" ;
 붙인 모듈은 처음 자리를 지킨다.]
 
 #para("2")[코드의 맨 이름은 이 차례로 찾고, 처음 가진 것을 쓴다: 지역 변수와 매개변수, 이 소스(또는 세션)가 선언한 것, 핵
-낱말, 그리고 찾는 순서의 모듈들을 왼쪽부터. 그래서 소스의 이름과 핵 낱말은 순서에 무엇이 있든 뜻이 바뀌지 않고, 순서에 더한
-모듈이 전에 컴파일된 코드를 바꾸지 못한다. 핵 낱말과 이름이 같은 모듈의 낱말(`len` 곁의 `str.len`)은 경로로 쓴다. 경로는
+프로시저, 그리고 찾는 순서의 모듈들을 왼쪽부터. 그래서 소스의 이름과 핵 프로시저는 순서에 무엇이 있든 뜻이 바뀌지 않고, 순서에 더한
+모듈이 전에 컴파일된 코드를 바꾸지 못한다. 핵 프로시저와 이름이 같은 모듈의 프로시저(`len` 곁의 `str.len`)은 경로로 쓴다. 경로는
 전과 같이 읽는다.]
 
 #ex("spec", "13-order.pnx")
 #ex("spec", "13-order-core.pnx")
 
 #para("3")[`set_order` 는 소스나 세션 줄의 맨 위 수준에 필요한 만큼 쓸 수 있다. 하나하나가 그 자리부터 소스 끝까지의 순서를
-바꾸고, 세션은 다음 순서가 나올 때까지 뒤 줄들에 그것을 지닌다. 낱말은 컴파일될 때 그 이름들이 찾은 것을 쓴다.]
+바꾸고, 세션은 다음 순서가 나올 때까지 뒤 줄들에 그것을 지닌다. 프로시저는 컴파일될 때 그 이름들이 찾은 것을 쓴다.]
 
 #para("3a")[맨 위 수준에 홀로 쓴 `get_order` 는 그 자리의 찾는 순서를 `set_order` 가 받는 꼴로, `order: io str` 처럼
 `config.diag` 에 줄 0 의 진단으로 알리고(19.4 (1)), 아무것도 바꾸지 않는다. 소스를 검사할 때 알린다: 파일에서는 파일의 코드가 돌기 전이다.]
 
-#para("4")[찾는 순서로 닿는 이름은 이름 가리기 규칙(9.5)에 들지 않는다: 지역 변수는 순서에 있는 모듈의 낱말과 같은 이름일
-수 있고, 그 낱말 안에서는 지역 변수를 뜻한다.]
+#para("4")[찾는 순서로 닿는 이름은 이름 가리기 규칙(9.5)에 들지 않는다: 지역 변수는 순서에 있는 모듈의 프로시저와 같은 이름일
+수 있고, 그 프로시저 안에서는 지역 변수를 뜻한다.]
 
 #part("제약")
 
@@ -139,5 +139,5 @@ order-one = NAME | "get_order" ;
   ([모듈 이름이 아님], "set_order names modules, separated by spaces and ended by a period: set_order io str ."),
   ([모듈을 두 번], "this module is named twice in the order"),
   ([16 개보다 많음], "an order names at most 16 modules"),
-  ([언어의 낱말이 아닌 `search (…)`], "search is now set_order: set_order io str ."),
+  ([언어의 프로시저가 아닌 `search (…)`], "search is now set_order: set_order io str ."),
 )

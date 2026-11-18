@@ -1,25 +1,25 @@
 #import "/tools/common.typ": *
-// shape: host words follow the rules of clauses 9 to 12; their refusals are shown there (12-owned-*)
+// shape: host procedures follow the rules of clauses 9 to 12; their refusals are shown there (12-owned-*)
 
 = Standard host modules <host-modules>
 
-#para("1")[The modules of this clause are host words that come with the processor. They are not part of the language:
+#para("1")[The modules of this clause are host procedures that come with the processor. They are not part of the language:
 they exist only when a host registers them (13.3). `pnx` registers all seven. A host that embeds the library picks them
 one by one with `pinax_host_register(state, "io")` and the like (library `libpinax_host`). Using a module that was not
 registered is refused (13.1).]
 
-#para("2")[Host words keep the same rules as other words: their signatures are checked at load, words with `or fail`
+#para("2")[Host procedures keep the same rules as other procedures: their signatures are checked at load, procedures with `or fail`
 shall be guarded, and `owned` values are handed over exactly once.]
 
 #para("3")[What the operating system refuses is a failure (`or fail`). A missing file and the end of an input are
 `err.not_found`, bytes of the wrong form `err.format`, no room `err.full`, and any other refusal (permission, a device
-gone) `err.failed`. A word without `or fail` (`print`, `close`) does not report the operating system's refusal.]
+gone) `err.failed`. A procedure without `or fail` (`print`, `close`) does not report the operating system's refusal.]
 
 == `io` --- standard input and output <host-io>
 
 #para("1")[
 #table(columns: (auto, auto, 1fr), inset: 5pt, stroke: 0.5pt + luma(170),
-  [*Word*], [*Signature*], [*Meaning*],
+  [*Procedure*], [*Signature*], [*Meaning*],
   [`print` `println`], [`(s str)`], [writes to standard output; `println` adds a line break (LF)],
   [`eprint`], [`(s str)`], [writes to standard error],
   [`read_line`], [`(gives line str or fail)`], [one line of standard input, without its line break; `err.not_found` at the end of input],
@@ -31,9 +31,9 @@ Bytes are written unchanged; the same bytes come out on every operating system.]
 
 == `file` --- files <host-file>
 
-#para("1")[The handle type `file` is an open file. The opening words give an `owned file` and `close` takes it (12.4).
+#para("1")[The handle type `file` is an open file. The opening procedures give an `owned file` and `close` takes it (12.4).
 #table(columns: (auto, auto, 1fr), inset: 5pt, stroke: 0.5pt + luma(170),
-  [*Word*], [*Signature*], [*Meaning*],
+  [*Procedure*], [*Signature*], [*Meaning*],
   [`open_read` `open_write`], [`(path str gives owned file or fail)`], [opens for reading; for writing (made new or emptied)],
   [`write`], [`(s str, f file or fail)`], [writes bytes],
   [`read_line`], [`(f file gives line str or fail)`], [one line; `err.not_found` at the end],
@@ -51,7 +51,7 @@ A missing file is `err.not_found`.]
 
 #para("1")[
 #table(columns: (auto, auto, 1fr), inset: 5pt, stroke: 0.5pt + luma(170),
-  [*Word*], [*Signature*], [*Meaning*],
+  [*Procedure*], [*Signature*], [*Meaning*],
   [`clock.now_ms`], [`(gives int)`], [the time now, in milliseconds since 1970-01-01 UTC],
   [`clock.monotonic_ns`], [`(gives int)`], [nanoseconds of a clock that never goes back],
   [`clock.sleep`], [`(ms int)`], [waits; the state does nothing else meanwhile],
@@ -72,7 +72,7 @@ A missing file is `err.not_found`.]
 registers it in a state as a module of that name (`pinax_channel_register`, library `libpinax_host`). The states that
 registered the same channel pass messages to each other. They share no memory: a message is copied in and copied out.
 #table(columns: (auto, auto, 1fr), inset: 5pt, stroke: 0.5pt + luma(170),
-  [*Word*], [*Signature*], [*Meaning*],
+  [*Procedure*], [*Signature*], [*Meaning*],
   [`send`], [`(msg str or fail)`], [puts a message in; waits while the channel is full],
   [`receive`], [`(gives msg str or fail)`], [takes the message that came first; waits while it is empty],
   [`close`], [`()`], [no more messages go in],
@@ -103,7 +103,7 @@ all of them with `PINAX_ERR_DEADLOCK`.]
 host that embeds the library registers it only for scripts that may run commands (`pinax_host_register(state,
 "sh")`; `pinax_host_register_all` does not), and the WebAssembly host has no `sh`.
 #table(columns: (auto, auto, 1fr), inset: 5pt, stroke: 0.5pt + luma(170),
-  [*Word*], [*Signature*], [*Meaning*],
+  [*Procedure*], [*Signature*], [*Meaning*],
   [`sh.run`], [`(cmd str gives status int or fail)`], [runs `cmd`; its output goes where the program's goes, after what the program wrote. The status is the command's: a status other than 0 is not a failure. Fails only when no shell can be started],
   [`sh.output`], [`(cmd str gives out str or fail)`], [runs `cmd` and gives what it wrote on standard output, as written (with its line breaks), in the region],
   [`sh.output_into`], [`(cmd str, buf buffer gives status int or fail)`], [the same, appended to a buffer; `err.full` when it does not fit (the command is read to its end)],
@@ -134,7 +134,7 @@ write any database file the process can open (also by `ATTACH`): register it as 
 is the handle `sqlite` and a statement the handle `stmt`; both are `owned` when made and closed once (`sqlite.close`,
 `sqlite.finalize`).
 #table(columns: (auto, auto, 1fr), inset: 5pt, stroke: 0.5pt + luma(170),
-  [*Word*], [*Signature*], [*Meaning*],
+  [*Procedure*], [*Signature*], [*Meaning*],
   [`sqlite.open`], [`(path str gives owned sqlite or fail)`], [opens the database, creating it when it is not there; `":memory:"` is a database in memory and `""` a private temporary one. A path is a path: no `file:` names],
   [`sqlite.open_read`], [`(path str gives owned sqlite or fail)`], [opens it read only; `err.not_found` when it cannot be opened],
   [`sqlite.close`], [`(db owned sqlite)`], [closes the connection. A transaction left open is rolled back. Statements made on it keep working until they are finalized; the database closes with the last one],
@@ -156,7 +156,7 @@ is the handle `sqlite` and a statement the handle `stmt`; both are `owned` when 
   [`sqlite.step`], [`(s stmt gives more bool or fail)`], [takes one step: `true` when a row is there, `false` at the end],
   [`sqlite.col_count`], [`(s stmt gives n int)`], [the columns of the result],
   [`sqlite.col_name`], [`(i int, s stmt gives name str or fail)`], [the name of column `i` (from 0); `err.range` outside],
-  [`sqlite.col_kind`], [`(i int, s stmt gives k int)`], [the kind of the value in column `i` of the current row: `sqlite.k_null`, `k_int`, `k_real`, `k_text` or `k_blob` (pure words). With no row it is `k_null`. A column that is not there is the fault `range`],
+  [`sqlite.col_kind`], [`(i int, s stmt gives k int)`], [the kind of the value in column `i` of the current row: `sqlite.k_null`, `k_int`, `k_real`, `k_text` or `k_blob` (pure procedures). With no row it is `k_null`. A column that is not there is the fault `range`],
   [`sqlite.col_is_null`], [`(i int, s stmt gives bool)`], [whether it is null],
   [`sqlite.col_int`], [`(i int, s stmt gives n int or fail)`], [an integer column; any other kind is `err.format`, no row `err.not_found`],
   [`sqlite.col_str` `sqlite.col_blob`], [`(i int, s stmt gives v str or fail)`], [a text, or bytes, in the region. `col_str` also gives an integer or a real in its text form; `col_blob` takes only a blob],
@@ -172,11 +172,11 @@ is the handle `sqlite` and a statement the handle `stmt`; both are `owned` when 
 large), `err.not_found` (a file that cannot be opened, no row), `err.range` (a place that is not there), `err.format` (a
 file that is not a database, a statement that does not parse, a column of another kind), `err.state` (a statement used while
 it runs), and `err.failed` for the rest (a busy or locked database, a constraint, a read only database, an input or output
-error); `sqlite.last_code` tells which. This edition has no float type, so there are no words for a real: a real column
+error); `sqlite.last_code` tells which. This edition has no float type, so there are no procedures for a real: a real column
 is read as a text (`sqlite.col_str`) and moved with `str.to_dec` (7.5), and money is bound as an integer in its smallest
 unit.]
 
 #para("3")[The memory SQLite uses is limited for the process: past a hard limit (256 MiB unless the host sets another)
 an allocation fails as `err.full`. A connection is used by one thread at a time, as the state it belongs to is. A call
-that waits for the disk holds the thread; no word is awaitable. A connection opens with defensive settings: no
+that waits for the disk holds the thread; no procedure is awaitable. A connection opens with defensive settings: no
 extensions are loaded, a database cannot be damaged by `PRAGMA`, and a statement is at most 16 MiB of text.]

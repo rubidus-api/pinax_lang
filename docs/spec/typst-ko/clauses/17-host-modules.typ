@@ -3,22 +3,22 @@
 
 = 표준 호스트 모듈 <host-modules>
 
-#para("1")[이 절의 모듈은 처리기가 함께 내는 호스트 낱말이다. 언어의 일부가 아니다 --- 호스트가 등록할 때만
+#para("1")[이 절의 모듈은 처리기가 함께 내는 호스트 프로시저이다. 언어의 일부가 아니다 --- 호스트가 등록할 때만
 있다(13.3). `pnx` 는 일곱 모두를 등록한다. 라이브러리를 끼워 쓰는 호스트는 `pinax_host_register(state,
 "io")` 처럼 모듈 하나씩 고른다(라이브러리 `libpinax_host`). 등록하지 않은 모듈을 `use` 하면 거절된다(13.1).]
 
-#para("2")[호스트 낱말도 다른 낱말과 같은 규칙을 따른다: 서명은 적재 때 검사되고, `or fail` 이 있는 낱말은
+#para("2")[호스트 프로시저도 다른 프로시저와 같은 규칙을 따른다: 서명은 적재 때 검사되고, `or fail` 이 있는 프로시저는
 지켜야 하며, `owned` 값은 정확히 한 번 넘긴다.]
 
 #para("3")[운영체제가 거절한 일은 실패(`or fail`)다. 없는 파일과 입력의 끝은 `err.not_found`, 바이트가 모양에 맞지 않으면
-`err.format`, 자리가 모자라면 `err.full`, 그 밖의 거절(권한, 끊긴 장치)은 `err.failed` 다. `or fail` 이 없는 낱말(`print`,
+`err.format`, 자리가 모자라면 `err.full`, 그 밖의 거절(권한, 끊긴 장치)은 `err.failed` 다. `or fail` 이 없는 프로시저(`print`,
 `close`)은 운영체제의 거절을 알리지 않는다.]
 
 == `io` --- 표준 입출력 <host-io>
 
 #para("1")[
 #table(columns: (auto, auto, 1fr), inset: 5pt, stroke: 0.5pt + luma(170),
-  [*낱말*], [*서명*], [*뜻*],
+  [*프로시저*], [*서명*], [*뜻*],
   [`print` `println`], [`(s str)`], [표준 출력에 쓴다. `println` 은 줄바꿈(LF)을 붙인다],
   [`eprint`], [`(s str)`], [표준 오류에 쓴다],
   [`read_line`], [`(gives line str or fail)`], [표준 입력의 한 줄. 줄 끝은 뗀다. 입력이 끝나면 `err.not_found`],
@@ -30,9 +30,9 @@
 
 == `file` --- 파일 <host-file>
 
-#para("1")[핸들 타입 `file` 은 열린 파일이다. 여는 낱말이 `owned file` 을 주고, `close` 가 받는다(12.4).
+#para("1")[핸들 타입 `file` 은 열린 파일이다. 여는 프로시저가 `owned file` 을 주고, `close` 가 받는다(12.4).
 #table(columns: (auto, auto, 1fr), inset: 5pt, stroke: 0.5pt + luma(170),
-  [*낱말*], [*서명*], [*뜻*],
+  [*프로시저*], [*서명*], [*뜻*],
   [`open_read` `open_write`], [`(path str gives owned file or fail)`], [읽기로, 쓰기로(새로 만들거나 비우고) 연다],
   [`write`], [`(s str, f file or fail)`], [바이트를 쓴다],
   [`read_line`], [`(f file gives line str or fail)`], [한 줄. 끝이면 `err.not_found`],
@@ -50,7 +50,7 @@
 
 #para("1")[
 #table(columns: (auto, auto, 1fr), inset: 5pt, stroke: 0.5pt + luma(170),
-  [*낱말*], [*서명*], [*뜻*],
+  [*프로시저*], [*서명*], [*뜻*],
   [`clock.now_ms`], [`(gives int)`], [지금 시각, 1970-01-01 UTC 부터의 밀리초],
   [`clock.monotonic_ns`], [`(gives int)`], [거꾸로 가지 않는 시계의 나노초],
   [`clock.sleep`], [`(ms int)`], [멈춰 기다린다. 그동안 상태는 다른 일을 하지 않는다],
@@ -71,7 +71,7 @@
 그 이름의 모듈로 등록한다(`pinax_channel_register`, 라이브러리 `libpinax_host`). 같은 채널을 등록한 상태들이
 메시지를 주고받는다. 상태끼리 함께 쓰는 메모리는 없다: 메시지는 들어갈 때와 나올 때 복사된다.
 #table(columns: (auto, auto, 1fr), inset: 5pt, stroke: 0.5pt + luma(170),
-  [*낱말*], [*서명*], [*뜻*],
+  [*프로시저*], [*서명*], [*뜻*],
   [`send`], [`(msg str or fail)`], [메시지를 넣는다. 채널이 차 있으면 기다린다],
   [`receive`], [`(gives msg str or fail)`], [가장 먼저 들어온 메시지를 꺼낸다. 비어 있으면 기다린다],
   [`close`], [`()`], [더는 넣지 못하게 한다],
@@ -101,14 +101,14 @@
 라이브러리를 넣는 호스트는 명령을 돌려도 되는 스크립트에만 등록한다(`pinax_host_register(state, "sh")`.
 `pinax_host_register_all` 은 등록하지 않는다). WebAssembly 호스트에는 `sh` 가 없다.
 #table(columns: (auto, auto, 1fr), inset: 5pt, stroke: 0.5pt + luma(170),
-  [*낱말*], [*서명*], [*뜻*],
+  [*프로시저*], [*서명*], [*뜻*],
   [`sh.run`], [`(cmd str gives status int or fail)`], [`cmd` 를 돌린다. 그 출력은 프로그램이 쓴 것 뒤에, 프로그램의 출력이 가는 곳으로 간다. 상태는 명령의 것이다: 0 이 아닌 상태는 실패가 아니다. 셸을 띄우지 못할 때만 실패한다],
   [`sh.output`], [`(cmd str gives out str or fail)`], [`cmd` 를 돌리고, 그것이 표준 출력에 쓴 것을 쓴 그대로(줄바꿈과 함께) 영역에 준다],
   [`sh.output_into`], [`(cmd str, buf buffer gives status int or fail)`], [같은 것을 버퍼에 덧붙인다. 들어가지 않으면 `err.full`(명령은 끝까지 읽는다)],
   [`sh.open_read`], [`(cmd str gives owned file or fail)`], [명령의 표준 출력에서 오는 관을 `file`(17.2)로 준다: `file.read_line`, `file.read`, `file.close`],
   [`sh.open_write`], [`(cmd str gives owned file or fail)`], [명령의 표준 입력으로 가는 관: `file.write`, `file.close`],
   [`sh.status`], [`(gives int)`], [마지막으로 끝난 명령의 상태: `run`, `output`, `output_into`, 또는 관의 `file.close`(명령이 끝나기를 기다린다)],
-  [`sh.quote`], [`(s str gives str)`], [`s` 를 시스템 셸의 낱말 하나로 만든다. 자료로 명령을 만들 때 쓴다: `/bin/sh` 에는 작은따옴표로, `cmd.exe` 에는 큰따옴표로 싼다(거기서 `%` 와 `!` 는 뜻을 지킨다)],
+  [`sh.quote`], [`(s str gives str)`], [`s` 를 시스템 셸의 프로시저 하나로 만든다. 자료로 명령을 만들 때 쓴다: `/bin/sh` 에는 작은따옴표로, `cmd.exe` 에는 큰따옴표로 싼다(거기서 `%` 와 `!` 는 뜻을 지킨다)],
   [`sh.cd`], [`(path str or fail)`], [프로세스의 작업 디렉터리를 바꾼다. 못 하면 `err.not_found`],
   [`sh.cwd`], [`(gives path str or fail)`], [작업 디렉터리],
   [`sh.setenv`], [`(name str, value str or fail)`], [뒤따르는 명령(과 `env.getenv`)이 볼 환경 변수를 정한다],
@@ -131,7 +131,7 @@
 파일을 읽고 쓸 수 있다(`ATTACH` 로도): `file` 을 등록하듯 등록한다. 연결은 핸들 `sqlite`, 문장은 핸들 `stmt` 이고,
 둘 다 만들 때 `owned` 이며 한 번만 닫는다(`sqlite.close`, `sqlite.finalize`).
 #table(columns: (auto, auto, 1fr), inset: 5pt, stroke: 0.5pt + luma(170),
-  [*낱말*], [*서명*], [*뜻*],
+  [*프로시저*], [*서명*], [*뜻*],
   [`sqlite.open`], [`(path str gives owned sqlite or fail)`], [데이터베이스를 연다. 없으면 만든다. `":memory:"` 는 메모리 안의 것, `""` 는 임시로 혼자 쓰는 것이다. 경로는 경로일 뿐이다: `file:` 이름은 없다],
   [`sqlite.open_read`], [`(path str gives owned sqlite or fail)`], [읽기 전용으로 연다. 열 수 없으면 `err.not_found`],
   [`sqlite.close`], [`(db owned sqlite)`], [연결을 닫는다. 열려 있던 거래는 되돌린다. 이 연결에서 만든 문장은 끝낼 때까지 계속 쓸 수 있고, 마지막 문장이 끝나면 데이터베이스가 닫힌다],
@@ -152,7 +152,7 @@
   [`sqlite.step`], [`(s stmt gives more bool or fail)`], [한 걸음. 줄이 있으면 `true`, 끝이면 `false`],
   [`sqlite.col_count`], [`(s stmt gives n int)`], [결과의 열 수],
   [`sqlite.col_name`], [`(i int, s stmt gives name str or fail)`], [열 `i`(0부터)의 이름. 밖은 `err.range`],
-  [`sqlite.col_kind`], [`(i int, s stmt gives k int)`], [현재 줄의 열 `i` 에 든 값의 종류: `sqlite.k_null`, `k_int`, `k_real`, `k_text`, `k_blob`(순수 낱말)과 견준다. 줄이 없으면 `k_null`. 없는 열은 결함 `range`],
+  [`sqlite.col_kind`], [`(i int, s stmt gives k int)`], [현재 줄의 열 `i` 에 든 값의 종류: `sqlite.k_null`, `k_int`, `k_real`, `k_text`, `k_blob`(순수 프로시저)와 견준다. 줄이 없으면 `k_null`. 없는 열은 결함 `range`],
   [`sqlite.col_is_null`], [`(i int, s stmt gives bool)`], [null 인가],
   [`sqlite.col_int`], [`(i int, s stmt gives n int or fail)`], [정수 열. 다른 종류는 `err.format`, 줄이 없으면 `err.not_found`],
   [`sqlite.col_str` `sqlite.col_blob`], [`(i int, s stmt gives v str or fail)`], [글이나 바이트를 영역에 준다. `col_str` 는 정수와 실수도 글 꼴로 주고, `col_blob` 은 blob 만 받는다],
@@ -167,10 +167,10 @@
 #para("2")[SQLite 의 거절은 다음 코드의 실패다: `err.full`(메모리 부족, 디스크 가득, 너무 큰 값), `err.not_found`(열 수 없는
 파일, 줄 없음), `err.range`(없는 자리), `err.format`(데이터베이스가 아닌 파일, 해석되지 않는 문장, 다른 종류의 열),
 `err.state`(돌고 있는 문장을 쓴 것), 나머지는 `err.failed`(바쁘거나 잠긴 데이터베이스, 제약, 읽기 전용, 입출력 오류).
-어느 것인지는 `sqlite.last_code` 가 말한다. 이 판에는 float 형이 없어서 실수를 위한 낱말이 없다: 실수 열은 글로 읽고
+어느 것인지는 `sqlite.last_code` 가 말한다. 이 판에는 float 형이 없어서 실수를 위한 프로시저가 없다: 실수 열은 글로 읽고
 (`sqlite.col_str`) `str.to_dec`(7.5)로 옮기며, 돈은 가장 작은 단위의 정수로 묶는다.]
 
 #para("3")[SQLite 가 쓰는 메모리는 프로세스에 한도가 있다: 센 한도(호스트가 달리 정하지 않으면 256 MiB)를 넘는
 할당은 `err.full` 로 실패한다. 연결은 한 번에 한 스레드가 쓴다(속한 상태가 그렇듯). 디스크를 기다리는 호출은 스레드를
-붙든다: 기다릴 수 있는 낱말은 없다. 연결은 방어 설정으로 열린다: 확장은 불러오지 않고, `PRAGMA` 로 데이터베이스를
+붙든다: 기다릴 수 있는 프로시저는 없다. 연결은 방어 설정으로 열린다: 확장은 불러오지 않고, `PRAGMA` 로 데이터베이스를
 깨뜨릴 수 없으며, 문장은 글로 16 MiB 까지다.]

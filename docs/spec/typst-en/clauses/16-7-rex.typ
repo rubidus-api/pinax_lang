@@ -33,11 +33,11 @@ There are no back references, lookaround, Unicode properties or named groups.]
 #para("4")[A pattern that repeats a body able to match the empty text (such as `(a*)*`) may give other captures than
 Perl or Python.]
 
-=== Words
+=== Procedures
 
 #para("5")[`re` is a `regex` value. "The match" is the range narrowed by `\zs` and `\ze`.
 #table(columns: (auto, auto, 1fr), inset: 5pt, stroke: 0.5pt + luma(170),
-  [*Word*], [*Signature*], [*Meaning*],
+  [*Procedure*], [*Signature*], [*Meaning*],
   [`rx`], [`(pat gives regex)`], [makes the program at load; `pat` is a literal or a `const`],
   [`compile`], [`(pat str gives regex or fail)`], [makes it while running; a malformed pattern is `err.format`; the program lies in the region],
   [`is_match`], [`(s str, re gives bool)`], [is there a match],
@@ -82,6 +82,6 @@ fault `full`. The search below comes after the region was nearly filled.]
   ([A pattern for `rx` that is not a constant], "rx takes a string literal or a const name; a pattern made while running is rex.compile"),
   ([A count that goes downwards], "a counted repetition goes downwards"),
   ([A back reference], "back references are not supported"),
-  ([A `str` where a `regex` goes], "this word takes a str and a regex: s re rex.match"),
+  ([A `str` where a `regex` goes], "this procedure takes a str and a regex: s re rex.match"),
   ([A group parameter that is not a `str`], "the groups are named str parameters"),
 )

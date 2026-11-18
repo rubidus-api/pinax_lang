@@ -29,11 +29,11 @@
 
 === 쓰기
 
-#para("5")[쓰는 낱말은 모두 버퍼에 붙이고, 자리가 모자라면 `err.full` 로 실패한다. 쉼표는 낱말이 알아서 넣는다.
+#para("5")[쓰는 프로시저는 모두 버퍼에 붙이고, 자리가 모자라면 `err.full` 로 실패한다. 쉼표는 프로시저가 알아서 넣는다.
 #table(columns: (auto, auto), inset: 5pt, stroke: 0.5pt + luma(170),
-  [*낱말*], [*서명*],
+  [*프로시저*], [*서명*],
   [`begin_object` `end_object` `begin_array` `end_array` `put_null`], [`(buf or fail)`],
-  [`put_key` `put_str`], [`(s str, buf or fail)`. 이스케이프는 낱말이 한다],
+  [`put_key` `put_str`], [`(s str, buf or fail)`. 이스케이프는 프로시저가 한다],
   [`put_int`], [`(n int, buf or fail)`],
   [`put_dec`], [`(d dec N, buf or fail)`],
   [`put_bool`], [`(b bool, buf or fail)`],
@@ -58,7 +58,7 @@
 #ex("spec", "16-json-path.pnx")
 
 #para("5b")[레일(10.6): `s json.items` 는 배열 `s` 의 원소를, `s json.members` 는 객체 `s` 의 멤버를 훑고, `path s json.items_at` 과
-`path s json.members_at` 은 경로가 가리키는 배열이나 객체를 훑는다(낱말 하나에는 서명이 하나라 경로가 있는 꼴은 따로 낱말이다). 한 바퀴는
+`path s json.members_at` 은 경로가 가리키는 배열이나 객체를 훑는다(프로시저 하나에는 서명이 하나라 경로가 있는 꼴은 따로 프로시저이다). 한 바퀴는
 원소를 `(kind int, value str)`, 멤버를 `(key str, kind int, value str)` 로 주고 `each` 의 블록은 맨 위부터 받는다(`do to v to k`,
 `do to v to k to key`). kind 와 value 는 `json.next` 의 것이고 객체나 배열만 다시 훑을 수 있게 적힌 그대로 통째로 준다. 그 자리가 배열(객체)이
 아닌 글은 `err.format`, 아무것도 가리키지 않는 경로는 `err.not_found` 이고, 좋은 원소 몇 개 뒤에 깨진 글은 깨진 곳에 닿은 바퀴에서 `err.format`

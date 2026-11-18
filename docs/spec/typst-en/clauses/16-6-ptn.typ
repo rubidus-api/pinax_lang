@@ -22,11 +22,11 @@
 
 #ex("spec", "16-ptn-classes.pnx")
 
-=== Words
+=== Procedures
 
 #para("3")[
 #table(columns: (auto, auto, 1fr), inset: 5pt, stroke: 0.5pt + luma(170),
-  [*Word*], [*Signature*], [*Meaning*],
+  [*Procedure*], [*Signature*], [*Meaning*],
   [`is_match`], [`(s str, pat gives bool)`], [is there a match anywhere],
   [`match`], [`(s str, pat gives str or fail)`], [a view of the first match; `err.not_found` when none],
   [`capture`], [`(n int gives str)`], [capture `n` (1--9) of the last `match`; 0 is the whole match],
@@ -58,7 +58,7 @@ captures) is refused; so are `%b`, `%f`, the back reference `%1` and the positio
 #para("8")[A `capture` whose `n` the last match did not make, or with no match yet, is the fault `range`.]
 #ex("spec", "16-ptn-capture-none.pnx")
 
-#para("9")[Matching goes back and tries again. A word that takes more than 2#super[24] steps in one call stops with the
+#para("9")[Matching goes back and tries again. A procedure that takes more than 2#super[24] steps in one call stops with the
 fault `depth`. Rewrite such a pattern with fewer shortest repetitions (`-`), or use `rex`, which does not go back.]
 #ex("spec", "16-ptn-steps.pnx")
 

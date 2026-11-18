@@ -5,7 +5,7 @@
 #part("Syntax")
 ```ebnf
 extern = [ "export" ] "extern" c-name effect "from" STRING [ "as" NAME ] "end" ;
-c-name = NAME | reserved-word | STRING ;
+c-name = NAME | reserved-procedure | STRING ;
 ```
 
 #para("1")[`extern NAME signature from "LIBRARY" end` makes one C function a procedure. The processor does not open libraries
@@ -14,7 +14,7 @@ the host has set no resolver, or gives no function, the load is refused. So the 
 host's choice.]
 
 #para("2")[With `as OTHER` at the end the script calls it by that name; the name asked of the host stays the same. When
-the name of the C function is a core word or a reserved word, or holds characters that are not those of a name (it is
+the name of the C function is a core procedure or a reserved word, or holds characters that are not those of a name (it is
 then written in quotes), `as` is required.]
 
 #para("3")[The signature may have: as arguments `int` (and `bool`, narrow integers (7.6), declared types and other values
@@ -24,7 +24,7 @@ a null pointer from the function is a failure. `cstr` is a type of this signatur
 #para("4")[How the function is called: every `int` and every handle's object pointer is one `intptr_t` argument; a
 `str` is two arguments, `(const char *, size_t)`, not NUL-terminated; a `cstr` is one `const char *` to a
 NUL-terminated copy. At most eight C arguments. The result is read as one `intptr_t`. Functions of other shapes
-(floating point arguments, an `int` result, structs, variable arguments) are wrapped in host words.]
+(floating point arguments, an `int` result, structs, variable arguments) are wrapped in host procedures.]
 
 #ex("spec", "18-extern.c")
 
@@ -33,7 +33,7 @@ A host that runs scripts it does not trust sets no resolver.]
 
 #part("Constraints")
 
-#para("6")[A function whose name exists already (a core word, for instance) shall be given another name with `as`.]
+#para("6")[A function whose name exists already (a core procedure, for instance) shall be given another name with `as`.]
 #ex("spec", "18-extern-as.pnx")
 
 #para("7")[A signature that (3) does not allow is refused.]

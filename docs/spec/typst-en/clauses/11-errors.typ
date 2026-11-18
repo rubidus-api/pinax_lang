@@ -10,7 +10,7 @@ way to catch a fault.]
 == Error codes <errors-codes>
 
 #para("1")[Failures and faults have an #term("error code"), of type `err`. Codes are named by constants written after
-`err.` (no `use` needed). The word `err_text` gives the name of a code as a `str`.
+`err.` (no `use` needed). The procedure `err_text` gives the name of a code as a `str`.
 #table(columns: (auto, auto, 1fr), inset: 5pt, stroke: 0.5pt + luma(170),
   [*Constant*], [*Name*], [*Meaning*],
   [`err.failed`], [`failed`], [a failure in general; a false `assert`],
@@ -38,13 +38,13 @@ The values are those of `pinax_err` in the host interface (19.1). A program decl
 guard = "or_fail" | "or_return" | "or_else" [ "(" NAME ")" ] { body } "end" ;
 ```
 
-#para("1")[A word whose signature ends in `or fail` can fail. When it fails it has no results, only an error code.]
+#para("1")[A procedure whose signature ends in `or fail` can fail. When it fails it has no results, only an error code.]
 
-#para("2")[The token right after a call of a word that can fail shall be a #term("guard"):
+#para("2")[The token right after a call of a procedure that can fail shall be a #term("guard"):
 #table(columns: (auto, 1fr), inset: 5pt, stroke: 0.5pt + luma(170),
   [*Guard*], [*When the call fails*],
-  [`or_fail`], [this word fails too, with the same code; its signature shall have `or fail`],
-  [`or_return`], [this word ends; the stack there shall match its results],
+  [`or_fail`], [this procedure fails too, with the same code; its signature shall have `or fail`],
+  [`or_return`], [this procedure ends; the stack there shall match its results],
   [`or_else … end`], [the body makes the results in place of the call; `or_else to e … end` takes the code into the local `e`, and without `to` the code stands on the stack when the body starts, so `drop` it when it is not used; the body may also leave with `return`, `fail`, `break` or `continue`],
 )
 When the call succeeds the guard does nothing and the results stay on the stack.]
@@ -52,7 +52,7 @@ When the call succeeds the guard does nothing and the results stay on the stack.
 #para("2a")[A store into a `str N` place may be followed by a guard as well; it then fails with `range` when the text is
 too long (7.3 (4a)). After any other store a guard is refused.]
 
-#para("3")[`code fail` makes this word fail with that code. Its signature shall have `or fail`.]
+#para("3")[`code fail` makes this procedure fail with that code. Its signature shall have `or fail`.]
 
 #ex("spec", "11-failure.pnx")
 #ex("spec", "11-guards.pnx")
@@ -64,7 +64,7 @@ too long (7.3 (4a)). After any other store a guard is refused.]
 
 #part("Constraints")
 
-#para("5")[A word that can fail with no guard after it is refused: a failure cannot be passed over unnoticed.]
+#para("5")[A procedure that can fail with no guard after it is refused: a failure cannot be passed over unnoticed.]
 #ex("spec", "11-guard-missing.pnx")
 
 #para("6")[`or_fail` and `fail` are used only in words whose signature has `or fail`. Code outside definitions counts as
@@ -72,7 +72,7 @@ having no `or fail`.]
 #ex("spec", "11-or-fail-needs.pnx")
 #ex("spec", "11-fail-needs.pnx")
 
-#para("7")[The body of `or_else` shall leave what the word would have given on success, or leave.]
+#para("7")[The body of `or_else` shall leave what the procedure would have given on success, or leave.]
 #ex("spec", "11-or-else-stack.pnx")
 
 #para("8")[On the paths of failures too, `owned` values shall be handed over (12.4). A processor checks this at every
@@ -96,9 +96,9 @@ task's group is declared `apart` (14.4). The state remains and takes the next ru
 
 #para("3")[What a run that ends with a fault made in the region is rewound. The handles that run opened are closed by
 the processor, so on a path of faults `owned` values need no closing by hand. Values already stored in globals, and
-what host words have already done, stay.]
+what host procedures have already done, stay.]
 
-#para("4")[A conforming processor reports the kind of a fault and its line. `pnx` also shows the locals of the word the
+#para("4")[A conforming processor reports the kind of a fault and its line. `pnx` also shows the locals of the procedure the
 fault happened in.]
 
 #ex("spec", "11-div-zero.pnx")
@@ -106,8 +106,8 @@ fault happened in.]
 
 #part("Diagnostics")
 #diag(
-  ([No guard after a word that can fail], "a word that can fail is followed by or_fail, or_return or or_else"),
-  ([`or_fail` in a word without `or fail`], "or_fail passes the failure on, so this word needs `or fail` in its signature"),
-  ([`fail` in a word without `or fail`], "fail needs `or fail` in the signature of this word"),
-  ([The body of `or_else` leaves other values], "the body of or_else must leave what the word would have given, or leave the word or the loop"),
+  ([No guard after a procedure that can fail], "a procedure that can fail is followed by or_fail, or_return or or_else"),
+  ([`or_fail` in a procedure without `or fail`], "or_fail passes the failure on, so this procedure needs `or fail` in its signature"),
+  ([`fail` in a procedure without `or fail`], "fail needs `or fail` in the signature of this procedure"),
+  ([The body of `or_else` leaves other values], "the body of or_else must leave what the procedure would have given, or leave the procedure or the loop"),
 )

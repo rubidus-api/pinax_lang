@@ -25,7 +25,7 @@ Pinax 는 호스트 프로그램 안에서 돌도록 만든 언어입니다. 호
 - **믿지 못하는 코드도 돌릴 수 있습니다.** 어떤 소스도, 적재기가 받아들인 어떤 바이트코드도 호스트가 준 메모리 밖을 읽거나
   쓰지 않습니다. 명령 예산을 주면 실행은 언제나 돌아옵니다. 틀린 프로그램은 적재 때 거절되거나 결함으로 멈출 뿐,
   호스트를 무너뜨리지 않습니다. 호스트가 등록한 C 함수는 호스트 자신의 코드라서 이 약속 밖에 있고, 스크립트는 호스트가
-  등록한 낱말에만 닿습니다.
+  등록한 프로시저에만 닿습니다.
 
 ## 목표가 아닌 것
 
@@ -53,7 +53,7 @@ cc -std=c23 -o nob nob.c
                      # 그리고 build/dist/pinax-playground.html: 디스크에서 바로 여는 Pinax 터미널 페이지
 ```
 
-첫 스크립트 `hello.pnx` 입니다. 인자를 먼저 쓰고 그것을 받는 낱말을 뒤에 씁니다. 리터럴 밖의
+첫 스크립트 `hello.pnx` 입니다. 인자를 먼저 쓰고 그것을 받는 프로시저를 뒤에 씁니다. 리터럴 밖의
 구두점은 `.` `(` `)` `,` 넷뿐입니다.
 
 ```text
@@ -75,7 +75,7 @@ build/native/pnx hello.pnx        # 1 to 100 is 5050
 ## C 프로그램에 넣기
 
 호스트 인터페이스는 헤더 한 장 `include/pinax.h` 입니다. 호스트가 상태에 메모리를 주고,
-스크립트가 부를 C 함수를 등록하고, 소스를 적재하고, 낱말을 실행합니다.
+스크립트가 부를 C 함수를 등록하고, 소스를 적재하고, 프로시저를 실행합니다.
 
 ```c
 #include "pinax.h"
@@ -100,8 +100,8 @@ int main(void) {
     pinax_register(st, "calc", words, 1);
 
     static const char source[] =
-        "use calc\n"
-        "word answer (n int gives r int) n calc.tenfold 2 add end\n";
+        "use calc .\n"
+        "def answer n int gives r int do n calc.tenfold 2 add end\n";
     pinax_str text = {(const unsigned char *)source, sizeof source - 1};
     if (pinax_load(st, "main", text, PINAX_LOAD_CODE) != PINAX_OK)
         return 1;
@@ -124,7 +124,7 @@ cc -std=c99 -Iinclude host.c build/native/libpinax.a -lm -o host
 ```
 
 상태는 `block` 안에만 삽니다. Pinax 는 시스템에 메모리를 청하지 않습니다. 표준 호스트
-모듈(`io` `file` `clock` `random` `env`)은 `src/host/` 에 있는 평범한 호스트 낱말이고, 필요한
+모듈(`io` `file` `clock` `random` `env`)은 `src/host/` 에 있는 평범한 호스트 프로시저이고, 필요한
 호스트만 링크합니다. 같은 라이브러리 `libpinax_host.a` 에는 여러 상태를 몇 개의 스레드에서 돌리는
 호스트 루프와, 상태 사이로 메시지를 나르는 채널도 있습니다(`src/host/pinax_loop.h`). 읽기만 하는
 자료는 `shared` 로 선언하고 `pinax_share` 로 여러 상태에 복사 없이 빌려줍니다. 여러 프로세스라면

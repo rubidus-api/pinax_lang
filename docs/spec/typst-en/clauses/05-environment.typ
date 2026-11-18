@@ -25,8 +25,8 @@ threads. One state is used by one thread at a time.]
   handing over of `owned` values;
 + when all is kept, runs once, in the order written, the code written outside definitions.]
 
-#para("5")[The code outside definitions (#term("load code")) can use the words and globals of its source. The code
-inside a word definition runs when the word is called.]
+#para("5")[The code outside definitions (#term("load code")) can use the procedures and globals of its source. The code
+inside a procedure definition runs when the procedure is called.]
 
 #ex("spec", "05-load-order.pnx")
 
@@ -34,20 +34,20 @@ inside a word definition runs when the word is called.]
 
 #ex("spec", "05-refused-runs-nothing.pnx")
 
-#para("7")[When load code stops with a fault, the load fails, and the words and globals that source added are gone.
-Values that code stored into globals of sources loaded before, and what host words have already done, are not undone.]
+#para("7")[When load code stops with a fault, the load fails, and the procedures and globals that source added are gone.
+Values that code stored into globals of sources loaded before, and what host procedures have already done, are not undone.]
 
 #para("8")[There are two kinds of load. A #term("code load") accepts everything this document defines. A #term("data
-load") accepts declarations and values only and refuses word definitions, calls and control (13.4). It is for text that
+load") accepts declarations and values only and refuses procedure definitions, calls and control (13.4). It is for text that
 is not trusted, such as settings files.]
 
 == Running <env-run>
 
-#para("9")[The host finds a word by name and signature (clause 19), runs it with arguments and receives its results.
+#para("9")[The host finds a procedure by name and signature (clause 19), runs it with arguments and receives its results.
 A run has a budget of instructions. When it is used up the run remembers where it stopped and returns to the host; when
 the host continues it, it goes on from there. The budget does not change results.]
 
-#para("10")[Below is a whole host program. It registers one word, loads a source and calls a word of the script.]
+#para("10")[Below is a whole host program. It registers one procedure, loads a source and calls a procedure of the script.]
 
 #ex("spec", "05-embed.c")
 

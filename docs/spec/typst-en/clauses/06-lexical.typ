@@ -51,7 +51,7 @@ anything else is a name. So `remark` is a name, not a remark, and `12ab` is neit
 
 #para("2")[A #term("path") is names joined by dots, with no space around a dot. Inside a run of text a dot appears only
 in paths and in numbers (`2.5`). A dot that no name, digit, dot or quote follows is a token of its own: it ends a
-statement (10.8), also when it is written against the run before it (`7 sq.`). A path names a word of a module (`io.println`),
+statement (10.8), also when it is written against the run before it (`7 sq.`). A path names a procedure of a module (`io.println`),
 a field of a record (`p.x`) or a constant (`str.digit`).]
 
 #para("3")[A run after a dot is part of the path even when it is a reserved word (`json.array`). The first run of a
@@ -90,8 +90,8 @@ tag (`DOCUMENT`), does not close it.]
 #para("3")[A tool may read the remark right before a declaration as its description. There is no separate mark for
 documentation remarks.]
 
-#para("4")[Where a new name is due, the runs `rem`, `note` and `text` open neither a remark nor a text: they are words
-of the language there, and refused as names (9.5). A new name is due after a word that declares one (`def`, `forward`, `extern`, `test`,
+#para("4")[Where a new name is due, the runs `rem`, `note` and `text` open neither a remark nor a text: they are procedures
+of the language there, and refused as names (9.5). A new name is due after a procedure that declares one (`def`, `forward`, `extern`, `test`,
 `global`, `const`, `array`, `list`, `pool`, `queue`, `buffer`, `tasks`, `record`, `type`, `index`), after `to`, `set`
 and `as`, and right after a comma of a signature or at the name place of `to`, `or_else to`, `do to`, `ref` and `args`. In the body of a record `text` is always refused; `rem` and `note` are remarks there,
 as everywhere else.]
@@ -114,7 +114,7 @@ bit-digits  = bit { [ "_" ] bit } ;          (* bit: 0, 1 *)
 hexadecimal (`0x`) or binary (`0b`). There is no octal form: `0755` is decimal 755.]
 
 #para("2")[A sign is part of a number when it is attached to the digits: `-42` is one number. Addition and subtraction
-are the words `add` and `sub`; `+` and `-` are not characters of their own.]
+are the procedures `add` and `sub`; `+` and `-` are not characters of their own.]
 
 #para("3")[One underscore may stand between two digits; it is not part of the value. `0x` and `0b` are lower case only;
 hexadecimal digits `A`--`F` may be either case.]
@@ -198,7 +198,7 @@ punct    = "(" | ")" | "," | "." ;              (* a lone dot ends a statement, 
 token    = reserved | NAME | PATH | INT | CHAR | STRING | RAWSTRING | TEXT | BOOL | punct ;
 reserved = "rem" | "note" | "text" | "true" | "false" | "pinax"
          | "use" | "as" | "export"
-         | "word" | "global" | "const" | "array" | "list" | "pool" | "queue" | "buffer"
+         | "procedure" | "global" | "const" | "array" | "list" | "pool" | "queue" | "buffer"
          | "tasks" | "record" | "type" | "extern" | "from" | "forward" | "index" | "bound" | "shared"
          | "make" | "test" | "row" | "assign" | "big_endian" | "columns"
          | "gives" | "or" | "fail" | "owned"
@@ -208,21 +208,21 @@ reserved = "rem" | "note" | "text" | "true" | "false" | "pinax"
          | "def" | "ref" | "match" | "when" | "continue" | "args" ;
 ```
 
-#para("1")[The list of #term("reserved word")s is closed. A reserved word cannot be a name. The words of the old forms (`word` `while` `until` `case` `of` `cat`) stay reserved only
+#para("1")[The list of #term("reserved word")s is closed. A reserved word cannot be a name. The names of the old forms (`word` `while` `until` `case` `of` `cat`) stay reserved only
 so that they are refused: using one is refused with a message that names the new form (annex B).]
 
-#para("2")[`or` is a reserved word only inside a signature (`or fail`). In the body of a procedure `or` is a core word
+#para("2")[`or` is a reserved word only inside a signature (`or fail`). In the body of a procedure `or` is a core procedure
 (logical or).]
 
 #para("3")[The only punctuation is `(` `)` `,` and the dot that ends a statement (6.2 (2)). Each is a token of its own
 even when written against other text: `7 sq.` is three tokens.]
 
-#para("3a")[Lists that a word reads when it is compiled (names, a signature, a size, the items of `args`) are not wrapped in
-parentheses; they follow the word: names (`to a`, `set_order io str .`), a signature (`def sq n int gives int do … end`), a size
-(`str 32`), items (`args "id=" id . cat`). A list ends with a period or with a word such as `do` or `end`. The values a word takes
+#para("3a")[Lists that a procedure reads when it is compiled (names, a signature, a size, the items of `args`) are not wrapped in
+parentheses; they follow the procedure: names (`to a`, `set_order io str .`), a signature (`def sq n int gives int do … end`), a size
+(`str 32`), items (`args "id=" id . cat`). A list ends with a period or with a procedure such as `do` or `end`. The values a procedure takes
 when it runs come before it (`2 3 add`). Parentheses are left only in the value lists of `assign` and `row`.]
 
-#para("4")[The names of types (`int` `str` `bool` …) and of core words (`add` `dup` …) are not reserved words but names
+#para("4")[The names of types (`int` `str` `bool` …) and of core procedures (`add` `dup` …) are not reserved words but names
 declared in advance. Declaring them again is refused by the rule against hiding names (9.5).]
 
 #para("5")[`make` is reserved for a future feature and refused when used (annex D).]
@@ -250,7 +250,7 @@ source follows. This document defines version 2. Without it, a source is read as
   ([A character not allowed outside literals and remarks], "this character is not allowed outside literals and remarks"),
   ([A space or no name after a dot], "a dot is followed by a name, with no space"),
   ([A number runs into a letter, underscore or dot], "a number must not run into letters, an underscore or a dot"),
-  ([A space between a sign and its digits], "a sign is attached to its number; arithmetic uses words (add, sub)"),
+  ([A space between a sign and its digits], "a sign is attached to its number; arithmetic uses procedures (add, sub)"),
   ([An integer beyond 64 bits], "the integer does not fit in 64 bits"),
   ([More than 18 digits after the point], "a decimal has at most 18 digits after the point"),
   ([A decimal beyond 64 bits], "the decimal does not fit in 64 bits at its scale"),

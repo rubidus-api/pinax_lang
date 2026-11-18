@@ -7,10 +7,10 @@ conforming program does when it runs, how a processor refuses a program that doe
 drives a processor.]
 
 #para("2")[This document defines:
-- the characters and tokens of a source (clause 6), types and values (7), declarations (8), words and the stack (9),
+- the characters and tokens of a source (clause 6), types and values (7), declarations (8), procedures and the stack (9),
   control (10);
 - failures and faults (11), memory (12), modules (13), tasks (14);
-- the core words (15), the standard modules (16), the host modules (17), calling C functions (18);
+- the core procedures (15), the standard modules (16), the host modules (17), calling C functions (18);
 - the host interface (19) and the command `pnx` (20);
 - annexes: the whole grammar (A), the diagnostics (B), size limits (C), what is not in this edition (D).]
 
@@ -25,8 +25,8 @@ implementation in the same repository (`pnx`, `libpinax`), and the output printe
 example and the text disagree, the text wins.]
 
 #note[Pinax is a scripting language that runs inside one fixed block of memory. It has no garbage collector, no heap
-allocation, no pointers, no objects, no dynamic types and no exceptions. On the surface it is a typed Forth: words pass
-values over a stack, and inside a word values have names. The rest of this document spells that sentence out.]
+allocation, no pointers, no objects, no dynamic types and no exceptions. On the surface it is a typed Forth: procedures pass
+values over a stack, and inside a procedure values have names. The rest of this document spells that sentence out.]
 
 == How to read this document <scope-reading>
 
@@ -40,7 +40,7 @@ diagnostic messages of the clauses in one place.]
 - #strong[Syntax]: how it is written in a source (EBNF, annex A).
 - #strong[Constraints]: what is refused at load. Each constraint has a refused example and its message.
 - #strong[Semantics]: what running does.
-- #strong[Faults and failures]: when a run stops, and when a word fails.
+- #strong[Faults and failures]: when a run stops, and when a procedure fails.
 - #strong[Diagnostics]: a table of the messages the processor gives when it refuses.
 - #strong[Examples]: programs that were run, with their output. They show the rules; the text defines them.]
 

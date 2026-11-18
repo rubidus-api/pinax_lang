@@ -3,7 +3,7 @@
 = Values and the stack <values>
 
 #opening[Chapter 1 (the order of code, `pnx`, remarks).][
-- What is the stack, and how do values and words move on it?
+- What is the stack, and how do values and procedures move on it?
 - How is an ordinary formula put into the order Pinax reads?
 - When does the processor check the stack, and what does it refuse?
 - What values does Pinax have, and what happens when an integer overflows?
@@ -21,7 +21,7 @@ and a plate is taken from the top. Nobody pulls a plate out of the middle.
 Pinax code runs on this stack. The processor reads the code left to right, top to bottom, one token at a time, and
 does one of two things with each token.
 + A #strong[value] (`2`, `"abc"`, `true`) goes on top of the stack.
-+ A #strong[word] (`add`, `io.println`) is set to work. The word takes as many values as it needs off the top, does its
++ A #strong[procedure] (`add`, `io.println`) is set to work. The procedure takes as many values as it needs off the top, does its
   work, and puts its results, if any, on top.
 
 Follow `2 3 add` by these rules. This book uses tables like the one below often. The top of the stack is written on
@@ -30,7 +30,7 @@ the #strong[right], and `—` is an empty stack.
 #trace(
   ("2", "2", [A value: it goes on.]),
   ("3", "2 3", [A value: it goes on top of `2`. The top is now `3`.]),
-  ("add", "5", [A word: it takes the top two values `2` and `3` off, adds them, and puts the result `5` on.]),
+  ("add", "5", [A procedure: it takes the top two values `2` and `3` off, adds them, and puts the result `5` on.]),
 )
 
 What other languages write `2 + 3` is `2 3 add` in Pinax. The values come first and the work after: this is the #strong[postfix]
@@ -62,14 +62,14 @@ adds the `2` left below to that result. So it is $2 + 3 times 4 = 14$.
   ("add", "14", [Adds `2` and `12`.]),
 )
 
-Without parentheses, the order of the computation is the order of the text. Where a word is written decides what is
+Without parentheses, the order of the computation is the order of the text. Where a procedure is written decides what is
 computed first.
 
 == Turning a formula into postfix
 
 A familiar formula is carried over in this order.
 + With parentheses, carry the inside over first.
-+ Write one operation as "left value, right value, operation word": $a - b$ is `a b sub`.
++ Write one operation as "left value, right value, operation procedure": $a - b$ is `a b sub`.
 + Carry multiplication and division over before addition and subtraction, as in arithmetic.
 + Treat a carried-over piece as one value again, and put it where the left or right value of the outer operation goes.
 
@@ -90,7 +90,7 @@ makes `8 3 sub 2 4 add mul`.
 name (the locals of chapter 4). With `8 3 sub to left` you do not have to keep the stack in your head for long. Pinax
 keeps the stack short and asks for names when it grows.]
 
-== Words where order matters
+== Procedures where order matters
 
 Addition and multiplication give the same result whichever way round the two values are. Subtraction, division,
 remainder and comparison do not. There is one rule: #strong[the value put on first is on the left]. `10 3 sub` is
@@ -100,13 +100,13 @@ $10 - 3$, and `3 10 lt` asks "is $3 < 10$?".
 
 `div` divides whole numbers and throws the remainder away; `mod` gives the remainder.
 
-== Five words that rearrange the stack
+== Five procedures that rearrange the stack
 
-Five words change only the shape of the stack and compute nothing. In the table `a` and `b` are any values, and the
+Five procedures change only the shape of the stack and compute nothing. In the table `a` and `b` are any values, and the
 right is the top.
 
 #table(columns: (auto, auto, auto, 1fr), inset: 5pt, stroke: 0.5pt + luma(170),
-  table.header([*Word*], [*Before*], [*After*], [*What it does*]),
+  table.header([*Procedure*], [*Before*], [*After*], [*What it does*]),
   [`dup`], [`a`], [`a a`], [Makes one more of the top value.],
   [`drop`], [`a`], [`—`], [Throws the top value away.],
   [`swap`], [`a b`], [`b a`], [Exchanges the top two values.],
@@ -127,7 +127,7 @@ the printing --- otherwise a value is left at the end of the program and the pro
   ("drop", "—", [Throws the remaining `5` away.]),
 )
 
-#mistake[There is a `rot` that brings the third value to the top][There is not. Words that reach deep into the stack,
+#mistake[There is a `rot` that brings the third value to the top][There is not. Procedures that reach deep into the stack,
 like Forth's `rot` or `pick`, are left out on purpose: once more than three values are in play the stack is hard to
 follow in your head. Give the values names instead (named inputs in chapter 3, locals in chapter 4).
 #ex("manual", "02-rot.pnx")]
@@ -141,7 +141,7 @@ This book mostly uses four types:
   digits if you like. A character `'A'` is the `u8` of its byte. `u8` `u16` `u32` `u64` `i8` `i16` `i32` are the
   integer types of those widths: `255 u8` makes one from an `int`, `raw` gives the `int` back, and none of them mixes
   with `int` in arithmetic.
-- `bool` --- `true` and `false`; comparison words (`lt` `eq` …) give them and `if` takes them.
+- `bool` --- `true` and `false`; comparison procedures (`lt` `eq` …) give them and `if` takes them.
 - `str` --- strings; chapter 5 covers them.
 - `err` --- the reason for a failure; see chapter 8.
 
@@ -162,7 +162,7 @@ Second, #strong[the wrong type]. A string and an integer cannot be added.
 
 #ex("manual", "02-types-mixed.pnx")
 
-Third, #strong[values left over]. A value that nothing took when the program ends (and when the body of a word ends,
+Third, #strong[values left over]. A value that nothing took when the program ends (and when the body of a procedure ends,
 chapter 3) is refused: a left-over value is usually the trace of forgotten work.
 
 #ex("manual", "02-leftover.pnx")
@@ -170,7 +170,7 @@ chapter 3) is refused: a left-over value is usually the trace of forgotten work.
 `5:1` in the message is the first column of the fifth line: where the source ends. Left-over values can only be known
 at the end, so the end is pointed at.
 
-#mistake[The depth of the stack may change as a program runs][Languages like Forth allow words that leave a different
+#mistake[The depth of the stack may change as a program runs][Languages like Forth allow procedures that leave a different
 number of values depending on what happens. Pinax does not. At every place the depth and types of the stack are one and
 fixed. So the two branches of an `if` leave the same stack, and one turn of a loop leaves the stack as it was
 (chapter 4). This rule is what makes the checks above possible.]
@@ -180,7 +180,7 @@ fixed. So the two branches of an `if` leave the same stack, and one turn of a lo
 #ex("manual", "02-overflow.pnx")
 
 A result beyond the range of `int` does not quietly wrap around. The run stops on the spot and the processor reports a
-#strong[fault]. `pnx` shows the line of the fault and the locals of the word. For arithmetic that wraps use
+#strong[fault]. `pnx` shows the line of the fault and the locals of the procedure. For arithmetic that wraps use
 `wrap_mul`, for arithmetic that stops at the edge `sat_mul`, and to receive overflow as a failure `chk_mul`.
 
 A fault is not the same as a refusal at load. Whether a sum overflows depends on the values and cannot be known before
@@ -202,11 +202,11 @@ is left over. When that matters, take the cents with `raw` and share them out yo
 #ex("manual", "02-dec-scales.pnx")]
 
 #summary[
-- Values go on the stack; a word takes values off the top, works, and puts its results on (standard 9.3).
+- Values go on the stack; a procedure takes values off the top, works, and puts its results on (standard 9.3).
 - The value put on first is on the left: `10 3 sub` is 7 (standard 9.3).
-- The stack words are `dup` `drop` `swap` `over` `nip` only; when values pile up, name them (9.3).
+- The stack procedures are `dup` `drop` `swap` `over` `nip` only; when values pile up, name them (9.3).
 - The processor checks the depth and types of the stack at load: too few values, the wrong type and values left over
   are refused (7.1, 9.2, 9.3).
 - A number with a point is a `dec N`: N digits after it, exact arithmetic, `rescale` to round (standard 7.5).
-- Integer overflow and division by zero are faults; other arithmetic words exist (7.1, 15.1).
+- Integer overflow and division by zero are faults; other arithmetic procedures exist (7.1, 15.1).
 ]

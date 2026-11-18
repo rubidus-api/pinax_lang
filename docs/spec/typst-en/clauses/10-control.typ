@@ -14,7 +14,7 @@ block   = "do" { "to" NAME } { body } "end"
         | "ref" NAME ;
 ```
 
-#para("1")[`end` closes the innermost open construct. The words that open one are `def` `forward` `extern` `test` `record` `do` `if`
+#para("1")[`end` closes the innermost open construct. The procedures that open one are `def` `forward` `extern` `test` `record` `do` `if`
 `loop` `match` `when` `otherwise` `or_else` `defer`. (`forward` and `extern` are closed by the `end` after their signature, and so is `type NAME proc … end`.) (A `text` literal and a `note` remark close on their own tag, 6.3,
 6.5.)]
 
@@ -69,7 +69,7 @@ outer one, but a `break 2 .` written in the inner loop does.]
 block either; in the block of `each`, `each_index` or `times` they leave that block (10.6 (4)).]
 #ex("spec", "10-while-outside.pnx")
 
-#para("7")[Code right after a leaving word (`return` `fail` `break` `continue`) or a loop that never ends, in the same branch, can
+#para("7")[Code right after a leaving procedure (`return` `fail` `break` `continue`) or a loop that never ends, in the same branch, can
 never be reached and is refused.]
 #ex("spec", "10-unreachable.pnx")
 
@@ -109,10 +109,10 @@ refused.]
 
 == Blocks <control-blocks>
 
-#para("1")[`do … end` is a #term("block"). A block is given to a combining word only (there is no `do … end` standing by
+#para("1")[`do … end` is a #term("block"). A block is given to a combining procedure only (there is no `do … end` standing by
 itself); a block value is written with `def` (`def signature do … end`, (2a)). A block is used in two ways.
-- An #term("inline block") --- a block given directly to a combining word (10.6). It is expanded in place, so it can
-  read and store the locals around it, and a `return` inside it leaves the word around it.
+- An #term("inline block") --- a block given directly to a combining procedure (10.6). It is expanded in place, so it can
+  read and store the locals around it, and a `return` inside it leaves the procedure around it.
 - A #term("block value") --- `def signature do … end` stored in a local, or given to a parameter of a `proc … end` type (7.4). It becomes a
   nameless procedure, called with `call`. It does not see the locals around it (it captures nothing); it sees globals.]
 
@@ -124,8 +124,8 @@ put first, so `i` is on top). The signature of a block value is that of a proced
 #ex("spec", "10-value-block.pnx")
 
 #para("2a")[`ref NAME` gives a procedure defined with `def`, of this source or exported by a module in use (`ref by_len`, `ref geo.area`),
-as a value: its type is `proc` with the procedure's signature, and `call` calls it. Any other word is given in a block with the block's
-signature; inputs given as types only stay on the stack (9.2 (2)), so the block's body is the word alone:
+as a value: its type is `proc` with the procedure's signature, and `call` calls it. Any other procedure is given in a block with the block's
+signature; inputs given as types only stay on the stack (9.2 (2)), so the block's body is the procedure alone:
 `def str, str gives bool do str.starts_with end`.]
 
 #ex("spec", "10-word-value.pnx")
@@ -138,17 +138,17 @@ signature; inputs given as types only stay on the stack (9.2 (2)), so the block'
 #para("4")[A block expanded into a loop (`each`, `times` and so on) shall leave the stack as it found it.]
 #ex("spec", "10-block-net.pnx")
 
-#para("4a")[A block value with no signature takes nothing, so a word in it that needs values is refused, and the message
+#para("4a")[A block value with no signature takes nothing, so a procedure in it that needs values is refused, and the message
 shows both forms of (2a).]
 #ex("spec", "10-word-value-bare.pnx")
 
 #para("4b")[A procedure declared with `forward` is given as a value only after its definition.]
 #ex("spec", "10-word-value-forward.pnx")
 
-== Rails and combining words <control-rails>
+== Rails and combining procedures <control-rails>
 
 #para("1")[A #term("rail") yields values one after another. A rail is not a value: it cannot be stored, and the
-combining word right after it shall take it. Together they make one loop. A rail is a #term("closed rail") when its length is known
+combining procedure right after it shall take it. Together they make one loop. A rail is a #term("closed rail") when its length is known
 before the walk and the element at any place can be read (`range`, an array, a list, `str.bytes`), and an #term("open rail") when it is not: the
 pieces are taken one after another from a source and the walk is made once (`str.split`, `str.lines`, `str.words`, `str.chars`, `ptn.matches`,
 `rex.matches`, `rex.split`, `csv.fields`, a pool). A rail is evaluated lazily: the loop takes one element at a time, in the order of the walk, and the blocks of the adapters run only
@@ -165,9 +165,9 @@ nothing is stored between the stages. These make rails:
   [`s csv.fields`], [the fields (16.9)],
 )]
 
-#para("2")[The combining words are below; the "block" column is what the block takes and gives.
+#para("2")[The combining procedures are below; the "block" column is what the block takes and gives.
 #table(columns: (auto, auto, 1fr), inset: 5pt, stroke: 0.5pt + luma(170),
-  [*Word*], [*Block*], [*Result*],
+  [*Procedure*], [*Block*], [*Result*],
   [`each`], [`(T)`], [none],
   [`each_index`], [`(T, i int)`], [none],
   [`fold`], [`(acc U, T gives U)`], [`U`; the first value goes before the rail: `0 xs do … end fold`],
@@ -213,7 +213,7 @@ zipped pair, and neither adapters nor ranges are zipped yet.]
 #para("1e")[A rail may give several values at a turn (`zip`, `json.items`, `json.members`, `toml.items`, `md.blocks`); the block of `each` binds as many
 names as the rail gives, the last pushed first, and `skip` and `head` apply to it but the adapters with a block do not. Some rails can fail while they are
 walked (the rails of `json`, `toml`, `md` and `sqlite.rows`): the text may be damaged after some good elements, the engine may fail. The failure ends the loop and is the
-failure of the word `each`, so it is taken as every failure is: `each` is followed by `or_fail`, `or_return` or `or_else`. The end of the elements is not a failure.
+failure of the procedure `each`, so it is taken as every failure is: `each` is followed by `or_fail`, `or_return` or `or_else`. The end of the elements is not a failure.
 The rows of a book of `sheet` need no rail of their own: `0 g sheet.rows range` and `0 g sheet.cols range` walk their numbers.]
 
 #ex("spec", "10-combinators.pnx")
@@ -226,11 +226,11 @@ destination may be a collection parameter (9.9).]
 
 #ex("spec", "10-map-into.pnx")
 
-#para("4")[A rail and its combining word make one loop, and in the block of `each`, `each_index` or `times`, `break .`
-leaves it and `continue .` goes to the next element: the rail stops and the code after the combining word runs. The rules of leaving a loop hold: the
+#para("4")[A rail and its combining procedure make one loop, and in the block of `each`, `each_index` or `times`, `break .`
+leaves it and `continue .` goes to the next element: the rail stops and the code after the combining procedure runs. The rules of leaving a loop hold: the
 stack is as it was when the block began (10.2 (2)), and the block's deferred code runs (10.7). A `break .` in a `loop` inside the
 block leaves that loop. `break N .` and `continue N .` count such blocks and `loop`s alike as levels (10.2 (1)); the operands of the inner
-blocks leave with them. The blocks of the other combining words, which give a result made from every element, are not left early,
+blocks leave with them. The blocks of the other combining procedures, which give a result made from every element, are not left early,
 and are not crossed.]
 #ex("spec", "10-leave-each.pnx")
 #ex("spec", "10-leave-two.pnx")
@@ -242,8 +242,8 @@ and are not crossed.]
 defer = "defer" { body } "end" ;
 ```
 
-#para("1")[`defer CODE end` writes code that runs when the enclosing block is left. The block is a word's body, a
-loop's body (at every turn) or the `do` block of a combining word (at every run). The code runs on every way out of that
+#para("1")[`defer CODE end` writes code that runs when the enclosing block is left. The block is a procedure's body, a
+loop's body (at every turn) or the `do` block of a combining procedure (at every run). The code runs on every way out of that
 block: the block's `end`, the end of a turn, `break`, `continue`, `return`, `or_return`,
 `or_fail` and `fail`. Several run in the reverse of the order they are written. They do not run when a fault ends the
 run (the state closes the handles then, 19.6).]
@@ -258,12 +258,12 @@ the value can still be lent.]
 
 #part("Constraints")
 
-#para("3")[`defer` is written right in a word's body, a loop's body or a `do` block. In a branch of `if`, `match` or
+#para("3")[`defer` is written right in a procedure's body, a loop's body or a `do` block. In a branch of `if`, `match` or
 `or_else`, or outside a definition, it is refused.]
 #ex("spec", "10-defer-branch.pnx")
 
 #para("4")[Deferred code leaves the stack as it found it and leaves nothing on it. It cannot hold `return` `fail`
-`break` `continue` `to` `set` `loop` `do` `match` `defer`, or `or_fail` `or_return`; a word that can fail is taken with
+`break` `continue` `to` `set` `loop` `do` `match` `defer`, or `or_fail` `or_return`; a procedure that can fail is taken with
 `or_else` inside it.]
 
 #para("5")[Giving an owned value that a defer took over, inside the block, is refused.]
@@ -274,22 +274,22 @@ the value can still be lent.]
   ([Two branches leave different stacks], "the two branches of this if leave different stacks"),
   ([A turn changes the stack], "one turn of a loop must leave the stack as it found it"),
   ([`break` `continue` outside a loop], "break and continue belong inside a loop"),
-  ([`break` in the block of a word that gives a result], "only the block of each, each_index or times is left early; this word gives a result made from every element"),
+  ([`break` in the block of a procedure that gives a result], "only the block of each, each_index or times is left early; this procedure gives a result made from every element"),
   ([`break N .` to a loop outside a `do` block], "a named loop outside this block is not left from inside it; break leaves the block"),
   ([Unreachable code], "this code cannot be reached: the code before it always leaves"),
   ([The same value twice in a `match`], "this value is already in an earlier branch of the case"),
   ([An expanded block changes the stack], "this block must leave the stack as it found it"),
   ([`return` outside a definition], "return belongs inside a definition"),
   ([A branch value that is not a constant], "a case value is a literal or the name of a const"),
-  ([A combining word on something that is not a rail], "only an array, a list or a pool is a rail (not a queue, a buffer or an index)"),
-  ([`defer` in a branch], "defer is written right in a word's body, a loop's body or a do block, not in a branch"),
+  ([A combining procedure on something that is not a rail], "only an array, a list or a pool is a rail (not a queue, a buffer or an index)"),
+  ([`defer` in a branch], "defer is written right in a procedure's body, a loop's body or a do block, not in a branch"),
   ([`defer` outside a definition], "defer belongs inside a definition"),
   ([Deferred code changes the stack], "a defer leaves the stack as it found it"),
-  ([A word that leaves, in deferred code], "a defer holds no return, fail, break, continue, to, set, loop, do, match or defer"),
-  ([`or_fail` `or_return` in deferred code], "a defer does not leave the word; a failure in it is taken with or_else"),
+  ([A procedure that leaves, in deferred code], "a defer holds no return, fail, break, continue, to, set, loop, do, match or defer"),
+  ([`or_fail` `or_return` in deferred code], "a defer does not leave the procedure; a failure in it is taken with or_else"),
   ([Giving a value a defer took over], "a defer gives this owned value when the block is left; here it can only be lent"),
-  ([Too few values in a block value with no signature], "a block without a signature takes nothing; a procedure of the program is given as ref NAME, any other word with the block's signature: def str, str gives bool do str.starts_with end"),
-  ([A forward procedure as a value before its definition], "a word declared with forward is given as a value only after its definition"),
+  ([Too few values in a block value with no signature], "a block without a signature takes nothing; a procedure of the program is given as ref NAME, any other procedure with the block's signature: def str, str gives bool do str.starts_with end"),
+  ([A forward procedure as a value before its definition], "a procedure declared with forward is given as a value only after its definition"),
 )
 
 == Ends of statements <control-ends>
@@ -302,7 +302,7 @@ code without them means what it meant before.]
 
 #para("3")[A dot is a #term("barrier"): every effect begun before it is finished before anything after it. The
 processor's part is to call the function the host gave with `pinax_on_barrier` (19.4 (3)); the host's part is to
-write what its host words hold back (standard output, a file's writes) and to wait for what they started in the
+write what its host procedures hold back (standard output, a file's writes) and to wait for what they started in the
 background. The end of the code of a load and the end of a session line are a dot, also when they end with a fault.
 In a source loaded as data the two mark statements and call nothing.]
 

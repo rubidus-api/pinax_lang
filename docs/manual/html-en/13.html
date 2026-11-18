@@ -78,7 +78,7 @@ n -&gt; 3
 show
 </code></pre><p class="ex-label">Output</p><pre><code data-lang="text">$ pnx 12-replace-by.pnx
 The Quick Brown Fox (4 letters)
-</code></pre></div><p>Three more words search. <code>rex.match</code> gives the first match and fails when there is none. <code>rex.matches</code> is a rail that runs the block once per match; the block takes the whole match and one <code>str</code> per group. <code>rex.split</code> is the rail of the pieces between matches. <code>ptn</code> has the same rail, <code>ptn.matches</code>.</p><div class="example run"><p class="ex-file"><code>12-rex-words.pnx</code></p><pre><code data-lang="pinax"><span style="color: #d73948">use</span> io .
+</code></pre></div><p>Three more procedures search. <code>rex.match</code> gives the first match and fails when there is none. <code>rex.matches</code> is a rail that runs the block once per match; the block takes the whole match and one <code>str</code> per group. <code>rex.split</code> is the rail of the pieces between matches. <code>ptn</code> has the same rail, <code>ptn.matches</code>.</p><div class="example run"><p class="ex-file"><code>12-rex-words.pnx</code></p><pre><code data-lang="pinax"><span style="color: #d73948">use</span> io .
 <span style="color: #d73948">use</span> <span style="color: #d73948">str</span> .
 <span style="color: #d73948">use</span> rex .
 <span style="color: #d73948">def</span> demo <span style="color: #d73948">do</span>

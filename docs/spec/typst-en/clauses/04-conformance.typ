@@ -17,17 +17,17 @@ program means (11.3).]
 
 #para("2a")[For every source, conforming or not, and for every bytecode container it accepts
 (`pinax_load_bytecode`), a conforming processor reads and writes no memory outside the state's block and the memory the
-host gave it (strings passed in, bound globals, shared storage), and the run of a word with a budget other than 0
+host gave it (strings passed in, bound globals, shared storage), and the run of a procedure with a budget other than 0
 returns after a bounded number of instructions (19.5). A container that could do otherwise is refused at load
 (`PINAX_ERR_FORMAT`). Images (19.9), share files (19.7) and bound memory are data the host vouches for: the processor
 checks their shape, not every byte.]
 
 #para("3")[The sentences of the diagnostics (the English messages in the tables of this document) are those of this
-implementation. Another processor may word them differently. What it refuses shall be the same, and the place it points
+implementation. Another processor may procedure them differently. What it refuses shall be the same, and the place it points
 at shall lie inside the offending token (this implementation points at the start of the token, or at the byte inside it
 where the error shows). Lines and columns count from 1; columns count bytes.]
 
-#para("4")[A processor may add words, modules and host functions not in this document. What it adds shall not change
+#para("4")[A processor may add procedures, modules and host functions not in this document. What it adds shall not change
 the meaning of a conforming program, and shall not use the reserved words (6.6) or the names this document defines.]
 
 #para("5")[What this document says it does not define (speed, the shape of instructions) is up to the processor. What

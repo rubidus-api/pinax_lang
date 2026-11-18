@@ -58,7 +58,7 @@ fills a row of a record with #word("json.unpack"): the row is written only when 
 
 CSV is written one field at a time. #word("csv.put") appends text (quoted when it holds a comma, a quote or a line
 break), `csv.put_int` `csv.put_dec` `csv.put_bool` numbers and booleans, and #word("csv.end_line") the end of the line;
-the commas between fields are the words' business. One row of a record as one line is `csv.pack`.
+the commas between fields are the procedures' business. One row of a record as one line is `csv.pack`.
 
 #ex("manual", "11-csv-write.pnx")
 
@@ -91,7 +91,7 @@ that turn, so the loop is followed by a guard.
 #ex("manual", "11-json-rails.pnx")
 
 #qa[Is there a tree after `json.at`?][No. Each call reads the text again from the front up to the value it wants, so for many values from one large
-document the token words, which read it once, are cheaper.]
+document the token procedures, which read it once, are cheaper.]
 
 == Bytes
 
@@ -100,7 +100,7 @@ the most significant byte first. A `varint` field writes small numbers in few by
 
 #ex("manual", "11-binary.pnx")
 
-The writing words (`pack`, `put_…`, `encode.…_encode`) fail when the buffer is full, so a guard always follows
+The writing procedures (`pack`, `put_…`, `encode.…_encode`) fail when the buffer is full, so a guard always follows
 them.
 
 #ex("manual", "11-pack-unguarded.pnx")
@@ -111,7 +111,7 @@ them.
 == Other conversions
 
 `fmt` turns numbers into hexadecimal, binary and zero-padded text. `hash` gives CRC-32, FNV-1a and SipHash; `encode`
-gives Base64, hexadecimal and URL percent-encoding. Words that write their results into a buffer fail when the buffer is
+gives Base64, hexadecimal and URL percent-encoding. Procedures that write their results into a buffer fail when the buffer is
 full. The full lists are in clause 16 of the standard.
 
 A hash takes text and gives an `int`. #word("hash.crc32") is a checksum; `hash.fnv1a` and `hash.hash64` mix keys. How
@@ -120,7 +120,7 @@ helps in sizing a buffer.
 
 #ex("manual", "11-hash.pnx")
 
-#qa[Can the JSON writer indent, or add line breaks?][The writing words of `json` append one line. For a layout for people, give the text to
+#qa[Can the JSON writer indent, or add line breaks?][The writing procedures of `json` append one line. For a layout for people, give the text to
 `json.pretty`, which writes it with a member to a line.]
 
 #summary[

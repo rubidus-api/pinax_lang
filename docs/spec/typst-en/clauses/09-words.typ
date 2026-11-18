@@ -1,6 +1,6 @@
 #import "/tools/common.typ": *
 
-= Words <words>
+= Procedures <words>
 
 == Definitions <words-definition>
 
@@ -17,14 +17,14 @@ type       = [ "owned" ] ( NAME [ size ] | "proc" effect "end" ) ;   (* a type N
 parentheses. Procedures are defined only outside definitions, at the outermost level of a source; a procedure cannot be
 defined inside another.]
 
-#para("2")[To #term("call") a word is to write its name in a body. Where it is called, the topmost values of the stack
-become its inputs, and when it ends its results are in their place. Core words, words of standard modules and host
-words are called the same way.]
+#para("2")[To #term("call") a procedure is to write its name in a body. Where it is called, the topmost values of the stack
+become its inputs, and when it ends its results are in their place. Core procedures, procedures of standard modules and host
+procedures are called the same way.]
 
 == Signatures <words-signature>
 
-#para("1")[Every word has a *signature*: its inputs, then `gives` and its results, then `or fail` if it can fail. A word
-with neither inputs nor results has no signature to write (`def reset do … end`). Signatures are checked at load: the stack where a word is called shall match
+#para("1")[Every procedure has a *signature*: its inputs, then `gives` and its results, then `or fail` if it can fail. A procedure
+with neither inputs nor results has no signature to write (`def reset do … end`). Signatures are checked at load: the stack where a procedure is called shall match
 its inputs, and the stack where its body ends shall match its results.]
 
 #para("2")[An input with a name (`w int`) becomes a local of that name, and the body starts with an empty stack. An
@@ -44,20 +44,20 @@ More or fewer values are refused.]
 
 == The stack <words-stack>
 
-#para("1")[Values passed between words lie on the *stack*. A literal or a name pushes one value; a word takes its inputs
+#para("1")[Values passed between procedures lie on the *stack*. A literal or a name pushes one value; a procedure takes its inputs
 off and pushes its results. At load a processor knows, at every place of a body, the depth of the stack and the type of
 each slot.]
 
-#para("2")[Only five core words rearrange the stack.
+#para("2")[Only five core procedures rearrange the stack.
 #table(columns: (auto, auto, 1fr), inset: 5pt, stroke: 0.5pt + luma(170),
-  [*Word*], [*Before*  →  *after*], [*Meaning*],
+  [*Procedure*], [*Before*  →  *after*], [*Meaning*],
   [`dup`], [`a` → `a a`], [one more of the top],
   [`drop`], [`a` → ], [discard the top],
   [`swap`], [`a b` → `b a`], [exchange the top two],
   [`over`], [`a b` → `a b a`], [one more of the second, on top],
   [`nip`], [`a b` → `b`], [discard the second],
 )
-There are no deeper words (`rot` `pick` `roll` `depth`). When three or more values are involved, use locals.]
+There are no deeper procedures (`rot` `pick` `roll` `depth`). When three or more values are involved, use locals.]
 
 #ex("spec", "09-stack-words.pnx")
 
@@ -74,11 +74,11 @@ the mistakes of (3) and (3a) show before anything runs.]
 
 #part("Constraints")
 
-#para("3")[A word given fewer values than it takes is refused. The depth of the stack does not change while running.]
+#para("3")[A procedure given fewer values than it takes is refused. The depth of the stack does not change while running.]
 #ex("spec", "09-stack-short.pnx")
 
 #para("3a")[When the code outside definitions (5.2) ends, at the end of the source, values left on the stack are
-refused. The stack at the end of a word's body is 9.2's.]
+refused. The stack at the end of a procedure's body is 9.2's.]
 #ex("spec", "09-leftover.pnx")
 
 #para("4")[Using a name that is not defined is refused.]
@@ -125,7 +125,7 @@ refused.]
 
 == No hiding <words-shadowing>
 
-#para("1")[A new name (a parameter, a local, the name of a loop) cannot be the same as a name visible there --- a word,
+#para("1")[A new name (a parameter, a local, the name of a loop) cannot be the same as a name visible there --- a procedure,
 a global, a constant, a type, a local outside. One name means one thing at one place.]
 
 #part("Constraints")
@@ -134,17 +134,17 @@ a global, a constant, a type, a local outside. One name means one thing at one p
 #ex("spec", "09-shadow.pnx")
 #ex("spec", "09-shadow-word.pnx")
 
-#para("3")[A word of the language --- a reserved word, a core word, a word of clause 15 or 16 written without a module,
-a type --- is never a new name: not of a word, a declaration, a parameter, a local or a loop. A reserved word is not the
-name of a field either; another word of the language may be, since a field is always written after its record
-(8.8). The message says which word it is.]
+#para("3")[A procedure of the language --- a reserved word, a core procedure, a procedure of clause 15 or 16 written without a module,
+a type --- is never a new name: not of a procedure, a declaration, a parameter, a local or a loop. A reserved word is not the
+name of a field either; another procedure of the language may be, since a field is always written after its record
+(8.8). The message says which procedure it is.]
 #ex("spec", "09-name-taken.pnx")
 
 == Recursion and tail calls <words-recursion>
 
-#para("1")[A word may call itself. No forward declaration is needed.]
+#para("1")[A procedure may call itself. No forward declaration is needed.]
 
-#para("2")[A #term("tail call") --- a call that is the last thing a word does --- reuses the caller's place. Recursion
+#para("2")[A #term("tail call") --- a call that is the last thing a procedure does --- reuses the caller's place. Recursion
 through tail calls does not grow the depth. It needs no mark.]
 
 #ex("spec", "09-recursion.pnx")
@@ -154,7 +154,7 @@ through tail calls does not grow the depth. It needs no mark.]
 #para("3")[Calls that are not tail calls pile up; past the depth limit (annex C) they stop with the fault `depth`.]
 #ex("spec", "09-depth.pnx")
 
-== Forward words <words-forward>
+== Forward procedures <words-forward>
 
 #para("1")[`forward NAME signature end` announces a procedure defined further on, for two procedures that call each other.]
 
@@ -172,10 +172,10 @@ through tail calls does not grow the depth. It needs no mark.]
 cat    = "args" { body } "." "cat" ;       (* each body leaves one value; 9.8 *)
 ```
 
-#para("1")[`args items… . cat` joins the items between `args` and the period into one `str`. Each item is a word or literal
+#para("1")[`args items… . cat` joins the items between `args` and the period into one `str`. Each item is a procedure or literal
 that leaves one value, written one after another without commas. A `str`
 goes in as it is, an `int` in decimal, a `bool` as `true` or `false`. Other forms (hexadecimal and so on) are made into
-a `str` first by the words that make them (16.2).]
+a `str` first by the procedures that make them (16.2).]
 
 #para("2")[The result is a view of bytes made in the region (12.2). The number of items is what the text shows; the
 processor adds up the length first and writes once.]
@@ -199,8 +199,8 @@ of the type; any capacity is taken, and `l capacity` gives the one it has.]
 
 #ex("spec", "09-coll-param.pnx")
 
-#para("2")[In a word with a parameter `l` that is a table of records, the name `l` is also the type of its rows, as the
-name of a declared table is (8.8). A row reached through `l` is used in that word: in its locals, its fields and the
+#para("2")[In a procedure with a parameter `l` that is a table of records, the name `l` is also the type of its rows, as the
+name of a declared table is (8.8). A row reached through `l` is used in that procedure: in its locals, its fields and the
 blocks of its loops.]
 
 #ex("spec", "09-coll-param-rows.pnx")
@@ -218,12 +218,12 @@ across `yield` and the waits of 14.3.]
 #para("4")[A collection shall be given where its kind and cells are those of the parameter.]
 #ex("spec", "09-coll-param-kind.pnx")
 
-#para("5")[A collection parameter is not a value: it is not stored with `to`, not a result of a word, and not a
+#para("5")[A collection parameter is not a value: it is not stored with `to`, not a result of a procedure, and not a
 parameter of a block (`proc … end`). Pools and indexes are not taken.]
 #ex("spec", "09-coll-param-result.pnx")
 
-#para("6")[A word that truncates a list parameter (8.5 (2a)), or gives it to a word that does, truncates the list given
-to it. The rule of 8.5 (2b) then holds for that list, where the word is called.]
+#para("6")[A procedure that truncates a list parameter (8.5 (2a)), or gives it to a procedure that does, truncates the list given
+to it. The rule of 8.5 (2b) then holds for that list, where the procedure is called.]
 #ex("spec", "09-coll-param-truncate.pnx")
 
 #para("7")[`filter_into` does not copy rows when both tables are parameters. Walk one with `each` and fill the other
@@ -234,7 +234,7 @@ with `add_row`.]
 #diag(
   ([Named and bare inputs mixed], "inputs are all named or all bare types, not a mix"),
   ([The stack at the end unlike the results], "the stack does not hold exactly the results of the signature here"),
-  ([Too few values on the stack], "the stack does not hold enough values for this word"),
+  ([Too few values on the stack], "the stack does not hold enough values for this procedure"),
   ([Values left at the end of the source], "values are left on the stack at the end of the source"),
   ([A name that is not defined], "this name is not declared before this place"),
   ([A local given another type], "this local variable has another type than the value stored into it"),
@@ -243,12 +243,12 @@ with `add_row`.]
   ([`set` with the name of a local], "set writes a global; a local is written with to"),
   ([`set` with a name that is not a global], "set writes a declared global; there is none of this name"),
   ([Hiding a visible name], "this name is already visible here; a new name may not hide it"),
-  ([A word of the language as a new name (the word in the message)], "NAME is a word of the language; choose another name"),
+  ([A procedure of the language as a new name (the procedure in the message)], "NAME is a procedure of the language; choose another name"),
   ([A signature unlike the forward declaration], "the definition has another signature than its forward declaration"),
   ([A collection of another kind or cells], "the collection given here is of another kind, or holds another type, than the parameter says"),
   ([A value where a collection goes], "this parameter takes an array, list, queue or buffer: give its name"),
-  ([A collection as a result], "a word gives no collection; it takes one as a parameter"),
+  ([A collection as a result], "a procedure gives no collection; it takes one as a parameter"),
   ([`to` into a collection parameter], "this is a collection parameter; a cell of it is stored as: value index set name"),
-  ([A kept list given to a word that truncates it], "this list's rows are kept by a field, a global, a collection, a named row or an index; the word it is given to truncates it"),
+  ([A kept list given to a procedure that truncates it], "this list's rows are kept by a field, a global, a collection, a named row or an index; the procedure it is given to truncates it"),
   ([Rows copied between two tables parameters name], "filter_into does not copy rows between two tables parameters name; walk one and add_row"),
 )

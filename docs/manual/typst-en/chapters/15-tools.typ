@@ -2,15 +2,15 @@
 
 = Tools <tools>
 
-#opening[Chapter 1 (`pnx`), chapter 3 (words).][
-- What do I use to test words?
+#opening[Chapter 1 (`pnx`), chapter 3 (procedures).][
+- What do I use to test procedures?
 - How do I try things out a line at a time?
 - How do I see the stack at every line, or make indentation even?
 ]
 
 == Tests
 
-`test NAME … end` defines a test: a word that takes and gives nothing, and does not run at load. `pnx test FILE` runs
+`test NAME … end` defines a test: a procedure that takes and gives nothing, and does not run at load. `pnx test FILE` runs
 the tests in order. A false `assert` makes that test fail.
 
 #ex("manual", "15-test.pnx")
@@ -35,7 +35,7 @@ stack.
 The line `1 0 div` ended with a fault and left the stack as it was. The last line, `cube`, was refused because the
 top of the stack is a `str`. The message of a refusal goes to standard error, so it is not in the output above.
 
-A line that declares a word or a global adds just what it declares to the program, so even in a long session a
+A line that declares a procedure or a global adds just what it declares to the program, so even in a long session a
 line loads in the time its own length takes, and the memory block fills with what was declared. A line that only computes
 values uses none of it. When three quarters of the block are used, `pnx` says so once on standard error. Start a
 session that declares many large globals with a larger block through `PNX_BLOCK_KB` (the default is 16384, that is
@@ -53,14 +53,14 @@ What the stack holds after each line, followed. The next line starts from it.
   ("cube", "125 \"PINAX\"", [Refused: the top is a `str`, not an `int`.]),
 )
 
-A word can be defined again at any time: write `def` with its name once more. When the signature is the same, every
-word that calls it calls the new one, so a fix reaches every caller. When the signature is another, the new word takes
-the name, and the words compiled before keep calling the old body, as in Forth; `pnx repl` says which they are.
+A procedure can be defined again at any time: write `def` with its name once more. When the signature is the same, every
+procedure that calls it calls the new one, so a fix reaches every caller. When the signature is another, the new procedure takes
+the name, and the procedures compiled before keep calling the old body, as in Forth; `pnx repl` says which they are.
 
 #ex("manual", "15-redefine.pnx")
 
 After the first redefinition `quad` doubles twice (12). After the second, `sq` multiplies two values, and `quad` still
-runs the old `sq`. A word of a file is changed in the file, then loaded again.
+runs the old `sq`. A procedure of a file is changed in the file, then loaded again.
 
 A statement may end with a comma or a dot. A comma waits for nothing. A dot is a barrier: what the statements before it
 started is finished there, so output held in a buffer is written. Neither is required; the end of a line at the
@@ -71,22 +71,22 @@ prompt, and the end of a program's code, are a dot already.
 In bash terms, a comma is like `&` and a dot like `wait`. Use a dot where what came before must be seen, or must have
 happened, before going on: before a long computation, after a progress line.
 
-`pnx see --effects` tells, without running anything, what each word of a file may do beyond its own stack and
-locals: the globals it reads and writes, the host modules it reaches, whether it may yield or fail. A word marked
+`pnx see --effects` tells, without running anything, what each procedure of a file may do beyond its own stack and
+locals: the globals it reads and writes, the host modules it reaches, whether it may yield or fail. A procedure marked
 `none` gives the same results for the same inputs and touches nothing else.
 
 #ex("manual", "15-effects.pnx")
 
 == Shell scripts
 
-The module `sh` runs commands through the system shell, and `set_order` lets its words and those of `io` be written
+The module `sh` runs commands through the system shell, and `set_order` lets its procedures and those of `io` be written
 bare. A file that begins with `#!/usr/bin/env pnx` runs as a command.
 
 #ex("manual", "15-shell.pnx")
 
 A command's status is a value, not a failure: `"exit 2" run` gives 2. Only a shell that cannot start fails. To put data
 into a command, quote it first: `args "ls " name sh.quote . cat run`. `sh.open_read` and `sh.open_write` give a pipe as a
-`file`, read and written with the words of `file`; closing it waits for the command, and `sh.status` then tells how it
+`file`, read and written with the procedures of `file`; closing it waits for the command, and `sh.status` then tells how it
 ended. `sh.exit` ends the program with a status of its own. A host that embeds Pinax has `sh` only when it registers it
 (standard 17.5).
 
@@ -105,14 +105,14 @@ refusal of SQLite is one of a few codes (`err.format` for a statement that does 
 transaction is SQL (`begin`, `commit`); `sqlite.in_transaction` asks whether one is open, and a connection closed with one
 open rolls it back.
 
-A query can fill a `sheet`. The two modules do not know each other; a few words of the program, here `fetch`, join them.
+A query can fill a `sheet`. The two modules do not know each other; a few procedures of the program, here `fetch`, join them.
 
 #ex("manual", "15-sqlite-sheet.pnx")
 
 #qa[Does SQLite work in the web page?][No. `sqlite` is a host module that opens files, and the page has none. `pnx` has it;
 a host that embeds Pinax registers it with `pinax_host_register_sqlite` and links it only then (standard 17.6).]
 
-#qa[Why is there no word for a real?][This edition has no float type. Read a real column as a text with `col_str` and move
+#qa[Why is there no procedure for a real?][This edition has no float type. Read a real column as a text with `col_str` and move
 it with `str.to_dec`; bind money as an integer in its smallest unit.]
 
 == Seeing the stack, and formatting
@@ -139,8 +139,8 @@ The signature promised one `str`, but the stack after the last line is `str int 
 
 #ex("manual", "15-fmt.pnx")
 
-#qa[Do tests go in a file of their own, or beside the words?][Either. `pnx test FILE` loads the file and then runs only
-the tests in it. Beside the words, a test is in sight when the word is changed. When there are many, a test file of its
+#qa[Do tests go in a file of their own, or beside the procedures?][Either. `pnx test FILE` loads the file and then runs only
+the tests in it. Beside the procedures, a test is in sight when the procedure is changed. When there are many, a test file of its
 own brings the module in with `use`.]
 
 #qa[Why does the stack of `pnx see` show types only, and no values?][`see` loads and does not run. At load the processor

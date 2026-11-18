@@ -46,7 +46,7 @@ yes %d%.%d on 3.14: %. is a real point
 first_number io.println
 </code></pre><p class="ex-label">결함으로 멈춤</p><pre><code data-lang="text">$ pnx 12-capture-none.pnx
 12-capture-none.pnx:4: index out of range
-</code></pre></div><h3>12.2 정규 표현식: <code>rex</code></h3><p><code>rex</code> 는 고르기, 횟수(<code>{n,m}</code>), 낱말 경계(<code>\b</code>), 플래그(<code>(?i)</code> 등)가 있는 정규 표현식이다. 되돌아가지 않는 방식으로 맞추므로 어떤 패턴도 글의 길이에 비례하는 시간 안에 끝난다. 패턴은 <code>rex.rx</code> 로 프로그램을 만들어 쓰고, <code>matches</code> 의 블록은 묶음을 매개변수로 받는다.</p><div class="example run"><p class="ex-file"><code>12-rex.pnx</code></p><pre><code data-lang="pinax"><span style="color: #d73948">use</span> io .
+</code></pre></div><h3>12.2 정규 표현식: <code>rex</code></h3><p><code>rex</code> 는 고르기, 횟수(<code>{n,m}</code>), 프로시저 경계(<code>\b</code>), 플래그(<code>(?i)</code> 등)가 있는 정규 표현식이다. 되돌아가지 않는 방식으로 맞추므로 어떤 패턴도 글의 길이에 비례하는 시간 안에 끝난다. 패턴은 <code>rex.rx</code> 로 프로그램을 만들어 쓰고, <code>matches</code> 의 블록은 묶음을 매개변수로 받는다.</p><div class="example run"><p class="ex-file"><code>12-rex.pnx</code></p><pre><code data-lang="pinax"><span style="color: #d73948">use</span> io .
 <span style="color: #d73948">use</span> rex .
 <span style="color: #d73948">use</span> <span style="color: #d73948">str</span> .
 <span style="color: #74747c">rem Dates in any of two forms, rewritten to one.</span>
@@ -78,7 +78,7 @@ n -&gt; 3
 show
 </code></pre><p class="ex-label">출력</p><pre><code data-lang="text">$ pnx 12-replace-by.pnx
 The Quick Brown Fox (4 letters)
-</code></pre></div><p>찾는 낱말은 셋이 더 있다. <code>rex.match</code> 는 처음 맞은 부분을 주고 없으면 실패한다. <code>rex.matches</code> 는 맞은 부분마다 블록을 돌리는 레일이고, 블록은 맞은 전체와 묶음마다 <code>str</code> 하나를 받는다. <code>rex.split</code> 은 맞은 부분으로 가른 조각의 레일이다. <code>ptn</code> 에도 같은 레일 <code>ptn.matches</code> 가 있다.</p><div class="example run"><p class="ex-file"><code>12-rex-words.pnx</code></p><pre><code data-lang="pinax"><span style="color: #d73948">use</span> io .
+</code></pre></div><p>찾는 프로시저는 셋이 더 있다. <code>rex.match</code> 는 처음 맞은 부분을 주고 없으면 실패한다. <code>rex.matches</code> 는 맞은 부분마다 블록을 돌리는 레일이고, 블록은 맞은 전체와 묶음마다 <code>str</code> 하나를 받는다. <code>rex.split</code> 은 맞은 부분으로 가른 조각의 레일이다. <code>ptn</code> 에도 같은 레일 <code>ptn.matches</code> 가 있다.</p><div class="example run"><p class="ex-file"><code>12-rex-words.pnx</code></p><pre><code data-lang="pinax"><span style="color: #d73948">use</span> io .
 <span style="color: #d73948">use</span> <span style="color: #d73948">str</span> .
 <span style="color: #d73948">use</span> rex .
 <span style="color: #d73948">def</span> demo <span style="color: #d73948">do</span>

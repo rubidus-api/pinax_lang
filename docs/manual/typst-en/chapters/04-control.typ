@@ -6,7 +6,7 @@
 - When is a local made, and how far is it visible?
 - How are `if`, `loop` and `match` written, and what must they keep about the stack?
 - What is the short way to write a loop over an array?
-- How is a word given as a value?
+- How is a procedure given as a value?
 ]
 
 == Locals
@@ -104,8 +104,8 @@ The values of the branches are literals or `const`s of this source. Constants of
 
 == Rails and blocks
 
-A loop over an array or a list is written with a #strong[rail] and a #strong[combining word] instead. The name of the
-array is the rail, and a `do … end` block after it, with a word such as `each`, `count` or `fold`, takes it. The block
+A loop over an array or a list is written with a #strong[rail] and a #strong[combining procedure] instead. The name of the
+array is the rail, and a `do … end` block after it, with a procedure such as `each`, `count` or `fold`, takes it. The block
 is expanded in place, so it can use the locals around it.
 
 #ex("manual", "04-rails.pnx")
@@ -114,7 +114,7 @@ is expanded in place, so it can use the locals around it.
 (the value so far, an element) and gives the new value.
 
 The block of `each`, `each_index` or `times` is left early with `break .` (and `continue .` goes to the next element), as a loop is; `do to NAME … end` takes the element into a name. The rail
-stops and the code after the word runs. A search that stops at the first hit is written so.
+stops and the code after the procedure runs. A search that stops at the first hit is written so.
 
 #ex("manual", "04-leave-each.pnx")
 
@@ -131,17 +131,17 @@ inside the loop for each element and work on open rails too: `scores do to s s 4
 
 == Procedures as values
 
-A block that is not given to a combining word is written `def signature do … end` and is a #strong[value]: it can be kept in a local, returned, or given to a
+A block that is not given to a combining procedure is written `def signature do … end` and is a #strong[value]: it can be kept in a local, returned, or given to a
 parameter of a `proc` type (`type NAME proc signature end`), and `call` calls it. Such a block sees no locals around it. To give a procedure of
 the program as a value, write `ref NAME`: the value is that procedure, with its signature.
 
 #ex("manual", "04-word-values.pnx")
 
-#qa[How is a word of the language, such as `str.starts_with`, given as a value?][With the block's signature written
-as types only: `def str, str gives bool do str.starts_with end`. Inputs written as types stay on the stack, so the word
+#qa[How is a procedure of the language, such as `str.starts_with`, given as a value?][With the block's signature written
+as types only: `def str, str gives bool do str.starts_with end`. Inputs written as types stay on the stack, so the procedure
 takes them as it is. Without a signature the block takes nothing, and the message shows both forms.]
 
-#mistake[A `match` branch can hold the word itself: `when "prefix" do str.starts_with end`][A branch runs its words; it
+#mistake[A `match` branch can hold the procedure itself: `when "prefix" do str.starts_with end`][A branch runs its procedures; it
 does not make a value of them. There `str.starts_with` is called, and finds too few values on the stack. Make the
 value with a block: `when "prefix" do def str, str gives bool do str.starts_with end end`, or `ref NAME` for a procedure of the
 program.
@@ -160,5 +160,5 @@ other has not, that is a failure (chapter 8) or a row asked with `is_none` (chap
 - Several loops are left at once with a count, `break 2 .` (10.2).
 - Arrays and lists are walked with rails: `each` `each_index` `count` `fold` `sum` … (10.6); the block of `each`,
   `each_index` or `times` is left with `break` (10.6 (4)).
-- `ref NAME` is the procedure `NAME` as a value; any other word is given as `def signature do word end` (10.5).
+- `ref NAME` is the procedure `NAME` as a value; any other procedure is given as `def signature do procedure end` (10.5).
 ]

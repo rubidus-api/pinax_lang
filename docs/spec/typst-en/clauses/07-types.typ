@@ -2,7 +2,7 @@
 
 = Types and values <types>
 
-#para("1")[Every value has a type fixed at load. Values do not carry their type while running, and no word asks for a
+#para("1")[Every value has a type fixed at load. Values do not carry their type while running, and no procedure asks for a
 type while running. A program whose types do not match is refused at load.]
 
 #para("2")[The types are:
@@ -30,8 +30,8 @@ text, a row "none" (8.8).]
 
 #para("1")[The values of `int` are the integers from −2#super[63] to 2#super[63]−1, the same on every processor.]
 
-#para("2")[The arithmetic words `add` `sub` `mul` `div` `mod` `neg` `abs` stop with the fault `overflow` when the
-result is out of range (11.3). There are words that wrap (`wrap_add` …), that stop at the edge (`sat_add` …), and that
+#para("2")[The arithmetic procedures `add` `sub` `mul` `div` `mod` `neg` `abs` stop with the fault `overflow` when the
+result is out of range (11.3). There are procedures that wrap (`wrap_add` …), that stop at the edge (`sat_add` …), and that
 report overflow as a failure (`chk_add` …) (15.1).]
 
 #para("3")[`div` rounds toward zero, and the result of `mod` has the sign of the dividend (`a b div b mul a b mod add`
@@ -47,8 +47,8 @@ run.]
 
 == Booleans <types-bool>
 
-#para("1")[`bool` has two values, `true` and `false`. Comparison words (`eq` `lt` …) give them; `if`
-and the logical words (`and` `or` `not`) take them.]
+#para("1")[`bool` has two values, `true` and `false`. Comparison procedures (`eq` `lt` …) give them; `if`
+and the logical procedures (`and` `or` `not`) take them.]
 
 #ex("spec", "07-bool.pnx")
 
@@ -61,8 +61,8 @@ where arithmetic goes.]
 
 == Strings <types-str>
 
-#para("1")[A #term("string") is a sequence of bytes. There is no rule that it be UTF-8: words that work on bytes read
-bytes, and words that work on characters (`str.char_count` and so on) read UTF-8.]
+#para("1")[A #term("string") is a sequence of bytes. There is no rule that it be UTF-8: procedures that work on bytes read
+bytes, and procedures that work on characters (`str.char_count` and so on) read UTF-8.]
 
 #para("2")[There are two string types.
 - `str` is a *view*: the start and length of bytes that are somewhere (a literal, the text of a global, a buffer, the
@@ -92,7 +92,7 @@ failure `range` too, whether or not the list is full.]
 
 #para("4b")[`fits PLACE` names a `str N` place as a store does: `record.field`, a global (also `MODULE.NAME`), or an
 array or a list, for its cells (also a collection parameter, 9.9). It takes the text on top of the stack and gives
-nothing; it writes nothing. A text of N bytes or fewer goes on; a longer one is the failure `range`. It is a word that
+nothing; it writes nothing. A text of N bytes or fewer goes on; a longer one is the failure `range`. It is a procedure that
 can fail, so a guard follows it (11.2 (2)). A program asks a place with it before it does anything a text too long
 would leave half done, such as taking a row.]
 #ex("spec", "07-fits.pnx")
@@ -112,10 +112,10 @@ base      = "int" | "bool" | "str" | "dec" INT | "proc" effect "end" ;
 nothing more to run, but at load it is a different type. It keeps numbers of different units from being mixed.]
 
 #para("2")[The name of the type written after a value of the base type makes a value of that type (`1500 meters`). The
-word `raw` turns a value of a declared type back into its base type.]
+procedure `raw` turns a value of a declared type back into its base type.]
 
 #para("3")[Two values of the same declared type can be added and subtracted with `add` and `sub`; the result has that
-type. Comparison words and `min` `max` also take two values of the same type. Other arithmetic is done after `raw`.]
+type. Comparison procedures and `min` `max` also take two values of the same type. Other arithmetic is done after `raw`.]
 
 #ex("spec", "07-type.pnx")
 
@@ -133,8 +133,8 @@ down keeps its unit. The product and the quotient of two `D` values are not a `D
 #para("4")[A value of a declared type given where another type goes is refused. Below, the two arguments are swapped.]
 #ex("spec", "07-type-mixed.pnx")
 
-#para("5")[Arithmetic words other than `add` and `sub` on two values of a declared type are refused. So is any
-arithmetic word outside (3a) on a declared type and an `int`.]
+#para("5")[Arithmetic procedures other than `add` and `sub` on two values of a declared type are refused. So is any
+arithmetic procedure outside (3a) on a declared type and an `int`.]
 #ex("spec", "07-type-arith.pnx")
 
 == Decimals <types-dec>
@@ -182,18 +182,18 @@ a `dec`.]
 says the range: `u` from 0 to 2#super[width]−1, `i` from −2#super[width−1] to 2#super[width−1]−1. `u8` is the type of a
 byte and `u32` the type of a code point. The 64-bit signed integer is `int`; there is no type `i64`.]
 
-#para("2")[A narrow integer is another type than `int`, and each is another type than the others. Conversion is a word:
+#para("2")[A narrow integer is another type than `int`, and each is another type than the others. Conversion is a procedure:
 `n u8` makes the `int` or other narrow integer `n` into a `u8`, and a value outside the range is the fault `overflow`.
 Nothing is truncated. A literal is written the same way: `255 u8`. A constant outside the range is refused at load.
 `x raw` gives the `int` held; `raw` of a `u64` puts its 64 bits into the `int` as they are (2#super[63] and above are
-negative). `n low_u8` … `n low_i32` take the low bits only: these are the truncating words.]
+negative). `n low_u8` … `n low_i32` take the low bits only: these are the truncating procedures.]
 
 #para("3")[`add` `sub` `mul` `div` `mod` take two of one narrow integer type and give that type; a result outside the
 range is the fault `overflow`. `wrap_add` `wrap_sub` `wrap_mul` wrap modulo 2#super[width], `sat_add` `sat_sub`
-`sat_mul` stop at the ends of the range, and `chk_add` `chk_sub` `chk_mul` `chk_div` fail. The comparison words take two
+`sat_mul` stop at the ends of the range, and `chk_add` `chk_sub` `chk_mul` `chk_div` fail. The comparison procedures take two
 of one type; `u64` compares and divides unsigned. `neg` `abs` `min` `max` `clamp` do not take them (15.1).]
 
-#para("4")[The bit words work within the width. `bit_not` flips the bits of the width only, `shl` drops the bits that
+#para("4")[The bit procedures work within the width. `bit_not` flips the bits of the width only, `shl` drops the bits that
 leave the width, and `shr` keeps the sign of a signed type and fills an unsigned one with zeros. `u_shr` `u_div` `u_mod`
 `u_lt` `u_le` `u_gt` `u_ge` `floor_div` `floor_mod` are, on an unsigned type, `shr` `div` `mod` `lt` `le` `gt` `ge`
 `div` `mod`, and do not take a signed type. `count_ones` `leading_zeros` `trailing_zeros` count the bits of the width and
@@ -201,17 +201,17 @@ give an `int` (the width for 0); `byte_swap` reverses the bytes of the width. `r
 `u64` only.]
 
 #para("5")[A narrow integer is, as `int` is, the type of globals, of cells of arrays and lists, of values of queues, of
-parameters and results and of host word signatures (19.2), and the base of a declared type (7.4), as in `type opcode
+parameters and results and of host procedure signatures (19.2), and the base of a declared type (7.4), as in `type opcode
 u8`. A cell of an array, list or queue and a field of a record take the bytes of the width (`array a u8 1024` is
 1024 bytes); one global is an 8-byte place. A character literal is a `u8` or a `u32` (6.5). `match` compares a narrow
-integer (10.3). A host word takes and gives the value as one 64-bit integer, and a result outside the range is the fault
+integer (10.3). A host procedure takes and gives the value as one 64-bit integer, and a result outside the range is the fault
 `overflow` (19.2).]
 
 #ex("spec", "07-narrow.pnx")
 
 #part("Constraints")
 
-#para("6")[An `int` with a narrow integer, or two narrow integers of different types, given to one word is refused. A
+#para("6")[An `int` with a narrow integer, or two narrow integers of different types, given to one procedure is refused. A
 constant outside the range converted is refused.]
 #ex("spec", "07-narrow-mix.pnx")
 #ex("spec", "07-narrow-range.pnx")
@@ -224,7 +224,7 @@ constant outside the range converted is refused.]
 #part("Diagnostics")
 #diag(
   ([A value that is not a `bool` where a condition goes], "a bool is expected here"),
-  ([A narrow integer with an `int`, or two narrow integers of different types], "this word takes two values of one type: u8 with u8, int with int; u8 and raw convert"),
+  ([A narrow integer with an `int`, or two narrow integers of different types], "this procedure takes two values of one type: u8 with u8, int with int; u8 and raw convert"),
   ([A constant outside the range converted], "the constant is outside the range of this type; low_u8 and the others keep the low bits"),
   ([A value of a declared type converted directly], "u8, u16, u32, u64, i8, i16, i32 and low_u8 ... are made from an int or from one another; for a declared type take raw first"),
   ([`u_shr` on a signed narrow integer], "u_shr takes an int or an unsigned type; a signed type shifts with shr"),
@@ -233,9 +233,9 @@ constant outside the range converted is refused.]
   ([`rotl` `rotr` on a narrow integer other than `u64`], "rotl and rotr take an int or a u64; for a narrow type take raw"),
   ([`mul_hi` `u_mul_hi` on a narrow integer other than `u64`], "mul_hi and u_mul_hi take an int or a u64; for a narrow type take raw"),
   ([`abs` on a narrow integer], "abs takes an int or a declared type over int; a narrow type has no abs"),
-  ([The two values of an arithmetic word differ in type or are not `int`], "this word takes two int values, or two of the same declared type"),
+  ([The two values of an arithmetic procedure differ in type or are not `int`], "this procedure takes two int values, or two of the same declared type"),
   ([Arithmetic outside (3) and (3a) on a declared type], "a declared type is added to and subtracted from its own type, and multiplied, divided or taken modulo by an int; for other arithmetic take raw"),
-  ([An argument of another type than the signature], "an argument has another type than the word's signature asks for"),
+  ([An argument of another type than the signature], "an argument has another type than the procedure's signature asks for"),
   ([`str` for a global and the like], "stored text is str N; a str view lives only in locals, arguments and results"),
   ([`str` for a field of a record], "a field holds str N; a str view lives only in locals, arguments and results"),
   ([Two `dec` of different scales], "two dec values of different scales: rescale one first (d 2 rescale)"),

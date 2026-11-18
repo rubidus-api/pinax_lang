@@ -5,7 +5,7 @@
 #para("1")[The module `toml` reads TOML text of version 1, a file of settings, without building a tree. A value is given as the bytes it has
 in the text, and a string without its quotes; a string with escapes, or of several lines with a backslash at the end of a line, is
 decoded into text written in the region (12.2). Nothing is converted: a number is given as written (`5_000`, `0xff`), to be read by
-the program with the word of the type it wants. The module can also change a file (below), keeping every byte it does not change.]
+the program with the procedure of the type it wants. The module can also change a file (below), keeping every byte it does not change.]
 
 #para("2")[`kind` is one of the constants below.
 #table(columns: (auto, 1fr), inset: 5pt, stroke: 0.5pt + luma(170),
@@ -41,7 +41,7 @@ by a header may be named again only as the parent of one already made), a table 
 inline table and an array are closed (nothing is added to them later), and an array of tables is not also a table. Every integer must fit 64 bits
 signed, every float must be finite, and a date or time must exist (the month and the day of that year, hours to 23, minutes to 59, seconds to 60;
 seconds are required, as in TOML 1). `err.format` when a rule is broken or a statement is malformed; `err.full` when the region has no room for the
-table the check keeps (at most one node for each byte of `s`; it is given back when the word ends), never "valid". A name written with escapes is
+table the check keeps (at most one node for each byte of `s`; it is given back when the procedure ends), never "valid". A name written with escapes is
 the same key as the same name written bare, and a part with escapes longer than 256 bytes is `err.full`.]
 
 #para("7")[`path s value kind b toml.set` (`or fail`) appends to `b` the text `s` with the value of `path` set: the value of a key that is there is replaced
@@ -58,7 +58,7 @@ and the result must keep the rules of `toml.check`, else `err.format`; `err.full
 not statements of their own), or when the text is malformed; `err.full` as for `toml.set`.]
 
 #table(columns: (auto, auto, 1fr), inset: 5pt, stroke: 0.5pt + luma(170),
-  [*Word*], [*Signature*], [*Meaning*],
+  [*Procedure*], [*Signature*], [*Meaning*],
   [`valid`], [`(s str gives bool)`], [whether every statement of `s` is well formed],
   [`check`], [`(s str gives or fail)`], [the rules of the whole document; `err.format`, `err.full`],
   [`at`], [`(path str, s str gives kind int, value str or fail)`], [the value `path` names in `s`; `err.not_found`, `err.format`],
@@ -86,5 +86,5 @@ can fail it is taken by `each` and followed by a guard.]
 
 #part("Diagnostics")
 #diag(
-  ([A value of another type for a word of `toml`], "this word takes a str (the text, and the path before it)"),
+  ([A value of another type for a procedure of `toml`], "this procedure takes a str (the text, and the path before it)"),
 )

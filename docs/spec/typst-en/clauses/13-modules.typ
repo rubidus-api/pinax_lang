@@ -13,8 +13,8 @@ import = "use" NAME [ "as" NAME ] ;
 the file name without `.pnx`). Standard modules and host modules (13.3) are modules too.]
 
 #para("2")[`use MODULE .` opens that module in this source; from then on its parts are written as the *path*
-`MODULE.NAME`. `use MODULE as ALIAS .` makes the same module be written `ALIAS.NAME`. Only core words and what this source
-declares are written as bare names, and the words of the modules a search order names (13.5).]
+`MODULE.NAME`. `use MODULE as ALIAS .` makes the same module be written `ALIAS.NAME`. Only core procedures and what this source
+declares are written as bare names, and the procedures of the modules a search order names (13.5).]
 
 #para("3")[A module that is used shall exist already: a standard module, a module the host registered, or a source
 loaded earlier. When `pnx` meets `use NAME .` it first loads `NAME.pnx` from beside the program file.]
@@ -27,14 +27,14 @@ loaded earlier. When `pnx` meets `use NAME .` it first loads `NAME.pnx` from bes
 #para("4")[Using a module that does not exist is refused.]
 #ex("spec", "13-unknown-module.pnx")
 
-#para("5")[A word of a module written as a bare name is refused, unless a search order names that module (13.5); so is
+#para("5")[A procedure of a module written as a bare name is refused, unless a search order names that module (13.5); so is
 a path into a module that was not opened.]
 #ex("spec", "13-bare-name.pnx")
 #ex("spec", "13-no-use.pnx")
 
 == Exports <modules-export>
 
-#para("1")[Another source can use only what was declared or defined with `export`. Words, constants and globals are
+#para("1")[Another source can use only what was declared or defined with `export`. Procedures, constants and globals are
 written `MODULE.NAME` (an exported global is stored with `set MODULE.NAME`); exported `record`s and `type`s and the row types of tables are written by their name alone.]
 
 #para("2")[The module `geometry` below is the one the examples of 13.1 use. `square` is not exported.]
@@ -51,8 +51,8 @@ written `MODULE.NAME` (an exported global is stored with `set MODULE.NAME`); exp
 #para("1")[The #term("standard module")s come with the processor and are part of the language: `str` `fmt` `hash`
 `encode` `bytes` `ptn` `rex` `json` `csv` (clause 16). They are seen only after `use`.]
 
-#para("2")[A #term("host module") is a set of words the host registered. A module the host did not register does not
-exist. Everything a script can do outside itself (files, clocks, the environment) is a word the host registered. `pnx`
+#para("2")[A #term("host module") is a set of procedures the host registered. A module the host did not register does not
+exist. Everything a script can do outside itself (files, clocks, the environment) is a procedure the host registered. `pnx`
 registers the standard host modules `io` `file` `clock` `random` `env` (clause 17).]
 
 #para("3")[`err` is a set of constants written as paths without `use` (11.1).]
@@ -88,8 +88,8 @@ Everything a data source declares counts as exported.]
   ([A module that does not exist], "no module of this name is registered or loaded"),
   ([A path into a module not opened, or no record], "this path names neither a module in use nor a record"),
   ([A name not exported], "the module exports nothing of this name"),
-  ([A definition or `use` in a data load], "a data source defines no words and uses no modules"),
-  ([A call in a data load], "a data source calls no words; only literals, const names and stores"),
+  ([A definition or `use` in a data load], "a data source defines no procedures and uses no modules"),
+  ([A call in a data load], "a data source calls no procedures; only literals, const names and stores"),
 )
 
 == The search order <modules-search>
@@ -109,9 +109,9 @@ get_order .` puts `json` in front of it, `set_order get_order csv .` behind it. 
 or that is named again after `get_order` brought it, keeps its first place.]
 
 #para("2")[A bare name in code is looked for in this order, and the first that has it is taken: the locals and
-parameters; what this source (or session) declares; the core words; then the modules of the search order, left to
-right. So a name of the source and a core word keep their meaning whatever the order holds, and a module added to it
-cannot change code that compiled before. A word of a module named like a core word (`str.len` beside `len`) is written
+parameters; what this source (or session) declares; the core procedures; then the modules of the search order, left to
+right. So a name of the source and a core procedure keep their meaning whatever the order holds, and a module added to it
+cannot change code that compiled before. A procedure of a module named like a core procedure (`str.len` beside `len`) is written
 with its path. A path is read as before.]
 
 #ex("spec", "13-order.pnx")
@@ -119,14 +119,14 @@ with its path. A path is read as before.]
 
 #para("3")[`set_order` stands at the top level of a source or of a session line, as often as needed. Each one
 replaces the order from there to the end of the source; a session keeps it for the lines after, until the next one.
-A word takes what its names found when it was compiled.]
+A procedure takes what its names found when it was compiled.]
 
 #para("3a")[`get_order` alone at the top level tells the search order at that place, written as `set_order` takes
 it, `order: io str`, as a diagnostic with line 0 at `config.diag` (19.4 (1)), and changes nothing. It speaks when the source is checked: in a
 file, before any of the file's code runs.]
 
 #para("4")[A name reached through the search order does not count for the rule against hiding names (9.5): a local
-may have the name of a word of a module in the order, and inside that word the local is meant.]
+may have the name of a procedure of a module in the order, and inside that procedure the local is meant.]
 
 #part("Constraints")
 
@@ -141,5 +141,5 @@ than 16 modules, and one that names a module that does not exist are refused.]
   ([Not a module name], "set_order names modules, separated by spaces and ended by a period: set_order io str ."),
   ([A module named twice], "this module is named twice in the order"),
   ([More than 16], "an order names at most 16 modules"),
-  ([`search (…)`, not a word of the language], "search is now set_order: set_order io str ."),
+  ([`search (…)`, not a procedure of the language], "search is now set_order: set_order io str ."),
 )

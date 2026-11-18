@@ -3,13 +3,13 @@
 
 = Standard modules <std>
 
-#para("1")[The standard modules come with the processor. They are opened with `use MODULE .` and written `MODULE.WORD`
-(13.1); the module `args` (16.13) is part of the core and needs no `use`. Words of standard modules cannot reach outside without the host --- they use no files, clocks or environment.]
+#para("1")[The standard modules come with the processor. They are opened with `use MODULE .` and written `MODULE.PROCEDURE`
+(13.1); the module `args` (16.13) is part of the core and needs no `use`. Procedures of standard modules cannot reach outside without the host --- they use no files, clocks or environment.]
 
-#para("2")[Words of standard modules make no new storage. Their results are one of:
+#para("2")[Procedures of standard modules make no new storage. Their results are one of:
 - a view of the bytes they were given; nothing is copied;
 - a view of new bytes written in the region (12.2);
-- bytes appended to a buffer the caller gave. Such words end in `_into` or take a buffer, and fail with `err.full`
+- bytes appended to a buffer the caller gave. Such procedures end in `_into` or take a buffer, and fail with `err.full`
   when there is not enough room.]
 
 #include "16-1-str.typ"

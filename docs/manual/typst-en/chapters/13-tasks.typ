@@ -23,7 +23,7 @@ One `spawn` line, followed, shows what a task takes and gives.
 #trace(
   ("do \"ping\" 3 count_to end", "block", [A block that takes and gives nothing goes on as a value; the literals inside belong to it.]),
   ("workers spawn", "task", [Makes one task in the set and gives it. Fails when no place is free.]),
-  ([`or_else to e return end`], "task", [Success: skipped. On failure the word is left.]),
+  ([`or_else to e return end`], "task", [Success: skipped. On failure the procedure is left.]),
   ("drop", "—", [The task value serves `resume` and `cancel`; here `run_all` runs it, so it is dropped.]),
 )
 
@@ -60,12 +60,12 @@ that fault at once.
 
 #ex("manual", "13-deadlock.pnx")
 
-Only the two waiting words are watched. A task that waits in a loop of its own (`loop … yield … end`) is not, so a host
+Only the two waiting procedures are watched. A task that waits in a loop of its own (`loop … yield … end`) is not, so a host
 that runs such code gives it a budget (chapter 14).
 
 #mistake[The block of `spawn` sees the locals around it][The block given to `spawn` is a block value and does not see
-the locals around it, because the task may live on after that word has ended. To give a task values, use globals or
-queues, or --- as in the examples above --- call a word inside the block with literals.
+the locals around it, because the task may live on after that procedure has ended. To give a task values, use globals or
+queues, or --- as in the examples above --- call a procedure inside the block with literals.
 #ex("manual", "13-no-locals.pnx")]
 
 == Faults and cancelling
@@ -86,7 +86,7 @@ and ends. Cancelling does not stop a task by force.
 ended is used again. Each task has a call depth and a region of its own, so a large count needs a large block.]
 
 #qa[What does `yield` do in the main run?][Nothing, and it succeeds. The main run is not a task and has nobody to give
-a turn to. So the same word serves inside a task and outside.]
+a turn to. So the same procedure serves inside a task and outside.]
 
 #summary[
 - Tasks change only where they `yield` (standard 14.2).

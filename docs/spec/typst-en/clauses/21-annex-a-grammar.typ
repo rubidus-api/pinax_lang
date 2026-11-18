@@ -10,7 +10,7 @@ stated in words. Names in capitals are the tokens of clause 6. Any number of spa
 tokens, except right before a new name (6.3 (4)).]
 
 #para("2")[The grammar is read with one token of lookahead. The exception is a parameter of a signature, where the token
-after it tells whether it is a name or a type. What a name refers to (a local, a global, a word) and the types on the
+after it tells whether it is a name or a type. What a name refers to (a local, a global, a procedure) and the types on the
 stack are settled by the declarations and checks, not by the grammar.]
 
 ```ebnf
@@ -51,7 +51,7 @@ decl        = "const" NAME literal
 capacity    = size | "host" ;
 size        = INT | NAME ;
 field       = NAME NAME [ size ] ;
-c-name      = NAME | reserved-word | STRING ;
+c-name      = NAME | reserved-procedure | STRING ;
 row-item    = [ "export" ] "row" NAME [ "as" NAME ] { value } "." ;
 assign-item = "assign" NAME "(" value { "," value } ")" ;
 value       = literal | NAME ;

@@ -14,7 +14,7 @@ block   = "do" { "to" NAME } { body } "end"
         | "ref" NAME ;
 ```
 
-#para("1")[`end` 는 가장 안쪽에 열린 것 하나를 닫는다. 여는 낱말은 `def` `forward` `extern` `test` `record` `do` `if` `loop`
+#para("1")[`end` 는 가장 안쪽에 열린 것 하나를 닫는다. 여는 프로시저는 `def` `forward` `extern` `test` `record` `do` `if` `loop`
 `match` `when` `otherwise` `or_else` `defer` 다. (`forward` 와 `extern` 은 서명 뒤의 `end` 로, `type NAME proc … end` 도 닫는다.) (텍스트 리터럴과 `note` 주석은 자기 꼬리표로 닫는다, 6.3, 6.5.)]
 
 #para("2")[처리기는 적재 때 모든 갈래의 스택을 견준다. 갈래가 다시 만나는 자리에서 스택은 어느 갈래로 왔든
@@ -68,7 +68,7 @@ block   = "do" { "to" NAME } { body } "end"
 `each`, `each_index`, `times` 의 블록 안에서는 그 블록을 떠난다(10.6 (4)).]
 #ex("spec", "10-while-outside.pnx")
 
-#para("7")[떠나는 낱말(`return` `fail` `break` `continue`)이나 끝나지 않는 루프 바로 뒤에 같은 갈래의 코드가 더 있으면
+#para("7")[떠나는 프로시저(`return` `fail` `break` `continue`)이나 끝나지 않는 루프 바로 뒤에 같은 갈래의 코드가 더 있으면
 닿지 않는 코드로 거절된다.]
 #ex("spec", "10-unreachable.pnx")
 
@@ -106,11 +106,11 @@ block   = "do" { "to" NAME } { body } "end"
 
 == 블록 <control-blocks>
 
-#para("1")[`do … end` 는 #term("블록", en: "block")이다. 블록은 조합 낱말에 주는 것으로만 쓴다(`if` 의 몸처럼 낱말
+#para("1")[`do … end` 는 #term("블록", en: "block")이다. 블록은 조합 프로시저에 주는 것으로만 쓴다(`if` 의 몸처럼 프로시저
 없이 홀로 있는 `do … end` 는 없다). 값이 되는 블록은 `def` 로 적는다(`def 서명 do … end`, (2a)).
 블록은 두 가지로 쓰인다.
-- #term("끼워 넣는 블록", en: "inline block") --- 조합 낱말(10.6)에 바로 준 블록. 그 자리에 펼쳐진다.
-  그래서 바깥의 지역 변수를 읽고 쓸 수 있고, 안에서 `return` 하면 바깥 낱말을 떠난다.
+- #term("끼워 넣는 블록", en: "inline block") --- 조합 프로시저(10.6)에 바로 준 블록. 그 자리에 펼쳐진다.
+  그래서 바깥의 지역 변수를 읽고 쓸 수 있고, 안에서 `return` 하면 바깥 프로시저를 떠난다.
 - #term("값이 되는 블록", en: "block value") --- `def 서명 do … end` 로 적어 지역 변수에 넣거나, 블록을 받는
   매개변수(`proc … end` 타입, 7.4)에 주는 것. 이름 없는 프로시저 하나가 되며 `call` 로 부른다. 바깥의 지역 변수를
   보지 못한다(붙잡지 않는다). 전역은 본다.]
@@ -123,8 +123,8 @@ block   = "do" { "to" NAME } { body } "end"
 #ex("spec", "10-value-block.pnx")
 
 #para("2a")[`ref 이름` 은 `def` 로 정의한 프로시저(이 소스의 것이든 쓰는 모듈이 내보낸 것이든) 자체를 값으로 준다(`ref by_len`,
-`ref geo.area`). 타입은 그 프로시저의 서명을 가진 `proc` 이고, `call` 은 그 프로시저를 부른다. 언어의 다른 낱말은
-서명을 쓴 블록으로 준다. 타입만 쓴 입력은 스택에 남으므로(9.2 (2)) 블록의 몸은 그 낱말 하나다:
+`ref geo.area`). 타입은 그 프로시저의 서명을 가진 `proc` 이고, `call` 은 그 프로시저를 부른다. 언어의 다른 프로시저는
+서명을 쓴 블록으로 준다. 타입만 쓴 입력은 스택에 남으므로(9.2 (2)) 블록의 몸은 그 프로시저 하나다:
 `def str, str gives bool do str.starts_with end`.]
 
 #ex("spec", "10-word-value.pnx")
@@ -137,17 +137,17 @@ block   = "do" { "to" NAME } { body } "end"
 #para("4")[루프로 펼쳐지는 블록(`each` `times` 등)은 스택을 들어올 때와 같게 둬야 한다.]
 #ex("spec", "10-block-net.pnx")
 
-#para("4a")[서명이 없는 값이 되는 블록은 아무것도 받지 않는다. 그 안에서 값이 필요한 낱말은 거절되고, 메시지가
+#para("4a")[서명이 없는 값이 되는 블록은 아무것도 받지 않는다. 그 안에서 값이 필요한 프로시저는 거절되고, 메시지가
 (2a)의 두 꼴을 보인다.]
 #ex("spec", "10-word-value-bare.pnx")
 
 #para("4b")[`forward` 로 선언한 프로시저는 정의된 뒤에만 값으로 준다.]
 #ex("spec", "10-word-value-forward.pnx")
 
-== 레일과 조합 낱말 <control-rails>
+== 레일과 조합 프로시저 <control-rails>
 
 #para("1")[#term("레일", en: "rail")는 차례로 값을 내는 것이다. 레일은 값이 아니어서 지역 변수에 넣지 못하고,
-바로 뒤의 조합 낱말이 받아야 한다. 둘이 합쳐 루프 하나가 된다. 훑기 전에 길이를 알고 어느 자리의 원소든 읽을 수 있는 레일을
+바로 뒤의 조합 프로시저가 받아야 한다. 둘이 합쳐 루프 하나가 된다. 훑기 전에 길이를 알고 어느 자리의 원소든 읽을 수 있는 레일을
 #term("닫힌 레일", en: "closed rail")이라 하고(`range`, 배열, 목록, `str.bytes`), 그렇지 않은 레일을 #term("열린 레일", en: "open rail")이라 한다: 원천에서
 조각을 차례로 하나씩 꺼내고 한 번만 훑는다(`str.split` `str.lines` `str.words` `str.chars` `ptn.matches` `rex.matches` `rex.split` `csv.fields`, 풀).
 레일은 게으르게 평가된다: 루프는 훑는 차례대로 원소를 하나씩 꺼내고, 어댑터의 블록은 거기에 닿은 원소에만 돈다. 일찍 끝나는
@@ -164,9 +164,9 @@ block   = "do" { "to" NAME } { body } "end"
   [`s csv.fields`], [필드(16.9)],
 )]
 
-#para("2")[조합 낱말은 다음과 같다. "블록" 열은 블록이 받고 주는 것이다.
+#para("2")[조합 프로시저는 다음과 같다. "블록" 열은 블록이 받고 주는 것이다.
 #table(columns: (auto, auto, 1fr), inset: 5pt, stroke: 0.5pt + luma(170),
-  [*낱말*], [*블록*], [*결과*],
+  [*프로시저*], [*블록*], [*결과*],
   [`each`], [`(T)`], [없음],
   [`each_index`], [`(T, i int)`], [없음],
   [`fold`], [`(acc U, T gives U)`], [`U`. 첫 값을 레일 앞에 둔다: `0 xs do … end fold`],
@@ -209,7 +209,7 @@ block   = "do" { "to" NAME } { body } "end"
 
 #para("1e")[레일은 한 바퀴에 값 여럿을 줄 수 있고(`zip` `json.items` `json.members` `toml.items` `md.blocks`) `each` 의 블록은 레일이 주는 수만큼 이름을
 맨 위부터 받는다. `skip` 과 `head` 는 쓸 수 있고 블록이 든 어댑터는 쓰지 못한다. 훑는 도중 실패하는 레일이 있다(`json` `toml` `md` 의 레일과 `sqlite.rows`):
-좋은 원소 몇 개 뒤에 글이 깨질 수 있고 엔진이 실패할 수 있다. 실패는 루프를 끝내고 낱말 `each` 의 실패가 되어 여느 실패처럼 다룬다: `each` 뒤에 `or_fail`
+좋은 원소 몇 개 뒤에 글이 깨질 수 있고 엔진이 실패할 수 있다. 실패는 루프를 끝내고 프로시저 `each` 의 실패가 되어 여느 실패처럼 다룬다: `each` 뒤에 `or_fail`
 `or_return` `or_else` 가 온다. 원소가 끝난 것은 실패가 아니다. `sheet` 책의 줄은 레일이 따로 필요 없다: `0 g sheet.rows range` 와 `0 g sheet.cols range` 가 번호를
 훑는다.]
 
@@ -222,11 +222,11 @@ fail`). 목적지가 차면 `err.full` 로 실패하고, 그때까지 쓴 것은
 
 #ex("spec", "10-map-into.pnx")
 
-#para("4")[레일과 조합 낱말은 루프 하나를 이루고, `each`, `each_index`, `times` 의 블록 안에서 `break .` 는 그 루프를
-떠나고 `continue .` 는 다음 원소로 간다. 레일은 멈추고 조합 낱말 뒤의 코드가 돈다. 루프를 떠나는
+#para("4")[레일과 조합 프로시저는 루프 하나를 이루고, `each`, `each_index`, `times` 의 블록 안에서 `break .` 는 그 루프를
+떠나고 `continue .` 는 다음 원소로 간다. 레일은 멈추고 조합 프로시저 뒤의 코드가 돈다. 루프를 떠나는
 규칙이 그대로다: 스택은 블록이 시작할 때와 같고(10.2 (2)), 블록의 미룬 코드가 돈다(10.7). 블록 안의 `loop` 에 쓴
 `break .` 는 그 루프를 떠난다. `break N .` 와 `continue N .` 는 이런 블록과 `loop` 를 모두 한 단계로 센다(10.2 (1)): 안쪽 블록의
-연산 값들은 함께 떠난다. 모든 원소로 결과를 만드는 다른 조합 낱말의 블록은 일찍 떠나지 못하고, 그 블록을 건너 떠나지도 못한다.]
+연산 값들은 함께 떠난다. 모든 원소로 결과를 만드는 다른 조합 프로시저의 블록은 일찍 떠나지 못하고, 그 블록을 건너 떠나지도 못한다.]
 #ex("spec", "10-leave-each.pnx")
 #ex("spec", "10-leave-two.pnx")
 
@@ -237,8 +237,8 @@ fail`). 목적지가 차면 `err.full` 로 실패하고, 그때까지 쓴 것은
 defer = "defer" { body } "end" ;
 ```
 
-#para("1")[`defer 코드 end` 는 둘러싼 블록을 떠날 때 돌 코드를 적는다. 블록은 낱말의 몸, 루프의 몸(한 바퀴마다),
-조합 낱말의 `do` 블록(한 번 돌 때마다)이다. 그 블록을 떠나는 모든 길에서 돈다: 블록의 `end`, 루프의 한 바퀴 끝,
+#para("1")[`defer 코드 end` 는 둘러싼 블록을 떠날 때 돌 코드를 적는다. 블록은 프로시저의 몸, 루프의 몸(한 바퀴마다),
+조합 프로시저의 `do` 블록(한 번 돌 때마다)이다. 그 블록을 떠나는 모든 길에서 돈다: 블록의 `end`, 루프의 한 바퀴 끝,
 `break`, `continue`, `return`, `or_return`, `or_fail`, `fail`. 여럿이면 적은 차례의 거꾸로
 돈다. 결함으로 끝날 때는 돌지 않는다(그때는 상태가 핸들을 닫는다, 19.6).]
 
@@ -257,7 +257,7 @@ defer = "defer" { body } "end" ;
 #ex("spec", "10-defer-branch.pnx")
 
 #para("4")[미룬 코드는 스택을 받은 그대로 두고 아무것도 남기지 않는다. `return` `fail` `break` `continue` `to` `set`
-`loop` `do` `match` `defer` 와 `or_fail` `or_return` 을 쓸 수 없다. 실패하는 낱말은 그 안에서 `or_else` 로 다룬다.]
+`loop` `do` `match` `defer` 와 `or_fail` `or_return` 을 쓸 수 없다. 실패하는 프로시저는 그 안에서 `or_else` 로 다룬다.]
 
 #para("5")[미룬 코드가 맡은 소유 값을 블록 안에서 소비하면 거절된다.]
 #ex("spec", "10-defer-taken.pnx")
@@ -267,18 +267,18 @@ defer = "defer" { body } "end" ;
   ([두 갈래의 스택이 다름], "the two branches of this if leave different stacks"),
   ([한 바퀴가 스택을 바꿈], "one turn of a loop must leave the stack as it found it"),
   ([루프 밖의 `break` `continue`], "break and continue belong inside a loop"),
-  ([결과를 주는 낱말의 블록 안의 `break`], "only the block of each, each_index or times is left early; this word gives a result made from every element"),
+  ([결과를 주는 프로시저의 블록 안의 `break`], "only the block of each, each_index or times is left early; this word gives a result made from every element"),
   ([`do` 블록 밖 루프로의 `break N .`], "a named loop outside this block is not left from inside it; break leaves the block"),
   ([닿지 않는 코드], "this code cannot be reached: the code before it always leaves"),
   ([`match` 의 같은 값], "this value is already in an earlier branch of the case"),
   ([펼쳐지는 블록이 스택을 바꿈], "this block must leave the stack as it found it"),
   ([정의 밖의 `return`], "return belongs inside a definition"),
   ([상수가 아닌 가지의 값], "a case value is a literal or the name of a const"),
-  ([레일이 아닌 것에 조합 낱말], "only an array, a list or a pool is a rail (not a queue, a buffer or an index)"),
+  ([레일이 아닌 것에 조합 프로시저], "only an array, a list or a pool is a rail (not a queue, a buffer or an index)"),
   ([가지 안의 `defer`], "defer is written right in a word's body, a loop's body or a do block, not in a branch"),
   ([정의 밖의 `defer`], "defer belongs inside a definition"),
   ([미룬 코드가 스택을 바꿈], "a defer leaves the stack as it found it"),
-  ([미룬 코드 안의 떠나는 낱말], "a defer holds no return, fail, break, continue, to, set, loop, do, match or defer"),
+  ([미룬 코드 안의 떠나는 프로시저], "a defer holds no return, fail, break, continue, to, set, loop, do, match or defer"),
   ([미룬 코드 안의 `or_fail` `or_return`], "a defer does not leave the word; a failure in it is taken with or_else"),
   ([미룬 코드가 맡은 값을 소비], "a defer gives this owned value when the block is left; here it can only be lent"),
   ([서명이 없는 값이 되는 블록에서 값이 모자람], "a block without a signature takes nothing; a procedure of the program is given as ref NAME, any other word with the block's signature: def str, str gives bool do str.starts_with end"),
@@ -293,7 +293,7 @@ defer = "defer" { body } "end" ;
 #para("2")[쉼표는 아무것도 기다리지 않는다: 다음 문장이 시작할 때 이 문장의 효과가 아직 진행 중일 수 있다.]
 
 #para("3")[점은 #term("장벽", en: "barrier")이다: 점 앞에서 시작한 모든 효과가 점 뒤의 무엇보다 먼저 끝난다. 처리기의
-몫은 호스트가 `pinax_on_barrier`(19.4 (3))로 준 함수를 부르는 것이고, 호스트의 몫은 호스트 낱말이 붙들고 있는 것(표준
+몫은 호스트가 `pinax_on_barrier`(19.4 (3))로 준 함수를 부르는 것이고, 호스트의 몫은 호스트 프로시저가 붙들고 있는 것(표준
 출력, 파일에 쓴 것)을 내보내고 뒤에서 시작한 일을 기다리는 것이다. 적재한 코드의 끝과 세션 줄의 끝은 점이다. 결함으로
 끝나도 그렇다. 데이터로 적재한 소스에서 둘은 문장을 나눌 뿐 아무것도 부르지 않는다.]
 

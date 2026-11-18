@@ -8,7 +8,7 @@ args-value = "args" { body } "." ;              (* each body leaves one value, 9
 param      = NAME "args" ;                      (* a parameter that takes an args value *)
 ```
 
-#para("1")[모듈 `args` 와 타입 `args` 는 핵에 든다. 이 절의 다른 모듈과 달리 `args` 의 낱말은 `use` 없이 `args.낱말` 로 쓴다.
+#para("1")[모듈 `args` 와 타입 `args` 는 핵에 든다. 이 절의 다른 모듈과 달리 `args` 의 프로시저는 `use` 없이 `args.프로시저` 로 쓴다.
 #term("args 값", en: "args value")은 종류가 다른 값 몇 개를 담는다. 값의 수가 달라지는 프로시저는 그런 값 하나를 매개변수
 `이름 args` 로 받는다(`def show label str, rest args gives str do … end`).]
 
@@ -23,7 +23,7 @@ param      = NAME "args" ;                      (* a parameter that takes an arg
 
 #ex("spec", "16-args.pnx")
 
-#para("4")[아래 낱말은 args 값을 읽는다. 값의 번호(0 이 처음)를 먼저, args 를 맨 뒤에 준다. 종류는 상수 `args.k_int` 1,
+#para("4")[아래 프로시저는 args 값을 읽는다. 값의 번호(0 이 처음)를 먼저, args 를 맨 뒤에 준다. 종류는 상수 `args.k_int` 1,
 `args.k_bool` 2, `args.k_str` 3, `args.k_dec` 4 다.
 #table(columns: (auto, auto, 1fr), inset: 5pt, stroke: 0.5pt + luma(170),
   [*Word*], [*Signature*], [*Meaning*],
@@ -44,7 +44,7 @@ param      = NAME "args" ;                      (* a parameter that takes an arg
 
 #part("제약")
 
-#para("6")[`args` 는 매개변수일 뿐이다. 지역 변수나 전역에 담거나, `gives` 로 돌려주거나, 다른 args 에 넣거나, 호스트 낱말이나
+#para("6")[`args` 는 매개변수일 뿐이다. 지역 변수나 전역에 담거나, `gives` 로 돌려주거나, 다른 args 에 넣거나, 호스트 프로시저나
 `extern` 에 주면 거절된다. 값이 없는 `args` 도 거절된다.]
 #ex("spec", "16-args-stored.pnx")
 #ex("spec", "16-args-nested.pnx")
@@ -58,7 +58,7 @@ param      = NAME "args" ;                      (* a parameter that takes an arg
 #diag(
   ([args 를 담거나 돌려줌], "an args is only a parameter: it is not stored in a local or a global, and not given back"),
   ([args 안의 args, 또는 int bool str dec N 이 아닌 값], "an args holds no args: its values are int, bool, str and dec N"),
-  ([args 의 낱말에 값의 차례가 거꾸로], "this word takes the number of the value, and then the args: 0 rest args.int"),
+  ([args 의 프로시저에 값의 차례가 거꾸로], "this word takes the number of the value, and then the args: 0 rest args.int"),
   ([`args.dec` 의 자리가 상수가 아님], "the digits of args.dec are a constant 0 to 18: 2 rest args.dec"),
   ([앞에 args 가 없는 `cat`], "cat takes args: args a b . cat, or an args parameter"),
 )

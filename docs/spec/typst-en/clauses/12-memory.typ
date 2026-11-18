@@ -13,15 +13,15 @@ while running. There is no garbage collector, and no value refers to another by 
 - slots of the stack and of locals; their depth is fixed at load (9.3);
 - one *region* for each task (12.2), where the bytes of text made while running go;
 - memory the host gives: bound and shared storage (8.12, 8.13), the strings it passes to a run and those a `KEEP_STR`
-  host word gives (19.3). The host keeps it alive and unchanged while the state reads it.]
+  host procedure gives (19.3). The host keeps it alive and unchanged while the state reads it.]
 
 #para("3")[So the upper bound of the memory a program uses is known at load. Using up the region or a capacity shows as
 a fault or a failure while running; it never leads the processor to ask for more memory.]
 
 == The region and marks <memory-region>
 
-#para("1")[Words that make new bytes --- `cat`, `str.upper`, the words that turn numbers into text and so on --- write
-the result into the region and give a view of it. The region is filled from the front. The word `region_free` gives the
+#para("1")[Procedures that make new bytes --- `cat`, `str.upper`, the procedures that turn numbers into text and so on --- write
+the result into the region and give a view of it. The region is filled from the front. The procedure `region_free` gives the
 number of bytes left.]
 
 #para("2")[`mark` gives the current place in the region as an `owned` value (type `mark`). `mark release` rewinds the
@@ -43,7 +43,7 @@ longer it copies into its own memory (clause 19).]
 == The life of views <memory-views>
 
 #para("1")[A view into the region cannot be used once its bytes are rewound. A processor checks this at load. Within
-one body (a word, a block value, the code outside definitions) it counts, for each `str` value, the marks made before
+one body (a procedure, a block value, the code outside definitions) it counts, for each `str` value, the marks made before
 it. `mark release` takes back the values made after that mark.]
 
 #part("Constraints")
@@ -51,21 +51,21 @@ it. `mark release` takes back the values made after that mark.]
 #para("2")[A `release` while a value it takes back is still on the stack is refused.]
 #ex("spec", "12-release-stack.pnx")
 
-#para("2a")[A `release` in deferred code that runs because the word fails (`or_fail`, `fail`; 10.7 (1)) does not count
-the values the word leaves on the stack: the word ends there, its stack is not read again, and deferred code takes
+#para("2a")[A `release` in deferred code that runs because the procedure fails (`or_fail`, `fail`; 10.7 (1)) does not count
+the values the procedure leaves on the stack: the procedure ends there, its stack is not read again, and deferred code takes
 nothing from it (10.7 (4)). The values of the deferred code itself count as in (2), and a local holding a value taken
-back is as in (3). A failure carries only its code (11.2), so no `str` leaves the word that way.]
+back is as in (3). A failure carries only its code (11.2), so no `str` leaves the procedure that way.]
 #ex("spec", "12-release-failing.pnx")
 
 #para("3")[A local holding a value taken back cannot be read until something is stored into it again.]
 #ex("spec", "12-release-view.pnx")
 
 #para("4")[The check leans to caution. String literals are not in the region and are never taken back. Every other
-`str` --- views, stored text read back, values words give --- counts as made where it appears. Where paths meet, a value
+`str` --- views, stored text read back, values procedures give --- counts as made where it appears. Where paths meet, a value
 counts as the latest and a mark as the earliest. So it may refuse a correct program; then keep the value in a `str N`
 or move the mark.]
 
-#para("5")[Handing an `owned` mark to a word counts as a `release` there. A word that takes a mark counts its `str`
+#para("5")[Handing an `owned` mark to a procedure counts as a `release` there. A procedure that takes a mark counts its `str`
 inputs as made after that mark. Two tasks sharing one region are not followed by this check (clause 14).]
 
 == Owned values <memory-owned>
@@ -74,9 +74,9 @@ inputs as made after that mark. Two tasks sharing one region are not followed by
 a mark of the region. A processor checks at load that such a value is handed over exactly once on every path.]
 
 #para("2")[An `owned` value is used in two ways:
-- #term("borrowing"): giving it to a word that takes the type without `owned` (`f file.write`); any number of times;
+- #term("borrowing"): giving it to a procedure that takes the type without `owned` (`f file.write`); any number of times;
   the value stays;
-- #term("handing over"): giving it to a word that takes it `owned` (`f file.close`), storing it in a global or field,
+- #term("handing over"): giving it to a procedure that takes it `owned` (`f file.close`), storing it in a global or field,
   putting a row just taken into an index over its pool (`insert`, 8.10 (3a)), or returning it as an `owned` result;
   after that the name is empty and cannot be read.]
 
@@ -103,6 +103,6 @@ with `drop`. It shall be handed over on the paths of failures (`or_fail` `or_ret
   ([A value taken back is on the stack at `release`], "a str made after this mark is still on the stack; the release gives its bytes back"),
   ([Reading a value taken back], "this str was made after a mark that was released since; the region may hold other bytes there now"),
   ([Reading a value handed over], "this local gave its owned value away; it holds nothing to read"),
-  ([Doubling or discarding an `owned` value], "an owned value is kept in a local or given on at once; this word would lose it"),
+  ([Doubling or discarding an `owned` value], "an owned value is kept in a local or given on at once; this procedure would lose it"),
   ([A path that does not hand it over], "an owned value in a local is not given on every path (close, free or store it)"),
 )

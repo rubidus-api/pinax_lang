@@ -12,13 +12,13 @@ until the next call on that state unless stated otherwise.]
 == Error codes <host-errors>
 
 #para("1")[Functions return a `pinax_err`; `PINAX_OK` is 0. Three outcomes are not failures: `PINAX_SUSPENDED` (the
-budget ran out, 19.5), `PINAX_WAITING` (every task waits for the host, 19.8) and `PINAX_PENDING` (a host word finishes
+budget ran out, 19.5), `PINAX_WAITING` (every task waits for the host, 19.8) and `PINAX_PENDING` (a host procedure finishes
 later). From `0x100` come the faults and failures of scripts (the codes of 11.1); from `0x200` the failures of the
 interface itself: `ARGUMENT`, `NO_ROOM` (the block is too small), `SYNTAX`, `TYPE` (load refusals), `NOT_FOUND`,
 `SIGNATURE`, `FORMAT`, `STATE` (a call not allowed now).]
 
 #para("1a")[From `0x400` come the failure codes a program declares (8.14), numbered in the order the state declares
-them. A word that fails with one gives that number; `pinax_error_text` gives its name. A host reads the name: the
+them. A procedure that fails with one gives that number; `pinax_error_text` gives its name. A host reads the name: the
 number of a code depends on what was loaded before it.]
 
 #para("2")[`pinax_error_text` gives the last failure as text; for a fault, in the form `module:line: name`.]
@@ -26,13 +26,13 @@ number of a code depends on what was loaded before it.]
 #para("3")[A failure of the interface means the same in every function.
 #table(columns: (auto, 1fr), inset: 5pt, stroke: 0.5pt + luma(170),
   [*Code*], [*Meaning*],
-  [`PINAX_ERR_ARGUMENT`], [an argument is wrong: a null pointer, a word number that is none, a size other than the declaration's],
+  [`PINAX_ERR_ARGUMENT`], [an argument is wrong: a null pointer, a procedure number that is none, a size other than the declaration's],
   [`PINAX_ERR_NO_ROOM`], [the block has no room; `pinax_needed` says at least how big it had to be (19.3)],
   [`PINAX_ERR_SYNTAX` `PINAX_ERR_TYPE`], [the source was refused; the place and the reason are in `diag` and `pinax_error_text`],
-  [`PINAX_ERR_NOT_FOUND`], [no word, global, module or host word of that name; also a host word not yet given again to a state opened from an image],
-  [`PINAX_ERR_SIGNATURE`], [the signature differs: of the word looked for, of the host word registered, of the global shared],
+  [`PINAX_ERR_NOT_FOUND`], [no procedure, global, module or host procedure of that name; also a host procedure not yet given again to a state opened from an image],
+  [`PINAX_ERR_SIGNATURE`], [the signature differs: of the procedure looked for, of the host procedure registered, of the global shared],
   [`PINAX_ERR_FORMAT`], [a container, image or share file is not of this processor's form, or failed its checks],
-  [`PINAX_ERR_STATE`], [a call not possible now: a run is suspended, a host word is running, no code is loaded, the state is frozen],
+  [`PINAX_ERR_STATE`], [a call not possible now: a run is suspended, a host procedure is running, no code is loaded, the state is frozen],
 )]
 
 == Opening and closing <host-open>
@@ -51,31 +51,31 @@ gives a random key. All zeros means a fixed key.]
 block; the block is the host's.]
 
 #para("4")[The block serves three uses. Opening takes the fixed parts of the state: the banks, the call frames, the main
-run's region, the tables of host words and handles. With the defaults that is about 150 KB, most of it the region
+run's region, the tables of host procedures and handles. With the defaults that is about 150 KB, most of it the region
 (64 KB) and the integer bank (32 KB), which `config` can shrink. The loaded program is stacked after it and stays.
 While a load runs, the unused tail of the block is the compiler's working memory: about 20 KB for a small source,
-about 1 KB more per word, and 64 KB more when the source has a constant pattern (16.7). The working memory is free
+about 1 KB more per procedure, and 64 KB more when the source has a constant pattern (16.7). The working memory is free
 again when the load ends. A body uses working memory for the blocks it actually nests, not for the deepest nesting
 allowed.]
 
-== Host words <host-words>
+== Host procedures <host-words>
 
-#para("1")[`pinax_register(state, module, defs, count)` registers host functions as the words of one module. Each entry
+#para("1")[`pinax_register(state, module, defs, count)` registers host functions as the procedures of one module. Each entry
 of `defs` has a name, a signature text (in the form of 9.2, such as `"(s str gives n int or fail)"`), the function, a
-user pointer and flags. Signatures are checked once, here. Register words before the sources that use them.]
+user pointer and flags. Signatures are checked once, here. Register procedures before the sources that use them.]
 
 #para("2")[A host function receives `(call, user, args)`. Arguments and results are in arrays by type: integers (and
 `bool`, characters, handles and declared types over `int`) in `args->i[]` and `args->ri[]`, strings in `args->s[]` and
 `args->rs[]`, in the order of the signature, counted from 0 within each type. The integer pointers point straight at the
 state's slots. A narrow integer of the signature (7.6) travels as one 64-bit slot, and after the function returns the
-processor checks the range of each result: outside it is the fault `overflow` (the result of a waiting word gets the
+processor checks the range of each result: outside it is the fault `overflow` (the result of a waiting procedure gets the
 same check in `pinax_complete` and ends with that code). An argument of `pinax_run` outside its narrow type is
 `PINAX_ERR_ARGUMENT`, and nothing runs.]
 
-#para("3")[When the function returns something other than `PINAX_OK`, a word whose signature has `or fail` fails with
-that code (11.2), and a word without it ends the run with a fault.]
+#para("3")[When the function returns something other than `PINAX_OK`, a procedure whose signature has `or fail` fails with
+that code (11.2), and a procedure without it ends the run with a fault.]
 
-#para("4")[A string result is copied into the caller's region unless the word has the flag `PINAX_WORD_KEEP_STR`. With
+#para("4")[A string result is copied into the caller's region unless the procedure has the flag `PINAX_WORD_KEEP_STR`. With
 the flag it is not copied but pointed at; those bytes shall outlive the state and not change (static text, the
 program's arguments and the like), and there is no limit to the number of such results. Room
 for new bytes comes from `pinax_call_alloc`, in the caller's region. A parameter of type `buffer` in the signature is a
@@ -92,20 +92,20 @@ arrives at `config.diag` as (file, line, column, text).]
 #para("1a")[`pinax_load_bytecode(state, bytes)` loads a bytecode container made by the processor into an empty state. The
 shape of a container is the processor's (1 (3)). The processor does not trust a container; it checks it, and refuses
 with `PINAX_ERR_FORMAT` one that could break 4 (2a). Among what this implementation refuses: registers outside the
-window, jumps out of the word, a register read before it is written, a jump back or a call that does not charge the
-budget, a tail call to a word with other results, an operation that can fail without a failure word after it or with
+window, jumps out of the procedure, a register read before it is written, a jump back or a call that does not charge the
+budget, a tail call to a procedure with other results, an operation that can fail without a failure procedure after it or with
 nothing after that, and an instruction that changes a string register and names it twice.]
 
 #para("1b")[A load has no budget. So the processor loads a source or a container in time proportional to its length: no
-pass of it, finding names, deciding which words yield or checking the flow of the registers, grows with the square
+pass of it, finding names, deciding which procedures yield or checking the flow of the registers, grows with the square
 of the length. A host that takes untrusted sources therefore limits only their length, without fear that one load
 never ends.]
 
 #para("1c")[A load into a state that already holds a program appends what the new source adds to the program and
-checks the new words only, so the bound of (1b) holds for the lines of a session and for modules loaded one by one.
+checks the new procedures only, so the bound of (1b) holds for the lines of a session and for modules loaded one by one.
 The declaration tables are kept the same way: a load reads what earlier loads declared where it lies and appends
-only its own declarations. The pass that decides which words yield covers the words the load brings, and the whole
-program only when the load redefines a word. The room the program takes in the block grows with what was declared: when a part has no room
+only its own declarations. The pass that decides which procedures yield covers the procedures the load brings, and the whole
+program only when the load redefines a procedure. The room the program takes in the block grows with what was declared: when a part has no room
 left to append to, the processor moves that part to a larger place, and when the load has ended it takes back the
 room it left; while a task (clause 14) is alive it does not, and the next load after the task has ended does.
 `redefine` appends the new body and leaves the old code where it was. The room used is read from `block_bytes_used`
@@ -123,25 +123,25 @@ another; such a load runs without it.]
 line leaves is read with `pinax_eval_count` and `pinax_eval_value`.]
 
 #para("2a")[The session has a stack that stays from line to line. A line starts with what the lines before it left
-and is checked as a word whose inputs are those values and whose results are what it leaves. The session stack holds
+and is checked as a procedure whose inputs are those values and whose results are what it leaves. The session stack holds
 at most 16 values: an int or a type over it, a bool, an err, a str of at most 255 bytes, a handle that is not owned. A
 line that would leave more, or a collection, a rail or an owned value, is refused; one that leaves a longer str ends
 with `PINAX_ERR_NO_ROOM` after it ran. A line that is refused or ends with a fault leaves the stack as it was before it;
 so does one that ran out of budget and is abandoned, while one resumed to its end leaves what it left. A str of the
 session stack is copied into the state and stays valid until the next `pinax_eval` or `pinax_eval_clear`.
-`pinax_eval_clear(state)` empties the stack, as does a line that begins with the tool word `clear`. A load or a run
+`pinax_eval_clear(state)` empties the stack, as does a line that begins with the tool procedure `clear`. A load or a run
 leaves it as it is; an image and a clone do not carry it.]
 
 #para("3")[`pinax_on_barrier(state, function, user)` gives the function a dot calls (10.8 (3)): at each dot the code
 reaches, and at the end of the code of a load or of a session line, also one that ends with a fault, the processor
-calls `function(user)`. In it the host writes what its host words hold back and waits for what they started in the
+calls `function(user)`. In it the host writes what its host procedures hold back and waits for what they started in the
 background; it does not call the state. `NULL`, the default, finishes nothing. A clone keeps the function; an image
 does not. The host library's `pinax_host_register_all` gives one that writes the output `io` holds back.]
 
-#para("4")[`pinax_set_trace(state, function, user)` asks for a trace of the lines of words. While a function is set, what the
-compiler produces from a load or a session line holds, at the start of each line of a word body (not of the top level),
+#para("4")[`pinax_set_trace(state, function, user)` asks for a trace of the lines of procedures. While a function is set, what the
+compiler produces from a load or a session line holds, at the start of each line of a procedure body (not of the top level),
 an instruction that calls `function(user, line, word)` as the line is about to run; `pinax_fault_local` then reads the
-locals the word holds there, as at a fault. The function may call only what reads the state. If it answers non-zero the run
+locals the procedure holds there, as at a fault. The function may call only what reads the state. If it answers non-zero the run
 is suspended before that line (a breakpoint): the call that ran answers `PINAX_SUSPENDED` and `pinax_resume` goes on from the
 line, without calling the function for it again. Code compiled with no
 function set holds no such instruction and costs nothing; code that holds it runs on, calling nothing, once the
@@ -149,15 +149,15 @@ function is `NULL`. An image and exported C do not carry the function or the ins
 
 == Finding and running <host-run>
 
-#para("1")[`pinax_find(state, name, signature, flags, &word)` finds a word and checks that its signature is the one
-given; another is `PINAX_ERR_SIGNATURE`. A bare name is a word of the first source loaded; `module.word` a word of that
+#para("1")[`pinax_find(state, name, signature, flags, &word)` finds a procedure and checks that its signature is the one
+given; another is `PINAX_ERR_SIGNATURE`. A bare name is a procedure of the first source loaded; `module.procedure` a procedure of that
 module (exported or not).]
 
-#para("2")[`pinax_run(state, word, args)` runs a word. When the budget runs out it returns `PINAX_SUSPENDED`, and
+#para("2")[`pinax_run(state, word, args)` runs a procedure. When the budget runs out it returns `PINAX_SUSPENDED`, and
 `pinax_resume` goes on where it stopped; the budget does not change results. A fault returns its code, and the state
 takes the next run.]
 
-#para("2a")[The budget counts the cost of each check at a back branch or a call, the bytes the string words scan, and
+#para("2a")[The budget counts the cost of each check at a back branch or a call, the bytes the string procedures scan, and
 each turn that `run_all` gives a task (14.1 (2)), which costs one. So every run of a container the processor accepts
 meets the budget, even one whose tasks spawn and end without a loop of their own.]
 
@@ -172,18 +172,18 @@ too saves an image (19.9) before the run.]
 
 #ex("spec", "19-run.c")
 
-#para("4")[`pinax_run` may be called from inside a host word too. There it runs only words found with the flag
-`PINAX_FIND_NESTED`, and words that may yield (14.2) cannot be found with that flag.]
+#para("4")[`pinax_run` may be called from inside a host procedure too. There it runs only procedures found with the flag
+`PINAX_FIND_NESTED`, and procedures that may yield (14.2) cannot be found with that flag.]
 
-#para("5")[`pinax_word_effects(state, word, &effects)` tells what a word may do beyond its stack and locals, worked out
-from the loaded code of the word and of every word it may call. `effects.effects` holds `PINAX_EFFECT_READS_GLOBALS`
+#para("5")[`pinax_word_effects(state, word, &effects)` tells what a procedure may do beyond its stack and locals, worked out
+from the loaded code of the procedure and of every procedure it may call. `effects.effects` holds `PINAX_EFFECT_READS_GLOBALS`
 and `PINAX_EFFECT_WRITES_GLOBALS` (a list's length, a queue and a task set count as globals),
-`PINAX_EFFECT_READS_OUTSIDE` and `PINAX_EFFECT_WRITES_OUTSIDE` (through host words), `PINAX_EFFECT_YIELDS`,
+`PINAX_EFFECT_READS_OUTSIDE` and `PINAX_EFFECT_WRITES_OUTSIDE` (through host procedures), `PINAX_EFFECT_YIELDS`,
 `PINAX_EFFECT_FAILS` and `PINAX_EFFECT_ANYTHING` (a C function of `extern`); `module` and `module_effects` name the
-host modules it reaches (the first 16 of `n_modules`). A host word tells what it touches with the flags
+host modules it reaches (the first 16 of `n_modules`). A host procedure tells what it touches with the flags
 `PINAX_WORD_READS` and `PINAX_WORD_WRITES` of its registration; one with neither counts as both, and one with
-`PINAX_WORD_PURE` as neither. A call through a word value counts every word of the program with that signature, a
-spawned task every word without parameters and results. A host may refuse a program whose words reach what they
+`PINAX_WORD_PURE` as neither. A call through a procedure value counts every procedure of the program with that signature, a
+spawned task every procedure without parameters and results. A host may refuse a program whose procedures reach what they
 should not.]
 
 == Handles <host-handles>
@@ -232,23 +232,23 @@ as an image's are (19.9), except that no more than N bytes are read from a `str 
 #ex("spec", "19-share-file.c")
 
 #para("1d")[While a run is not finished --- suspended by the budget, waiting for a host operation, or inside a host
-word --- `pinax_bind`, `pinax_share` and `pinax_share_file` are `PINAX_ERR_STATE`: a view the run holds may point into
+procedure --- `pinax_bind`, `pinax_share` and `pinax_share_file` are `PINAX_ERR_STATE`: a view the run holds may point into
 the storage they would replace.]
 
-#para("2")[The `number` that `pinax_global_find` gives is what a word with a collection parameter (9.9) takes as that
+#para("2")[The `number` that `pinax_global_find` gives is what a procedure with a collection parameter (9.9) takes as that
 argument, an integer in `i`. A number of a collection of another kind or another size of element, or of no global, is the
-fault `PINAX_ERR_STATE` where the word uses it.]
+fault `PINAX_ERR_STATE` where the procedure uses it.]
 
-== Host words that finish later <host-await>
+== Host procedures that finish later <host-await>
 
-#para("1")[A host word registered with `PINAX_WORD_AWAITABLE` may start some work, take a token with
+#para("1")[A host procedure registered with `PINAX_WORD_AWAITABLE` may start some work, take a token with
 `pinax_call_pending`, and return `PINAX_PENDING`. The task that called it waits and others run. When nothing else can
 run, `pinax_run` or `pinax_resume` returns `PINAX_WAITING`. The host finishes the work with `pinax_complete(state,
 token, outcome, values)` and calls `pinax_resume`.]
 
 #ex("spec", "19-await.c")
 
-#para("2")[In a state the host loop (17.4) runs, a host word takes its token with `pinax_loop_pending` in place of
+#para("2")[In a state the host loop (17.4) runs, a host procedure takes its token with `pinax_loop_pending` in place of
 `pinax_call_pending` and finishes the work with `pinax_loop_complete`, from any thread. The loop calls `pinax_complete`
 on the state's thread and continues the run.]
 
@@ -263,7 +263,7 @@ that the addresses inside it lie in the block it was saved from, but not every b
 one it trusts saved. Strings that pointed outside the block (a host's text) and the last pattern match do not survive
 an image.]
 
-#para("2")[On an opened state the host gives host words, handle types and `extern` functions again, by name. Until all
+#para("2")[On an opened state the host gives host procedures, handle types and `extern` functions again, by name. Until all
 are given, runs are refused with `PINAX_ERR_NOT_FOUND`. Handles come back closed (without their close functions), and
 bound globals back on their own storage. `pinax_clone` saves and opens in another block in one call.]
 
@@ -272,7 +272,7 @@ bound globals back on their own storage. `pinax_clone` saves and opens in anothe
 
 #para("2b")[`pinax_clone_with(source, block, flags, out)` is `pinax_clone` with flags. With
 `PINAX_CLONE_KEEP_HOSTS` the clone keeps what the source was given in this process, with the same `user` pointers:
-its host words, handle types, `extern` functions and resolver, its exported code (19.11) and its task fault function
+its host procedures, handle types, `extern` functions and resolver, its exported code (19.11) and its task fault function
 (19.10 (3a)). So it runs at once. Bound globals are bound again and handles do not pass, as for any clone. An
 unknown flag is `PINAX_ERR_ARGUMENT`.]
 
@@ -283,7 +283,7 @@ unknown flag is `PINAX_ERR_ARGUMENT`.]
 #para("1")[`pinax_stats_get` gives the highest use of slots, region, handles and call depth, and the number of
 instructions run. It is for choosing the block and the capacities.]
 
-#para("2")[`pinax_fault_local` gives, after a run that ended with a fault, the locals of the word the fault happened in
+#para("2")[`pinax_fault_local` gives, after a run that ended with a fault, the locals of the procedure the fault happened in
 with their values at that time (up to 16; text cut to its first 32 bytes, and shown only when its bytes lie in memory
 the state can vouch for). They are what `pnx` shows below a fault
 (11.3).]
@@ -297,19 +297,19 @@ fault, at the fault, before the task's slot is used again. `fault` gives the fau
 place in the same form. Several tasks that fault in one run are told one by one. Inside `fn`,
 `pinax_fault_local` reads the locals of that task. The run is in the middle, so `fn` may call only the functions
 that read the state: `pinax_fault_local`, `pinax_task_faults`, `pinax_error_text`. `NULL` takes the function away.
-An image and a clone forget it, as they forget host words (19.9), unless the clone keeps them (19.9 (2b)).]
+An image and a clone forget it, as they forget host procedures (19.9), unless the clone keeps them (19.9 (2b)).]
 
 == Exported code <host-native>
 
 #para("1")[`pnx export-c` (20 (3)) writes a program's code as C. The host compiles that file with `pinax_native.h` of
-the same build and gets one `pinax_native` table. It covers the program as it was exported: its code and its words,
+the same build and gets one `pinax_native` table. It covers the program as it was exported: its code and its procedures,
 counted in `code_words` and `words`. `pinax_native_attach(state, table)` makes the state run that code through the
 table from the first run at which the state's program begins with the one exported: the same code, the same start of
-every word, the same build. Given before the loads, it serves a load's own code too. `NULL` takes it back.]
+every procedure, the same build. Given before the loads, it serves a load's own code too. `NULL` takes it back.]
 
 #para("1a")[What is loaded after it (the lines of a session, a module loaded later) is interpreted, and the table stays
 in use: a call, a return or a task switch that goes into the code it covers runs there through the table again. A
-redefinition (20.4 (2a)) of one of its words with the same signature changes the program it covers: from then on the
+redefinition (20.4 (2a)) of one of its procedures with the same signature changes the program it covers: from then on the
 table is not used. One with another signature leaves the code it covers as it was, and the table stays in use.]
 
 #para("2")[A program and a host see the same as interpreted: results, faults with their places and locals, failures,

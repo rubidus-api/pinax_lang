@@ -21,7 +21,7 @@ Multiplying or dividing `cents` by an integer gives `cents` (`c 3 mul`): scaling
 
 == Using a module
 
-After `use money .`, its words are written as paths such as `money.of_won`; the exported type `cents` is written by its
+After `use money .`, its procedures are written as paths such as `money.of_won`; the exported type `cents` is written by its
 name alone. When `money` is not a registered module, `pnx` first loads `money.pnx` from beside the program.
 
 #ex("manual", "10-use.pnx")
@@ -31,18 +31,18 @@ name alone. When `money` is not a registered module, `pnx` first loads `money.pn
 
 #ex("manual", "10-private.pnx")
 
-Besides words, a module can export constants, globals, types and records. They are used like this.
+Besides procedures, a module can export constants, globals, types and records. They are used like this.
 
 #table(columns: (auto, auto, 1fr), inset: 5pt, stroke: 0.5pt + luma(170),
   table.header([*Exported*], [*Read or call*], [*Note*]),
-  [word], [`module.word`], [the signature is the same as inside the module],
+  [procedure], [`module.procedure`], [the signature is the same as inside the module],
   [constant (`const`)], [`module.name`], [],
   [global (`global` and collections)], [`module.name`], [stored with `value set module.name`],
   [type, record, row type of a table], [the name alone], [written without a path, like `cents`],
 )
 
-The module `tally` below exports a constant, a global and a word. Changing the global is usually the job of the
-module's own word (`bump`), but it can also be stored from outside with `set tally.hits`.
+The module `tally` below exports a constant, a global and a procedure. Changing the global is usually the job of the
+module's own procedure (`bump`), but it can also be stored from outside with `set tally.hits`.
 
 #ex("manual", "tally.pnx")
 #ex("manual", "10-tally.pnx")
@@ -64,13 +64,13 @@ mixed.
 == Bare names from modules
 
 A script that calls the same modules all the time, a shell script above all, can name them in a search order with
-`set_order`. Then their words are written bare.
+`set_order`. Then their procedures are written bare.
 
 #ex("manual", "10-order.pnx")
 
-The order is only a last resort. A bare name is first a local, then a name of the source, then a core word; only then
-are the modules of the order asked, left to right. So `len` stays the core word even with `str` in the order, and the
-`str` word is written `str.len`. `set_order .` empties the order again. A path works with or without it.
+The order is only a last resort. A bare name is first a local, then a name of the source, then a core procedure; only then
+are the modules of the order asked, left to right. So `len` stays the core procedure even with `str` in the order, and the
+`str` procedure is written `str.len`. `set_order .` empties the order again. A path works with or without it.
 
 #qa[How do I add one module without naming the others again?][Inside `set_order`, `get_order` stands for the
 order as it is: `set_order get_order str .` puts `str` behind it, `set_order str get_order .` in front. Alone,
@@ -78,14 +78,14 @@ order as it is: `set_order get_order str .` puts `str` behind it, `set_order str
 prints.
 #ex("manual", "10-order-add.pnx")]
 
-#qa[Why is it `set_order io str .` and not `io str set_order`?][What a word takes when it runs comes before it,
-on the stack: `2 3 add`. What a word reads when it is compiled comes after it: the signature of
+#qa[Why is it `set_order io str .` and not `io str set_order`?][What a procedure takes when it runs comes before it,
+on the stack: `2 3 add`. What a procedure reads when it is compiled comes after it: the signature of
 `def`, the name of `to`, the modules of `set_order` (ended by a period). A module is not a value, so the list could not be on
 the stack.]
 
 == Data files
 
-A host can read a source by #strong[data load]. A data load accepts declarations and values only, and refuses word
+A host can read a source by #strong[data load]. A data load accepts declarations and values only, and refuses procedure
 definitions, calls and control. So reading an untrusted settings file cannot run any code.
 
 #ex("manual", "10-data.c")
@@ -120,7 +120,7 @@ depending on a host module.]
 #summary[
 - One file is one module, and only what is `export`ed is seen outside (standard 13.1, 13.2).
 - After `use MODULE [as ALIAS] .` its parts are written `MODULE.NAME` (13.1).
-- Words, constants and globals are used by path, types and records by name alone; an exported global is stored with
+- Procedures, constants and globals are used by path, types and records by name alone; an exported global is stored with
   `set module.name` (13.2).
 - Values of a declared type are added and subtracted only with the same type (7.4).
 - A data load accepts declarations and values only (13.4).

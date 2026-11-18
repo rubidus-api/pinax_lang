@@ -34,7 +34,7 @@ size        = INT | NAME ;                         (* NAME: a const *)
 #para("2")[처리기는 소스를 위에서 아래로 한 번 읽는다. 이름은 쓰는 자리보다 앞에서 선언돼 있어야 한다.
 예외는 자기를 부르는 프로시저와 `forward`(8.11)다.]
 
-#para("3")[한 모듈 안에서 같은 이름을 두 번 짓지 못한다. 종류가 달라도 그렇다. 핵 낱말과 타입의 이름도 다시
+#para("3")[한 모듈 안에서 같은 이름을 두 번 짓지 못한다. 종류가 달라도 그렇다. 핵 프로시저와 타입의 이름도 다시
 짓지 못한다.]
 
 #para("4")[용량(`size`)은 양의 정수 리터럴이거나 그런 값의 `const` 다. 용량은 적재 때 정해지고 돌 때 바뀌지
@@ -42,7 +42,7 @@ size        = INT | NAME ;                         (* NAME: a const *)
 
 #para("4a")[배열, 버퍼, 목록, 큐, 풀, 작업 묶음의 용량은 `host` 로 쓸 수 있다. 그러면 그것은 호스트가 적재 전에 그 선언에
 준 수다(19.4 (1d)). 적재는 그 수를 거기에 적은 것처럼 다룬다. 호스트가 수를 주지 않은 선언에서 `host` 를 만난 적재는
-거절되고, 메시지가 그 선언의 이름을 댄다. `host` 는 그 자리에서만 선언의 낱말이다. 그 자리에서는 같은 이름의 상수를 찾지
+거절되고, 메시지가 그 선언의 이름을 댄다. `host` 는 그 자리에서만 선언의 프로시저이다. 그 자리에서는 같은 이름의 상수를 찾지
 않는다.]
 #ex("spec", "08-host-capacity.pnx")
 
@@ -73,7 +73,7 @@ size        = INT | NAME ;                         (* NAME: a const *)
 `err` `dec N` `str N`, 선언한 타입, 줄의 타입(표의 이름), 핸들 타입이다. `str` 는 쓰지 못한다(7.3).]
 
 #para("2")[전역을 읽으려면 이름을 쓰고, 넣으려면 `v set 이름` 을 쓴다(9.4). 상태가 살아 있는 동안 값이 남는다 ---
-한 낱말의 실행이 끝나도, 다음 적재가 와도 그대로다.]
+한 프로시저의 실행이 끝나도, 다음 적재가 와도 그대로다.]
 
 #ex("spec", "08-const-global.pnx")
 
@@ -220,7 +220,7 @@ value    = literal | NAME ;                         (* NAME: a const, a row name
 #part("결함")
 
 #para("8")[좁은 정수 필드에 넣을 `int` 는 먼저 그 타입으로 바꾼다(`n u8`); 값이 폭에 맞지 않으면 그 변환이 결함
-`overflow` 다(7.6). 자르지 않는다 --- 잘라 넣으려면 `low_u8` 처럼 아래 비트를 받는 낱말을 쓴다. 없음 줄의 필드를
+`overflow` 다(7.6). 자르지 않는다 --- 잘라 넣으려면 `low_u8` 처럼 아래 비트를 받는 프로시저를 쓴다. 없음 줄의 필드를
 읽거나 쓰면 결함 `range` 다.]
 #ex("spec", "08-record-narrow.pnx")
 
@@ -239,7 +239,7 @@ value    = literal | NAME ;                         (* NAME: a const, a row name
 #ex("spec", "08-pool.pnx")
 
 #para("3a")[`풀 do (r 풀) … end each` 는 풀에서 살아 있는 줄을 칸의 차례로 들른다. 얻은 차례가 아니다. 걷기가 닿기 전에
-블록 안에서 돌려준 줄은 들르지 않는다. 블록 안에서 얻은 줄은 그 칸이 뒤에 있으면 들른다. 풀을 걷는 조합 낱말(10.6)은
+블록 안에서 돌려준 줄은 들르지 않는다. 블록 안에서 얻은 줄은 그 칸이 뒤에 있으면 들른다. 풀을 걷는 조합 프로시저(10.6)은
 `each` 하나뿐이다.]
 
 #part("제약")
@@ -247,17 +247,17 @@ value    = literal | NAME ;                         (* NAME: a const, a row name
 #para("4")[얻은 줄을 넣지도 돌려주지도 않는 경로가 있으면 거절된다.]
 #ex("spec", "08-pool-leak.pnx")
 
-#para("4a")[풀에 `each` 가 아닌 조합 낱말을 쓰면 거절된다.]
+#para("4a")[풀에 `each` 가 아닌 조합 프로시저를 쓰면 거절된다.]
 #ex("spec", "08-pool-walk.pnx")
 
 #part("결함")
 
-#para("5")[돌려준 줄을 쓰면 결함 `stale` 이다. `pnx` 는 결함 아래에 그 낱말의 지역 변수를 함께 보인다.]
+#para("5")[돌려준 줄을 쓰면 결함 `stale` 이다. `pnx` 는 결함 아래에 그 프로시저의 지역 변수를 함께 보인다.]
 #ex("spec", "08-pool-stale.pnx")
 
 #part("진단")
 #diag(
-  ([풀에 `each` 가 아닌 조합 낱말], "a pool is walked by each only"),
+  ([풀에 `each` 가 아닌 조합 프로시저], "a pool is walked by each only"),
 )
 
 == 찾아보기 <decl-index>
@@ -331,19 +331,19 @@ forward = "forward" ( "array" | "list" | "pool" ) NAME
 #part("제약")
 
 #para("2")[공유 전역은 아무것도 바꾸지 못한다: 넣기, `set`, `push`, `pop`, `clear`, `truncate`, `add_row`, 필드에
-넣기, `insert`, `remove`, 버퍼에 붙이는 낱말, `map_into` 와 `filter_into` 의 목적지가 모두 거절된다. 처리기는
+넣기, `insert`, `remove`, 버퍼에 붙이는 프로시저, `map_into` 와 `filter_into` 의 목적지가 모두 거절된다. 처리기는
 공유 전역을 바꾸는 바이트코드도 적재 때 거절하고, 매개변수로 받은 공유 전역을 바꾸려는 바이트코드는 실행 때 결함
 `state` 로 끝낸다.]
 #ex("spec", "08-shared-write.pnx")
 
-#para("3")[공유 모음은 그 매개변수를 읽기만 하는 낱말의 모음 매개변수(9.9)로 넘길 수 있다. 낱말이 매개변수를
-바꾸는 명령을 쓰거나, 매개변수를 바꾸는 낱말이나 호스트 낱말의 `buffer` 매개변수로 넘기면 그 매개변수를 바꾸는
-낱말이다. 처리기는 원본을 다 읽은 뒤에 판단하므로 `forward` 로 알린 낱말에도, 앞선 적재의 낱말에도 같다.]
+#para("3")[공유 모음은 그 매개변수를 읽기만 하는 프로시저의 모음 매개변수(9.9)로 넘길 수 있다. 프로시저가 매개변수를
+바꾸는 명령을 쓰거나, 매개변수를 바꾸는 프로시저나 호스트 프로시저의 `buffer` 매개변수로 넘기면 그 매개변수를 바꾸는
+프로시저이다. 처리기는 원본을 다 읽은 뒤에 판단하므로 `forward` 로 알린 프로시저에도, 앞선 적재의 프로시저에도 같다.]
 #ex("spec", "08-shared-param.pnx")
 #ex("spec", "08-shared-change.pnx")
 
-#para("3a")[공유 모음은 호스트 낱말의 `buffer` 매개변수와 블록 값이 부르는 낱말(`call`)의 매개변수로는 넘기지 않는다.
-받는 쪽이 무엇을 하는지 적재 때 모르기 때문이다. `redefine` 은 읽기만 하던 매개변수를 바꾸는 낱말로 만들지 못한다.]
+#para("3a")[공유 모음은 호스트 프로시저의 `buffer` 매개변수와 블록 값이 부르는 프로시저(`call`)의 매개변수로는 넘기지 않는다.
+받는 쪽이 무엇을 하는지 적재 때 모르기 때문이다. `redefine` 은 읽기만 하던 매개변수를 바꾸는 프로시저로 만들지 못한다.]
 
 #para("4")[`shared` 는 `queue` `pool` `tasks` 와 `const` `record` 앞에 오지 않는다.]
 #ex("spec", "08-shared-queue.pnx")
@@ -382,10 +382,10 @@ forward = "forward" ( "array" | "list" | "pool" ) NAME
   ([`owned` 줄을 넘기지 않는 경로], "an owned value in a local is not given on every path (close, free or store it)"),
   ([미리 알린 표가 없음], "a table announced by forward is never declared"),
   ([공유 전역을 바꿈], "a shared global is read-only: nothing here may change it"),
-  ([공유 모음을 그것을 바꾸는 낱말에 넘김], "a shared collection is read-only: the word it is given to changes this parameter"),
-  ([공유 모음을 블록 값의 낱말에 넘김], "a shared collection is read-only: it is not given to the word a block value names, which may change it"),
+  ([공유 모음을 그것을 바꾸는 프로시저에 넘김], "a shared collection is read-only: the word it is given to changes this parameter"),
+  ([공유 모음을 블록 값의 프로시저에 넘김], "a shared collection is read-only: it is not given to the word a block value names, which may change it"),
   ([`redefine` 이 읽던 매개변수를 바꿈], "redefine cannot make the word change a collection parameter the old one only read: shared collections may have been given to it"),
-  ([공유 버퍼를 호스트 낱말에 넘김], "a shared buffer is read-only: it is not given to a host word, which may write it"),
+  ([공유 버퍼를 호스트 프로시저에 넘김], "a shared buffer is read-only: it is not given to a host word, which may write it"),
   ([`shared` 뒤에 다른 선언], "shared stands before global, array, list, buffer or index"),
   ([이름이 따르지 않는 `err`], "err is followed by the name of a new failure code"),
   ([31 바이트를 넘는 실패 코드의 이름], "the name of a failure code is at most 31 bytes long"),

@@ -2,7 +2,7 @@
 
 == `str` --- strings <std-str>
 
-#para("1")[The module `str` works on strings as bytes. Byte positions count from 0. Only the words that work on
+#para("1")[The module `str` works on strings as bytes. Byte positions count from 0. Only the procedures that work on
 characters (`chars` `char_count` `is_utf8`) read UTF-8. Changing case (`upper` `lower`) changes ASCII only.]
 
 #para("2")[Where a separator or a part to look for is taken (`sep`, `part`), a `str` or a single character (`int`,
@@ -12,7 +12,7 @@ characters (`chars` `char_count` `is_utf8`) read UTF-8. Changing case (`upper` `
 
 #para("3")[All results are views of the string given.
 #table(columns: (auto, auto, 1fr), inset: 5pt, stroke: 0.5pt + luma(170),
-  [*Word*], [*Signature*], [*Meaning*],
+  [*Procedure*], [*Signature*], [*Meaning*],
   [`len` `is_empty`], [`(str gives int)` `(str gives bool)`], [the number of bytes; is it empty],
   [`take` `skip`], [`(s str, n int gives str)`], [the first `n` bytes; what follows them; when short, what there is],
   [`take_last` `skip_last`], [`(s str, n int gives str)`], [the last `n` bytes; what comes before them],
@@ -32,7 +32,7 @@ characters (`chars` `char_count` `is_utf8`) read UTF-8. Changing case (`upper` `
 
 #para("5")[
 #table(columns: (auto, auto, 1fr), inset: 5pt, stroke: 0.5pt + luma(170),
-  [*Word*], [*Signature*], [*Meaning*],
+  [*Procedure*], [*Signature*], [*Meaning*],
   [`starts_with` `ends_with` `contains`], [`(s str, part gives bool)`], [],
   [`find` `find_last`], [`(s str, part gives int or fail)`], [the first, last position; `err.not_found` when absent],
   [`compare`], [`(str, str gives int)`], [negative, zero or positive, comparing in byte order],
@@ -40,16 +40,16 @@ characters (`chars` `char_count` `is_utf8`) read UTF-8. Changing case (`upper` `
   [`char_count`], [`(str gives int)`], [the number of UTF-8 characters],
   [`is_utf8`], [`(str gives bool)`], [is it valid UTF-8],
 )
-The comparison words `eq` `ne` `lt` and the rest also compare strings in byte order (15.2).]
+The comparison procedures `eq` `ne` `lt` and the rest also compare strings in byte order (15.2).]
 
 #ex("spec", "16-str-search.pnx")
 
 === Making new text
 
 #para("6")[The results are new bytes written in the region; when the region is used up it is the fault `full` (12.2).
-The words that read numbers can fail.
+The procedures that read numbers can fail.
 #table(columns: (auto, auto, 1fr), inset: 5pt, stroke: 0.5pt + luma(170),
-  [*Word*], [*Signature*], [*Meaning*],
+  [*Procedure*], [*Signature*], [*Meaning*],
   [`upper` `lower`], [`(str gives str)`], [ASCII case changed],
   [`repeat`], [`(s str, n int gives str)`], [`n` copies joined; a negative `n` is the fault `range`],
   [`replace`], [`(s str, old str, new str gives str)`], [every `old` replaced by `new`],
@@ -64,7 +64,7 @@ The words that read numbers can fail.
 
 === Rails and writing into buffers
 
-#para("7")[Words that make rails (10.6):
+#para("7")[Procedures that make rails (10.6):
 - `s sep str.split` --- the pieces between `sep`s, empty ones included; `sep` is a `str` or one byte (a `u8` constant,
   usually a character literal), as for `cut` and `try_cut`;
 - `s str.words` --- the pieces between white space, no empty ones;
@@ -72,9 +72,9 @@ The words that read numbers can fail.
 - `s str.bytes` --- the bytes (`u8`);
 - `s str.chars` --- one view (`str`) for each UTF-8 character.]
 
-#para("8")[Words that write into a buffer:
+#para("8")[Procedures that write into a buffer:
 - `sep buf STEM str.join_into` --- appends the pieces of the rail joined by `sep` (`or fail`). The rail goes last,
-  since the word right after a rail shall take it;
+  since the procedure right after a rail shall take it;
 - `s old new buf str.replace_into` --- appends the text with replacements and gives their number
   (`gives n int or fail`).]
 
@@ -82,7 +82,7 @@ The words that read numbers can fail.
 
 #part("Constraints")
 
-#para("9")[A value that is not a `str` given to a word of `str` is refused.]
+#para("9")[A value that is not a `str` given to a procedure of `str` is refused.]
 #ex("spec", "16-str-type.pnx")
 
 #part("Faults")

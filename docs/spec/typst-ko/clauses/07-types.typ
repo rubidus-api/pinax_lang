@@ -3,7 +3,7 @@
 = 타입과 값 <types>
 
 #para("1")[모든 값에는 적재 때 정해지는 타입이 있다. 돌 때 값이 타입을 들고 다니지 않고, 돌 때 타입을
-묻는 낱말도 없다. 타입이 맞지 않는 프로그램은 적재 때 거절된다.]
+묻는 프로시저도 없다. 타입이 맞지 않는 프로그램은 적재 때 거절된다.]
 
 #para("2")[타입은 다음과 같다.
 #table(columns: (auto, 1fr), inset: 5pt, stroke: 0.5pt + luma(170),
@@ -30,9 +30,9 @@
 
 #para("1")[`int` 의 값은 −2#super[63] 부터 2#super[63]−1 까지의 정수다. 모든 처리기에서 같다.]
 
-#para("2")[산술 낱말 `add` `sub` `mul` `div` `mod` `neg` `abs` 는 결과가 범위를 벗어나면 결함
-`overflow` 로 멈춘다(11.3). 값을 감아 돌리는 낱말(`wrap_add` …), 끝에서 멈추는 낱말(`sat_add` …),
-넘침을 실패로 알리는 낱말(`chk_add` …)이 따로 있다(15.1).]
+#para("2")[산술 프로시저 `add` `sub` `mul` `div` `mod` `neg` `abs` 는 결과가 범위를 벗어나면 결함
+`overflow` 로 멈춘다(11.3). 값을 감아 돌리는 프로시저(`wrap_add` …), 끝에서 멈추는 프로시저(`sat_add` …),
+넘침을 실패로 알리는 프로시저(`chk_add` …)이 따로 있다(15.1).]
 
 #para("3")[`div` 는 0 쪽으로 버리고, `mod` 의 결과는 나뉘는 수의 부호를 따른다(`a b div b mul a b mod add`
 가 `a` 다). `floor_div` 와 `floor_mod` 는 아래로 버린다. 0 으로 나누면 결함 `div_zero` 다.]
@@ -46,21 +46,21 @@
 
 == 참거짓 <types-bool>
 
-#para("1")[`bool` 의 값은 `true` 와 `false` 둘이다. 비교 낱말(`eq` `lt` …)이 내고, `if` 와
-논리 낱말(`and` `or` `not`)이 받는다.]
+#para("1")[`bool` 의 값은 `true` 와 `false` 둘이다. 비교 프로시저(`eq` `lt` …)이 내고, `if` 와
+논리 프로시저(`and` `or` `not`)이 받는다.]
 
 #ex("spec", "07-bool.pnx")
 
 #part("제약")
 
-#para("2")[`bool` 과 `int` 는 서로 바뀌지 않는다. 조건 자리에 `int` 를, 산술 낱말에 `bool` 을 줄 수 없다.]
+#para("2")[`bool` 과 `int` 는 서로 바뀌지 않는다. 조건 자리에 `int` 를, 산술 프로시저에 `bool` 을 줄 수 없다.]
 #ex("spec", "07-bool-not-int.pnx")
 #ex("spec", "07-int-not-bool.pnx")
 
 == 문자열 <types-str>
 
 #para("1")[#term("문자열", en: "string")은 바이트의 열이다. UTF-8 이어야 한다는 규칙은 없다 --- 바이트를
-다루는 낱말은 바이트로, 글자를 다루는 낱말(`str.char_count` 등)은 UTF-8 로 읽는다.]
+다루는 프로시저는 바이트로, 글자를 다루는 프로시저(`str.char_count` 등)은 UTF-8 로 읽는다.]
 
 #para("2")[문자열의 타입은 둘이다.
 - `str` 는 *뷰*다. 어딘가에 있는 바이트(리터럴, 전역의 글, 버퍼, 구역)의 시작과 길이를 가리키며,
@@ -78,19 +78,19 @@
 
 #part("결함")
 
-#para("4")[`str N` 자리에 N 바이트보다 긴 글을 넣고 그 뒤에 지킴 낱말이 없으면 결함 `range` 로 멈춘다. 자르지
+#para("4")[`str N` 자리에 N 바이트보다 긴 글을 넣고 그 뒤에 지킴 프로시저가 없으면 결함 `range` 로 멈춘다. 자르지
 않는다.]
 #ex("spec", "07-str-too-long.pnx")
 
-#para("4a")[`str N` 자리에 넣는 일(`to` 로 필드에, `set` 으로 전역이나 칸에) 뒤에는 지킴 낱말이 올 수 있다(11.2).
-그러면 N 바이트보다 긴 글은 실패 `range` 이고, 자리는 가졌던 것을 그대로 가진다. 짧은 글은 들어가고 지킴 낱말은
-아무 일도 하지 않는다. `str N` 목록에 `push` 하는 일의 지킴 낱말 아래에서도(8.5) 너무 긴 글은 실패 `range` 다.
+#para("4a")[`str N` 자리에 넣는 일(`to` 로 필드에, `set` 으로 전역이나 칸에) 뒤에는 지킴 프로시저가 올 수 있다(11.2).
+그러면 N 바이트보다 긴 글은 실패 `range` 이고, 자리는 가졌던 것을 그대로 가진다. 짧은 글은 들어가고 지킴 프로시저는
+아무 일도 하지 않는다. `str N` 목록에 `push` 하는 일의 지킴 프로시저 아래에서도(8.5) 너무 긴 글은 실패 `range` 다.
 목록이 찼든 아니든 그렇다.]
 #ex("spec", "07-str-guard.pnx")
 
 #para("4b")[`fits PLACE` 는 넣는 일처럼 `str N` 자리를 부른다: `record.field`, 전역(`MODULE.NAME` 도), 또는 그 칸을 위한
 배열이나 목록(컬렉션 매개변수도, 9.9). 스택 맨 위의 글을 가져가고 아무것도 주지 않으며 아무것도 쓰지 않는다. N 바이트
-이하의 글은 지나가고, 더 긴 글은 실패 `range` 다. 실패할 수 있는 낱말이므로 뒤에 지킴 낱말이 온다(11.2 (2)). 너무 긴
+이하의 글은 지나가고, 더 긴 글은 실패 `range` 다. 실패할 수 있는 프로시저이므로 뒤에 지킴 프로시저가 온다(11.2 (2)). 너무 긴
 글이 반쯤 해 놓은 일을 남길 일(줄을 받기 같은)을 하기 전에, 프로그램은 이것으로 자리에 묻는다.]
 #ex("spec", "07-fits.pnx")
 
@@ -108,10 +108,10 @@ base      = "int" | "bool" | "str" | "dec" INT | "proc" effect "end" ;
 `int` 와 같고 실행에 드는 비용도 없지만, 적재 때는 다른 타입이다. 단위가 다른 두 수를 섞는 실수를
 막으려고 쓴다.]
 
-#para("2")[바탕 타입의 값 뒤에 타입의 이름을 쓰면 그 타입의 값이 된다(`1500 meters`). 낱말 `raw` 는 선언한
+#para("2")[바탕 타입의 값 뒤에 타입의 이름을 쓰면 그 타입의 값이 된다(`1500 meters`). 프로시저 `raw` 는 선언한
 타입의 값을 바탕 타입의 값으로 돌린다.]
 
-#para("3")[같은 선언한 타입의 두 값은 `add` 와 `sub` 로 더하고 뺄 수 있고, 결과도 그 타입이다. 비교 낱말과
+#para("3")[같은 선언한 타입의 두 값은 `add` 와 `sub` 로 더하고 뺄 수 있고, 결과도 그 타입이다. 비교 프로시저와
 `min` `max` 도 같은 타입끼리 쓴다. 다른 산술은 `raw` 로 바꾼 뒤에 한다.]
 
 #ex("spec", "07-type.pnx")
@@ -130,8 +130,8 @@ base      = "int" | "bool" | "str" | "dec" INT | "proc" effect "end" ;
 #para("4")[선언한 타입의 값을 다른 타입의 자리에 주면 거절된다. 아래는 두 인자의 차례를 바꾼 것이다.]
 #ex("spec", "07-type-mixed.pnx")
 
-#para("5")[선언한 타입의 두 값에 `add` `sub` 밖의 산술 낱말을 쓰면 거절된다. 선언한 타입과 `int` 에 (3a)
-밖의 산술 낱말을 써도 거절된다.]
+#para("5")[선언한 타입의 두 값에 `add` `sub` 밖의 산술 프로시저를 쓰면 거절된다. 선언한 타입과 `int` 에 (3a)
+밖의 산술 프로시저를 써도 거절된다.]
 #ex("spec", "07-type-arith.pnx")
 
 == 십진 소수 <types-dec>
@@ -178,33 +178,33 @@ DEC      = [ sign ] digits "." digits ;   (* 지수 없음: 6.4 *)
 말한다: `u` 는 0 부터 2#super[폭]−1, `i` 는 −2#super[폭−1] 부터 2#super[폭−1]−1. `u8` 은 바이트의 타입이고 `u32` 는
 코드포인트의 타입이다. 64 비트 부호 있는 정수는 `int` 다. `i64` 라는 타입은 없다.]
 
-#para("2")[좁은 정수는 `int` 와 다른 타입이고 서로도 다른 타입이다. 변환은 낱말로 적는다. `n u8` 은 `int` 나 다른 좁은
+#para("2")[좁은 정수는 `int` 와 다른 타입이고 서로도 다른 타입이다. 변환은 프로시저로 적는다. `n u8` 은 `int` 나 다른 좁은
 정수 `n` 을 `u8` 로 만들고, 값이 범위 밖이면 결함 `overflow` 다. 자르지 않는다. 리터럴도 같은 꼴이다: `255 u8`.
 상수가 범위 밖이면 적재 때 거절된다. `x raw` 는 담긴 `int` 를 준다. `u64` 의 `raw` 는 64 비트를 그대로 `int` 에
-담는다(2#super[63] 이상은 음수). `n low_u8` … `n low_i32` 는 아래 비트만 받는다. 이것이 자르는 낱말이다.]
+담는다(2#super[63] 이상은 음수). `n low_u8` … `n low_i32` 는 아래 비트만 받는다. 이것이 자르는 프로시저이다.]
 
 #para("3")[`add` `sub` `mul` `div` `mod` 는 같은 좁은 정수 둘을 받아 같은 타입을 준다. 결과가 범위를 벗어나면 결함
 `overflow` 다. `wrap_add` `wrap_sub` `wrap_mul` 은 2#super[폭] 을 법으로 감고, `sat_add` `sat_sub` `sat_mul` 은 범위의
-끝에서 멈추고, `chk_add` `chk_sub` `chk_mul` `chk_div` 는 실패로 알린다. 비교 낱말은 같은 타입 둘을 받는다. `u64` 는
+끝에서 멈추고, `chk_add` `chk_sub` `chk_mul` `chk_div` 는 실패로 알린다. 비교 프로시저는 같은 타입 둘을 받는다. `u64` 는
 부호 없이 비교하고 나눈다. `neg` `abs` `min` `max` `clamp` 는 받지 않는다(15.1).]
 
-#para("4")[비트 낱말은 폭 안에서 한다. `bit_not` 은 폭의 비트만 뒤집고, `shl` 은 폭을 넘는 비트를 버리고, `shr` 은 부호
+#para("4")[비트 프로시저는 폭 안에서 한다. `bit_not` 은 폭의 비트만 뒤집고, `shl` 은 폭을 넘는 비트를 버리고, `shr` 은 부호
 있는 타입이면 부호를 지키고 없는 타입이면 0 을 채운다. `u_shr` `u_div` `u_mod` `u_lt` `u_le` `u_gt` `u_ge` `floor_div`
 `floor_mod` 는 부호 없는 타입에서 `shr` `div` `mod` `lt` `le` `gt` `ge` `div` `mod` 와 같고, 부호 있는 타입은 받지 않는다.
 `count_ones` `leading_zeros` `trailing_zeros` 는 폭의 비트를 세어 `int` 를 주고(0 이면 폭), `byte_swap` 은 폭의 바이트를
 뒤집는다. `rotl` `rotr` `mul_hi` `u_mul_hi` 는 `u64` 만 받는다.]
 
-#para("5")[좁은 정수는 `int` 처럼 전역, 배열과 목록의 칸, 큐의 값, 매개변수와 결과, 호스트 낱말의 서명(19.2)의 타입이
+#para("5")[좁은 정수는 `int` 처럼 전역, 배열과 목록의 칸, 큐의 값, 매개변수와 결과, 호스트 프로시저의 서명(19.2)의 타입이
 되고, `type opcode u8` 처럼 선언한 타입(7.4)의 바탕이 된다. 배열, 목록, 큐의 칸과 레코드의 필드는 그 폭만큼의
 바이트다(`array a u8 1024` 는 1024 바이트); 전역 하나는 8 바이트 자리다. 문자 리터럴은 `u8` 이나 `u32` 다(6.5).
-`match` 는 좁은 정수를 견준다(10.3). 호스트 낱말은 값을 64 비트 정수 하나로 받고 주며, 결과가 범위 밖이면 결함
+`match` 는 좁은 정수를 견준다(10.3). 호스트 프로시저는 값을 64 비트 정수 하나로 받고 주며, 결과가 범위 밖이면 결함
 `overflow` 다(19.2).]
 
 #ex("spec", "07-narrow.pnx")
 
 #part("제약")
 
-#para("6")[`int` 와 좁은 정수, 또는 다른 좁은 정수 둘을 한 낱말에 주면 거절된다. 범위 밖의 상수를 변환하면 거절된다.]
+#para("6")[`int` 와 좁은 정수, 또는 다른 좁은 정수 둘을 한 프로시저에 주면 거절된다. 범위 밖의 상수를 변환하면 거절된다.]
 #ex("spec", "07-narrow-mix.pnx")
 #ex("spec", "07-narrow-range.pnx")
 
@@ -225,7 +225,7 @@ DEC      = [ sign ] digits "." digits ;   (* 지수 없음: 6.4 *)
   ([`u64` 아닌 좁은 정수에 `rotl` `rotr`], "rotl and rotr take an int or a u64; for a narrow type take raw"),
   ([`u64` 아닌 좁은 정수에 `mul_hi` `u_mul_hi`], "mul_hi and u_mul_hi take an int or a u64; for a narrow type take raw"),
   ([좁은 정수에 `abs`], "abs takes an int or a declared type over int; a narrow type has no abs"),
-  ([산술 낱말의 두 값의 타입이 다르거나 `int` 가 아님], "this word takes two int values, or two of the same declared type"),
+  ([산술 프로시저의 두 값의 타입이 다르거나 `int` 가 아님], "this word takes two int values, or two of the same declared type"),
   ([선언한 타입에 (3)과 (3a) 밖의 산술], "a declared type is added to and subtracted from its own type, and multiplied, divided or taken modulo by an int; for other arithmetic take raw"),
   ([인자의 타입이 서명과 다름], "an argument has another type than the word's signature asks for"),
   ([전역 등에 `str`], "stored text is str N; a str view lives only in locals, arguments and results"),

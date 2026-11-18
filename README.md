@@ -27,7 +27,7 @@ collector and no pointers at run time.
 - **Safe to run untrusted code.** No source, and no bytecode the loader accepts, reads or writes outside the memory the
   host gave it; with an instruction budget every run comes back. A wrong program is refused at load or stops with a
   fault, and never brings the host down. The C functions a host registers are the host's own code and outside this
-  promise; a script reaches only the words the host registered.
+  promise; a script reaches only the procedures the host registered.
 
 ## Not goals
 
@@ -56,7 +56,7 @@ cc -std=c23 -o nob nob.c
                      # and build/dist/pinax-playground.html: Pinax in a terminal page, opened from disk
 ```
 
-A first script, `hello.pnx`. Arguments come before the word that takes them, and the only
+A first script, `hello.pnx`. Arguments come before the procedure that takes them, and the only
 punctuation outside literals is `.` `(` `)` `,`:
 
 ```text
@@ -78,7 +78,7 @@ build/native/pnx hello.pnx        # 1 to 100 is 5050
 ## Embedding
 
 The host interface is one header, `include/pinax.h`. The host gives the state its memory,
-registers the C functions scripts may call, loads source and runs words:
+registers the C functions scripts may call, loads source and runs procedures:
 
 ```c
 #include "pinax.h"
@@ -103,8 +103,8 @@ int main(void) {
     pinax_register(st, "calc", words, 1);
 
     static const char source[] =
-        "use calc\n"
-        "word answer (n int gives r int) n calc.tenfold 2 add end\n";
+        "use calc .\n"
+        "def answer n int gives r int do n calc.tenfold 2 add end\n";
     pinax_str text = {(const unsigned char *)source, sizeof source - 1};
     if (pinax_load(st, "main", text, PINAX_LOAD_CODE) != PINAX_OK)
         return 1;
@@ -127,7 +127,7 @@ cc -std=c99 -Iinclude host.c build/native/libpinax.a -lm -o host
 ```
 
 The state lives entirely inside `block`; Pinax never asks the system for memory. The standard
-host modules (`io`, `file`, `clock`, `random`, `env`) are ordinary host words in
+host modules (`io`, `file`, `clock`, `random`, `env`) are ordinary host procedures in
 `src/host/`, linked only by hosts that want them. The same library, `libpinax_host.a`, has a
 host loop that runs many states on a few threads and channels that carry messages between
 them (`src/host/pinax_loop.h`); data that is only read is declared `shared` and lent to many

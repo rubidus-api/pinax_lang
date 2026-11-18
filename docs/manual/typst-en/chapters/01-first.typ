@@ -5,7 +5,7 @@
 #opening[Nothing; this is the first chapter.][
 - What does the smallest Pinax program look like?
 - How is a program run, and how is a wrong program reported?
-- What does it take to make a word and call it?
+- What does it take to make a procedure and call it?
 ]
 
 == A program that says hello
@@ -13,14 +13,14 @@
 #ex("manual", "01-hello.pnx")
 
 These two lines are the whole program. The first line, `use io .`, opens (a statement ends with a period) the module `io` for input and output. The
-second puts a string on the stack and calls the word `io.println`, which takes the string off the top of the stack,
+second puts a string on the stack and calls the procedure `io.println`, which takes the string off the top of the stack,
 writes it to standard output and ends the line.
 
-Pinax code reads in this order: #strong[values, then the word]. Values pile up on the stack; a word takes off what it
+Pinax code reads in this order: #strong[values, then the procedure]. Values pile up on the stack; a procedure takes off what it
 needs, does its work and puts its results back. This is called #term("postfix") notation.
 
 Follow the order in which the processor reads these two lines. It reads one token at a time from the left: a value
-goes onto the stack, a word is set to work. The top of the stack is written on the right, and `—` is an empty stack.
+goes onto the stack, a procedure is set to work. The top of the stack is written on the right, and `—` is an empty stack.
 
 #trace(
   ("use io", "—", [Opens the module `io`. The stack is not touched.]),
@@ -30,8 +30,8 @@ goes onto the stack, a word is set to work. The top of the stack is written on t
 
 Note that the stack is empty when the program ends. A program that leaves values on it is refused (chapter 2).
 
-#qa[Is there no start function like `main`?][No. Code written outside word definitions runs once, from top to bottom,
-when the file is loaded; that is where a program starts. A larger program gathers its work into words and calls one of
+#qa[Is there no start function like `main`?][No. Code written outside procedure definitions runs once, from top to bottom,
+when the file is loaded; that is where a program starts. A larger program gathers its work into procedures and calls one of
 them at the very end.]
 
 == Running with `pnx`
@@ -46,7 +46,7 @@ This program uses `io.println` without opening `io`. A message has the form `fil
 where the offending token starts.
 
 #mistake[Adding with `+`][Writing `1 + 2`, as in other languages, is refused. Outside literals and remarks Pinax allows
-only the characters of names and `( ) , .`. Addition is the word `add`, written after the values.
+only the characters of names and `( ) , .`. Addition is the procedure `add`, written after the values.
 #ex("manual", "01-plus.pnx")
 A sign attached to a number, as in `-7`, is part of the number and fine. Only a `+` or `-` standing apart is not.]
 
@@ -61,9 +61,9 @@ A line break is the same as a space. The code of one call may run over two lines
 of work. Indentation and line breaks are for the reader; `pnx fmt` evens them out (chapter 15).
 
 #qa[Why `rem` and not `//` or `#`?][Outside literals and remarks, Pinax allows only the characters of names and
-`( ) , .`. So a remark also opens with a word-like `rem`. `rem` is reserved and cannot be a name.]
+`( ) , .`. So a remark also opens with a procedure-like `rem`. `rem` is reserved and cannot be a name.]
 
-== Making words
+== Making procedures
 
 Here is a program that adds up 1 to 100, three ways.
 
@@ -78,8 +78,8 @@ and gives one `int`". When the body ends, the stack shall hold exactly the resul
 - `sum_formula` is the formula $n(n+1)/2$ written in postfix.
 
 #qa[Why the `str.to_str`?][`io.println` takes only strings. To print an integer it has to become text first, and the
-word for that is `to_str` of the module `str` --- hence `use str .`. There is no output word that takes an integer as it
-is: each word has exactly one signature.]
+procedure for that is `to_str` of the module `str` --- hence `use str .`. There is no output procedure that takes an integer as it
+is: each procedure has exactly one signature.]
 
 == Taking arguments
 
@@ -87,14 +87,14 @@ The arguments of `pnx FILE ARGUMENTS…` are read with the module `env`.
 
 #ex("manual", "01-greet.pnx")
 
-`1 env.arg` gives the first argument. There may be none, so this word can #strong[fail]; that is why `or_else … end`
-follows it right away, with the value to use instead. Calling a word that can fail and leaving the place after it empty
+`1 env.arg` gives the first argument. There may be none, so this procedure can #strong[fail]; that is why `or_else … end`
+follows it right away, with the value to use instead. Calling a procedure that can fail and leaving the place after it empty
 is refused. Chapter 8 covers failures.
 
 #summary[
-- Code is values, then words. Code outside definitions runs once at load (standard 5.2).
-- Words of a module need `use MODULE .` and are written `MODULE.WORD` (13.1).
-- There are no characters like `+` or `;`; arithmetic is words (6.1, 6.4).
+- Code is values, then procedures. Code outside definitions runs once at load (standard 5.2).
+- Procedures of a module need `use MODULE .` and are written `MODULE.PROCEDURE` (13.1).
+- There are no characters like `+` or `;`; arithmetic is procedures (6.1, 6.4).
 - `def NAME signature do … end` makes a procedure; when the body ends the stack shall match the results (9.2).
 - A wrong program is refused before it runs (4).
 ]

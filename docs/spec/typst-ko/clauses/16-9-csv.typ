@@ -8,7 +8,7 @@
 #para("2")[`s csv.fields` 는 줄 하나의 필드를 차례로 내는 레일(10.6)다. 따옴표로 싼 필드는 따옴표를 떼고 겹친
 따옴표를 풀어서 낸다. 닫히지 않은 따옴표는 남은 글 그대로를 마지막 필드로 낸다(레일은 실패를 알리지 못한다).]
 
-#para("3")[쓰는 낱말은 버퍼에 붙인다(`or fail`, 자리가 모자라면 `err.full`). `s buf csv.put`, `n buf
+#para("3")[쓰는 프로시저는 버퍼에 붙인다(`or fail`, 자리가 모자라면 `err.full`). `s buf csv.put`, `n buf
 csv.put_int`, `d buf csv.put_dec`, `b buf csv.put_bool` 은 필드 하나를(앞에 필요한 쉼표와 함께), `buf csv.end_line` 은 줄 끝을
 붙인다. 참거짓은 `true` `false` 로 쓴다.]
 

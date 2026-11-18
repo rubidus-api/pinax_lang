@@ -13,25 +13,25 @@
 
 A host has four jobs:
 + give a block of memory and open a state with `pinax_open`; everything of the state is inside that block;
-+ register the #strong[host words] scripts may use with `pinax_register`, with signatures written as in Pinax;
++ register the #strong[host procedures] scripts may use with `pinax_register`, with signatures written as in Pinax;
 + load the script with `pinax_load`; when it is refused, the reason is in `pinax_error_text`;
-+ find a word, with its signature, using `pinax_find`, and call it with `pinax_run`.
++ find a procedure, with its signature, using `pinax_find`, and call it with `pinax_run`.
 
 #ex("manual", "14-host.c")
 
 #qa[How big must the block be?][Opening takes about 150 KB with the defaults. Most of it is the main run's region (64 KB)
 and the integer bank (32 KB), which `config.region_bytes` and `config.int_slots` can shrink. While a load runs, what is
-left of the block is the compiler's working memory: about 20 KB for a small source, about 1 KB per word, and 64 KB more
+left of the block is the compiler's working memory: about 20 KB for a small source, about 1 KB per procedure, and 64 KB more
 when there is a constant pattern. When the load ends only the program stays and the working memory is free again. The
 256 KB of the examples is plenty for a short script; for a long one, after `PINAX_ERR_NO_ROOM`, open again with at
 least the size `pinax_needed` gives. That size is a lower bound, so it may fall short once more.]
 
 Arguments and results pass in arrays by type: integers in `args->i[]` and `args->ri[]`, strings in `args->s[]` and
-`args->rs[]`. When a host word returns something other than `PINAX_OK`, a word whose signature has `or fail` fails (the
-script takes it with `or_else`), and a word without it becomes a fault.
+`args->rs[]`. When a host procedure returns something other than `PINAX_OK`, a procedure whose signature has `or fail` fails (the
+script takes it with `or_else`), and a procedure without it becomes a fault.
 
-#qa[Can a script delete files or reach the network?][Not unless the host registered words that do. The standard modules
-do not reach outside; everything outside is a host word. Calling C functions with `extern` reaches only the functions
+#qa[Can a script delete files or reach the network?][Not unless the host registered procedures that do. The standard modules
+do not reach outside; everything outside is a host procedure. Calling C functions with `extern` reaches only the functions
 the host's resolver allows.]
 
 == Scripts that are not trusted
@@ -59,7 +59,7 @@ One state runs on one thread at a time. To use several cores, open several state
 (`pinax_loop.h`) runs states on a set number of threads, and #strong[channels] carry messages between them. The loop is
 opened with a configuration, as a state is: the number of threads, how many states it holds at once, and a block of
 memory that holds the loop and its channels; two size functions say how large. Without a block it takes one piece
-of the heap of that size. The host hands a state and a word to the loop
+of the heap of that size. The host hands a state and a procedure to the loop
 with `pinax_loop_start` and hears that it ended through the function it gave
 there. The host names a channel and registers it as a module; the script writes `use orders` and then `orders.send`,
 `orders.receive` and `orders.close`. A task that puts into a full channel or takes from an empty one waits, and its
@@ -75,7 +75,7 @@ and the receiver reads that failure as the end.
 cannot be caught at load. What changed is passed on in the messages of channels. When every run waits for a channel and
 nothing is left to send, the loop ends those runs with `PINAX_ERR_DEADLOCK` (standard 17.4).]
 
-Large data that is only read (a dictionary, a rate table, a word list and its index) is not loaded into every state;
+Large data that is only read (a dictionary, a rate table, a procedure list and its index) is not loaded into every state;
 one copy is read by all. One state loads the data, and the states that read it write `shared` in front of the same
 declarations. When the host lends them the data state's storage with `pinax_share`, they read the same bytes without a
 copy. Code that changes a shared global is refused at load, and the state that lent its storage neither runs nor loads
@@ -89,14 +89,14 @@ Programs that run as several processes share a file instead. The program that ma
 `pinax_share_save`; each process maps it with `pinax_map_file` and gives its states the globals with
 `pinax_share_file`. The operating system keeps one copy of the file's pages for all of them (standard 19.7).
 
-#mistake[A shared list cannot be passed to a word that adds it up][It can, as long as the word only reads that
-parameter. The processor sees whether a word changes a collection parameter, itself or through the words it passes it
-to, and refuses only a shared collection given to such a word (standard 8.13).]
+#mistake[A shared list cannot be passed to a procedure that adds it up][It can, as long as the procedure only reads that
+parameter. The processor sees whether a procedure changes a collection parameter, itself or through the procedures it passes it
+to, and refuses only a shared collection given to such a procedure (standard 8.13).]
 
 == Serving many requests
 
 A server takes many requests at once, and most of their time goes in waiting: for a database, a file, another server.
-A host word that waits inside its C function holds the thread and the whole state. So a host word that waits is
+A host procedure that waits inside its C function holds the thread and the whole state. So a host procedure that waits is
 registered with `PINAX_WORD_AWAITABLE`. It keeps a token with `pinax_call_pending`, starts the operation and returns
 `PINAX_PENDING`. The task that called it waits, and the other tasks of the state go on. When no task can go on,
 `pinax_run` or `pinax_resume` returns `PINAX_WAITING`. The host's own event loop finishes the operations with
@@ -112,7 +112,7 @@ it with `--capacity requests=64` (standard 20 (3a)).
 #ex("manual", "14-requests.c")
 
 To give up on one request (a timeout, a client that went away), the host completes its token with a failure, here
-`PINAX_ERR_CANCELLED`. The word fails in the task that waits, `or_else` takes the failure, and the other requests are not
+`PINAX_ERR_CANCELLED`. The procedure fails in the task that waits, `or_else` takes the failure, and the other requests are not
 touched. `pinax_abort` would end the whole run, and every request of the state with it.
 
 A fault in one request must not end the others. Declare the group of the request tasks `apart` (chapter 13): a task
@@ -121,8 +121,8 @@ that faults then ends alone. The host must still answer that request, so the tas
 every such fault with that tag, here for the third request, whose id runs past the array `served`. Several faults
 in one run are told one by one (standard 19.10).
 
-#qa[What if the word that waits has no `or fail`?][Then a failure from the host can only become a fault, and a fault ends
-the whole run: every request of the state, unless the group is `apart`. A word the host may give up on is declared
+#qa[What if the procedure that waits has no `or fail`?][Then a failure from the host can only become a fault, and a fault ends
+the whole run: every request of the state, unless the group is `apart`. A procedure the host may give up on is declared
 `or fail`, as `fetch` is above (standard 19.8).]
 
 A task gives way only where it waits or yields. A request that computes for a long time holds the other requests of its
@@ -135,20 +135,20 @@ size of `tasks requests 64 32 8192 1000000 apart`. A task that runs past it with
 stores is seen by another. But a clone copies the whole state, its fixed parts and its program, for every request, and
 it must be closed again. A task costs only its own region and frames, as declared with `tasks` (standard 14 (2)). The
 tasks of one state share its globals, so what belongs to one request stays in its locals. A host that clones takes
-`pinax_clone_with(source, block, PINAX_CLONE_KEEP_HOSTS, &clone)`: the clone keeps the source's host words and
+`pinax_clone_with(source, block, PINAX_CLONE_KEEP_HOSTS, &clone)`: the clone keeps the source's host procedures and
 exported code, and runs without them being given again (standard 19.9 (2b)).]
 
 == Faster: the code as C
 
-When a program spends its time in integer loops, array work or many small words, its code can be compiled with the
+When a program spends its time in integer loops, array work or many small procedures, its code can be compiled with the
 host's C compiler. `pnx export-c prog.pnx > prog_native.c` writes it, without running any of it; the host compiles
 that file next to its own (it includes `pinax_native.h`, which `./nob dist` writes beside `pinax.h`), and calls
 `pinax_native_attach(state, &pnx_native)` before or after loading the same program. Nothing else changes: results,
 faults, the budget, waiting and tasks are as before (standard 19.11).
 
 What the state loads afterwards, a session's lines or a module loaded late, runs interpreted, and the exported part
-stays exported: a later word that calls a word of the program goes into the compiled code for that call. Only a
-`redefine` of a word of the exported program ends it; the state then runs everything interpreted.
+stays exported: a later procedure that calls a procedure of the program goes into the compiled code for that call. Only a
+`redefine` of a procedure of the exported program ends it; the state then runs everything interpreted.
 
 #qa[How much faster is it?][Integer loops run two to seven times as fast, the checks the loader proved cannot fire
 being left out. Work in the library's string functions, and calls into the host, change little.]
@@ -174,19 +174,19 @@ definitions and blocks are still open at the end of a text, the outermost first 
 
 `./nob wasm` also writes `build/dist/pinax-playground.html`, one page with the module inside it, which opens from disk
 with no server. The page is a terminal. Code runs when it is whole: it ends with `,` or `.`, or with the `end` of
-the block it opened. `use NAME .` and `set_order … .` end with a period, and `get_order` needs none (it takes nothing, so it runs when typed). A colon at the start of a line lists the commands, which are chosen as words are. `:procs` lists the procedures of the program with their signatures and `:get_order` tells the search order. An empty line runs the text gathered when no block is open, the way out of a forgotten dot. After `use` the completion offers the modules not in use yet, and after `set_order` the modules in use (and `get_order`), each with what it is and its words; the list opens downwards. Alt+0 offers at the place of the cursor: the word begun, or, in an empty place, ten names the program declares, the nearest and the most recent first. A loop or a block waits until its `end` is typed and then runs once, whole, and the status line
+the block it opened. `use NAME .` and `set_order … .` end with a period, and `get_order` needs none (it takes nothing, so it runs when typed). A colon at the start of a line lists the commands, which are chosen as procedures are. `:procs` lists the procedures of the program with their signatures and `:get_order` tells the search order. An empty line runs the text gathered when no block is open, the way out of a forgotten dot. After `use` the completion offers the modules not in use yet, and after `set_order` the modules in use (and `get_order`), each with what it is and its procedures; the list opens downwards. Alt+0 offers at the place of the cursor: the procedure begun, or, in an empty place, ten names the program declares, the nearest and the most recent first. A loop or a block waits until its `end` is typed and then runs once, whole, and the status line
 at the bottom says how deep the typing is and in what (`depth 2: loop › if`). The stack shows after each statement.
 Every statement that ran without a fault (a `def`, a `use`, a number, a call) is added to a program, as
 GW-BASIC keeps one; a name declared again takes the place of its lines, and a refused or faulting statement is not kept. No command that begins with a colon is: a command only has its effect (`:clear` empties the stack and `:stack` shows it, and neither is a line of the program; the statements `clear.` and `stack.` are). `:list` shows the program with line
 numbers. `:edit N` puts line N in the prompt, `:edit NAME` brings a procedure (or a record, a const ...) whole into the editor and puts it back in its place when saved, `:edit N-M` does the same for lines N to M, `:insert N` adds lines above line N (0: at the end) until an empty line,
 `:delete N` (`:del`, also `N-M`) removes lines, and `:edit` (F2) opens the whole program in an editor; after each the
-program runs again. `:trace` resets like `:run` and runs the program one statement at a time (up to each period), showing the stack after each and, grey, every line of a word as it runs with the locals it holds; `:trace off` stops the lines of words. `:break 4 7` (or `:break sq`, a procedure's first body line) sets breakpoints and runs the program again; it stops before those lines, in a word or before a statement, and shows the locals and the lines around the stop. `:list` marks the breakpoints with `*` and the stop with `=>`; `:continue` (`:c`) goes on, `:next` (`:n`) goes on to the next line or statement, `:stop` ends the run, `:unbreak` removes breakpoints. A typed statement stops in a word too. The breakpoints are line numbers: after `:insert` or `:delete` they stay at their numbers. `:run` (F5) is a reset: it empties the stack, forgets every definition and runs the program from
-line 1, the lines left as they are. Inside a word, nothing runs line by line: at each `,` or `.` the lines so far are only compiled, and a mistake is told at
-its line, with that line back in the prompt to be corrected. A word runs when it is called, its arguments first and then
-its name. Words are offered as you type, in the prompt and in the editor (F2), with their module, signature and meaning (taken from the
+program runs again. `:trace` resets like `:run` and runs the program one statement at a time (up to each period), showing the stack after each and, grey, every line of a procedure as it runs with the locals it holds; `:trace off` stops the lines of procedures. `:break 4 7` (or `:break sq`, a procedure's first body line) sets breakpoints and runs the program again; it stops before those lines, in a procedure or before a statement, and shows the locals and the lines around the stop. `:list` marks the breakpoints with `*` and the stop with `=>`; `:continue` (`:c`) goes on, `:next` (`:n`) goes on to the next line or statement, `:stop` ends the run, `:unbreak` removes breakpoints. A typed statement stops in a procedure too. The breakpoints are line numbers: after `:insert` or `:delete` they stay at their numbers. `:run` (F5) is a reset: it empties the stack, forgets every definition and runs the program from
+line 1, the lines left as they are. Inside a procedure, nothing runs line by line: at each `,` or `.` the lines so far are only compiled, and a mistake is told at
+its line, with that line back in the prompt to be corrected. A procedure runs when it is called, its arguments first and then
+its name. Procedures are offered as you type, in the prompt and in the editor (F2), with their module, signature and meaning (taken from the
 standard) above the line. Only keys a typist does not need work the offer: Alt+Up and Alt+Down choose (Alt+Down also offers),
-Alt+1 to Alt+9 write the nth word, Tab writes the chosen one (in the editor Tab writes four spaces when nothing is offered), Esc closes it.
-The words of the program come first among the candidates, with their signatures. A word just compiled puts a call to try into the
+Alt+1 to Alt+9 write the nth procedure, Tab writes the chosen one (in the editor Tab writes four spaces when nothing is offered), Esc closes it.
+The procedures of the program come first among the candidates, with their signatures. A procedure just compiled puts a call to try into the
 prompt (a sample value for each parameter, then the name and a dot); change the values and Enter runs it.
 `:help`, and the guide beside the terminal (F1), list the commands and keys; the page links to this manual. Each release
 carries the page as `pinax-playground.html`. The same page is on the web at `https://rubidus-api.github.io/pinax_lang/playground/`.
@@ -200,19 +200,19 @@ everywhere (chapter 13). The WebAssembly build uses the same core, and the same 
 
 == More
 
-Handles (giving a script a C object to hold), binding (host memory as globals), host words that finish later, images
+Handles (giving a script a C object to hold), binding (host memory as globals), host procedures that finish later, images
 and clones, and `extern` are in clauses 18 and 19 of the standard, with examples.
 
 #summary[
-- Give a block and open, register words, load, find and call (standard 19.2--19.5).
-- A failing host word is a failure with `or fail`, a fault without (19.3).
+- Give a block and open, register procedures, load, find and call (standard 19.2--19.5).
+- A failing host procedure is a failure with `or fail`, a fault without (19.3).
 - What a script can do outside itself is only what the host registered (13.3, 18).
 - While a run stopped by the budget remains, new runs are refused; go back to an image (19.5, 19.9).
 - For several cores, open several states and run them on the host loop; connect them with the messages of channels
   (17.4).
 - Data that is only read is declared `shared` and read as one copy through `pinax_share` (8.13, 19.7).
 - Several processes map one file written with `pinax_share_save` (`pinax_map_file`) and read it together (19.7).
-- A host word that waits is registered awaitable and finished later with `pinax_complete`; meanwhile the other tasks
+- A host procedure that waits is registered awaitable and finished later with `pinax_complete`; meanwhile the other tasks
   go on (19.8).
 - Each request is a task of its own. One request is given up by completing its token with a failure, the whole run by
   `pinax_abort` (14, 19.5, 19.8).

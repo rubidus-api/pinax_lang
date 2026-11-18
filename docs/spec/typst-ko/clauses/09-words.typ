@@ -1,6 +1,6 @@
 #import "/tools/common.typ": *
 
-= 낱말 <words>
+= 프로시저 <words>
 
 == 정의 <words-definition>
 
@@ -16,13 +16,13 @@ type       = [ "owned" ] ( NAME [ size ] | "proc" effect "end" ) ;   (* a type N
 #para("1")[`def 이름 서명 do 몸 end` 는 *프로시저*(procedure)를 정의한다. 서명은 이름과 `do` 사이에 괄호 없이 적는다.
 프로시저는 정의 밖, 소스의 맨 바깥에서만 정의한다. 프로시저 안에 프로시저를 정의하지 못한다.]
 
-#para("2")[낱말을 #term("부른다", en: "call")는 것은 몸에서 그 이름을 쓰는 것이다. 부르는 자리에서 스택의 맨
-위 값들이 낱말의 입력이 되고, 낱말이 끝나면 결과가 그 자리에 놓인다. 핵 낱말, 표준 모듈의 낱말, 호스트
-낱말도 같은 모양으로 부른다.]
+#para("2")[프로시저를 #term("부른다", en: "call")는 것은 몸에서 그 이름을 쓰는 것이다. 부르는 자리에서 스택의 맨
+위 값들이 프로시저의 입력이 되고, 프로시저가 끝나면 결과가 그 자리에 놓인다. 핵 프로시저, 표준 모듈의 프로시저, 호스트
+프로시저도 같은 모양으로 부른다.]
 
 == 서명 <words-signature>
 
-#para("1")[모든 낱말에는 *서명*이 있다. 입력, `gives` 와 결과, 그리고 실패할 수 있으면 `or fail` 을
+#para("1")[모든 프로시저에는 *서명*이 있다. 입력, `gives` 와 결과, 그리고 실패할 수 있으면 `or fail` 을
 이 차례로 적는다. 입력도 결과도 없으면 서명을 적지 않는다(`def reset do … end`). 서명은 적재 때 검사된다: 부르는 자리의 스택은 입력과
 맞아야 하고, 몸이 끝나는 자리의 스택은 결과와 맞아야 한다.]
 
@@ -43,12 +43,12 @@ type       = [ "owned" ] ( NAME [ size ] | "proc" effect "end" ) ;   (* a type N
 
 == 스택 <words-stack>
 
-#para("1")[낱말과 낱말 사이의 값은 *스택*에 놓인다. 리터럴과 이름 읽기는 값 하나를 올리고, 낱말은
+#para("1")[프로시저와 프로시저 사이의 값은 *스택*에 놓인다. 리터럴과 이름 읽기는 값 하나를 올리고, 프로시저는
 입력을 내리고 결과를 올린다. 처리기는 적재 때 몸의 모든 자리에서 스택의 깊이와 칸마다의 타입을 안다.]
 
-#para("2")[스택을 고치는 핵 낱말은 다섯뿐이다.
+#para("2")[스택을 고치는 핵 프로시저는 다섯뿐이다.
 #table(columns: (auto, auto, 1fr), inset: 5pt, stroke: 0.5pt + luma(170),
-  [*낱말*], [*전*  →  *후*], [*뜻*],
+  [*프로시저*], [*전*  →  *후*], [*뜻*],
   [`dup`], [`a` → `a a`], [맨 위를 하나 더],
   [`drop`], [`a` → ], [맨 위를 버림],
   [`swap`], [`a b` → `b a`], [위의 둘을 바꿈],
@@ -71,10 +71,10 @@ type       = [ "owned" ] ( NAME [ size ] | "proc" effect "end" ) ;   (* a type N
 
 #part("제약")
 
-#para("3")[낱말이 받을 값이 스택에 모자라면 거절된다. 스택의 깊이는 돌 때 달라지지 않는다.]
+#para("3")[프로시저가 받을 값이 스택에 모자라면 거절된다. 스택의 깊이는 돌 때 달라지지 않는다.]
 #ex("spec", "09-stack-short.pnx")
 
-#para("3a")[정의 밖의 코드(5.2)가 끝날 때, 곧 소스의 끝에서 스택에 값이 남으면 거절된다. 낱말의 몸이 끝날 때의 스택은
+#para("3a")[정의 밖의 코드(5.2)가 끝날 때, 곧 소스의 끝에서 스택에 값이 남으면 거절된다. 프로시저의 몸이 끝날 때의 스택은
 9.2 가 정한다.]
 #ex("spec", "09-leftover.pnx")
 
@@ -120,7 +120,7 @@ set   = "set" ( NAME | PATH ) ;
 
 == 가림 금지 <words-shadowing>
 
-#para("1")[새 이름(매개변수, 지역 변수, 루프의 이름)은 그 자리에서 보이는 이름 --- 낱말, 전역, 상수, 타입,
+#para("1")[새 이름(매개변수, 지역 변수, 루프의 이름)은 그 자리에서 보이는 이름 --- 프로시저, 전역, 상수, 타입,
 바깥의 지역 변수 --- 과 같을 수 없다. 이름 하나가 한 자리에서 늘 한 가지만 뜻하게 하려는 규칙이다.]
 
 #part("제약")
@@ -129,16 +129,16 @@ set   = "set" ( NAME | PATH ) ;
 #ex("spec", "09-shadow.pnx")
 #ex("spec", "09-shadow-word.pnx")
 
-#para("3")[언어의 낱말 --- 예약어, 핵심 낱말, 모듈 없이 쓰는 15절과 16절의 낱말, 타입 --- 은 어디서도 새 이름이 될 수
-없다. 낱말, 선언, 매개변수, 지역 변수, 루프의 이름이 모두 그렇다. 예약어는 필드의 이름도 될 수 없다. 다른 언어의 낱말은
-필드의 이름이 될 수 있다. 필드는 늘 레코드 뒤에 쓰기 때문이다(8.8). 메시지는 그것이 어느 낱말인지 말한다.]
+#para("3")[언어의 프로시저 --- 예약어, 핵심 프로시저, 모듈 없이 쓰는 15절과 16절의 프로시저, 타입 --- 은 어디서도 새 이름이 될 수
+없다. 프로시저, 선언, 매개변수, 지역 변수, 루프의 이름이 모두 그렇다. 예약어는 필드의 이름도 될 수 없다. 다른 언어의 프로시저는
+필드의 이름이 될 수 있다. 필드는 늘 레코드 뒤에 쓰기 때문이다(8.8). 메시지는 그것이 어느 프로시저인지 말한다.]
 #ex("spec", "09-name-taken.pnx")
 
 == 되부름과 꼬리 부름 <words-recursion>
 
-#para("1")[낱말은 자기를 부를 수 있다. 앞선 선언은 필요 없다.]
+#para("1")[프로시저는 자기를 부를 수 있다. 앞선 선언은 필요 없다.]
 
-#para("2")[낱말의 마지막 일로 다른 낱말을 부르는 #term("꼬리 부름", en: "tail call")은 부른 낱말의 자리를
+#para("2")[프로시저의 마지막 일로 다른 프로시저를 부르는 #term("꼬리 부름", en: "tail call")은 부른 프로시저의 자리를
 다시 쓴다. 그래서 꼬리 부름으로 도는 되부름은 깊이가 자라지 않는다. 따로 표시하지 않는다.]
 
 #ex("spec", "09-recursion.pnx")
@@ -148,7 +148,7 @@ set   = "set" ( NAME | PATH ) ;
 #para("3")[꼬리 부름이 아닌 부름이 쌓여 호출 깊이의 한계(부속서 C)를 넘으면 결함 `depth` 다.]
 #ex("spec", "09-depth.pnx")
 
-== 앞선 낱말 선언 <words-forward>
+== 앞선 프로시저 선언 <words-forward>
 
 #para("1")[`forward 이름 서명 end` 는 뒤에서 정의할 프로시저를 미리 알린다. 서로를 부르는 두 프로시저에 쓴다.]
 
@@ -167,9 +167,9 @@ cat    = "args" { body } "." "cat" ;       (* each body leaves one value; 9.8 *)
 ```
 
 #para("1")[`args 항목… . cat` 은 `args` 와 마침표 사이의 항목을 이어 `str` 하나를 낸다. 항목은 값을 하나씩 남기는
-낱말과 리터럴이고, 쉼표 없이 차례로 놓는다.
+프로시저와 리터럴이고, 쉼표 없이 차례로 놓는다.
 `str` 은 그대로, `int` 는 십진으로, `bool` 은 `true` `false` 로 들어간다. 다른 모양(십육진 등)은 그 모양을
-만드는 낱말(16.2)로 먼저 `str` 을 만든다.]
+만드는 프로시저(16.2)로 먼저 `str` 을 만든다.]
 
 #para("2")[결과는 구역(12.2)에 만든 뷰다. 항목의 수는 글에 보이는 만큼이고, 처리기는 길이를 먼저 더해 한 번에
 쓴다.]
@@ -192,8 +192,8 @@ cell            = NAME [ size ] ;   (* int, bool, err, dec N, str N, 레코드, 
 
 #ex("spec", "09-coll-param.pnx")
 
-#para("2")[매개변수 `l` 이 레코드 표인 낱말에서는, 선언된 표의 이름처럼(8.8) 이름 `l` 이 그 줄의 타입이기도 하다.
-`l` 로 얻은 줄은 그 낱말 안에서 쓴다: 지역 변수, 필드, 고리의 블록에서.]
+#para("2")[매개변수 `l` 이 레코드 표인 프로시저에서는, 선언된 표의 이름처럼(8.8) 이름 `l` 이 그 줄의 타입이기도 하다.
+`l` 로 얻은 줄은 그 프로시저 안에서 쓴다: 지역 변수, 필드, 고리의 블록에서.]
 
 #ex("spec", "09-coll-param-rows.pnx")
 
@@ -210,12 +210,12 @@ cell            = NAME [ size ] ;   (* int, bool, err, dec N, str N, 레코드, 
 #para("4")[모음은 그 종류와 칸이 매개변수의 것과 같은 자리에 주어야 한다.]
 #ex("spec", "09-coll-param-kind.pnx")
 
-#para("5")[모음 매개변수는 값이 아니다: `to` 로 담지 못하고, 낱말의 결과가 되지 못하고, 블록(`proc … end`)의 매개변수가
+#para("5")[모음 매개변수는 값이 아니다: `to` 로 담지 못하고, 프로시저의 결과가 되지 못하고, 블록(`proc … end`)의 매개변수가
 되지 못한다. 풀과 찾아보기는 받지 않는다.]
 #ex("spec", "09-coll-param-result.pnx")
 
-#para("6")[목록 매개변수를 자르는(8.5 (2a)) 낱말, 또는 자르는 낱말에 그것을 넘기는 낱말은 받은 목록을 자른다. 그러면
-그 낱말을 부르는 자리에서 그 목록에 8.5 (2b) 의 규칙이 적용된다.]
+#para("6")[목록 매개변수를 자르는(8.5 (2a)) 프로시저, 또는 자르는 프로시저에 그것을 넘기는 프로시저는 받은 목록을 자른다. 그러면
+그 프로시저를 부르는 자리에서 그 목록에 8.5 (2b) 의 규칙이 적용된다.]
 #ex("spec", "09-coll-param-truncate.pnx")
 
 #para("7")[`filter_into` 는 두 표가 모두 매개변수일 때 줄을 베끼지 않는다. 한쪽을 `each` 로 돌며 `add_row` 로 담는다.]
@@ -234,12 +234,12 @@ cell            = NAME [ size ] ;   (* int, bool, err, dec N, str N, 레코드, 
   ([`set` 의 이름이 지역], "set writes a global; a local is written with to"),
   ([`set` 의 이름이 전역이 아님], "set writes a declared global; there is none of this name"),
   ([보이는 이름을 가림], "this name is already visible here; a new name may not hide it"),
-  ([언어의 낱말을 새 이름으로 씀(메시지에 그 낱말)], "NAME is a word of the language; choose another name"),
+  ([언어의 프로시저를 새 이름으로 씀(메시지에 그 프로시저)], "NAME is a word of the language; choose another name"),
   ([앞선 선언과 다른 서명], "the definition has another signature than its forward declaration"),
   ([종류나 칸이 다른 모음], "the collection given here is of another kind, or holds another type, than the parameter says"),
   ([모음 자리에 값], "this parameter takes an array, list, queue or buffer: give its name"),
   ([결과로 모음], "a word gives no collection; it takes one as a parameter"),
   ([모음 매개변수에 `to`], "this is a collection parameter; a cell of it is stored as: value index set name"),
-  ([남이 쥔 목록을 자르는 낱말에 줌], "this list's rows are kept by a field, a global, a collection, a named row or an index; the word it is given to truncates it"),
+  ([남이 쥔 목록을 자르는 프로시저에 줌], "this list's rows are kept by a field, a global, a collection, a named row or an index; the word it is given to truncates it"),
   ([두 표가 모두 매개변수인 줄 베끼기], "filter_into does not copy rows between two tables parameters name; walk one and add_row"),
 )

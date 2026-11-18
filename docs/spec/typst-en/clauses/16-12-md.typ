@@ -39,7 +39,7 @@ with `err.not_found`. Nothing is copied: `text` is a view of `s`. `kind` is one 
 )]
 
 #table(columns: (auto, auto, 1fr), inset: 5pt, stroke: 0.5pt + luma(170),
-  [*Word*], [*Signature*], [*Meaning*],
+  [*Procedure*], [*Signature*], [*Meaning*],
   [`html`], [`(s str, b buffer or fail)`], [appends the HTML of the Markdown text `s`; `err.full`],
   [`inline`], [`(s str, b buffer or fail)`], [appends the HTML of the text of one line or paragraph; `err.full`],
   [`blocks`], [`(s str gives rail)`], [a rail over the blocks of `s` (6)],
@@ -59,5 +59,5 @@ pushed first (`do to body to level to kind`). It is taken by `each` and followed
 
 #part("Diagnostics")
 #diag(
-  ([A value of another type for a word of `md`], "this word takes a str (the text, and the path before it)"),
+  ([A value of another type for a procedure of `md`], "this procedure takes a str (the text, and the path before it)"),
 )

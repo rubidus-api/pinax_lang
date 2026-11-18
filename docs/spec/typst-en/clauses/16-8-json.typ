@@ -30,12 +30,12 @@ escapes, they are decoded into text written in the region. The `value` of a numb
 
 === Writing
 
-#para("5")[The writing words all append to a buffer and fail with `err.full` when there is not enough room. They put
+#para("5")[The writing procedures all append to a buffer and fail with `err.full` when there is not enough room. They put
 the commas in themselves.
 #table(columns: (auto, auto), inset: 5pt, stroke: 0.5pt + luma(170),
-  [*Word*], [*Signature*],
+  [*Procedure*], [*Signature*],
   [`begin_object` `end_object` `begin_array` `end_array` `put_null`], [`(buf or fail)`],
-  [`put_key` `put_str`], [`(s str, buf or fail)`; the word does the escaping],
+  [`put_key` `put_str`], [`(s str, buf or fail)`; the procedure does the escaping],
   [`put_int`], [`(n int, buf or fail)`],
   [`put_dec`], [`(d dec N, buf or fail)`],
   [`put_bool`], [`(b bool, buf or fail)`],
@@ -45,13 +45,13 @@ the commas in themselves.
 
 === Path, validity and layout
 
-#para("5a")[Four more words read the text as a whole, with the strict grammar of RFC 8259 (the token reader above is
+#para("5a")[Four more procedures read the text as a whole, with the strict grammar of RFC 8259 (the token reader above is
 lenient on purpose: it reads a stream). A text is valid when it is one value and white space; a nesting deeper than 64 is
 not valid here. A path names a value: names joined by dots, an index in brackets, and a name that holds a dot or a
 bracket as `["a.b"]` (`user.langs[1]`, `[0].id`); the empty path names the whole text. A name is compared with the key as it
-is after its escapes are decoded. The reading stops where it finds the value, so the words do not check the rest of the text.
+is after its escapes are decoded. The reading stops where it finds the value, so the procedures do not check the rest of the text.
 #table(columns: (auto, auto, 1fr), inset: 5pt, stroke: 0.5pt + luma(170),
-  [*Word*], [*Signature*], [*Meaning*],
+  [*Procedure*], [*Signature*], [*Meaning*],
   [`valid`], [`(s str gives bool)`], [whether `s` is one JSON value, with only white space around it],
   [`at`], [`(path str, s str gives kind int, value str or fail)`], [the value `path` names in `s`: its kind (the constants above, never `json.key`) and its text, as `json.next` gives it, except that an object or an array is given whole, as written, to be read again by `json.next` or `json.at`. `err.not_found` when there is no such value (a name missing, an index past the end, a name asked of an array or an index of an object); `err.format` when the path is malformed or the text is malformed where it was read],
   [`items` `members`], [`(s str gives rail)`], [rails over the elements of an array, the members of an object (5b)],
@@ -62,7 +62,7 @@ is after its escapes are decoded. The reading stops where it finds the value, so
 #ex("spec", "16-json-path.pnx")
 
 #para("5b")[Rails (10.6): `s json.items` walks the elements of the array `s` and `s json.members` the members of the object `s`; `path s json.items_at`
-and `path s json.members_at` walk the array or object the path names (a word has one signature, so the path has words of its own). Each turn gives the
+and `path s json.members_at` walk the array or object the path names (a procedure has one signature, so the path has procedures of its own). Each turn gives the
 next element as the values `(kind int, value str)` for an element and `(key str, kind int, value str)` for a member; the block of `each` binds them the last
 pushed first (`do to v to k`, `do to v to k to key`). The kind and the value are those of `json.next`, except that an object or an array is given whole, as
 written, to be walked again. A text that is not an array (an object) at the place is `err.format`, a path that names nothing is `err.not_found`; a text that is
@@ -90,5 +90,5 @@ only when everything is right; when it fails (`err.format`) the row is unchanged
 
 #part("Diagnostics")
 #diag(
-  ([JSON text that is not a `str`], "this word takes the JSON text as a str"),
+  ([JSON text that is not a `str`], "this procedure takes the JSON text as a str"),
 )

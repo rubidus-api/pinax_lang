@@ -9,7 +9,7 @@ holds a comma, a quote or a line break is quoted, and quotes inside it are doubl
 with doubled quotes made single. An unclosed quote gives the rest of the text as the last field (a rail cannot report a
 failure).]
 
-#para("3")[The writing words append to a buffer (`or fail`, `err.full` when there is not enough room). `s buf csv.put`,
+#para("3")[The writing procedures append to a buffer (`or fail`, `err.full` when there is not enough room). `s buf csv.put`,
 `n buf csv.put_int`, `d buf csv.put_dec` and `b buf csv.put_bool` append one field (with the comma it needs); `buf csv.end_line` ends the
 line. Booleans are written `true` and `false`.]
 

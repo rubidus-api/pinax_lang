@@ -2,7 +2,7 @@
 
 == `str` --- 문자열 <std-str>
 
-#para("1")[모듈 `str` 은 문자열을 바이트로 다룬다. 바이트의 번호는 0 부터 센다. 글자 단위로 다루는 낱말
+#para("1")[모듈 `str` 은 문자열을 바이트로 다룬다. 바이트의 번호는 0 부터 센다. 글자 단위로 다루는 프로시저
 (`chars` `char_count` `is_utf8`)만 UTF-8 로 읽는다. 대소문자 바꾸기(`upper` `lower`)는 ASCII 만 바꾼다.]
 
 #para("2")[구분자나 찾는 것을 받는 자리(`sep`, `part`)에는 `str` 이나 문자 하나(`int`, 6.5)를 줄 수 있다.]
@@ -11,7 +11,7 @@
 
 #para("3")[결과는 모두 받은 문자열의 뷰다.
 #table(columns: (auto, auto, 1fr), inset: 5pt, stroke: 0.5pt + luma(170),
-  [*낱말*], [*서명*], [*뜻*],
+  [*프로시저*], [*서명*], [*뜻*],
   [`len` `is_empty`], [`(str gives int)` `(str gives bool)`], [바이트 수, 비었는가],
   [`take` `skip`], [`(s str, n int gives str)`], [앞의 `n` 바이트, 앞의 `n` 바이트를 뺀 나머지. 모자라면 있는 만큼],
   [`take_last` `skip_last`], [`(s str, n int gives str)`], [뒤의 `n` 바이트, 뒤의 `n` 바이트를 뺀 앞],
@@ -31,7 +31,7 @@
 
 #para("5")[
 #table(columns: (auto, auto, 1fr), inset: 5pt, stroke: 0.5pt + luma(170),
-  [*낱말*], [*서명*], [*뜻*],
+  [*프로시저*], [*서명*], [*뜻*],
   [`starts_with` `ends_with` `contains`], [`(s str, part gives bool)`], [],
   [`find` `find_last`], [`(s str, part gives int or fail)`], [처음, 마지막으로 나온 자리. 없으면 `err.not_found`],
   [`compare`], [`(str, str gives int)`], [바이트 차례로 견주어 음수, 0, 양수],
@@ -39,15 +39,15 @@
   [`char_count`], [`(str gives int)`], [UTF-8 글자의 수],
   [`is_utf8`], [`(str gives bool)`], [올바른 UTF-8 인가],
 )
-`eq` `ne` `lt` 등 비교 낱말도 문자열을 바이트 차례로 견준다(15.2).]
+`eq` `ne` `lt` 등 비교 프로시저도 문자열을 바이트 차례로 견준다(15.2).]
 
 #ex("spec", "16-str-search.pnx")
 
 === 새 글 만들기
 
-#para("6")[결과는 구역에 쓴 새 바이트다. 구역이 모자라면 결함 `full` 이다(12.2). 수로 읽는 낱말은 실패할 수 있다.
+#para("6")[결과는 구역에 쓴 새 바이트다. 구역이 모자라면 결함 `full` 이다(12.2). 수로 읽는 프로시저는 실패할 수 있다.
 #table(columns: (auto, auto, 1fr), inset: 5pt, stroke: 0.5pt + luma(170),
-  [*낱말*], [*서명*], [*뜻*],
+  [*프로시저*], [*서명*], [*뜻*],
   [`upper` `lower`], [`(str gives str)`], [ASCII 대소문자 바꾸기],
   [`repeat`], [`(s str, n int gives str)`], [`n` 번 이은 글. `n` 이 음수면 결함 `range`],
   [`replace`], [`(s str, old str, new str gives str)`], [모든 `old` 를 `new` 로],
@@ -62,7 +62,7 @@
 
 === 레일과 버퍼에 쓰기
 
-#para("7")[레일(10.6)를 내는 낱말:
+#para("7")[레일(10.6)를 내는 프로시저:
 - `s sep str.split` --- `sep` 으로 가른 조각. 빈 조각도 낸다. `sep` 은 `str` 이거나 바이트 하나(`u8` 상수, 보통
   문자 리터럴)다. `cut` 과 `try_cut` 의 `sep` 도 같다.
 - `s str.words` --- 공백으로 가른 조각. 빈 조각은 내지 않는다.
@@ -70,16 +70,16 @@
 - `s str.bytes` --- 바이트(`u8`).
 - `s str.chars` --- UTF-8 글자 하나씩의 뷰(`str`).]
 
-#para("8")[버퍼에 쓰는 낱말:
+#para("8")[버퍼에 쓰는 프로시저:
 - `sep buf 레일 str.join_into` --- 레일의 조각을 `sep` 으로 이어 버퍼에 붙인다(`or fail`). 레일은 바로 뒤의
-  낱말이 받아야 하므로 레일을 맨 뒤에 둔다.
+  프로시저가 받아야 하므로 레일을 맨 뒤에 둔다.
 - `s old new buf str.replace_into` --- 바꾼 글을 버퍼에 붙이고 바꾼 횟수를 준다(`gives n int or fail`).]
 
 #ex("spec", "16-str-rails.pnx")
 
 #part("제약")
 
-#para("9")[`str` 의 낱말에 `str` 가 아닌 값을 주면 거절된다.]
+#para("9")[`str` 의 프로시저에 `str` 가 아닌 값을 주면 거절된다.]
 #ex("spec", "16-str-type.pnx")
 
 #part("결함")

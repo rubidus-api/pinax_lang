@@ -9,7 +9,7 @@
 == 오류 번호 <errors-codes>
 
 #para("1")[실패와 결함에는 #term("오류 번호", en: "error code")가 있다. 타입은 `err` 이다. 이름은 `err.` 에
-이어 적는 상수다(`use` 없이 쓴다). 낱말 `err_text` 는 번호의 이름을 `str` 로 준다.
+이어 적는 상수다(`use` 없이 쓴다). 프로시저 `err_text` 는 번호의 이름을 `str` 로 준다.
 #table(columns: (auto, auto, 1fr), inset: 5pt, stroke: 0.5pt + luma(170),
   [*상수*], [*이름*], [*뜻*],
   [`err.failed`], [`failed`], [일반적인 실패, `assert` 가 거짓],
@@ -39,19 +39,19 @@ guard = "or_fail" | "or_return" | "or_else" [ "(" NAME ")" ] { body } "end" ;
 
 #para("1")[서명이 `or fail` 로 끝나는 프로시저는 실패할 수 있다. 실패하면 결과는 없고 오류 번호만 있다.]
 
-#para("2")[실패할 수 있는 낱말을 부른 바로 다음 토큰은 #term("지킴 낱말", en: "guard")이어야 한다.
+#para("2")[실패할 수 있는 프로시저를 부른 바로 다음 토큰은 #term("지킴 프로시저", en: "guard")이어야 한다.
 #table(columns: (auto, 1fr), inset: 5pt, stroke: 0.5pt + luma(170),
   [*지킴*], [*실패했을 때*],
-  [`or_fail`], [같은 오류로 이 낱말도 실패한다. 이 낱말의 서명에 `or fail` 이 있어야 한다],
-  [`or_return`], [이 낱말을 끝낸다. 그 자리의 스택이 결과와 맞아야 한다],
+  [`or_fail`], [같은 오류로 이 프로시저도 실패한다. 이 프로시저의 서명에 `or fail` 이 있어야 한다],
+  [`or_return`], [이 프로시저를 끝낸다. 그 자리의 스택이 결과와 맞아야 한다],
   [`or_else … end`], [몸이 대신할 결과를 만든다. 몸은 오류 번호(`err`)가 스택에 놓인 채 시작하므로 쓰지 않으면 `drop` 한다. `or_else to e … end` 는 오류 번호를 지역 변수 `e` 로 받는다. 몸은 `return` `fail` `break` `continue` 로 떠나도 된다],
 )
-성공하면 지킴 낱말은 아무 일도 하지 않고 결과가 스택에 남는다.]
+성공하면 지킴 프로시저는 아무 일도 하지 않고 결과가 스택에 남는다.]
 
-#para("2a")[`str N` 자리에 넣는 일 뒤에도 지킴 낱말이 올 수 있다. 그러면 글이 너무 길 때 `range` 로 실패한다
-(7.3 (4a)). 다른 넣기 뒤의 지킴 낱말은 거절된다.]
+#para("2a")[`str N` 자리에 넣는 일 뒤에도 지킴 프로시저가 올 수 있다. 그러면 글이 너무 길 때 `range` 로 실패한다
+(7.3 (4a)). 다른 넣기 뒤의 지킴 프로시저는 거절된다.]
 
-#para("3")[`번호 fail` 은 이 낱말을 그 오류로 실패시킨다. 이 낱말의 서명에 `or fail` 이 있어야 한다.]
+#para("3")[`번호 fail` 은 이 프로시저를 그 오류로 실패시킨다. 이 프로시저의 서명에 `or fail` 이 있어야 한다.]
 
 #ex("spec", "11-failure.pnx")
 #ex("spec", "11-guards.pnx")
@@ -63,10 +63,10 @@ guard = "or_fail" | "or_return" | "or_else" [ "(" NAME ")" ] { body } "end" ;
 
 #part("제약")
 
-#para("5")[실패할 수 있는 낱말 뒤에 지킴 낱말이 없으면 거절된다. 실패를 모르고 지나칠 수 없다.]
+#para("5")[실패할 수 있는 프로시저 뒤에 지킴 프로시저가 없으면 거절된다. 실패를 모르고 지나칠 수 없다.]
 #ex("spec", "11-guard-missing.pnx")
 
-#para("6")[`or_fail` 과 `fail` 은 서명에 `or fail` 이 있는 낱말 안에서만 쓴다. 정의 밖의 코드도 `or fail` 이
+#para("6")[`or_fail` 과 `fail` 은 서명에 `or fail` 이 있는 프로시저 안에서만 쓴다. 정의 밖의 코드도 `or fail` 이
 없는 것으로 친다.]
 #ex("spec", "11-or-fail-needs.pnx")
 #ex("spec", "11-fail-needs.pnx")
@@ -85,7 +85,7 @@ guard = "or_fail" | "or_return" | "or_else" [ "(" NAME ")" ] { body } "end" ;
 
 #para("2")[결함은 다음에서 난다.
 - 산술의 넘침(`overflow`), 0 으로 나눔(`div_zero`) --- 7.1, 15.1;
-- 배열·목록의 범위 밖 번호, 맞는 가지가 없는 `match`, 없음 줄, 지킴 낱말 없이 넣은 `str N` 보다 긴 글(`range`)
+- 배열·목록의 범위 밖 번호, 맞는 가지가 없는 `match`, 없음 줄, 지킴 프로시저 없이 넣은 `str N` 보다 긴 글(`range`)
   --- 7.3, 8, 10.3;
 - 좁은 필드에 맞지 않는 값(`overflow`) --- 8.8;
 - 구역이나 작업 공간이 모자람(`full`) --- 12.2;
@@ -94,9 +94,9 @@ guard = "or_fail" | "or_return" | "or_else" [ "(" NAME ")" ] { body } "end" ;
 - 거짓인 `assert`(`failed`).]
 
 #para("3")[결함으로 끝난 실행이 구역에 만든 것은 되감긴다. 실행이 연 핸들은 처리기가 닫는다. 그래서 결함의
-경로에서 `owned` 값을 손으로 닫을 일은 없다. 전역에 이미 넣은 값과 호스트 낱말이 이미 한 일은 그대로 남는다.]
+경로에서 `owned` 값을 손으로 닫을 일은 없다. 전역에 이미 넣은 값과 호스트 프로시저가 이미 한 일은 그대로 남는다.]
 
-#para("4")[적합한 처리기는 결함의 갈래와 그것이 난 줄을 알린다. `pnx` 는 그 아래에 결함이 난 낱말의 지역
+#para("4")[적합한 처리기는 결함의 갈래와 그것이 난 줄을 알린다. `pnx` 는 그 아래에 결함이 난 프로시저의 지역
 변수를 함께 보인다.]
 
 #ex("spec", "11-div-zero.pnx")
@@ -104,8 +104,8 @@ guard = "or_fail" | "or_return" | "or_else" [ "(" NAME ")" ] { body } "end" ;
 
 #part("진단")
 #diag(
-  ([실패할 수 있는 낱말 뒤에 지킴이 없음], "a word that can fail is followed by or_fail, or_return or or_else"),
-  ([`or fail` 없는 낱말의 `or_fail`], "or_fail passes the failure on, so this word needs `or fail` in its signature"),
-  ([`or fail` 없는 낱말의 `fail`], "fail needs `or fail` in the signature of this word"),
+  ([실패할 수 있는 프로시저 뒤에 지킴이 없음], "a word that can fail is followed by or_fail, or_return or or_else"),
+  ([`or fail` 없는 프로시저의 `or_fail`], "or_fail passes the failure on, so this word needs `or fail` in its signature"),
+  ([`or fail` 없는 프로시저의 `fail`], "fail needs `or fail` in the signature of this word"),
   ([`or_else` 의 몸이 남기는 값이 다름], "the body of or_else must leave what the word would have given, or leave the word or the loop"),
 )

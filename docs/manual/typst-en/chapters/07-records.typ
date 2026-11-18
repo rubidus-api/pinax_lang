@@ -23,7 +23,7 @@ outside definitions, and can name it. Adding rows while running is `add_row`.
 
 #ex("manual", "07-add-row.pnx")
 
-Here are the words for rows together, with remarks. The `r` that `add_row` gives is a number inside the table; a field
+Here are the procedures for rows together, with remarks. The `r` that `add_row` gives is a number inside the table; a field
 is stored with `value row to record.field`, and read with `row record.field`, which takes one row off and puts the
 field's value on.
 

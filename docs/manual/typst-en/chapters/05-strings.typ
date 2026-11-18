@@ -61,19 +61,19 @@ store part of it, cut it first with `str.take`.
 #ex("manual", "05-too-long.pnx")]
 
 #qa[The text comes from outside and may be too long. Must I compare its length first?][No. Put a guard after the
-store, as after any word that can fail. A text too long is then the failure `range`, and the place keeps what it
+store, as after any procedure that can fail. A text too long is then the failure `range`, and the place keeps what it
 held. Without the guard it stays a fault.
 #ex("manual", "05-too-long-guard.pnx")
-The guard comes after the store, so what the word did before it stays done. To refuse a text before anything else
+The guard comes after the store, so what the procedure did before it stays done. To refuse a text before anything else
 happens (a row taken, a count raised), ask the place first with `fits`: `v fits entry.name` takes the text and fails
 the same way, with `range`, and writes nothing. The width is the place's own.
 #ex("manual", "05-fits.pnx")]
 
 == Making new text, and buffers
 
-`cat` and words that make new bytes, such as `str.upper` and `str.repeat`, write those bytes into the #strong[region]
-and give a view of them. To build text piece by piece, declare a #strong[buffer] and add to it with the `append` words.
-When the buffer is full, the word that adds fails.
+`cat` and procedures that make new bytes, such as `str.upper` and `str.repeat`, write those bytes into the #strong[region]
+and give a view of them. To build text piece by piece, declare a #strong[buffer] and add to it with the `append` procedures.
+When the buffer is full, the procedure that adds fails.
 
 #ex("manual", "05-build.pnx")
 
@@ -91,8 +91,8 @@ After the release, views made in between cannot be used. The processor checks th
 #qa[How do I keep text that must outlive the release?][Put it into a `str N` global or cell. It is copied there, so it
 survives rewinding the region. `05-stored.pnx` above does that.]
 
-#qa[A word inside `each` fails, under `defer m release`. Can I pass the failure on with `or_fail`?][Yes. On the way out
-of a failing word the release does not look at the text left on the stack: the word ends there and nothing reads it
+#qa[A procedure inside `each` fails, under `defer m release`. Can I pass the failure on with `or_fail`?][Yes. On the way out
+of a failing procedure the release does not look at the text left on the stack: the procedure ends there and nothing reads it
 again. The rail stops at the first failure.
 #ex("manual", "05-release-failing.pnx")]
 
@@ -118,9 +118,9 @@ than `N` is a failure.
   ("to rest to digits", "—", [The name written first takes the top value.]),
 )
 
-Two words write joined or replaced text straight into a buffer: #word("str.join_into") joins the pieces of a rail
+Two procedures write joined or replaced text straight into a buffer: #word("str.join_into") joins the pieces of a rail
 with a separator, #word("str.replace_into") appends the replaced text and gives the number of replacements. Both fail
-when the buffer is full. `join_into` takes the rail last, because a rail is taken by the word right after it
+when the buffer is full. `join_into` takes the rail last, because a rail is taken by the procedure right after it
 (chapter 4).
 
 #ex("manual", "05-join.pnx")

@@ -36,7 +36,7 @@ path <span style="color: #d73948">do</span> <span style="color: #d73948">to</spa
 <span style="color: #198810">""</span> io.println
 </code></pre><p class="ex-label">출력</p><pre><code data-lang="text">$ pnx 07-add-row.pnx
 (0, 0)(3, 4)(6, 0)
-</code></pre></div><p>줄을 다루는 낱말을 주석과 함께 한 번에 보자. <code>add_row</code> 가 준 <code>r</code> 은 표 안의 번호이고, 필드에 넣는 꼴은 <code>값 줄 to<br>레코드.필드</code> 다. 읽는 꼴은 <code>줄 레코드.필드</code> 이고, 줄 하나를 내려 필드의 값을 올린다.</p><div class="example run"><p class="ex-file"><code>07-row-steps.pnx</code></p><pre><code data-lang="pinax"><span style="color: #d73948">use</span> io .
+</code></pre></div><p>줄을 다루는 프로시저를 주석과 함께 한 번에 보자. <code>add_row</code> 가 준 <code>r</code> 은 표 안의 번호이고, 필드에 넣는 꼴은 <code>값 줄 to<br>레코드.필드</code> 다. 읽는 꼴은 <code>줄 레코드.필드</code> 이고, 줄 하나를 내려 필드의 값을 올린다.</p><div class="example run"><p class="ex-file"><code>07-row-steps.pnx</code></p><pre><code data-lang="pinax"><span style="color: #d73948">use</span> io .
 <span style="color: #d73948">record</span> item
   name <span style="color: #d73948">str</span> <span style="color: #b60157">12</span>                         <span style="color: #74747c">rem stored text: 12 bytes inside the row</span>
   price <span style="color: #d73948">int</span>

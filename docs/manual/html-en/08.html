@@ -36,7 +36,7 @@ path <span style="color: #d73948">do</span> <span style="color: #d73948">to</spa
 <span style="color: #198810">""</span> io.println
 </code></pre><p class="ex-label">Output</p><pre><code data-lang="text">$ pnx 07-add-row.pnx
 (0, 0)(3, 4)(6, 0)
-</code></pre></div><p>Here are the words for rows together, with remarks. The <code>r</code> that <code>add_row</code> gives is a number inside the table; a field is stored with <code>value row to record.field</code>, and read with <code>row record.field</code>, which takes one row off and puts the field’s value on.</p><div class="example run"><p class="ex-file"><code>07-row-steps.pnx</code></p><pre><code data-lang="pinax"><span style="color: #d73948">use</span> io .
+</code></pre></div><p>Here are the procedures for rows together, with remarks. The <code>r</code> that <code>add_row</code> gives is a number inside the table; a field is stored with <code>value row to record.field</code>, and read with <code>row record.field</code>, which takes one row off and puts the field’s value on.</p><div class="example run"><p class="ex-file"><code>07-row-steps.pnx</code></p><pre><code data-lang="pinax"><span style="color: #d73948">use</span> io .
 <span style="color: #d73948">record</span> item
   name <span style="color: #d73948">str</span> <span style="color: #b60157">12</span>                         <span style="color: #74747c">rem stored text: 12 bytes inside the row</span>
   price <span style="color: #d73948">int</span>

@@ -22,11 +22,11 @@
 
 #ex("spec", "16-ptn-classes.pnx")
 
-=== 낱말
+=== 프로시저
 
 #para("3")[
 #table(columns: (auto, auto, 1fr), inset: 5pt, stroke: 0.5pt + luma(170),
-  [*낱말*], [*서명*], [*뜻*],
+  [*프로시저*], [*서명*], [*뜻*],
   [`is_match`], [`(s str, pat gives bool)`], [어디든 맞는 곳이 있는가],
   [`match`], [`(s str, pat gives str or fail)`], [처음 맞은 부분의 뷰. 없으면 `err.not_found`],
   [`capture`], [`(n int gives str)`], [마지막 `match` 의 갈무리 `n` (1--9). 0 은 맞은 전체],
@@ -58,7 +58,7 @@
 #para("8")[`capture` 의 `n` 이 마지막 맞음에 없는 갈무리이거나 아직 맞음이 없으면 결함 `range` 다.]
 #ex("spec", "16-ptn-capture-none.pnx")
 
-#para("9")[맞추기는 되돌아가며 찾는다. 낱말 한 번에 2#super[24] 걸음을 넘으면 결함 `depth` 로 멈춘다. 그런 패턴은
+#para("9")[맞추기는 되돌아가며 찾는다. 프로시저 한 번에 2#super[24] 걸음을 넘으면 결함 `depth` 로 멈춘다. 그런 패턴은
 짧은 되풀이(`-`)를 줄이거나 `rex` 를 쓴다(`rex` 는 되돌아가지 않는다).]
 #ex("spec", "16-ptn-steps.pnx")
 

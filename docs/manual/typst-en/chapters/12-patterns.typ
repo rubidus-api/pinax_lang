@@ -50,7 +50,7 @@ A block can also make the text that replaces each match.
 
 #ex("manual", "12-replace-by.pnx")
 
-Three more words search. #word("rex.match") gives the first match and fails when there is none. #word("rex.matches") is
+Three more procedures search. #word("rex.match") gives the first match and fails when there is none. #word("rex.matches") is
 a rail that runs the block once per match; the block takes the whole match and one `str` per group. #word("rex.split")
 is the rail of the pieces between matches. `ptn` has the same rail, #word("ptn.matches").
 

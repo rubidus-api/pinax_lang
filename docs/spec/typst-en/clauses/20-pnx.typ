@@ -18,14 +18,14 @@ pnx export-c file.pnx [NAME]
 
 #para("1")[`pnx file.pnx arguments…` loads the file and runs its load code. For each module the file uses or names in
 `set_order` that is not registered, it first loads `MODULE.pnx` from beside the file (13.1, 13.5). The file is loaded as the module named after it
-without `.pnx`; when that name is not written like a word (it begins with a digit or contains `-`), the module has no
+without `.pnx`; when that name is not written like a procedure (it begins with a digit or contains `-`), the module has no
 name.]
 
 #para("2")[There are three exit statuses, and the one a program gives with `sh.exit` (17.5).
 #table(columns: (auto, 1fr), inset: 5pt, stroke: 0.5pt + luma(170),
   [*Status*], [*When*],
   [0], [the load code ran to its end; for `pnx test`, every test passed],
-  [1], [a refusal: `file:line:column: reason` on standard error; a fault: `file:line: kind` and the locals of the word; for `pnx test`, a test failed],
+  [1], [a refusal: `file:line:column: reason` on standard error; a fault: `file:line: kind` and the locals of the procedure; for `pnx test`, a test failed],
   [2], [the command line is wrong (the usage is shown), the file cannot be read, a library of `--lib` cannot be opened, a `--capacity` is not `NAME=N`],
 )]
 
@@ -67,14 +67,14 @@ what earlier lines defined and the values they left (19.4 (2a)). A line that end
 read together with the next. A line that is refused or ends with a fault leaves the stack as it was. The end of a line, Enter,
 is a dot (10.8): what the line wrote is on the screen before the prompt comes back.]
 
-#para("2")[There are tool words only for sessions: `list_words` (the procedures defined), `stack` (the types on the stack
+#para("2")[There are tool procedures only for sessions: `list_words` (the procedures defined), `stack` (the types on the stack
 there), `clear` (at the start of a line: the line starts from an empty stack), `see` (the stack after every line of
 the definitions that follow), `redefine def …` (the same as `def …` for a procedure that exists, (2a)). `get_order` (13.5 (3a)) tells the search
 order, in a session and in a file.]
 
 #para("2a")[`def NAME …` with the name of a procedure an earlier line of the session defined redefines it. With the same
 signature, every procedure that calls it calls the new one. With another signature the new procedure takes the name; the procedures
-compiled before keep calling the old body, which no longer has a name, and `pnx repl` names them ("2 words still call
+compiled before keep calling the old body, which no longer has a name, and `pnx repl` names them ("2 procedures still call
 the old sq: quad, cube"). One procedure is redefined in a line, and none while a task is alive. A procedure of a module loaded
 from a file is not redefined in the session: edit the file and load it again.]
 
@@ -92,16 +92,16 @@ diagnostic, and exits with 1.]
 #ex("spec", "20-see-refused.pnx")
 
 #para("1b")[`pnx see --checks file.pnx` loads the file as `pnx file.pnx` does (the code outside definitions runs),
-then shows, per word, the run-time checks the loader proved cannot fire: the word's number of checks and of proven
+then shows, per procedure, the run-time checks the loader proved cannot fire: the procedure's number of checks and of proven
 ones, and for each proven instruction its line, the instruction and the reason. A proof changes nothing a program
 does; the checks still run.]
 
 #ex("spec", "20-see-checks.pnx")
 
-#para("1c")[`pnx see --effects file.pnx` loads the file without running it and shows, for each word of the file, what
+#para("1c")[`pnx see --effects file.pnx` loads the file without running it and shows, for each procedure of the file, what
 it may do beyond its stack and locals (`pinax_word_effects`, 19.5 (5)): the globals it reads and writes, the host
 modules it reaches and whether it reads or writes through them, "anything (a C function)" for `extern`, "may yield"
-and "may fail"; "none" for a word that uses only its stack and locals.]
+and "may fail"; "none" for a procedure that uses only its stack and locals.]
 
 #ex("spec", "20-see-effects.pnx")
 

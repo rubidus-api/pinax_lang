@@ -4,9 +4,9 @@
 
 #para("1")[모듈 `sheet` 는 프로그램이 선언한 버퍼(8.7) 안에 줄과 열의 표, 곧 #term("시트", en: "sheets")를 여럿 둔다. 버퍼 하나가 #term("작업책", en: "book")
 하나다. 자료형이 아니라 라이브러리이고, 어댑터처럼 돌아간다: 프로그램이 작업책을 열고, 그 안에 시트를 만들고, 이름이나
-번호로 하나를 고르면, 다른 모든 낱말은 그 #term("현재 시트", en: "current sheet")에 닿는다. `sheet` 의 모든 낱말은 모음 매개변수(9.9)처럼 버퍼를 맨
+번호로 하나를 고르면, 다른 모든 프로시저는 그 #term("현재 시트", en: "current sheet")에 닿는다. `sheet` 의 모든 프로시저는 모음 매개변수(9.9)처럼 버퍼를 맨
 끝에 받는다. 칸에는 아무것도 없거나, 프로그램이 넣은 `int`, `bool`, `dec N`, 날짜(Unix 초, UTC), `str` 이 들어 있다. 칸의 종류는 모듈 안에서만
-알고, 값은 그 형의 낱말(`int`, `str` ...)로만 칸에서 나온다. 그래서 모든 낱말의 서명은 정해져 있고, 스택에 형이 없는 값이
+알고, 값은 그 형의 프로시저(`int`, `str` ...)로만 칸에서 나온다. 그래서 모든 프로시저의 서명은 정해져 있고, 스택에 형이 없는 값이
 오르는 일이 없다. 칸과 풀과 색인이 버퍼 안에 어떻게 놓이는지는 인터페이스가 아니다.]
 
 #para("2")[줄, 열, 시트는 0부터 센다. 줄은 `add_row` 가 끝에 더하고, 시트는 `create` 가 받은 `rmax` 줄까지 가진다. 열의 수는
@@ -17,7 +17,7 @@
 
 === 작업책과 시트
 
-#para("3")[이 묶음이 아닌 낱말은 현재 시트가 있어야 하고, 없으면 결함 `state` 다. 작업책에 처음 만든 시트가 현재 시트가 된다. 이름은
+#para("3")[이 묶음이 아닌 프로시저는 현재 시트가 있어야 하고, 없으면 결함 `state` 다. 작업책에 처음 만든 시트가 현재 시트가 된다. 이름은
 1에서 255바이트이고 작업책에 한 번만 보관된다. 시트 번호는 만든 차례이며, 지운 시트의 번호는 다음에 만드는 시트가 다시 받는다.
 #table(columns: (auto, auto, 1fr), inset: 5pt, stroke: 0.5pt + luma(170),
   [*Word*], [*Signature*], [*Meaning*],
@@ -34,7 +34,7 @@
 
 === 만들기와 늘리기
 
-#para("4")[이 묶음의 낱말은 현재 시트에 닿는다.
+#para("4")[이 묶음의 프로시저는 현재 시트에 닿는다.
 #table(columns: (auto, auto, 1fr), inset: 5pt, stroke: 0.5pt + luma(170),
   [*Word*], [*Signature*], [*Meaning*],
   [`rows` `cols` `rows_max`], [`(b buffer gives int)`], [지금의 줄 수, 열 수, 최대 줄 수],
@@ -47,7 +47,7 @@
 
 === 칸
 
-#para("5")[줄과 열을 받는 낱말은 칸이 표 밖이면 결함 `range` 다. 표가 아닌 버퍼도 같은 결함이다.
+#para("5")[줄과 열을 받는 프로시저는 칸이 표 밖이면 결함 `range` 다. 표가 아닌 버퍼도 같은 결함이다.
 #table(columns: (auto, auto, 1fr), inset: 5pt, stroke: 0.5pt + luma(170),
   [*Word*], [*Signature*], [*Meaning*],
   [`put_int` `put_bool`], [`(v int, row int, col int, b buffer or fail)` `(v bool, row int, col int, b buffer or fail)`], [칸에 복사해 넣는다. 풀이 가득이면 `err.full`],
@@ -69,14 +69,14 @@
 없다고 알아낸다.
 #table(columns: (auto, auto, 1fr), inset: 5pt, stroke: 0.5pt + luma(170),
   [*Word*], [*Signature*], [*Meaning*],
-  [`find_row_int` `find_row_str`], [`(key int, col int, b buffer gives int or fail)` `(key str, col int, ...)`], [`col` 열이 `key` 인 첫 줄. 없으면 `err.not_found`. 스프레드시트의 `MATCH` 다. 날짜 칸은 그 초로 찾는다(`where_int`, `narrow_int`, 색인, `sum_*` 도 그렇게 본다). 값은 그 뒤 `int`, `str`, `date` ... 로 읽는다(`VLOOKUP` 처럼 형 없는 값을 돌려주는 낱말은 없다)],
+  [`find_row_int` `find_row_str`], [`(key int, col int, b buffer gives int or fail)` `(key str, col int, ...)`], [`col` 열이 `key` 인 첫 줄. 없으면 `err.not_found`. 스프레드시트의 `MATCH` 다. 날짜 칸은 그 초로 찾는다(`where_int`, `narrow_int`, 색인, `sum_*` 도 그렇게 본다). 값은 그 뒤 `int`, `str`, `date` ... 로 읽는다(`VLOOKUP` 처럼 형 없는 값을 돌려주는 프로시저는 없다)],
   [`find_col_int` `find_col_str`], [`(key int, row int, b buffer gives int or fail)`], [`row` 줄을 옆으로 훑어 첫 열],
   [`find_row_from_int` `find_row_from_str` `find_col_from_int` `find_col_from_str`], [`(key, line int, from int, b buffer gives int or fail)`], [같되 줄이나 열 `from` 부터],
 )]
 
 #para("7")[시트는 #term("선택", en: "selection")을 가진다: 줄의 목록이고, 처음엔 모든 줄이다. `where_*` 는 모든 줄에서 다시 시작해, 그 열의 값이 `v` 와
 관계 `op`(`sheet.eq` `ne` `lt` `le` `gt` `ge`)인 줄만 남기고, `narrow_*` 는 지금 선택된 줄 가운데 그런 줄만 남긴다. 종류가
-다른 칸과 빈 칸은 어떤 관계도 아니다. 낱말마다 시트의 선택에 일하므로 낱말을 늘어놓으면 곧 파이프다. 선택은 버퍼 안의 한 자리이고
+다른 칸과 빈 칸은 어떤 관계도 아니다. 프로시저마다 시트의 선택에 일하므로 프로시저를 늘어놓으면 곧 파이프다. 선택은 버퍼 안의 한 자리이고
 작업책 안에 시트마다 보관된다.
 #table(columns: (auto, auto, 1fr), inset: 5pt, stroke: 0.5pt + luma(170),
   [*Word*], [*Signature*], [*Meaning*],
@@ -115,12 +115,12 @@
 === 파일
 
 #para("9a")[CSV와 xlsx 파일을 현재 시트로 읽고 현재 시트에서 쓴다. 파일에 대한 권한은 없다: 프로그램이 파일을 `buffer` 로 읽고(`file.read_all_into`)
-버퍼를 내보낸다(`contents` 를 `file.write`). 이 낱말들은 #term("버퍼 둘", en: "two buffers")을 받는다. 파일이 먼저, 작업책이 마지막이다(`0 blob book sheet.load_csv`).
-둘은 서로 다른 버퍼이고, 작업책은 참조가 아닌 버퍼 자신이어야 한다(파일은 컬렉션 매개변수(9.9)여도 된다). 파일을 받는 낱말은 그 버퍼의 바이트를
+버퍼를 내보낸다(`contents` 를 `file.write`). 이 프로시저들은 #term("버퍼 둘", en: "two buffers")을 받는다. 파일이 먼저, 작업책이 마지막이다(`0 blob book sheet.load_csv`).
+둘은 서로 다른 버퍼이고, 작업책은 참조가 아닌 버퍼 자신이어야 한다(파일은 컬렉션 매개변수(9.9)여도 된다). 파일을 받는 프로시저는 그 버퍼의 바이트를
 바꿀 수 있다(작업 공간이다. 공유 버퍼는 거절한다). 읽기는 현재 시트의 마지막 줄 뒤에 줄을 더하고 더한 수를 주며, 실패하면 시트는 처음 그대로다.
 `rows_max` 를 넘는 줄이나 시트보다 많은 열은 `err.full`, CSV가 아닌 글이나 xlsx가 아닌 파일은 `err.format` 이다. `mode` 는 0, 1, 2이고 다른 값은 오류(fault)다.]
 #table(columns: (auto, auto, 1fr), inset: 5pt, stroke: 0.5pt + luma(170),
-  [*낱말*], [*서명*], [*뜻*],
+  [*프로시저*], [*서명*], [*뜻*],
   [`load_csv`], [`(mode int, f buffer, b buffer gives n int or fail)`], [`f` 의 글을 읽는다. 줄은 LF나 CRLF로 끝나고 필드는 쉼표로 나뉘며, 따옴표 필드는 쉼표·줄바꿈·겹따옴표를 담을 수 있다(그 자리에서 풀어 쓴다). 빈 줄과 UTF-8 BOM은 건너뛴다. mode 0: 정규형 정수(`-?(0|[1-9][0-9]*)`, int에 들어가는 것)는 `int`, 소수점 뒤 1~18자리인 정규형 수(들어가는 것)는 그 자릿수의 `dec`(`1.50` 은 `dec 2`), 빈 필드는 빈 칸, 나머지는 글(`007`, `-0` 도). mode 2: mode 0과 같고, 실제로 있는 날짜인 필드(`YYYY-MM-DD`, 또는 `T`나 공백과 `hh:mm:ss`가 붙고 `Z`가 올 수도 있다)는 날짜 칸이 된다(UTC, 날짜만 있으면 자정). mode 1: 모두 글],
   [`load_xlsx`], [`(mode int, n int, f buffer, b buffer gives rows int or fail)`], [`f` 의 xlsx에서 `n` 번 시트(0부터, 통합 문서 순서, 없으면 `err.not_found`)를 읽는다. 숫자는 CSV 규칙을 따른다(소수 18자리를 넘는 자리는 반올림, 지수는 적용, 들어가지 않으면 글). 공유·인라인·수식 결과 문자열은 글(서식 있는 글은 이어 붙이고 발음 표기는 버린다), `t="b"` 는 `bool`, 오류값(`#N/A`)은 글, 수식은 저장된 결과를 준다. 숫자 서식이 날짜나 시간인 칸(내장 14~22, 27~36, 45~47, 50~58, 71~81, 또는 따옴표·대괄호 밖에 `y`, `d`, `h`, `s`, `m` 이 있는 사용자 서식, `[h]`, `[mm]` 포함)은 mode 0에서 Unix 초(UTC, 파일의 1900/1904 날짜 체계, 시각만 있는 값은 자정부터)의 `int`, mode 1에서는 일련번호 그대로의 `dec`, mode 2에서는 그 초를 가진 날짜 칸(다른 칸은 mode 0과 같다). 파일이 비운 줄과 열은 빈 칸],
   [`save_csv`], [`(dst buffer, b buffer gives n int or fail)`], [`dst` 의 내용을 현재 시트의 CSV로 바꾼다(쓴 마지막 줄과 열까지, 쉼표·따옴표·줄바꿈이 든 글은 따옴표로 감싼다, `dec` 는 자릿수대로, `bool` 은 `true`/`false`, 날짜는 `YYYY-MM-DD`이고 자정이 아니면 `Thh:mm:ss`가 붙는다. 0~9999년 밖이면 초로 쓴다). 쓴 바이트 수를 준다. `dst` 가 작으면 `err.full`(그때 `dst` 는 비어 있다)],
@@ -146,12 +146,12 @@
 
 #part("결함")
 
-#para("11")[시트 밖의 줄이나 열, 현재 시트가 없는데 현재 시트가 필요한 낱말(`state`), `open_book` 으로 만들지 않았거나 그 뒤 바뀐 버퍼, 넘치는 합은 결함이다.]
+#para("11")[시트 밖의 줄이나 열, 현재 시트가 없는데 현재 시트가 필요한 프로시저(`state`), `open_book` 으로 만들지 않았거나 그 뒤 바뀐 버퍼, 넘치는 합은 결함이다.]
 #ex("spec", "16-sheet-range.pnx")
 
 #part("진단")
 #diag(
-  ([`sheet` 의 낱말에 다른 형의 값], "this word of sheet takes int for row, column and number, str for text, bool for put_bool, dec N for put_dec"),
-  ([`sheet` 의 낱말인데 끝에 버퍼가 없음], "the words of sheet take a buffer last: v row column grid sheet.put_int"),
-  ([파일을 받는 낱말에 참조인 작업책이나 버퍼가 아닌 파일], "this word of sheet takes the buffer of the file, then the book: 0 file book sheet.load_csv"),
+  ([`sheet` 의 프로시저에 다른 형의 값], "this word of sheet takes int for row, column and number, str for text, bool for put_bool, dec N for put_dec"),
+  ([`sheet` 의 프로시저인데 끝에 버퍼가 없음], "the words of sheet take a buffer last: v row column grid sheet.put_int"),
+  ([파일을 받는 프로시저에 참조인 작업책이나 버퍼가 아닌 파일], "this word of sheet takes the buffer of the file, then the book: 0 file book sheet.load_csv"),
 )

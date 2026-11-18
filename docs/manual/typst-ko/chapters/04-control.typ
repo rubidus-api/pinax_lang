@@ -6,7 +6,7 @@
 - 지역 변수는 언제 생기고 어디까지 보이는가?
 - `if`, `loop`, `match` 는 어떻게 쓰고, 스택에 대해 무엇을 지켜야 하는가?
 - 배열을 훑는 루프를 짧게 쓰는 길은?
-- 낱말을 값으로 주려면?
+- 프로시저를 값으로 주려면?
 ]
 
 == 지역 변수
@@ -100,8 +100,8 @@
 
 == 레일과 블록
 
-배열이나 목록을 훑는 일은 루프 대신 #strong[레일]과 #strong[조합 낱말]로 쓴다. 배열의 이름이 레일이고, 뒤에 오는
-`do … end` 블록과 `each` `count` `fold` 같은 낱말이 그것을 받는다. 블록은 그 자리에 펼쳐지므로 바깥의 지역 변수를
+배열이나 목록을 훑는 일은 루프 대신 #strong[레일]과 #strong[조합 프로시저]로 쓴다. 배열의 이름이 레일이고, 뒤에 오는
+`do … end` 블록과 `each` `count` `fold` 같은 프로시저가 그것을 받는다. 블록은 그 자리에 펼쳐지므로 바깥의 지역 변수를
 쓸 수 있다.
 
 #ex("manual", "04-rails.pnx")
@@ -109,7 +109,7 @@
 `lo hi range` 도 레일이다(`hi` 는 들지 않는다). `fold` 는 첫 값을 레일 앞에 두고, 블록이 (지금까지의 값, 원소)를 받아
 새 값을 준다.
 
-`each`, `each_index`, `times` 의 블록은 루프처럼 `break .` 로 일찍 떠나고 `continue .` 로 다음 원소로 간다. `do to 이름 … end` 의 `to` 가 원소를 이름에 받는다. 레일은 멈추고 그 낱말 뒤의
+`each`, `each_index`, `times` 의 블록은 루프처럼 `break .` 로 일찍 떠나고 `continue .` 로 다음 원소로 간다. `do to 이름 … end` 의 `to` 가 원소를 이름에 받는다. 레일은 멈추고 그 프로시저 뒤의
 코드가 돈다. 처음 맞는 것에서 멈추는 찾기는 이렇게 쓴다.
 
 #ex("manual", "04-leave-each.pnx")
@@ -126,17 +126,17 @@
 
 == 값인 프로시저
 
-조합 낱말에 주지 않는 블록은 `def 서명 do … end` 로 쓰고, #strong[값]이다. 지역 변수에 넣거나, 돌려주거나, `proc` 타입
+조합 프로시저에 주지 않는 블록은 `def 서명 do … end` 로 쓰고, #strong[값]이다. 지역 변수에 넣거나, 돌려주거나, `proc` 타입
 (`type 이름 proc 서명 end`)의 매개변수에 줄 수 있고, `call` 로 부른다. 이런 블록은 바깥의 지역 변수를 보지 못한다.
 프로그램의 프로시저를 값으로 주려면 `ref 이름` 이라고 쓴다. 그 값은 그 프로시저이고, 서명도 그 프로시저의 것이다.
 
 #ex("manual", "04-word-values.pnx")
 
-#qa[`str.starts_with` 같은 언어의 낱말은 어떻게 값으로 주는가?][블록의 서명을 타입만으로 쓴다:
-`def str, str gives bool do str.starts_with end`. 타입만 쓴 입력은 스택에 남으므로 낱말이 그대로 받는다. 서명이 없으면
+#qa[`str.starts_with` 같은 언어의 프로시저는 어떻게 값으로 주는가?][블록의 서명을 타입만으로 쓴다:
+`def str, str gives bool do str.starts_with end`. 타입만 쓴 입력은 스택에 남으므로 프로시저가 그대로 받는다. 서명이 없으면
 블록은 아무것도 받지 않고, 메시지가 두 꼴을 보여 준다.]
 
-#mistake[`match` 가지에 낱말 자체를 둘 수 있다: `when "prefix" do str.starts_with end`][가지는 낱말을 실행한다. 값으로
+#mistake[`match` 가지에 프로시저 자체를 둘 수 있다: `when "prefix" do str.starts_with end`][가지는 프로시저를 실행한다. 값으로
 만들지 않는다. 거기서 `str.starts_with` 가 불리고, 스택에 값이 모자란다. 블록으로 값을 만든다:
 `when "prefix" do def str, str gives bool do str.starts_with end end`, 프로그램의 프로시저면 `ref 이름`.
 #ex("manual", "04-word-values-branch.pnx")]
@@ -153,5 +153,5 @@
 - 루프를 여럿 한 번에 떠나려면 `break 2 .` 처럼 수를 쓴다(10.2).
 - 배열과 목록은 레일로 훑는다: `each` `each_index` `count` `fold` `sum` …(10.6). `each`, `each_index`, `times` 의
   블록은 `break .` 로 떠난다(10.6 (4)).
-- `ref 이름` 은 프로시저 `이름` 을 값으로 준다. 다른 낱말은 `def 서명 do 낱말 end` 로 준다(10.5).
+- `ref 이름` 은 프로시저 `이름` 을 값으로 준다. 다른 프로시저는 `def 서명 do 프로시저 end` 로 준다(10.5).
 ]

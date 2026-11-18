@@ -1,16 +1,16 @@
 #import "/tools/common.typ": *
 
-= Core words <core>
+= Core procedures <core>
 
-#para("1")[A #term("core word") is written as a bare name, without `use`. The tables of this clause write signatures as
-in 9.2. `T` means "any one type"; it is a notation for built-in words only. The stack words (`dup` `drop` `swap` `over`
-`nip`) are in 9.3 and the combining words that take rails in 10.6.]
+#para("1")[A #term("core procedure") is written as a bare name, without `use`. The tables of this clause write signatures as
+in 9.2. `T` means "any one type"; it is a notation for built-in words only. The stack procedures (`dup` `drop` `swap` `over`
+`nip`) are in 9.3 and the combining procedures that take rails in 10.6.]
 
 == Integers <core-int>
 
 #para("1")[Arithmetic. Overflow and division by zero are faults (11.3).
 #table(columns: (auto, auto, 1fr), inset: 5pt, stroke: 0.5pt + luma(170),
-  [*Word*], [*Signature*], [*Meaning*],
+  [*Procedure*], [*Signature*], [*Meaning*],
   [`add` `sub` `mul`], [`(int, int gives int)`], [add, subtract, multiply],
   [`div` `mod`], [`(int, int gives int)`], [quotient rounded toward zero and its remainder (sign of the dividend)],
   [`floor_div` `floor_mod`], [`(int, int gives int)`], [quotient rounded down and its remainder (sign of the divisor)],
@@ -20,17 +20,17 @@ in 9.2. `T` means "any one type"; it is a notation for built-in words only. The 
   [`rescale`], [`(d dec N, M gives dec M)`], [the decimal with `M` digits after the point (`M` a constant); fewer digits rounded half away from zero (7.5)],
 )]
 
-#para("2")[Words that treat overflow otherwise.
+#para("2")[Procedures that treat overflow otherwise.
 #table(columns: (auto, auto, 1fr), inset: 5pt, stroke: 0.5pt + luma(170),
-  [*Word*], [*Signature*], [*Meaning*],
+  [*Procedure*], [*Signature*], [*Meaning*],
   [`wrap_add` `wrap_sub` `wrap_mul`], [`(int, int gives int)`], [wrap modulo 2#super[64]],
   [`sat_add` `sat_sub` `sat_mul`], [`(int, int gives int)`], [stop at the edge of the range],
   [`chk_add` `chk_sub` `chk_mul` `chk_div`], [`(int, int gives int or fail)`], [fail with `err.overflow` on overflow, `err.div_zero` on division by zero],
 )]
 
-#para("3")[Words that read numbers as unsigned: the 64 bits as a number from 0 to 2#super[64]−1.
+#para("3")[Procedures that read numbers as unsigned: the 64 bits as a number from 0 to 2#super[64]−1.
 #table(columns: (auto, auto, 1fr), inset: 5pt, stroke: 0.5pt + luma(170),
-  [*Word*], [*Signature*], [*Meaning*],
+  [*Procedure*], [*Signature*], [*Meaning*],
   [`u_div` `u_mod`], [`(int, int gives int)`], [unsigned quotient and remainder; division by zero is a fault],
   [`u_lt` `u_le` `u_gt` `u_ge`], [`(int, int gives bool)`], [unsigned comparison],
   [`mul_hi` `u_mul_hi`], [`(int, int gives int)`], [the upper 64 bits of the 128-bit product (signed, unsigned)],
@@ -38,7 +38,7 @@ in 9.2. `T` means "any one type"; it is a notation for built-in words only. The 
 
 #para("4")[Bits. Shift and rotate counts are taken modulo 64 (their low 6 bits). `shl` does not check for overflow.
 #table(columns: (auto, auto, 1fr), inset: 5pt, stroke: 0.5pt + luma(170),
-  [*Word*], [*Signature*], [*Meaning*],
+  [*Procedure*], [*Signature*], [*Meaning*],
   [`bit_and` `bit_or` `bit_xor`], [`(int, int gives int)`], [bit by bit],
   [`bit_not`], [`(int gives int)`], [every bit flipped],
   [`shl` `shr` `u_shr`], [`(n int, k int gives int)`], [left, signed right, right filling with zeros],
@@ -47,16 +47,16 @@ in 9.2. `T` means "any one type"; it is a notation for built-in words only. The 
   [`byte_swap`], [`(int gives int)`], [the eight bytes in reverse order],
 )]
 
-#para("5")[On a narrow integer (7.6) the words above take two of one type and give that type; overflow, wrapping and
-saturation are judged by that type's range. The words that read numbers as unsigned and `floor_div` `floor_mod` are the
-plain words on an unsigned type and do not take a signed one. The bit words work within the width. `neg` `abs` `min`
+#para("5")[On a narrow integer (7.6) the procedures above take two of one type and give that type; overflow, wrapping and
+saturation are judged by that type's range. The procedures that read numbers as unsigned and `floor_div` `floor_mod` are the
+plain words on an unsigned type and do not take a signed one. The bit procedures work within the width. `neg` `abs` `min`
 `max` `clamp` do not take a narrow integer; `rotl` `rotr` `mul_hi` `u_mul_hi` take `u64` only.]
 
 #ex("spec", "15-integers.pnx")
 
 #part("Constraints")
 
-#para("5")[Integer words take `int` only (or two values of the same declared type, 7.4).]
+#para("5")[Integer procedures take `int` only (or two values of the same declared type, 7.4).]
 #ex("spec", "15-max-str.pnx")
 
 #part("Faults")
@@ -68,7 +68,7 @@ plain words on an unsigned type and do not take a signed one. The bit words work
 
 #para("1")[
 #table(columns: (auto, auto, 1fr), inset: 5pt, stroke: 0.5pt + luma(170),
-  [*Word*], [*Signature*], [*Meaning*],
+  [*Procedure*], [*Signature*], [*Meaning*],
   [`eq` `ne`], [`(T, T gives bool)`], [equal, not equal: `int` `bool` `str`, declared types, rows, error codes],
   [`lt` `le` `gt` `ge`], [`(T, T gives bool)`], [`int` (as signed), `str` (in byte order), declared types],
   [`and` `or`], [`(bool, bool gives bool)`], [logical and, or; both values are computed],
@@ -86,9 +86,9 @@ plain words on an unsigned type and do not take a signed one. The bit words work
 
 == Collections <core-collections>
 
-#para("1")[The words for the storage clause 8 declares. `c` is the name of that storage.
+#para("1")[The procedures for the storage clause 8 declares. `c` is the name of that storage.
 #table(columns: (auto, auto, 1fr), inset: 5pt, stroke: 0.5pt + luma(170),
-  [*Word*], [*For*], [*Meaning*],
+  [*Procedure*], [*For*], [*Meaning*],
   [`c len`], [array, list, queue, buffer], [what it holds now (an array: its capacity; a buffer: bytes); pools do not count their rows],
   [`c capacity`], [array, list, queue, buffer], [the declared capacity],
   [`c is_empty`], [array, list, queue, buffer], [is it empty],
@@ -113,7 +113,7 @@ plain words on an unsigned type and do not take a signed one. The bit words work
 #para("2")[Examples are in clause 8.]
 
 #para("3")[`c sort` puts the cells of an array, or of a list up to its length, in order from the smallest; `c sort_desc`
-from the largest. The cells change in place and the word gives nothing. The cells shall be `int`, a narrow integer,
+from the largest. The cells change in place and the procedure gives nothing. The cells shall be `int`, a narrow integer,
 `dec N`, `bool` (`false` first) or `str N`, or of a type declared over one of them; `u64` cells are compared unsigned,
 `str N` cells in the byte order of `str.compare` (16.1). A collection parameter (9.9) is sorted the same way. A list or
 array of records is refused: an index, a field, a global or a named row may keep its rows. Its rows are put in order
@@ -123,7 +123,7 @@ through a list of their numbers, by (4).]
 
 #para("4")[`o t sort_by r.f` takes `o`, an array or list of `int`, each cell the number of a row of `t`, or of rows of `t`
 (8.8 (5a)); `t`, an array
-or list of records, or a pool of records when the cells of `o` are its rows; and the field `r.f` of the record `t` holds, written after the word as `to` and `set` take their
+or list of records, or a pool of records when the cells of `o` are its rows; and the field `r.f` of the record `t` holds, written after the procedure as `to` and `set` take their
 name. It puts the cells of `o` in order of that field of the rows they number, from the smallest; `sort_by_desc` from
 the largest. The field shall be of a type the cells of (3) may have. The rows do not move, so indexes and kept rows stay
 right. A cell that is not a row number of `t`, or a none row, is the fault `range`, and a row of a pool given back since is the
@@ -140,11 +140,11 @@ collection it sorts, or, when it sorts a collection parameter, of the largest ar
 global of the state, and the block must have room for it. A sort of $n$ cells is charged to the budget as
 $n dot.c ceil(log_2 n)$ instructions (19.5).]
 
-== Other words <core-other>
+== Other procedures <core-other>
 
 #para("1")[
 #table(columns: (auto, auto, 1fr), inset: 5pt, stroke: 0.5pt + luma(170),
-  [*Word*], [*Signature*], [*Meaning*],
+  [*Procedure*], [*Signature*], [*Meaning*],
   [`mark`], [`(gives owned mark)`], [the current place of the region (12.2)],
   [`release`], [`(owned mark)`], [rewinds the region to that place (12.2)],
   [`region_free`], [`(gives int)`], [the bytes left in the region],
@@ -162,7 +162,7 @@ $n dot.c ceil(log_2 n)$ instructions (19.5).]
 
 #part("Diagnostics")
 #diag(
-  ([A value that is not `int` given to an integer word], "this word takes two int values"),
+  ([A value that is not `int` given to an integer procedure], "this procedure takes two int values"),
   ([Two values of different types compared], "the two values compared must have the same type"),
   ([The values of `select` differ in type], "select takes a bool and two values of one type: flag a b select"),
   ([`sort` of an array or list of records], "rows do not move: sort a list of their numbers by a field: order table sort_by record.field"),

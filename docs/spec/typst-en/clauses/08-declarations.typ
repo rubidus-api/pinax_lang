@@ -32,10 +32,10 @@ size        = INT | NAME ;                         (* NAME: a const *)
 written only outside definitions, at the outermost level of a source.]
 
 #para("2")[A processor reads a source once, from top to bottom. A name shall be declared before the place where it is
-used. The exceptions are a word that calls itself, and `forward` (8.11).]
+used. The exceptions are a procedure that calls itself, and `forward` (8.11).]
 
 #para("3")[Within one module a name cannot be made twice, not even for different kinds of things. The names of core
-words and types cannot be made again either.]
+procedures and types cannot be made again either.]
 
 #para("4")[A capacity (`size`) is a positive integer literal or a `const` of one. Capacities are fixed at load and do
 not change while running. All storage is placed inside the state's block at load.]
@@ -43,7 +43,7 @@ not change while running. All storage is placed inside the state's block at load
 #para("4a")[The capacity of an array, a buffer, a list, a queue, a pool or a task group may be written `host`. Then it
 is the number the host gave for that declaration before the load (19.4 (1d)), and the load treats it as that number
 written there. A load that meets `host` for a declaration the host gave no number is refused, and the message names
-the declaration. `host` is a word of the declaration only in that place; a constant of that name is not looked up
+the declaration. `host` is a procedure of the declaration only in that place; a constant of that name is not looked up
 there.]
 #ex("spec", "08-host-capacity.pnx")
 
@@ -76,7 +76,7 @@ refused. `set` writes globals only (9.4).]
 `dec N`, `str N`, a declared type, a row type (the name of a table) or a handle type; not `str` (7.3).]
 
 #para("2")[A global is read by writing its name and stored with `v set NAME` (9.4). Its value stays as long as the state does
---- after a word's run ends, and across later loads.]
+--- after a procedure's run ends, and across later loads.]
 
 #ex("spec", "08-const-global.pnx")
 
@@ -227,7 +227,7 @@ the layout in memory.]
 #part("Faults")
 
 #para("8")[An `int` stored into a narrow integer field is converted first (`n u8`); a value that does not fit the width
-makes that conversion the fault `overflow` (7.6). Nothing is cut: to store the low bits take a word such as `low_u8`.
+makes that conversion the fault `overflow` (7.6). Nothing is cut: to store the low bits take a procedure such as `low_u8`.
 Reading or storing a field of the none row is the fault `range`.]
 #ex("spec", "08-record-narrow.pnx")
 
@@ -247,24 +247,24 @@ or global, or given to `free`. Once stored, the generation check guards it.]
 
 #para("3a")[`POOL do (r POOL) … end each` visits the rows of the pool that are alive, in the order of their slots, not in
 the order they were taken. A row given back in the block before the walk reaches it is not visited; a row taken in the
-block is visited when its slot comes later. `each` is the only combining word (10.6) that walks a pool.]
+block is visited when its slot comes later. `each` is the only combining procedure (10.6) that walks a pool.]
 
 #part("Constraints")
 
 #para("4")[A path on which a taken row is neither stored nor given back is refused.]
 #ex("spec", "08-pool-leak.pnx")
 
-#para("4a")[A combining word other than `each` on a pool is refused.]
+#para("4a")[A combining procedure other than `each` on a pool is refused.]
 #ex("spec", "08-pool-walk.pnx")
 
 #part("Faults")
 
-#para("5")[Using a row that was given back is the fault `stale`. `pnx` shows the locals of the word below the fault.]
+#para("5")[Using a row that was given back is the fault `stale`. `pnx` shows the locals of the procedure below the fault.]
 #ex("spec", "08-pool-stale.pnx")
 
 #part("Diagnostics")
 #diag(
-  ([A combining word other than `each` on a pool], "a pool is walked by each only"),
+  ([A combining procedure other than `each` on a pool], "a pool is walked by each only"),
 )
 
 == Indexes <decl-index>
@@ -340,20 +340,20 @@ The declaring state has no storage for them; the host gives it the same declarat
 #part("Constraints")
 
 #para("2")[Nothing changes a shared global: storing, `set`, `push`, `pop`, `clear`, `truncate`, `add_row`, storing
-into a field, `insert`, `remove`, the words that append to a buffer, and a `map_into` or `filter_into` destination are
+into a field, `insert`, `remove`, the procedures that append to a buffer, and a `map_into` or `filter_into` destination are
 all refused. The processor also refuses, at load, bytecode that changes a shared global, and ends with the fault
 `state` bytecode that would change a shared global it was given as a parameter.]
 #ex("spec", "08-shared-write.pnx")
 
-#para("3")[A shared collection may be passed as a collection parameter (9.9) of a word that only reads that parameter.
-A word changes its parameter when it uses an instruction that changes it, or passes it to a word that changes that
-parameter or to a host word's `buffer` parameter. The processor decides once the whole source is read, so the same
-holds for a word announced with `forward` and for a word of an earlier load.]
+#para("3")[A shared collection may be passed as a collection parameter (9.9) of a procedure that only reads that parameter.
+A procedure changes its parameter when it uses an instruction that changes it, or passes it to a procedure that changes that
+parameter or to a host procedure's `buffer` parameter. The processor decides once the whole source is read, so the same
+holds for a procedure announced with `forward` and for a procedure of an earlier load.]
 #ex("spec", "08-shared-param.pnx")
 #ex("spec", "08-shared-change.pnx")
 
-#para("3a")[A shared collection is not passed as a host word's `buffer` parameter or as a parameter of the word a block
-value names (`call`), since what the receiver does is not known at load. `redefine` cannot make a word change a
+#para("3a")[A shared collection is not passed as a host procedure's `buffer` parameter or as a parameter of the procedure a block
+value names (`call`), since what the receiver does is not known at load. `redefine` cannot make a procedure change a
 parameter it only read.]
 
 #para("4")[`shared` does not stand before `queue`, `pool`, `tasks`, `const` or `record`.]
@@ -394,10 +394,10 @@ program does not depend on the number; a host reads the name (`pinax_error_text`
   ([A path that does not hand over an `owned` row], "an owned value in a local is not given on every path (close, free or store it)"),
   ([An announced table that is never declared], "a table announced by forward is never declared"),
   ([A shared global is changed], "a shared global is read-only: nothing here may change it"),
-  ([A shared collection passed to a word that changes it], "a shared collection is read-only: the word it is given to changes this parameter"),
-  ([A shared collection passed to a block value's word], "a shared collection is read-only: it is not given to the word a block value names, which may change it"),
-  ([`redefine` makes a read parameter changed], "redefine cannot make the word change a collection parameter the old one only read: shared collections may have been given to it"),
-  ([A shared buffer passed to a host word], "a shared buffer is read-only: it is not given to a host word, which may write it"),
+  ([A shared collection passed to a procedure that changes it], "a shared collection is read-only: the procedure it is given to changes this parameter"),
+  ([A shared collection passed to a block value's procedure], "a shared collection is read-only: it is not given to the procedure a block value names, which may change it"),
+  ([`redefine` makes a read parameter changed], "redefine cannot make the procedure change a collection parameter the old one only read: shared collections may have been given to it"),
+  ([A shared buffer passed to a host procedure], "a shared buffer is read-only: it is not given to a host procedure, which may write it"),
   ([Another declaration after `shared`], "shared stands before global, array, list, buffer or index"),
   ([`err` not followed by a name], "err is followed by the name of a new failure code"),
   ([The name of a failure code over 31 bytes], "the name of a failure code is at most 31 bytes long"),

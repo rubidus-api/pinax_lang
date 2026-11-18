@@ -30,7 +30,7 @@ end. Only indexes below the length may be used.
 
 #ex("manual", "06-list.pnx")
 
-Here are the words for lists in one place, with remarks saying what each line does.
+Here are the procedures for lists in one place, with remarks saying what each line does.
 
 #ex("manual", "06-list-steps.pnx")
 
@@ -87,11 +87,11 @@ from cell 0, and the number of cells written is given. When the destination is f
 
 #ex("manual", "06-map-filter.pnx")
 
-== Passing a collection to a word
+== Passing a collection to a procedure
 
-A word can take a collection as a parameter. Write its kind and what its cells hold --- `list int`, `array city`,
-`queue int`, `list str 8` --- or `buffer`, and give the collection's name where you call the word. Inside, the parameter
-works wherever a collection's name does (even as the destination of `map_into`). The same word now serves every list of that kind, whatever its capacity.
+A procedure can take a collection as a parameter. Write its kind and what its cells hold --- `list int`, `array city`,
+`queue int`, `list str 8` --- or `buffer`, and give the collection's name where you call the procedure. Inside, the parameter
+works wherever a collection's name does (even as the destination of `map_into`). The same procedure now serves every list of that kind, whatever its capacity.
 
 #ex("manual", "06-coll-param.pnx")
 
@@ -108,13 +108,13 @@ its cells are written one by one with `set`.]
 When a table of rows and columns is wanted that holds a number in one cell and a text in the next, as a spreadsheet
 does, the module `sheet` keeps it in a buffer. It is a library; it is not a type. The buffer is made a #strong[book] by
 `open_book`, and `create` makes named sheets in it (at most so many rows, exactly so many columns). A sheet is chosen by name
-(`activate`) or by number (`activate_n`), and every other word then works on the chosen #strong[current sheet]: the shape of connecting
-to a service, choosing one thing in it and asking. A row is added at a time, and every word of `sheet` takes the buffer last.
-A cell comes out through the word of its kind: `int`, `str`, `bool`, `dec`. Equal texts and big numbers are stored once,
+(`activate`) or by number (`activate_n`), and every other procedure then works on the chosen #strong[current sheet]: the shape of connecting
+to a service, choosing one thing in it and asking. A row is added at a time, and every procedure of `sheet` takes the buffer last.
+A cell comes out through the procedure of its kind: `int`, `str`, `bool`, `dec`. Equal texts and big numbers are stored once,
 however many cells hold them and in however many sheets.
 
 Searching and choosing work on a #strong[selection], the rows chosen so far. `where_str` and `where_int` start it from all
-the rows; `narrow_int` and `narrow_str` keep, of the rows selected, those that are still right. A line of such words is
+the rows; `narrow_int` and `narrow_str` keep, of the rows selected, those that are still right. A line of such procedures is
 the pipe, and `order_by`, `sum_sel` and `sel_row` read what is left.
 
 #ex("manual", "06-sheet.pnx")
@@ -127,17 +127,17 @@ answer without scanning, and the answers are the same. A write costs a little mo
 
 Spreadsheets and CSV files come in and go out through two buffers: the file, then the book. `load_csv` and `load_xlsx` add the file's rows
 to the current sheet (`mode` 0 turns numbers into numbers, and in an xlsx a date into Unix seconds; mode 1 keeps the text, or the serial number; mode 2 is mode 0 with a date kind, `put_date` and `date`, for the dates of an xlsx and for CSV fields such as `2024-02-29` or `2024-02-29T08:30:00`, and a date is written back as a date),
-and `save_csv` and `save_xlsx` write the sheet into a buffer, which the program then writes to a file. The words give the number of rows
+and `save_csv` and `save_xlsx` write the sheet into a buffer, which the program then writes to a file. The procedures give the number of rows
 or bytes. They have no power over files, because the program moves the bytes itself (`file.read_all_into`, `file.write`), and nothing is
 allocated: an xlsx is read in the spare room after the file's bytes in its buffer, so declare that buffer larger than the file.
 
 #ex("manual", "06-sheet-files.pnx")
 
 Columns do not grow: `widen` rebuilds the table, in the same buffer, with another number of columns. A cell of another
-kind than the word asks for fails with `err.format`; ask `kind` first when it can be so.
+kind than the procedure asks for fails with `err.format`; ask `kind` first when it can be so.
 
 #summary[
-- A word takes a collection as `list T`, `array T`, `queue T` or `buffer` (9.9).
+- A procedure takes a collection as `list T`, `array T`, `queue T` or `buffer` (9.9).
 - The capacity of a collection is fixed by its declaration; no storage grows while running (standard 8.1).
 - An array is always full; a list's length grows; an index out of range is a fault (8.4, 8.5).
 - `push` `pop` `put` `take` can fail: `full` when full, `range` when empty (8.5, 8.6).

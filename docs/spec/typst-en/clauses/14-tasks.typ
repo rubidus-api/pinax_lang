@@ -8,14 +8,14 @@ tasks-decl = "tasks" NAME size [ size [ size [ size ] ] ] [ "apart" ] ;   (* cou
 ```
 
 #para("1")[A *task* is a flow of execution that takes turns with others inside one state. Tasks change only where one
-gives way on its own (`yield`, or a host word that waits). So even when two tasks use the same global, no other task
+gives way on its own (`yield`, or a host procedure that waits). So even when two tasks use the same global, no other task
 comes in between two yields of one task. Tasks are not threads: a state runs on one thread at a time (5.1).]
 
 #para("2")[`tasks NAME count [depth [region [turns]]]` declares a #term("task group") of up to `count` tasks. Each task
 has its own call depth (`depth`) and its own region (`region` bytes); left out, they are the processor's defaults.
 `turns`, when it is written, is the group's turn limit (14.6). The name of
 the group is the type of the values that refer to its tasks. Written last, `apart` makes a fault inside one of the
-group's tasks end that task only (14.4 (3a)); `apart` is a word of the declaration only in that place.]
+group's tasks end that task only (14.4 (3a)); `apart` is a procedure of the declaration only in that place.]
 
 == Making and running tasks <tasks-run>
 
@@ -46,8 +46,8 @@ the next run.]
 
 #ex("spec", "14-queue.pnx")
 
-#para("3")[Which words may yield (directly or in a word they call) is known at load. `wait_take` and `wait_put` (14.3)
-yield too. Such words cannot be run from inside a host word (clause 19).]
+#para("3")[Which procedures may yield (directly or in a procedure they call) is known at load. `wait_take` and `wait_put` (14.3)
+yield too. Such procedures cannot be run from inside a host procedure (clause 19).]
 
 == Waiting for a queue <tasks-queue-wait>
 
@@ -71,7 +71,7 @@ queue and `wait_put` on a full one are the fault `deadlock` at once.]
 
 #ex("spec", "14-deadlock-main.pnx")
 
-#para("4")[Only these two words are watched for a deadlock. Tasks that wait in a loop of their own (`loop … yield …
+#para("4")[Only these two procedures are watched for a deadlock. Tasks that wait in a loop of their own (`loop … yield …
 end`), or a task resumed by hand with `resume`, are not; a host that runs such code gives it a budget (19.5).]
 
 == Cancelling <tasks-cancel>
@@ -108,7 +108,7 @@ this does not normally happen.]
 #part("Diagnostics")
 #diag(
   ([a block with parameters or results given to `spawn`], "spawn takes a block that takes and gives nothing, and a set of tasks: do ... end workers spawn"),
-  ([`resume`, `is_done` or `cancel` on a value that is not a task], "this word takes a task"),
+  ([`resume`, `is_done` or `cancel` on a value that is not a task], "this procedure takes a task"),
   ([`run_all` on a collection that is not a task group (an array, a list)], "run_all takes a set of tasks"),
   ([a `tasks` count above 4096], "a set holds at most 4096 tasks"),
   ([a call depth of a task outside 1 to 4096], "the call depth of a task is 1 to 4096"),
@@ -122,7 +122,7 @@ this does not normally happen.]
 
 #para("1")[`n task_tag` (`int gives`) gives the running task a #term("tag"): an `int` the host is told with the
 task's fault when its group is declared `apart` (14.4 (3a), 19.10 (3)). A task's tag is 0 until it gives one; a later
-`task_tag` replaces it. In the main run, which is not a task, the word does nothing. The tag is a part of the task,
+`task_tag` replaces it. In the main run, which is not a task, the procedure does nothing. The tag is a part of the task,
 and an image keeps it.]
 
 #para("2")[A task learns what it serves after `spawn`, from a queue or a global (14.4 (2)), so it names itself

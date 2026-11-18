@@ -3,12 +3,12 @@
 == `bytes` --- binary data <std-bytes>
 
 #para("1")[The module `bytes` writes numbers and text into a buffer as fixed byte forms, and reads them from bytes. The
-writing words are `(value, buf or fail)` (`err.full` when there is not enough room; nothing is written). The reading
-words are `(s str gives value, rest str or fail)` (`err.format` when the bytes run short or have the wrong form).]
+writing procedures are `(value, buf or fail)` (`err.full` when there is not enough room; nothing is written). The reading
+procedures are `(s str gives value, rest str or fail)` (`err.format` when the bytes run short or have the wrong form).]
 
 #para("2")[
 #table(columns: (auto, 1fr), inset: 5pt, stroke: 0.5pt + luma(170),
-  [*Word*], [*Bytes*],
+  [*Procedure*], [*Bytes*],
   [`put_u8` `put_u16` `put_u32` `put_u64` \ `put_i8` `put_i16` `put_i32` `put_i64`], [a value of the type the name says (7.6; `put_i64` an `int`), least significant byte first],
   [the same names with `_be`], [most significant byte first],
   [`get_u8` … `get_i64`, `get_u16_be` …], [their pairs: a value of the type the name says (`get_i64` an `int`)],
@@ -40,6 +40,6 @@ only when every field can be read; when it fails the row is unchanged.]
 
 #part("Faults")
 
-#para("7")[The value written has the type the word's name says (`u8` for `put_u8`, 7.6). An `int` is made into that
+#para("7")[The value written has the type the procedure's name says (`u8` for `put_u8`, 7.6). An `int` is made into that
 type first (`n u8`), and a value outside its range is the fault `overflow` there; nothing is cut.]
 #ex("spec", "16-bytes-narrow.pnx")
