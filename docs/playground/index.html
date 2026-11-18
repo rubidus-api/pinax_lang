@@ -14887,6 +14887,17 @@ async function createConsole({ createPinax, bytes, print, store = null }) {
     }
 
     // a statement typed that declares something: added, or in place of the lines declaring the same
+    // a statement typed over several lines is one entry of the history, not one per line
+    function foldHistory(text) {
+        const parts = text.split("\n").filter((l) => l.trim() !== "");
+        if (parts.length < 2 || history.length < parts.length)
+            return;
+        const tail = history.slice(history.length - parts.length);
+        if (tail.every((l, i) => l === parts[i])) {
+            history.splice(history.length - parts.length, parts.length, text);
+        }
+    }
+
     function remember(text) {
         const key = declared(text);
         if (key === null)
@@ -15099,6 +15110,7 @@ async function createConsole({ createPinax, bytes, print, store = null }) {
             gathered = [];
             trialled = false;
             if (r.ok) {
+                foldHistory(text);
                 remember(text);
                 showStack(r.stack);
             }
@@ -15119,6 +15131,7 @@ async function createConsole({ createPinax, bytes, print, store = null }) {
         gathered = [];
         trialled = false;
         if (r.ok) {
+            foldHistory(text);
             remember(text);
             showStack(r.stack);
             const found = /^\s*def\s+([A-Za-z_][A-Za-z_0-9]*)([^\n]*?)\bdo\b/.exec(text);
