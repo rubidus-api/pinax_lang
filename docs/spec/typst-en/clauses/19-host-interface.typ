@@ -141,7 +141,9 @@ does not. The host library's `pinax_host_register_all` gives one that writes the
 #para("4")[`pinax_set_trace(state, function, user)` asks for a trace of the lines of words. While a function is set, what the
 compiler produces from a load or a session line holds, at the start of each line of a word body (not of the top level),
 an instruction that calls `function(user, line, word)` as the line is about to run; `pinax_fault_local` then reads the
-locals the word holds there, as at a fault. The function may call only what reads the state. Code compiled with no
+locals the word holds there, as at a fault. The function may call only what reads the state. If it answers non-zero the run
+is suspended before that line (a breakpoint): the call that ran answers `PINAX_SUSPENDED` and `pinax_resume` goes on from the
+line, without calling the function for it again. Code compiled with no
 function set holds no such instruction and costs nothing; code that holds it runs on, calling nothing, once the
 function is `NULL`. An image and exported C do not carry the function or the instruction.]
 

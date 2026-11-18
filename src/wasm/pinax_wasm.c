@@ -15,7 +15,7 @@
 #define WASM_EXPORT(name) __attribute__((export_name(name)))
 
 WASM_IMPORT("pnx_write") void pnx_write(int32_t stream, const void *bytes, size_t length);
-WASM_IMPORT("pnx_trace") void pnx_trace(uint32_t line, const void *word, size_t length);
+WASM_IMPORT("pnx_trace") int32_t pnx_trace(uint32_t line, const void *word, size_t length);
 WASM_IMPORT("pnx_diag") void pnx_diag(uint32_t line, uint32_t column, const void *message, size_t length);
 
 // ---- the C library the core calls ------------------------------------------------------
@@ -177,9 +177,14 @@ WASM_EXPORT("pnx_wasm_text") void *pnx_wasm_text(size_t bytes) {
 // pinax_set_trace: the page is told each line of a word about to run; it reads the locals with
 // pnx_wasm_fault_local while it is told. Kept across opens (a session opens a state again).
 static int trace_on;
-static void trace_note(void *user, uint32_t line, pinax_str word) {
+static int trace_note(void *user, uint32_t line, pinax_str word) {
     (void)user;
-    pnx_trace(line, word.ptr, word.len);
+    return pnx_trace(line, word.ptr, word.len);
+}
+
+// Goes on with a session line that stopped (pinax_eval answered PINAX_SUSPENDED); the same answers.
+WASM_EXPORT("pnx_wasm_resume") int32_t pnx_wasm_resume(void) {
+    return state ? pinax_resume(state, NULL) : PINAX_ERR_STATE;
 }
 WASM_EXPORT("pnx_wasm_trace") void pnx_wasm_trace(int32_t on) {
     trace_on = on != 0;

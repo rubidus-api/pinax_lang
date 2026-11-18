@@ -47,6 +47,9 @@ export const GUIDE = {
         [":insert N", "new lines above line N (0: at the end); an empty line ends, and the program runs (:ins)"],
         [":delete N[-M]", "removes lines N to M (:del)"],
         [":trace", "RESETS like :run, then runs the program one statement at a time (one period each), showing the stack after each and every line of a word with its locals as it runs; :trace off stops the lines of words"],
+        [":break N|NAME ...", "breakpoints: the run stops before those lines (a procedure: its first body line); :list marks them `*` and the stop `=>`; RESETS and runs the program again (:b)"],
+        [":unbreak [N ...|all]", "removes breakpoints (:ub)"],
+        [":continue, :next, :stop", "after a stop: go on (:c), go on to the next line or statement (:n), or end the run (:stop)"],
         [":run", "RESETS: empties the stack and forgets every definition, then runs the program from line 1 (F5); the program's lines stay"],
         [":new", "no program, and a fresh state"],
         [":stack", "the values on the stack, the first pushed first (:s); it may be typed inside a block"],
@@ -178,47 +181,140 @@ export async function createConsole({ createPinax, bytes, print, store = null })
         return out;
     }
 
-    function runProgram(trace = false) {
-        session.reset();
+    // ---- running, breakpoints, a stop -----------------------------------------------------------
+    const breaks = new Set(); // lines of the program (from 1) to stop before
+    let showLines = false;    // :trace: every line of a word is shown as it runs
+    let stepping = false;     // :next: stop before the next line or statement
+    let halt = null;          // a run that stopped: { line, word, locals, mid } (mid: inside a statement, to resume)
+    let runner = null;        // the program being run: { pieces, i, skip }
+    let noStop = false;       // :stop replays the program without stopping
+
+    // whether TRACE instructions are wanted in what is compiled: a trace or a breakpoint is set
+    const syncTrace = () => pinax.trace(showLines || breaks.size > 0, onTrace);
+    function onTrace({ word, line, locals }) {
+        const at = line + (defAt.get(word) ?? 0);
+        if (showLines)
+            print("trace", `    ${word}:${at}${locals.map(([n, v]) => ` ${n}=${v}`).join("")}\n`);
+        if (!noStop && (stepping || breaks.has(at))) {
+            stepping = false;
+            halt = { line: at, word, locals, mid: true };
+            return true;
+        }
+        return false;
+    }
+
+    // the program (or a range) with its numbers, `*` at a breakpoint, `=>` at the line the run stopped before
+    function listing(from, to) {
+        const width = String(lines.length).length;
+        let text = "";
+        for (let k = from; k < to; ++k) {
+            const here = halt && halt.line === k + 1, stop = breaks.has(k + 1);
+            const mark = here ? (stop ? "=*" : "=>") : stop ? " *" : "  ";
+            text += `${mark}${String(k + 1).padStart(width)}  ${lines[k]}\n`;
+        }
+        return text;
+    }
+
+    function stopped() {
+        const where = halt.word ? `in ${halt.word} at line ${halt.line}` : `before line ${halt.line}`;
+        print("info", `stopped ${where}${breaks.has(halt.line) ? " (a breakpoint)" : ""}; :continue (:c) goes on, :next (:n) one line\n`);
+        if (halt.locals?.length)
+            print("stack", `   locals: ${halt.locals.map(([n, v]) => `${n}=${v}`).join(" ")}\n`);
+        const at = halt.line - 1;
+        print("info", listing(Math.max(0, at - 3), Math.min(lines.length, at + 4)));
+    }
+
+    // the pieces a run goes through: the statements (a period each) when lines are traced or a breakpoint is set,
+    // else the parts of the program as they are
+    function pieces() {
+        const out = [];
         for (const { start, end } of parts()) {
-            offset = start;
-            if (trace) {
-                const pieces = statements(start, end);
-                for (const { text, line } of pieces) {
+            if (showLines || breaks.size) {
+                const these = statements(start, end);
+                for (const { text, line } of these) {
                     const found = /^\s*def\s+([A-Za-z_][A-Za-z_0-9]*)/.exec(text);
                     if (found)
                         defAt.set(found[1], line);
+                    out.push({ text, line, end: line + text.split("\n").length });
                 }
-                let failed = false;
-                for (const { text, line } of pieces) {
-                    offset = line;
-                    print("echo", `${line + 1}: ${text.split("\n").join("\n   ")}\n`);
-                    const q = session.eval(text);
-                    if (!q.ok)
-                        failed = true;
-                    else
-                        print("stack", `   stack: ${session.stack().join(" ") || "(empty)"}\n`);
-                    if (failed) {
-                        offset = 0;
-                        print("info", `the program stops in line ${line + 1} (:list ${line + 1})\n`);
-                        return false;
-                    }
-                }
-                offset = 0;
-                continue;
-            }
-            const r = session.eval(lines.slice(start, end).join("\n"));
-            offset = 0;
-            if (!r.ok) {
-                const at = end - start === 1 ? `line ${start + 1}` : `lines ${start + 1}-${end}`;
-                print("info", r.unfinished ? `${at}: a definition or a block is not closed by the program's end\n`
-                                           : `the program stops in ${at} (:list ${at.split(" ")[1]})\n`);
-                return false;
+            } else {
+                out.push({ text: lines.slice(start, end).join("\n"), line: start, end });
             }
         }
-        if (!trace)
+        return out;
+    }
+
+    function runProgram() {
+        session.reset();
+        halt = null;
+        stepping = false;
+        syncTrace();
+        runner = { pieces: pieces(), i: 0, skip: -1 };
+        return pump(false);
+    }
+
+    // goes on with the statements of the program; a stop ends it (resumed by :continue)
+    function pump(resumeFirst) {
+        while (runner.i < runner.pieces.length) {
+            const { text, line, end } = runner.pieces[runner.i];
+            let r;
+            offset = line;
+            if (resumeFirst) {
+                resumeFirst = false;
+                r = session.resume();
+            } else {
+                if (!noStop && runner.skip !== runner.i && (stepping || breaks.has(line + 1))) {
+                    stepping = false;
+                    runner.skip = runner.i;
+                    halt = { line: line + 1, word: null, locals: null, mid: false };
+                    offset = 0;
+                    stopped();
+                    return false;
+                }
+                if (showLines)
+                    print("echo", `${line + 1}: ${text.split("\n").join("\n   ")}\n`);
+                r = session.eval(text);
+            }
+            offset = 0;
+            if (r.suspended) {
+                stopped();
+                return false;
+            }
+            if (!r.ok) {
+                const at = end - line === 1 ? `line ${line + 1}` : `lines ${line + 1}-${end}`;
+                print("info", r.unfinished ? `${at}: a definition or a block is not closed by the program's end\n`
+                                           : `the program stops in ${at} (:list ${at.split(" ")[1]})\n`);
+                runner = null;
+                return false;
+            }
+            if (showLines)
+                print("stack", `   stack: ${session.stack().join(" ") || "(empty)"}\n`);
+            ++runner.i;
+        }
+        runner = null;
+        if (!showLines)
             showStack(session.stack());
         return true;
+    }
+
+    // :continue and :next: the stopped run goes on (:next stops again before the next line or statement)
+    function goOn(one) {
+        if (!halt) {
+            print("info", "nothing is stopped\n");
+            return;
+        }
+        const was = halt;
+        halt = null;
+        stepping = one;
+        if (runner) {
+            pump(was.mid);
+        } else { // a statement typed at the prompt that stopped inside a word
+            const r = session.resume();
+            if (r.suspended)
+                stopped();
+            else if (r.ok)
+                showStack(r.stack);
+        }
     }
 
     // a statement typed that declares something: added, or in place of the lines declaring the same
@@ -277,11 +373,7 @@ export async function createConsole({ createPinax, bytes, print, store = null })
             const r = arg === undefined ? [0, lines.length] : range(arg);
             if (!r)
                 return noLine(arg), {};
-            const width = String(lines.length).length;
-            let text = "";
-            for (let k = r[0]; k < r[1]; ++k)
-                text += `${String(k + 1).padStart(width + 2)}  ${lines[k]}\n`;
-            print("info", text);
+            print("info", listing(r[0], r[1]));
             return {};
         }
         case "edit": {
@@ -330,14 +422,59 @@ export async function createConsole({ createPinax, bytes, print, store = null })
             return {};
         case "trace":
             if (arg === "off") {
-                pinax.trace(false);
+                showLines = false;
+                syncTrace();
                 print("info", "trace off\n");
                 return {};
             }
+            showLines = true;
             print("info", "reset; the program runs one statement at a time, and each line of a word as it runs " +
                             "(:trace off stops the lines)\n");
-            pinax.trace(true);
-            runProgram(true);
+            runProgram();
+            return {};
+        case "break": case "b": {
+            const given = line.slice(1).trim().split(/\s+/).slice(1);
+            if (!given.length) {
+                print("info", breaks.size ? `breakpoints at ${[...breaks].sort((x, y) => x - y).join(", ")}\n` : "no breakpoints; :break N or :break NAME\n");
+                return {};
+            }
+            for (const g of given) {
+                let n = /^\d+$/.test(g) ? Number(g) : 0;
+                if (!n && /^[A-Za-z_][A-Za-z_0-9]*$/.test(g)) { // a procedure: its first line after the def line
+                    const d = declaration(g);
+                    n = d ? (d[1] - d[0] > 1 ? d[0] + 2 : d[0] + 1) : 0;
+                }
+                if (n < 1 || n > lines.length)
+                    return print("err", `no line or procedure ${g}; :list shows the lines\n`), {};
+                breaks.add(n);
+            }
+            print("info", `breakpoints at ${[...breaks].sort((x, y) => x - y).join(", ")}; the program runs again from a fresh state\n`);
+            runProgram();
+            return {};
+        }
+        case "unbreak": case "ub": {
+            const given = line.slice(1).trim().split(/\s+/).slice(1);
+            if (!given.length || given[0] === "all")
+                breaks.clear();
+            else
+                for (const g of given)
+                    breaks.delete(Number(g));
+            syncTrace();
+            print("info", breaks.size ? `breakpoints at ${[...breaks].sort((x, y) => x - y).join(", ")}\n` : "no breakpoints\n");
+            return {};
+        }
+        case "continue": case "c":
+            goOn(false);
+            return {};
+        case "next": case "n":
+            goOn(true);
+            return {};
+        case "stop": // ends a stopped run: the program is run again to its end without stopping
+            if (!halt)
+                return print("info", "nothing is stopped\n"), {};
+            noStop = true;
+            runProgram();
+            noStop = false;
             return {};
         case "new":
             lines = [];
@@ -442,6 +579,10 @@ export async function createConsole({ createPinax, bytes, print, store = null })
         }
         if (gathered.length === 0 && line.trim() === "")
             return { prompt: prompt() };
+        if (halt && !line.trimStart().startsWith(":")) { // the run is stopped: only commands, until it goes on
+            print("info", `stopped ${halt.word ? `in ${halt.word} ` : ""}at line ${halt.line}: :continue (:c), :next (:n) or :stop first\n`);
+            return { prompt: prompt() };
+        }
         if (line.trimStart().startsWith(":") && (gathered.length === 0 || /^:(stack|s|blocks|words|help|list)\b/.test(line.trim())))
             return { ...command(line.trim()), prompt: prompt() };
         // an empty line after text that waits for its dot runs the text, when no block is open: the way out of a
@@ -458,6 +599,10 @@ export async function createConsole({ createPinax, bytes, print, store = null })
             }
             gathered = [];
             trialled = false;
+            if (r.suspended) {
+                stopped();
+                return { prompt: prompt() };
+            }
             if (r.ok) {
                 foldHistory(text);
                 remember(text);
@@ -479,6 +624,10 @@ export async function createConsole({ createPinax, bytes, print, store = null })
             return { prompt: prompt() };
         gathered = [];
         trialled = false;
+        if (r.suspended) {
+            stopped();
+            return { prompt: prompt() };
+        }
         if (r.ok) {
             foldHistory(text);
             remember(text);

@@ -29,7 +29,7 @@
 // when that one was a `do` block. ok is false for text that is not Pinax (a string not closed).
 // MIT (see ../../LICENSE).
 
-const SYNTAX = 0x202, TYPE = 0x203;
+const SYNTAX = 0x202, TYPE = 0x203, SUSPENDED = 1;
 const errors = new Map([
     [0x100, "failed"], [0x101, "integer overflow"], [0x102, "division by zero"], [0x103, "index out of range"],
     [0x104, "a declared capacity is used up"], [0x105, "call depth limit"],
@@ -47,6 +47,7 @@ export async function createPinax(bytes, { write = () => {}, blockBytes = 16 << 
     let told = false;       // a load message named the place: the failure is not said again
     let held = null;        // a session line's output, kept until the line is known to be whole
     let toolStream = 2;     // where tool output (line 0) goes: stream 1 in a session
+    let onTrace = () => false; // trace(on, fn): fn({ word, line, locals }) answers true to stop
     let opened = 0;         // how many times a state was opened: a session sees when run() took it
     const out = (stream, text) => (held ? held.push([stream, text]) : write(stream, text));
     const view = (at, length) => new Uint8Array(memory.buffer, at, length);
@@ -54,15 +55,16 @@ export async function createPinax(bytes, { write = () => {}, blockBytes = 16 << 
         env: {
             pnx_write: (stream, at, length) => out(stream, decoder.decode(view(at, length))),
             pnx_trace: (line, at, length) => { // a line of a word is about to run: where, and its locals
-                let text = `${decoder.decode(view(at, length))}:${line}`;
+                const locals = [];
                 for (let k = 0; ; ++k) {
                     const p = x.pnx_wasm_fault_local(k);
                     if (!p)
                         break;
                     const w = new Uint32Array(memory.buffer, p, 9);
-                    text += ` ${decoder.decode(view(w[3], w[4]))}=${shown(p, true)}`;
+                    locals.push([decoder.decode(view(w[3], w[4])), shown(p, true)]);
                 }
-                out(3, text + "\n");
+                // the page's function answers true to stop before the line (a breakpoint)
+                return onTrace({ word: decoder.decode(view(at, length)), line, locals }) ? 1 : 0;
             },
             pnx_diag: (line, column, at, length) => {
                 const message = decoder.decode(view(at, length));
@@ -160,8 +162,17 @@ export async function createPinax(bytes, { write = () => {}, blockBytes = 16 << 
             const text = encoder.encode(source);
             const at = place(text);
             const err = at ? x.pnx_wasm_eval(at, text.length) : 0x201;
+            return finish(err);
+        }
+        // what a line answered (also after resume()): a stop is no failure, the line waits for resume()
+        function finish(err) {
             const lines = held;
             held = null;
+            if (err === SUSPENDED) {
+                for (const [stream, t] of lines)
+                    write(stream, t);
+                return { ok: true, suspended: true, unfinished: false, stack: stack() };
+            }
             if (err === SYNTAX && errorText().startsWith("unfinished:"))
                 return { ok: false, error: "unfinished", unfinished: true, stack: stack() };
             for (const [stream, t] of lines)
@@ -169,7 +180,11 @@ export async function createPinax(bytes, { write = () => {}, blockBytes = 16 << 
             const error = err === 0 ? undefined : report(err, name);
             return { ok: err === 0, error, unfinished: false, stack: stack() };
         }
-        return { eval: evaluate, reset, clear: () => mine === opened && x.pnx_wasm_eval_clear(), stack };
+        function resume() {
+            held = [];
+            return finish(x.pnx_wasm_resume());
+        }
+        return { eval: evaluate, resume, reset, clear: () => mine === opened && x.pnx_wasm_eval_clear(), stack };
     }
 
     // the definitions and blocks open at the end of a text, the outermost first ("word sq", "loop");
@@ -184,5 +199,5 @@ export async function createPinax(bytes, { write = () => {}, blockBytes = 16 << 
         return { ok: true, open: said.split("\n").filter((s) => s !== ""), depth: n, closed: x.pnx_wasm_blocks_closed() };
     }
 
-    return { run, session, blocks, trace: (on) => x.pnx_wasm_trace(on ? 1 : 0), close: () => x.pnx_wasm_close() };
+    return { run, session, blocks, trace: (on, fn) => { onTrace = fn ?? (() => false); x.pnx_wasm_trace(on ? 1 : 0); }, close: () => x.pnx_wasm_close() };
 }

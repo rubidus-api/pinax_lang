@@ -3033,7 +3033,7 @@ static void fault_locals(pinax_state *st) {
 
 // A TRACE instruction at code word `pc - 1`: the locals of the word are copied as at a fault (the
 // host reads them with pinax_fault_local) and the host is told the line and the word.
-void pnx_trace_note(pinax_state *st, uint32_t pc, uint32_t ibase, uint32_t sbase, uint32_t line) {
+int pnx_trace_note(pinax_state *st, uint32_t pc, uint32_t ibase, uint32_t sbase, uint32_t line) {
     st->fault_pc = pc;
     st->fault_ibase = ibase;
     st->fault_sbase = sbase;
@@ -3041,10 +3041,10 @@ void pnx_trace_note(pinax_state *st, uint32_t pc, uint32_t ibase, uint32_t sbase
     fault_locals(st);
     const uint32_t word = word_of_pc(st, pc - 1);
     const char *name = word == UINT32_MAX ? "" : st->words[word].name;
-    st->trace(st->trace_user, line, (pinax_str){(const unsigned char *)name, __builtin_strlen(name)});
+    return st->trace(st->trace_user, line, (pinax_str){(const unsigned char *)name, __builtin_strlen(name)});
 }
 
-void pinax_set_trace(pinax_state *st, void (*trace)(void *user, uint32_t line, pinax_str word), void *user) {
+void pinax_set_trace(pinax_state *st, int (*trace)(void *user, uint32_t line, pinax_str word), void *user) {
     if (st)
         st->trace = trace, st->trace_user = user;
 }

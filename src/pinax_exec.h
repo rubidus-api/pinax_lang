@@ -566,8 +566,10 @@ again:
             NEXT();
         }
         CASE(TRACE) { // only code compiled while a trace was set holds this; a state without one skips it
-            if (st->trace)
-                pnx_trace_note(st, (uint32_t)(pc - code), ibase, sbase, OP_BX(w));
+            if (st->trace && pnx_trace_note(st, (uint32_t)(pc - code), ibase, sbase, OP_BX(w))) {
+                st->owed = 0; // the host asked to stop: a resume goes on after this instruction
+                goto suspended;
+            }
             NEXT();
         }
         CASE(FAULT) { FAULT((pinax_err)OP_BX(w)); }
