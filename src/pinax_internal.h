@@ -593,6 +593,8 @@ struct pinax_state {
     void *diag_user;
     void (*barrier)(void *user); // pinax_on_barrier: a dot, the end of a session line or of load code
     void *barrier_user;
+    void (*trace)(void *user, uint32_t line, pinax_str word); // pinax_set_trace
+    void *trace_user;
     pinax_resolve_fn resolve; // gives the C functions that `extern` names
     // the session stack (RFC-0040 part A): what the lines of pinax_eval() left, the deepest
     // first; its types (the compiler's numbers) and values, a str's bytes copied here
@@ -806,6 +808,7 @@ pinax_err pnx_extern_link(pinax_state *state, const char *module, const char *na
 // Ends every task and puts the main run back in place: after a fault inside a task.
 void pnx_tasks_abort(pinax_state *state);
 // The banks the fault_ibase and fault_sbase of a fault are in: those of the run now.
+void pnx_trace_note(pinax_state *st, uint32_t pc, uint32_t ibase, uint32_t sbase, uint32_t line);
 void pnx_fault_banks(pinax_state *state);
 // Where the run stands now, and back to it. A word run from a host word keeps it, so that
 // the run goes back there however that word ended.

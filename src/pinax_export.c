@@ -230,6 +230,9 @@ size_t pnx_export_c(const pinax_state *st, const char *name, char *buffer, size_
                 put_u(&o, i);
                 put(&o, "u; goto suspend; } left -= c; }\n    count += c; if (charge >= 16) st->charge = charge & 15u; }");
                 break;
+            case PNX_TRACE: // a trace is not carried into C
+                put(&o, ";");
+                break;
             case PNX_FAULT:
                 put(&o, "r = ");
                 put_u(&o, OP_BX(w));

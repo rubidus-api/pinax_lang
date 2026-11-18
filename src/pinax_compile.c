@@ -408,6 +408,8 @@ typedef struct comp {
     bool         unfinished; // the text ended inside a definition or a block: more is to come
     bool         see;        // list the stack after every line of the definitions that follow
     uint32_t     see_line;
+    fn          *trace_f;
+    uint32_t     trace_line; // the line the last TRACE instruction named
     sig          eval_sig;   // the line as a word: the session stack before it and after it (RFC-0040 part A)
     bool         cleared;    // the line began with the tool word `clear`: it starts from an empty stack
     // set_order (io, str): the modules a bare name is looked for in, after the source's own names
@@ -8330,6 +8332,12 @@ static bool body_token(comp *c) {
     fn *f = c->f;
     if (c->see)
         see_line(c, c->tok.line);
+    if (c->st->trace && c->f != c->top_fn && !f->dead && !c->data_only && (c->tok.line != c->trace_line || c->trace_f != f)) {
+        c->trace_line = c->tok.line;
+        c->trace_f = f;
+        if (c->tok.line && emit(c, PNX_ABX(PNX_TRACE, 0, c->tok.line > 0xffffu ? 0xffffu : c->tok.line)) == NONE)
+            return false;
+    }
     const pnx_token t = c->tok;
     if (f->n_blocks && f->blocks[f->n_blocks - 1]->kind == B_CASE)
         return case_item(c);

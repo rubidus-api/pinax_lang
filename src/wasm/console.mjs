@@ -46,7 +46,7 @@ export const GUIDE = {
         [":edit N-M", "lines N to M in the editor; saving puts them back in their place"],
         [":insert N", "new lines above line N (0: at the end); an empty line ends, and the program runs (:ins)"],
         [":delete N[-M]", "removes lines N to M (:del)"],
-        [":trace", "RESETS like :run, then runs the program one statement at a time (one period each), showing the line and the stack after each"],
+        [":trace", "RESETS like :run, then runs the program one statement at a time (one period each), showing the stack after each and every line of a word with its locals as it runs; :trace off stops the lines of words"],
         [":run", "RESETS: empties the stack and forgets every definition, then runs the program from line 1 (F5); the program's lines stay"],
         [":new", "no program, and a fresh state"],
         [":stack", "the values on the stack, the first pushed first (:s); it may be typed inside a block"],
@@ -102,10 +102,13 @@ function declared(text) {
 }
 
 export async function createConsole({ createPinax, bytes, print, store = null }) {
+    const defAt = new Map(); // a word's name: the line of the program its def began on (a trace names lines of the def's text)
     let offset = 0; // while the program runs: the line before the part running, for the places said
     const placed = (text) => (offset ? text.replace(/^input:(\d+):/gm, (_, n) => `input:${Number(n) + offset}:`) : text);
     const pinax = await createPinax(bytes, {
-        write: (stream, text) => (trialLog ? trialLog.push(text) : print(stream === 1 ? "out" : "err", placed(text))),
+        write: (stream, text) => (trialLog ? trialLog.push(text)
+            : stream === 3 ? print("trace", `    ${text.replace(/^(\w+):(\d+)/, (_, w, n) => `${w}:${Number(n) + (defAt.get(w) ?? 0)}`)}`)
+            : print(stream === 1 ? "out" : "err", placed(text))),
     });
     const session = pinax.session("input");
     let lines = [];      // the program
@@ -181,6 +184,11 @@ export async function createConsole({ createPinax, bytes, print, store = null })
             offset = start;
             if (trace) {
                 const pieces = statements(start, end);
+                for (const { text, line } of pieces) {
+                    const found = /^\s*def\s+([A-Za-z_][A-Za-z_0-9]*)/.exec(text);
+                    if (found)
+                        defAt.set(found[1], line);
+                }
                 let failed = false;
                 for (const { text, line } of pieces) {
                     offset = line;
@@ -230,6 +238,9 @@ export async function createConsole({ createPinax, bytes, print, store = null })
         if (key === null)
             return;
         const at = key === "" ? undefined : parts().find(({ start, end }) => declared(lines.slice(start, end).join("\n")) === key);
+        const found = /^\s*def\s+([A-Za-z_][A-Za-z_0-9]*)/.exec(text);
+        if (found)
+            defAt.set(found[1], at ? at.start : lines.length);
         if (at)
             lines.splice(at.start, at.end - at.start, ...text.split("\n"));
         else
@@ -318,7 +329,14 @@ export async function createConsole({ createPinax, bytes, print, store = null })
             runProgram();
             return {};
         case "trace":
-            print("info", "reset; the program runs one statement at a time\n");
+            if (arg === "off") {
+                pinax.trace(false);
+                print("info", "trace off\n");
+                return {};
+            }
+            print("info", "reset; the program runs one statement at a time, and each line of a word as it runs " +
+                            "(:trace off stops the lines)\n");
+            pinax.trace(true);
             runProgram(true);
             return {};
         case "new":

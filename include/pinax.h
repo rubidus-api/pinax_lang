@@ -434,6 +434,16 @@ PINAX_API pinax_err pinax_resume(pinax_state *state, const pinax_args *results);
 PINAX_API pinax_err pinax_abort(pinax_state *state);
 PINAX_API void      pinax_set_budget(pinax_state *state, uint64_t instructions);
 
+/* A trace of the lines of words. While `trace` is set, the compiler puts an instruction at the start of every
+ * line of a word body (not of the top level), in what is loaded or evaluated meanwhile; code compiled before,
+ * or with no trace set, holds none and pays nothing. When such a line is about to run the host is called with
+ * the line (of its source) and the word, and pinax_fault_local() reads the locals the word holds there, by the
+ * same records as at a fault. The function may call only what reads the state (pinax_fault_local,
+ * pinax_error_text). While set, the state keeps `trace` and `user` (an image does not carry them);
+ * pinax_set_trace(state, NULL, NULL) stops new code from holding the instruction (what holds it
+ * runs on and calls nothing). Exported C (pinax_export) leaves the instruction out. */
+PINAX_API void      pinax_set_trace(pinax_state *state, void (*trace)(void *user, uint32_t line, pinax_str word), void *user);
+
 /* ---- images and copies -------------------------------------------------------------- */
 
 /* An image is the whole state: its code and declarations, globals, registers, region and

@@ -15,6 +15,7 @@
 #define WASM_EXPORT(name) __attribute__((export_name(name)))
 
 WASM_IMPORT("pnx_write") void pnx_write(int32_t stream, const void *bytes, size_t length);
+WASM_IMPORT("pnx_trace") void pnx_trace(uint32_t line, const void *word, size_t length);
 WASM_IMPORT("pnx_diag") void pnx_diag(uint32_t line, uint32_t column, const void *message, size_t length);
 
 // ---- the C library the core calls ------------------------------------------------------
@@ -173,6 +174,19 @@ WASM_EXPORT("pnx_wasm_text") void *pnx_wasm_text(size_t bytes) {
     return text;
 }
 
+// pinax_set_trace: the page is told each line of a word about to run; it reads the locals with
+// pnx_wasm_fault_local while it is told. Kept across opens (a session opens a state again).
+static int trace_on;
+static void trace_note(void *user, uint32_t line, pinax_str word) {
+    (void)user;
+    pnx_trace(line, word.ptr, word.len);
+}
+WASM_EXPORT("pnx_wasm_trace") void pnx_wasm_trace(int32_t on) {
+    trace_on = on != 0;
+    if (state)
+        pinax_set_trace(state, trace_on ? trace_note : NULL, NULL);
+}
+
 // Opens the state in a block of `bytes` (taken once; a later open reuses it when large enough)
 // with the module io. Returns a pinax_err.
 WASM_EXPORT("pnx_wasm_open") int32_t pnx_wasm_open(size_t bytes) {
@@ -200,6 +214,8 @@ WASM_EXPORT("pnx_wasm_open") int32_t pnx_wasm_open(size_t bytes) {
     };
     if (err == PINAX_OK)
         err = pinax_register(state, "io", words, sizeof words / sizeof words[0]);
+    if (err == PINAX_OK && trace_on)
+        pinax_set_trace(state, trace_note, NULL);
     return err;
 }
 

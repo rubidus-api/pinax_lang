@@ -3031,6 +3031,24 @@ static void fault_locals(pinax_state *st) {
     }
 }
 
+// A TRACE instruction at code word `pc - 1`: the locals of the word are copied as at a fault (the
+// host reads them with pinax_fault_local) and the host is told the line and the word.
+void pnx_trace_note(pinax_state *st, uint32_t pc, uint32_t ibase, uint32_t sbase, uint32_t line) {
+    st->fault_pc = pc;
+    st->fault_ibase = ibase;
+    st->fault_sbase = sbase;
+    pnx_fault_banks(st);
+    fault_locals(st);
+    const uint32_t word = word_of_pc(st, pc - 1);
+    const char *name = word == UINT32_MAX ? "" : st->words[word].name;
+    st->trace(st->trace_user, line, (pinax_str){(const unsigned char *)name, __builtin_strlen(name)});
+}
+
+void pinax_set_trace(pinax_state *st, void (*trace)(void *user, uint32_t line, pinax_str word), void *user) {
+    if (st)
+        st->trace = trace, st->trace_user = user;
+}
+
 void pnx_note_task_fault(pinax_state *st, pinax_err err) {
     char kept[sizeof st->where];
     __builtin_memcpy(kept, st->where, sizeof kept);
@@ -4315,6 +4333,7 @@ pinax_err pinax_image_open(pinax_mem block, pinax_str image, const pinax_config 
     st->resolve = NULL, st->resolve_user = NULL;
     st->diag = config->diag, st->diag_user = config->diag_user;
     st->barrier = NULL, st->barrier_user = NULL; // a function of the process that saved the image
+    st->trace = NULL, st->trace_user = NULL;
     st->budget = config->budget;
     st->error_text = "";
     st->eval_n = 0; // the session stack does not survive an image

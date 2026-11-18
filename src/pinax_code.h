@@ -388,6 +388,8 @@ enum {
     X(TXTF, 0x67, PNX_K_I, PNX_K_S, PNX_K_IMM, PNX_F_ABC, PNX_X_NONE, 1, "---") \
     X(TXTW, 0x68, PNX_K_I, PNX_K_S, PNX_K_IMM, PNX_F_ABC, PNX_X_GLOBAL, 0, "---") \
     X(TXTWF, 0x69, PNX_K_I, PNX_K_S, PNX_K_IMM, PNX_F_ABC, PNX_X_GLOBAL, 1, "---") \
+    /* a line of a word begins, in code loaded while pinax_set_trace() was set: the host is told (Bx: the line) */ \
+    X(TRACE, 0x6a, PNX_K_NONE, PNX_K_NONE, PNX_K_NONE, PNX_F_IMM, PNX_X_NONE, 0, "---") \
     X(BARRIER, 0xfd, PNX_K_NONE, PNX_K_NONE, PNX_K_NONE, PNX_F_ABC, PNX_X_NONE, 0, "---")
 
 enum {

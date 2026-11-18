@@ -138,6 +138,13 @@ calls `function(user)`. In it the host writes what its host words hold back and 
 background; it does not call the state. `NULL`, the default, finishes nothing. A clone keeps the function; an image
 does not. The host library's `pinax_host_register_all` gives one that writes the output `io` holds back.]
 
+#para("4")[`pinax_set_trace(state, function, user)` asks for a trace of the lines of words. While a function is set, what the
+compiler produces from a load or a session line holds, at the start of each line of a word body (not of the top level),
+an instruction that calls `function(user, line, word)` as the line is about to run; `pinax_fault_local` then reads the
+locals the word holds there, as at a fault. The function may call only what reads the state. Code compiled with no
+function set holds no such instruction and costs nothing; code that holds it runs on, calling nothing, once the
+function is `NULL`. An image and exported C do not carry the function or the instruction.]
+
 == Finding and running <host-run>
 
 #para("1")[`pinax_find(state, name, signature, flags, &word)` finds a word and checks that its signature is the one

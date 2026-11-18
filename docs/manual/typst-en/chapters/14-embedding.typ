@@ -180,7 +180,7 @@ A statement that declares something (`def`, `const`, `use`, `set_order` and the 
 GW-BASIC keeps one, and a name declared again takes the place of its lines. `:list` shows the program with line
 numbers. `:edit N` puts line N in the prompt, `:edit NAME` brings a procedure (or a record, a const ...) whole into the editor and puts it back in its place when saved, `:edit N-M` does the same for lines N to M, `:insert N` adds lines above line N (0: at the end) until an empty line,
 `:delete N` (`:del`, also `N-M`) removes lines, and `:edit` (F2) opens the whole program in an editor; after each the
-program runs again. `:run` (F5) is a reset: it empties the stack, forgets every definition and runs the program from
+program runs again. `:trace` resets like `:run` and runs the program one statement at a time (up to each period), showing the stack after each and, grey, every line of a word as it runs with the locals it holds; `:trace off` stops the lines of words. `:run` (F5) is a reset: it empties the stack, forgets every definition and runs the program from
 line 1, the lines left as they are. Inside a word, nothing runs line by line: at each `,` or `.` the lines so far are only compiled, and a mistake is told at
 its line, with that line back in the prompt to be corrected. A word runs when it is called, its arguments first and then
 its name. Words are offered as you type, in the prompt and in the editor (F2), with their module, signature and meaning (taken from the

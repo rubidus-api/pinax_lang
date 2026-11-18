@@ -565,6 +565,11 @@ again:
 #endif
             NEXT();
         }
+        CASE(TRACE) { // only code compiled while a trace was set holds this; a state without one skips it
+            if (st->trace)
+                pnx_trace_note(st, (uint32_t)(pc - code), ibase, sbase, OP_BX(w));
+            NEXT();
+        }
         CASE(FAULT) { FAULT((pinax_err)OP_BX(w)); }
 
 #if defined(PINAX_SWITCH_DISPATCH)

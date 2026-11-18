@@ -53,6 +53,17 @@ export async function createPinax(bytes, { write = () => {}, blockBytes = 16 << 
     const imports = {
         env: {
             pnx_write: (stream, at, length) => out(stream, decoder.decode(view(at, length))),
+            pnx_trace: (line, at, length) => { // a line of a word is about to run: where, and its locals
+                let text = `${decoder.decode(view(at, length))}:${line}`;
+                for (let k = 0; ; ++k) {
+                    const p = x.pnx_wasm_fault_local(k);
+                    if (!p)
+                        break;
+                    const w = new Uint32Array(memory.buffer, p, 9);
+                    text += ` ${decoder.decode(view(w[3], w[4]))}=${shown(p, true)}`;
+                }
+                out(3, text + "\n");
+            },
             pnx_diag: (line, column, at, length) => {
                 const message = decoder.decode(view(at, length));
                 told = told || line !== 0;
@@ -173,5 +184,5 @@ export async function createPinax(bytes, { write = () => {}, blockBytes = 16 << 
         return { ok: true, open: said.split("\n").filter((s) => s !== ""), depth: n, closed: x.pnx_wasm_blocks_closed() };
     }
 
-    return { run, session, blocks, close: () => x.pnx_wasm_close() };
+    return { run, session, blocks, trace: (on) => x.pnx_wasm_trace(on ? 1 : 0), close: () => x.pnx_wasm_close() };
 }
