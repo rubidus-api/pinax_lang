@@ -332,7 +332,7 @@ export async function createConsole({ createPinax, bytes, print, store = null })
     function remember(text) {
         const key = declared(text);
         if (key === null) { // not a declaration: a statement of the program too, at its end (tool words are not)
-            if (!/^\s*(stack|clear|see|list_words)\s*[.,]?\s*$/.test(text)) {
+            if (!/^\s*(stack|see|list_words)\s*[.,]?\s*$/.test(text)) { // tool words that only tell something
                 lines.push(...text.split("\n"));
                 keep();
             }
