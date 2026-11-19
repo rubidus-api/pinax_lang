@@ -6,7 +6,7 @@
 #para("1")[`pnx` is a host that uses this library, and a development tool. It registers all the standard host modules
 (clause 17).
 ```text
-pnx [--lib NAME=PATH]... [--capacity NAME=N]... file.pnx [arguments]
+pnx [--stats] [--lib NAME=PATH]... [--capacity NAME=N]... file.pnx [arguments]
 pnx test file.pnx
 pnx repl
 pnx see file.pnx
@@ -32,6 +32,10 @@ name.]
 #para("3")[`--lib NAME=PATH` opens the shared library at `PATH` so that the resolver finds its functions for
 `extern … from "NAME"` (clause 18). It finds only the functions that library defines (not those it imports). Without
 `--lib`, every `extern` is refused.]
+
+#para("3b")[`--stats` writes one line to standard error after the run, the highest use of a state as `pinax_stats_get` gives it (19.10):
+`pnx: stats: N instructions; highest use: int slots A, str slots B, region R bytes, handles H, call depth D; block U of B bytes (P percent)`.
+Standard output and the exit status are unchanged. It is how to read what a script needs from a real input.]
 
 #para("3a")[`--capacity NAME=N` gives the capacity a source writes `host` (8 (4a), 19.4 (1d)), for a run, `pnx test`,
 `pnx see`, `pnx export-c` and `pnx repl`. A plain `NAME` is a declaration of the file, `MODULE.NAME` one of a module

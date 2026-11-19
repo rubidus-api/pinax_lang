@@ -1,0 +1,22 @@
+rem handler.pnx - the request handler of the nginx-style bench (benchmarks/server): the shape of a content handler of ngx_lua. The host
+rem gives the module web: uri (the request line's target), header (a request header, empty when absent) and respond (status, body).
+rem GET /cpu?n=N with the header x-token: pilot: the route, the header check, the query, N turns of an integer loop, a JSON answer.
+use web .
+use str .
+def sum_mod n int gives s int do
+  0 to s
+  1 n 1 add range do to i s  i i mul 7 mod  add to s end each
+  s
+end
+def query_int query str, name str gives v int do
+  query name str.try_cut or_else to e "" "" end to rest to before
+  rest "&" str.cut to after to digits
+  digits str.to_int or_else to e -1 end
+end
+def handle do
+  "x-token" web.header "pilot" ne if 403 "{\"error\":\"forbidden\"}" web.respond return end
+  web.uri "?" str.cut to query to path
+  query "n=" query_int to n
+  n 0 lt n 100000 gt or if 400 "{\"error\":\"n\"}" web.respond return end
+  200 args "{\"n\":" n ",\"sum\":" n sum_mod "}" . cat web.respond
+end

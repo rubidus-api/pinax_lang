@@ -155,7 +155,14 @@ module (exported or not).]
 
 #para("2")[`pinax_run(state, word, args)` runs a procedure. When the budget runs out it returns `PINAX_SUSPENDED`, and
 `pinax_resume` goes on where it stopped; the budget does not change results. A fault returns its code, and the state
-takes the next run.]
+takes the next run. The budget bounds one slice, not the run: a script that never ends is suspended again and again, and the host
+decides how many slices it allows (or goes back to its event loop between two) and what it does when they are used up.]
+
+#para("2b")[The three promises a host relies on can be checked on its own compiler and platform, with `./nob contract` or by compiling
+this example: a block too small is refused with `PINAX_ERR_NO_ROOM` and `pinax_needed` names a size above it; a run resumed at its
+budget ends with the result of a run with no budget, and a script that never ends is stopped by the host; a registered C function is
+called with its arguments and its failure is the code of the run.]
+#ex("spec", "19-contract.c")
 
 #para("2a")[The budget counts the cost of each check at a back branch or a call, the bytes the string procedures scan, and
 each turn that `run_all` gives a task (14.1 (2)), which costs one. So every run of a container the processor accepts

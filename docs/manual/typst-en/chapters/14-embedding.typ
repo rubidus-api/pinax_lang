@@ -26,6 +26,13 @@ when there is a constant pattern. When the load ends only the program stays and 
 256 KB of the examples is plenty for a short script; for a long one, after `PINAX_ERR_NO_ROOM`, open again with at
 least the size `pinax_needed` gives. That size is a lower bound, so it may fall short once more.]
 
+#qa[How do I find what a script needs on real input?][Run it and ask. `pinax_stats_get` gives, after a run, the highest use of the slots of
+the banks, of the region, of the handles and of the call depth, the instructions and the bytes of the block taken; from the command line
+`pnx --stats script.pnx` writes the same on one line to standard error. Take the highest use of your biggest input, add the margin you
+choose, and set `config` and the size of the block to it: a run that needs more fails with the answer of the thing that ran out
+(`PINAX_ERR_NO_ROOM`, `PINAX_ERR_FULL` or a fault), and a script that never ends is stopped by you, since the budget bounds a slice and
+not the run (the example above allows 100 slices). `./nob contract` checks these promises on your own compiler and platform.]
+
 Arguments and results pass in arrays by type: integers in `args->i[]` and `args->ri[]`, strings in `args->s[]` and
 `args->rs[]`. When a host procedure returns something other than `PINAX_OK`, a procedure whose signature has `or fail` fails (the
 script takes it with `or_else`), and a procedure without it becomes a fault.

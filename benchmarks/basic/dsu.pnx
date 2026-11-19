@@ -1,0 +1,47 @@
+rem dsu.pnx - basic bench `dsu`: union-find with union by rank and path compression. N/2 unions of the pairs
+rem (i * 6364136223846793005 + 1442695040888963407) >> 11 (unsigned, wrapped) mod n; then the roots' sum. pnx dsu.pnx N (default 200000).
+use io .
+use env .
+use str .
+const most 400000
+array p int most
+array rk int most
+def find x0 int gives int do
+  x0 to r
+  loop r p idx r eq if break . end r p idx to r end
+  x0 to x
+  loop
+    x r eq if break . end
+    x p idx to nx
+    r x set p
+    nx to x
+  end
+  r
+end
+def unite a int, b int gives int do
+  a find to ra
+  b find to rb
+  ra rb eq if 0 return end
+  ra rk idx  rb rk idx lt if rb ra set p
+  else
+    ra rb set p
+    ra rk idx  rb rk idx eq if ra rk idx 1 add ra set rk end
+  end
+  1
+end
+def pair i int gives int do i 6364136223846793005 wrap_mul 1442695040888963407 wrap_add 11 u_shr end
+def main or fail do
+  1 env.arg or_else to e "200000" end str.to_int or_fail to n
+  0 n range do to i i i set p  0 i set rk end each
+  0 to merged
+  0 to k
+  loop
+    k 1 add n lt not if break . end
+    k pair n mod  k 1 add pair n mod unite  merged add to merged
+    k 2 add to k
+  end
+  0 to roots
+  0 n range do to i roots i find add 1000000007 mod to roots end each
+  args "dsu " n " " merged " " roots . cat io.println
+end
+main or_else to e args "dsu: " e err_text . cat io.println end

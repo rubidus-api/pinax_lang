@@ -29,10 +29,12 @@ int main(void) {
     pinax_args args = {.i = &n, .ri = &r};
     int resumes = 0;
     pinax_err err = pinax_run(st, w, &args);
-    while (err == PINAX_SUSPENDED) {                 /* the budget ran out: go on where it stopped */
+    while (err == PINAX_SUSPENDED && resumes < 100000) {   /* the budget ran out: go on where it stopped, as often as the host allows */
         ++resumes;
         err = pinax_resume(st, &args);
     }
+    if (err != PINAX_OK)
+        return 1;                                    /* not finished: no result to print */
     printf("total(100000) = %lld after %s resumes\n", (long long)r, resumes > 10 ? "many" : "few");
 
     /* a fault comes back as the error code, with its place in the error text */

@@ -48,8 +48,14 @@ second: a word runs when it is called
     <span style="color: #4b69c6">int64_t</span> in <span style="color: #d73948">=</span> <span style="color: #b60157">4</span>, out <span style="color: #d73948">=</span> <span style="color: #b60157">0</span>;
     pinax_args args <span style="color: #d73948">=</span> {.i <span style="color: #d73948">=</span> <span style="color: #d73948">&amp;</span>in, .ri <span style="color: #d73948">=</span> <span style="color: #d73948">&amp;</span>out};
     pinax_err err <span style="color: #d73948">=</span> <span style="color: #4b69c6">pinax_run</span>(st, answer, <span style="color: #d73948">&amp;</span>args);
-    <span style="color: #d73948">while</span> (err <span style="color: #d73948">==</span> PINAX_SUSPENDED)                 <span style="color: #74747c">/*</span><span style="color: #74747c"> the instruction budget ran out </span><span style="color: #74747c">*/</span>
+    <span style="color: #74747c">/*</span><span style="color: #74747c"> The budget bounds one slice, not the run: the host owns the stop (here 100 slices; a server</span>
+<span style="color: #74747c">       would go back to its event loop between two). </span><span style="color: #74747c">*/</span>
+    <span style="color: #d73948">for</span> (<span style="color: #d73948">int</span> slices <span style="color: #d73948">=</span> <span style="color: #b60157">1</span>; err <span style="color: #d73948">==</span> PINAX_SUSPENDED <span style="color: #d73948">&amp;&amp;</span> slices <span style="color: #d73948">&lt;</span> <span style="color: #b60157">100</span>; <span style="color: #d73948">++</span>slices)
         err <span style="color: #d73948">=</span> <span style="color: #4b69c6">pinax_resume</span>(st, <span style="color: #d73948">&amp;</span>args);
+    <span style="color: #d73948">if</span> (err <span style="color: #d73948">!=</span> PINAX_OK) {
+        <span style="color: #4b69c6">fprintf</span>(stderr, <span style="color: #198810">"</span><span style="color: #198810">the script did not finish: error </span><span style="color: #b60157">%d</span><span style="color: #1d6c76">\n</span><span style="color: #198810">"</span>, (<span style="color: #d73948">int</span>)err);
+        <span style="color: #d73948">return</span> <span style="color: #b60157">1</span>;
+    }
     <span style="color: #4b69c6">printf</span>(<span style="color: #198810">"</span><span style="color: #198810">answer(4) = </span><span style="color: #b60157">%lld</span><span style="color: #1d6c76">\n</span><span style="color: #198810">"</span>, (<span style="color: #d73948">long</span> <span style="color: #d73948">long</span>)out);
     <span style="color: #4b69c6">pinax_close</span>(st);
     <span style="color: #d73948">return</span> <span style="color: #b60157">0</span>;

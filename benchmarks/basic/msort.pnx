@@ -1,0 +1,62 @@
+rem msort.pnx - basic bench `msort`: bottom-up merge sort, widths 1, 2, 4 ..., two neighbours merged into a buffer and copied
+rem back (stable). The cells are (i * 2654435761) mod 1000000007. pnx msort.pnx N (default 200000, up to 400000).
+use io .
+use env .
+use str .
+const most 400000
+array xs int most
+array buf int most
+def merge lo int, mid int, hi int do
+  lo to i
+  mid to j
+  lo to k
+  loop
+    k hi lt not if break . end
+    i mid ge if
+      j xs idx k set buf  j 1 add to j
+    else
+      j hi ge if
+        i xs idx k set buf  i 1 add to i
+      else
+        i xs idx  j xs idx le if
+          i xs idx k set buf  i 1 add to i
+        else
+          j xs idx k set buf  j 1 add to j
+        end
+      end
+    end
+    k 1 add to k
+  end
+  lo to m
+  loop
+    m hi lt not if break . end
+    m buf idx m set xs
+    m 1 add to m
+  end
+end
+def main or fail do
+  1 env.arg or_else to e "200000" end str.to_int or_fail to n
+  0 n range do to k k 2654435761 mul 1000000007 mod k set xs end each
+  1 to w
+  loop
+    w n lt not if break . end
+    0 to lo
+    loop
+      lo n lt not if break . end
+      lo w add n min to mid
+      lo w 2 mul add n min to hi
+      mid hi lt if lo mid hi merge end
+      lo w 2 mul add to lo
+    end
+    w 2 mul to w
+  end
+  0 to check
+  true to ordered
+  0 n range do to k
+    k xs idx to v
+    check v k 1 add mul add 1000000007 mod to check
+    k 0 gt if k 1 sub xs idx v gt if false to ordered end end
+  end each
+  args "msort " n " " ordered " " check . cat io.println
+end
+main or_else to e args "msort: " e err_text . cat io.println end

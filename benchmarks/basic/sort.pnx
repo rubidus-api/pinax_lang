@@ -1,0 +1,39 @@
+rem sort.pnx - basic bench `sort`: quicksort, the last cell the pivot (Lomuto), the smaller side recursed and the larger
+rem looped. The cells are (i * 2654435761) mod 1000000007. pnx sort.pnx N (default 200000, up to 400000).
+use io .
+use env .
+use str .
+const most 400000
+array xs int most
+def exchange i int, j int do i xs idx to a  j xs idx i set xs  a j set xs end
+def qsort lo0 int, hi0 int do
+  lo0 to lo
+  hi0 to hi
+  loop
+    hi lo sub 1 gt not if break . end
+    hi 1 sub xs idx to pivot
+    lo to i
+    lo to j
+    loop
+      j hi 1 sub lt not if break . end
+      j xs idx pivot le if i j exchange  i 1 add to i end
+      j 1 add to j
+    end
+    i hi 1 sub exchange
+    i lo sub  hi i 1 add sub  le if lo i qsort  i 1 add to lo else i 1 add hi qsort  i to hi end
+  end
+end
+def main or fail do
+  1 env.arg or_else to e "200000" end str.to_int or_fail to n
+  0 n range do to k k 2654435761 mul 1000000007 mod k set xs end each
+  0 n qsort
+  0 to check
+  true to ordered
+  0 n range do to k
+    k xs idx to v
+    check v k 1 add mul add 1000000007 mod to check
+    k 0 gt if k 1 sub xs idx v gt if false to ordered end end
+  end each
+  args "sort " n " " ordered " " check . cat io.println
+end
+main or_else to e args "sort: " e err_text . cat io.println end

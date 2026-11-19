@@ -1,0 +1,25 @@
+rem matmul.pnx - basic bench `matmul`: the product of two n x n integer matrices, a[i] = i + 1 and b[i] = i + 2 in row-major order.
+rem pnx matmul.pnx N (default 200, up to 250): c[0] and the acc of all cells mod 1000000007.
+use io .
+use env .
+use str .
+const cells 62500
+array a int cells
+array b int cells
+array c int cells
+def main or fail do
+  1 env.arg or_else to e "200" end str.to_int or_fail to n
+  n n mul to sz
+  0 sz range do to i i 1 add i set a  i 2 add i set b end each
+  0 n range do to i
+    0 n range do to j
+      0 to acc
+      0 n range do to k acc  i n mul k add a idx  k n mul j add b idx mul add to acc end each
+      acc  i n mul j add set c
+    end each
+  end each
+  0 to total
+  0 sz range do to i total i c idx add 1000000007 mod to total end each
+  args "matmul " n " " 0 c idx " " total . cat io.println
+end
+main or_else to e args "matmul: " e err_text . cat io.println end

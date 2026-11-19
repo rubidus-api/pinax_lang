@@ -11,6 +11,7 @@
 !/include/
 !/src/
 !/vendor/
+!/benchmarks/
 !/docs/
 /docs/*
 !/docs/spec/

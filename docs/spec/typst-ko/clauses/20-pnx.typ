@@ -5,7 +5,7 @@
 
 #para("1")[`pnx` 는 이 라이브러리를 쓰는 호스트이자 개발 도구다. 표준 호스트 모듈(17절)을 모두 등록한다.
 ```text
-pnx [--lib NAME=PATH]... [--capacity NAME=N]... file.pnx [arguments]
+pnx [--stats] [--lib NAME=PATH]... [--capacity NAME=N]... file.pnx [arguments]
 pnx test file.pnx
 pnx repl
 pnx see file.pnx
@@ -30,6 +30,10 @@ pnx export-c file.pnx [NAME]
 #para("3")[`--lib NAME=PATH` 는 `PATH` 의 공유 라이브러리를 열어 `extern … from "NAME"`(18절)의 해결 함수가 그
 라이브러리의 함수를 찾게 한다. 그 라이브러리가 정의한 함수만 찾는다(그것이 들여온 함수는 찾지 않는다). `--lib` 가
 없으면 `extern` 은 모두 거절된다.]
+
+#para("3b")[`--stats` 는 실행 뒤에 표준 오류에 한 줄을 쓴다. `pinax_stats_get`(19.10)이 주는 상태의 최고 사용량이다:
+`pnx: stats: N instructions; highest use: int slots A, str slots B, region R bytes, handles H, call depth D; block U of B bytes (P percent)`.
+표준 출력과 종료 상태는 그대로이다. 실제 입력에서 스크립트가 필요로 하는 것을 읽는 길이다.]
 
 #para("3a")[`--capacity NAME=N` 은 소스가 `host` 로 쓴 용량(8 (4a), 19.4 (1d))을 준다. 실행, `pnx test`, `pnx see`,
 `pnx export-c`, `pnx repl` 에 쓴다. 맨 `NAME` 은 그 파일의 선언이고, `MODULE.NAME` 은 그 파일이 쓰는 모듈의 선언이다.

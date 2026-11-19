@@ -1,0 +1,39 @@
+rem dp.pnx - basic bench `dp`: edit distance of two strings of n letters (a c g t as 0 to 3) from linear generators, in two
+rem rolling rows. pnx dp.pnx N (default 1500, up to 4000).
+use io .
+use env .
+use str .
+const most 4001
+array a int most
+array b int most
+array prev int most
+array cur int most
+def main or fail do
+  1 env.arg or_else to e "1500" end str.to_int or_fail to n
+  0 n range do to i
+    i 2654435761 mul 13 shr 3 bit_and i set a
+    i 40503 mul 7 add 11 shr 3 bit_and i set b
+  end each
+  0 n 1 add range do to j j j set prev end each
+  1 to i
+  loop
+    i n le not if break . end
+    i 0 set cur
+    1 to k
+    loop
+      k n le not if break . end
+      k prev idx 1 add to best
+      k 1 sub cur idx 1 add to ins
+      ins best lt if ins to best end
+      i 1 sub a idx  k 1 sub b idx ne if 1 else 0 end to cost
+      k 1 sub prev idx cost add to sbc
+      sbc best lt if sbc to best end
+      best k set cur
+      k 1 add to k
+    end
+    0 n 1 add range do to t t cur idx t set prev end each
+    i 1 add to i
+  end
+  args "dp " n " " n prev idx . cat io.println
+end
+main or_else to e args "dp: " e err_text . cat io.println end

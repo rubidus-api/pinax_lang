@@ -6,7 +6,11 @@ A small, fast scripting language to embed in C programs, with fixed, flat memory
 
 > **Status: early, and it runs.** Source files compile and run, from the command `pnx` and
 > from a C program. The language is not complete (no floating point
-> yet), the current release is 0.30.0, and the bytecode format carries no promise.
+> yet), the current release is the one in the line above, and the bytecode format carries no promise.
+>
+> **Moving a script written before 0.31.0:** the syntax changed then (`word` is `def`, no parentheses
+> in a signature, `match` for `case`, `break N .`); the old forms are refused with a message that names
+> the new one, and `CHANGELOG.md` `[0.31.0]` lists every change.
 
 Pinax is meant to live inside a host program. The host hands it one block of memory,
 registers the functions it may call, and runs scripts in it. Every value has a type and a
@@ -114,8 +118,14 @@ int main(void) {
     int64_t in = 4, out = 0;
     pinax_args args = {.i = &in, .ri = &out};
     pinax_err err = pinax_run(st, answer, &args);
-    while (err == PINAX_SUSPENDED)           /* the instruction budget ran out: go on */
+    /* The budget bounds one slice, not the run: the host owns the stop. Here it allows 100 slices;
+       a server would go back to its event loop between two. */
+    for (int slices = 1; err == PINAX_SUSPENDED && slices < 100; ++slices)
         err = pinax_resume(st, &args);
+    if (err != PINAX_OK) {
+        fprintf(stderr, "the script did not finish: error %d\n", (int)err);
+        return 1;
+    }
     printf("%lld\n", (long long)out);        /* 42 */
     pinax_close(st);
     return 0;
@@ -125,6 +135,11 @@ int main(void) {
 ```sh
 cc -std=c99 -Iinclude host.c build/native/libpinax.a -lm -o host
 ```
+
+The three things a host relies on (a block too small is refused, a budget bounds a slice and the run resumes to its result, a
+registered C function is called and its failure comes back) are checked on your own compiler and platform by `./nob contract`
+(`docs/spec/examples/19-contract.c`). `pnx --stats script.pnx` tells what a script used, to size the block. Measurements against Lua
+and LuaJIT are in [`benchmarks/`](benchmarks/).
 
 The state lives entirely inside `block`; Pinax never asks the system for memory. The standard
 host modules (`io`, `file`, `clock`, `random`, `env`) are ordinary host procedures in

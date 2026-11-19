@@ -99,6 +99,7 @@ static const char *const public_paths[] = {
     ".gitignore", "README.md", "README.ko.md", "LICENSE", "nob.c", "include/", "src/", "vendor/",
     "docs/spec/", "docs/manual/", "docs/tools/", // the standard and the manual (Korean and English)
     "docs/playground/", "docs/index.html", "docs/.nojekyll", // the Pages front page and the playground
+    "benchmarks/", // programs that measure Pinax against Lua and LuaJIT (not part of the product)
 };
 
 typedef struct {
@@ -323,14 +324,16 @@ static int build_lib(const target_t *t, char *lib, size_t lib_cap, char *hosted_
     return 0;
 }
 
+static int cmd_contract(const target_t *t);
+
 static int cmd_test(const target_t *t) {
     char lib[512];
     static char hosted[8192];
     if (build_lib(t, lib, sizeof lib, hosted, sizeof hosted))
         return 1;
     if (!exists("tests/test_main.c")) {
-        printf("nob: tests/ not present (public checkout); skipping tests\n");
-        return 0;
+        printf("nob: tests/ not present (public checkout); running the contract check of the examples instead\n");
+        return cmd_contract(t);
     }
     char dir[256], objdir[300], exe[512];
     build_dir(dir, sizeof dir, t);
@@ -741,6 +744,34 @@ done:
     return bad;
 }
 
+// The three promises a host relies on (a block too small, a budget and its resume, a registered C function), as
+// docs/spec/examples/19-contract.c states them: built against the library of this target and run, so that an
+// adopter can check them with their own compiler and platform with one command: ./nob contract
+static int cmd_contract(const target_t *t) {
+    char lib[512];
+    static char hosted[8192];
+    if (build_lib(t, lib, sizeof lib, hosted, sizeof hosted))
+        return 1;
+    if (!exists("docs/spec/examples/19-contract.c")) {
+        fprintf(stderr, "nob: docs/spec/examples/19-contract.c is missing\n");
+        return 1;
+    }
+    char dir[256], exe[512], cmd[4096];
+    build_dir(dir, sizeof dir, t);
+    snprintf(exe, sizeof exe, "%s/contract%s", dir, t->exe);
+    snprintf(cmd, sizeof cmd, "%s -std=c23 -Wall -Wextra -Werror -Iinclude %s docs/spec/examples/19-contract.c%s %s %s -o %s", t->cc,
+             t->sanitize ? "-fsanitize=address,undefined" : "", hosted, lib,
+             strcmp(t->exe, ".exe") == 0 ? "-static -lbcrypt" : "-lm -pthread", exe);
+    if (run(cmd))
+        return 1;
+    if (strcmp(t->name, "native") != 0) {
+        printf("nob: built %s (cross target; run it on the target)\n", exe);
+        return 0;
+    }
+    snprintf(cmd, sizeof cmd, "./%s", exe);
+    return run(cmd);
+}
+
 // The freestanding part as a WebAssembly module, with the glue of src/wasm/: no C library, the
 // module io printing through an import, exports that src/wasm/pinax.mjs drives (P3).
 static int cmd_wasm(void) {
@@ -913,7 +944,7 @@ int main(int argc, char **argv) {
             command = a;
         } else {
             fprintf(stderr, "nob: unknown option %s\n"
-                            "usage: ./nob [build|test|check|freestanding|wasm|dist|all|clean] "
+                            "usage: ./nob [build|test|contract|check|freestanding|wasm|dist|all|clean] "
                             "[--target=native|win64] [--sanitize] [--debug] [--proofs] [--switch]\n", a);
             return 2;
         }
@@ -932,10 +963,12 @@ int main(int argc, char **argv) {
         return cmd_freestanding();
     if (strcmp(command, "dist") == 0)
         return cmd_dist(&t);
+    if (strcmp(command, "contract") == 0)
+        return cmd_contract(&t);
     if (strcmp(command, "wasm") == 0)
         return cmd_wasm();
     if (strcmp(command, "all") == 0)
-        return cmd_check() || cmd_freestanding() || cmd_test(&t) || cmd_dist(&t);
+        return cmd_check() || cmd_freestanding() || cmd_test(&t) || cmd_contract(&t) || cmd_dist(&t);
     if (strcmp(command, "clean") == 0)
         return run("rm -rf build");
     fprintf(stderr, "nob: unknown command %s\n", command);

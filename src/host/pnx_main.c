@@ -540,6 +540,22 @@ static void show_fault_locals(const pinax_state *state, FILE *out) {
     }
 }
 
+// --stats: one line on standard error after the run, the highest use of what a state holds (pinax_stats_get): to read the capacities
+// and the size of the block a script needs from a real input.
+static bool want_stats;
+static void print_stats(pinax_state *state, size_t block_bytes) {
+    if (!want_stats)
+        return;
+    pinax_stats stats = {.struct_size = sizeof stats};
+    pinax_stats_get(state, &stats);
+    fprintf(stderr,
+            "pnx: stats: %llu instructions; highest use: int slots %u, str slots %u, region %u bytes, handles %u, call depth %u; "
+            "block %zu of %zu bytes (%zu percent)\n",
+            (unsigned long long)stats.instructions, (unsigned)stats.int_slots_peak, (unsigned)stats.str_slots_peak,
+            (unsigned)stats.region_bytes_peak, (unsigned)stats.handles_peak, (unsigned)stats.depth_peak, stats.block_bytes_used,
+            block_bytes, block_bytes >= 100 ? stats.block_bytes_used / (block_bytes / 100) : 0);
+}
+
 // Reads lines from standard input and runs each as a line of one session. A definition or a
 // block may go over several lines: the text is run when it is complete.
 // What a session declares fills the block. Said once, when three quarters of it are used.
@@ -665,12 +681,19 @@ int main(int argc, char **argv) {
     heap = proven_alloc_checked(&heap_check, proven_heap_allocator(), HEAP_ENTRIES);
     // options before the command; what follows is read as if they were not there
     int options = 0;
-    while (options + 2 < argc && (strcmp(argv[1 + options], "--lib") == 0 || strcmp(argv[1 + options], "--capacity") == 0)) {
-        if (strcmp(argv[1 + options], "--capacity") == 0 ? !take_capacity(argv[2 + options]) : !open_lib(argv[2 + options])) {
-            close_libs();
-            return 2;
+    for (;;) {
+        if (options + 1 < argc && strcmp(argv[1 + options], "--stats") == 0) {
+            want_stats = true;
+            options += 1;
+        } else if (options + 2 < argc && (strcmp(argv[1 + options], "--lib") == 0 || strcmp(argv[1 + options], "--capacity") == 0)) {
+            if (strcmp(argv[1 + options], "--capacity") == 0 ? !take_capacity(argv[2 + options]) : !open_lib(argv[2 + options])) {
+                close_libs();
+                return 2;
+            }
+            options += 2;
+        } else {
+            break;
         }
-        options += 2;
     }
     if (options) {
         argv[options] = argv[0];
@@ -708,7 +731,7 @@ static int run(int argc, char **argv) {
     const bool exporting = argc > 1 && strcmp(argv[1], "export-c") == 0;
     const int  at = checking || effects ? 3 : testing || seeing || formatting || exporting ? 2 : 1;
     if (argc <= at) {
-        fprintf(stderr, "usage: pnx [--lib NAME=PATH]... [--capacity NAME=N]... file.pnx [arguments]\n       pnx test file.pnx\n"
+        fprintf(stderr, "usage: pnx [--stats] [--lib NAME=PATH]... [--capacity NAME=N]... file.pnx [arguments]\n       pnx test file.pnx\n"
                         "       pnx repl\n       pnx see file.pnx\n       pnx see --checks file.pnx\n"
                         "       pnx see --effects file.pnx\n"
                         "       pnx fmt file.pnx\n       pnx export-c file.pnx [NAME]   (the code as C, RFC-0028)\n");
@@ -775,6 +798,7 @@ static int run(int argc, char **argv) {
             return 2;
         }
         const int status = repl(state, block_bytes);
+        print_stats(state, block_bytes);
         pinax_close(state);
         give(block);
         give_sources();
@@ -849,6 +873,7 @@ static int run(int argc, char **argv) {
 #endif
     pnx_streams_flush();
     fflush(stdout);
+    print_stats(state, block_bytes);
     pinax_close(state);
     give(block);
     give_sources();

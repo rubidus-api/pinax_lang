@@ -6,7 +6,11 @@ C 프로그램 안에 넣어 쓰는 작고 빠른 스크립트 언어입니다. 
 
 > **상태: 초기 단계이고, 돌아갑니다.** 소스 파일을 컴파일해 실행합니다. 명령 `pnx` 로도, C
 > 프로그램 안에서도 됩니다. 언어는 아직 다 갖춰지지 않았습니다(실수가 아직
-> 없습니다). 지금 릴리스는 0.30.0 이고, 바이트코드 형식은 아직 약속이 아닙니다.
+> 없습니다). 지금 릴리스는 위 줄의 것이고, 바이트코드 형식은 아직 약속이 아닙니다.
+>
+> **0.31.0 이전에 쓴 스크립트 옮기기:** 그때 문법이 바뀌었습니다(`word` 가 `def`, 서명에 괄호 없음,
+> `case` 대신 `match`, `break N .`). 옛 꼴은 새 꼴을 알리는 메시지와 함께 거절되고,
+> `CHANGELOG.md` `[0.31.0]` 에 바뀐 것이 모두 적혀 있습니다.
 
 Pinax 는 호스트 프로그램 안에서 돌도록 만든 언어입니다. 호스트가 메모리 한 덩이를 주고,
 부를 수 있는 함수를 등록하고, 그 안에서 스크립트를 실행합니다. 모든 값의 타입과 자리가
@@ -111,8 +115,14 @@ int main(void) {
     int64_t in = 4, out = 0;
     pinax_args args = {.i = &in, .ri = &out};
     pinax_err err = pinax_run(st, answer, &args);
-    while (err == PINAX_SUSPENDED)           /* 명령 예산이 다했습니다. 이어 돌립니다 */
+    /* 예산은 한 조각을 막을 뿐 실행 전체를 막지 않습니다: 멈추는 것은 호스트의 몫입니다. 여기서는
+       100 조각까지 허용합니다. 서버라면 조각 사이에 이벤트 루프로 돌아갈 자리입니다. */
+    for (int slices = 1; err == PINAX_SUSPENDED && slices < 100; ++slices)
         err = pinax_resume(st, &args);
+    if (err != PINAX_OK) {
+        fprintf(stderr, "스크립트가 끝나지 않았습니다: 오류 %d\n", (int)err);
+        return 1;
+    }
     printf("%lld\n", (long long)out);        /* 42 */
     pinax_close(st);
     return 0;
@@ -122,6 +132,11 @@ int main(void) {
 ```sh
 cc -std=c99 -Iinclude host.c build/native/libpinax.a -lm -o host
 ```
+
+호스트가 기대는 세 가지(모자란 블록은 거절되고, 예산은 한 조각을 막으며 실행은 이어져 결과에 이르고, 등록한 C 함수는 불리고 그
+실패는 돌아온다)는 `./nob contract`(`docs/spec/examples/19-contract.c`)로 자기 컴파일러와 플랫폼에서 확인합니다. `pnx --stats
+script.pnx` 는 스크립트가 쓴 것을 알려 주어 블록의 크기를 정하게 합니다. Lua 와 LuaJIT 에 견준 측정은
+[`benchmarks/`](benchmarks/) 에 있습니다.
 
 상태는 `block` 안에만 삽니다. Pinax 는 시스템에 메모리를 청하지 않습니다. 표준 호스트
 모듈(`io` `file` `clock` `random` `env`)은 `src/host/` 에 있는 평범한 호스트 프로시저이고, 필요한

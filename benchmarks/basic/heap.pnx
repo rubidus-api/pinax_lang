@@ -1,0 +1,46 @@
+rem heap.pnx - basic bench `heap`: heapsort, a max-heap built in place, the front sent to the end. The cells are
+rem (i * 2654435761) mod 1000000007. pnx heap.pnx N (default 200000, up to 400000).
+use io .
+use env .
+use str .
+const most 400000
+array xs int most
+def exchange i int, j int do i xs idx to a  j xs idx i set xs  a j set xs end
+def sift root0 int, n int do
+  root0 to root
+  loop
+    root 2 mul 1 add to child
+    child n lt not if break . end
+    child to big
+    child 1 add n lt if child xs idx  child 1 add xs idx lt if child 1 add to big end end
+    root xs idx  big xs idx lt not if break . end
+    root big exchange
+    big to root
+  end
+end
+def main or fail do
+  1 env.arg or_else to e "200000" end str.to_int or_fail to n
+  0 n range do to k k 2654435761 mul 1000000007 mod k set xs end each
+  n 2 div to i
+  loop
+    i 0 gt not if break . end
+    i 1 sub n sift
+    i 1 sub to i
+  end
+  n 1 sub to e
+  loop
+    e 0 gt not if break . end
+    0 e exchange
+    0 e sift
+    e 1 sub to e
+  end
+  0 to check
+  true to ordered
+  0 n range do to k
+    k xs idx to v
+    check v k 1 add mul add 1000000007 mod to check
+    k 0 gt if k 1 sub xs idx v gt if false to ordered end end
+  end each
+  args "heap " n " " ordered " " check . cat io.println
+end
+main or_else to e args "heap: " e err_text . cat io.println end

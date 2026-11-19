@@ -1,0 +1,76 @@
+rem sssp.pnx - basic bench `sssp`: Dijkstra with a binary min-heap and lazy deletion over a sparse graph (6 neighbours per node,
+rem weights 1 + (((u + k) * 1103515245) >> 20 & 63)). The settled count and the sum of the distances. pnx sssp.pnx N (default 100000).
+use io .
+use env .
+use str .
+const most 200000
+array adj int 1200000
+array wgt int 1200000
+array dist int most
+array hd int 1200100
+array hv int 1200100
+global hsize int
+def hpush d int, v int do
+  hsize to i
+  d i set hd
+  v i set hv
+  loop
+    i 0 gt not if break . end
+    i 1 sub 2 div to p
+    p hd idx  i hd idx le if break . end
+    p hd idx to td  p hv idx to tv
+    i hd idx p set hd  i hv idx p set hv
+    td i set hd  tv i set hv
+    p to i
+  end
+  hsize 1 add set hsize
+end
+def hpop do
+  hsize 1 sub to last
+  last hd idx 0 set hd
+  last hv idx 0 set hv
+  last set hsize
+  0 to i
+  loop
+    i 2 mul 1 add to c
+    c last lt not if break . end
+    c to small
+    c 1 add last lt if c 1 add hd idx  c hd idx lt if c 1 add to small end end
+    i hd idx  small hd idx le if break . end
+    i hd idx to td  i hv idx to tv
+    small hd idx i set hd  small hv idx i set hv
+    td small set hd  tv small set hv
+    small to i
+  end
+end
+def main or fail do
+  1 env.arg or_else to e "100000" end str.to_int or_fail to n
+  0 n range do to u
+    0 6 range do to k
+      u 2654435761 mul  k 40503 mul add 1 add n mod  u 6 mul k add set adj
+      1  u k add 1103515245 mul 20 shr 63 bit_and add  u 6 mul k add set wgt
+    end each
+  end each
+  0 n range do to i 1152921504606846976 i set dist end each
+  0 0 set dist
+  0 set hsize
+  0 0 hpush
+  0 to settled
+  loop
+    hsize 0 gt not if break . end
+    0 hd idx to d
+    0 hv idx to u
+    hpop
+    d u dist idx gt if continue . end
+    settled 1 add to settled
+    0 6 range do to k
+      u 6 mul k add adj idx to v
+      d  u 6 mul k add wgt idx add to nd
+      nd v dist idx lt if nd v set dist  nd v hpush end
+    end each
+  end
+  0 to total
+  0 n range do to i i dist idx to dd  dd 1152921504606846976 lt if total dd add to total end end each
+  args "sssp " n " " settled " " total . cat io.println
+end
+main or_else to e args "sssp: " e err_text . cat io.println end

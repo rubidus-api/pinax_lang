@@ -55,7 +55,7 @@ int main(void) {
         int64_t in[2] = {item, 1000}, out = 0;
         pinax_args args = {.i = in, .ri = &out};
         err = pinax_run(st, price, &args);
-        while (err == PINAX_SUSPENDED)
+        for (int slices = 1; err == PINAX_SUSPENDED && slices < 100; ++slices)   /* the budget bounds a slice; the host bounds the run */
             err = pinax_resume(st, &args);
         if (err != PINAX_OK)
             report(st, "price failed", err);

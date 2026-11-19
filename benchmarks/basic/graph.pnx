@@ -1,0 +1,40 @@
+rem graph.pnx - basic bench `graph`: breadth-first search from node 0 over a sparse graph (8 neighbours per node,
+rem ((u * 2654435761) + k * 40503 + 1) mod n), the queue an array. pnx graph.pnx N (default 200000, up to 400000).
+use io .
+use env .
+use str .
+const most 400000
+array adj int 3200000
+array dist int most
+array que int most
+def main or fail do
+  1 env.arg or_else to e "200000" end str.to_int or_fail to n
+  0 n range do to u
+    0 8 range do to k
+      u 2654435761 mul  k 40503 mul add 1 add n mod  u 8 mul k add set adj
+    end each
+  end each
+  0 n range do to i -1 i set dist end each
+  0 0 set dist
+  0 0 set que
+  0 to qh
+  1 to qt
+  1 to seen
+  loop
+    qh qt lt not if break . end
+    qh que idx to u
+    qh 1 add to qh
+    u dist idx to du
+    0 8 range do to k
+      u 8 mul k add adj idx to v
+      v dist idx -1 eq if
+        du 1 add v set dist
+        qt n lt if v qt set que  qt 1 add to qt  seen 1 add to seen end
+      end
+    end each
+  end
+  0 to total
+  0 n range do to i i dist idx to d  d 0 ge if total d add to total end end each
+  args "graph " n " " seen " " total . cat io.println
+end
+main or_else to e args "graph: " e err_text . cat io.println end

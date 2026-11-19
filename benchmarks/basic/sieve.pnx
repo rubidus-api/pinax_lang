@@ -1,0 +1,30 @@
+rem sieve.pnx - basic bench `sieve`: the sieve of Eratosthenes over cells set to true, then the cells left are counted.
+rem pnx sieve.pnx N (default 1000000, up to 4000000): the primes below N.
+use io .
+use env .
+use str .
+const most 4000001
+array s bool most
+def main or fail do
+  1 env.arg or_else to e "1000000" end str.to_int or_fail to n
+  0 n range do to k true k set s end each
+  false 0 set s
+  false 1 set s
+  2 to i
+  loop
+    i i mul n lt not if break . end
+    i s idx if
+      i i mul to j
+      loop
+        j n lt not if break . end
+        false j set s
+        j i add to j
+      end
+    end
+    i 1 add to i
+  end
+  0 to cnt
+  0 n range do to k k s idx if cnt 1 add to cnt end end each
+  args "sieve " n " " cnt . cat io.println
+end
+main or_else to e args "sieve: " e err_text . cat io.println end

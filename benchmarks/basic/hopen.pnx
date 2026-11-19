@@ -1,0 +1,35 @@
+rem hash.pnx - basic bench `hash`: open addressing with linear probing, 2n+1 slots; n keys put (value 10 k) and looked up,
+rem the values summed. The slot is (k * 2654435761) mod slots. pnx hash.pnx N (default 200000, up to 400000).
+use io .
+use env .
+use str .
+const most 800001
+array keys int most
+array vals int most
+def main or fail do
+  1 env.arg or_else to e "200000" end str.to_int or_fail to n
+  n 2 mul 1 add to cap
+  1 to k
+  loop
+    k n le not if break . end
+    k 2654435761 mul cap mod to slot
+    loop
+      slot keys idx 0 eq if k slot set keys  k 10 mul slot set vals break . end
+      slot 1 add cap mod to slot
+    end
+    k 1 add to k
+  end
+  0 to acc
+  1 to k
+  loop
+    k n le not if break . end
+    k 2654435761 mul cap mod to slot
+    loop
+      slot keys idx k eq if acc slot vals idx add to acc break . end
+      slot 1 add cap mod to slot
+    end
+    k 1 add to k
+  end
+  args "hash " n " " acc . cat io.println
+end
+main or_else to e args "hash: " e err_text . cat io.println end

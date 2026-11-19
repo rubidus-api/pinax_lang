@@ -1,0 +1,10 @@
+rem fib.pnx - basic bench `fib`: Fibonacci by plain recursion; the cost measured is the call. pnx fib.pnx N (default 32).
+use io .
+use env .
+use str .
+def fib n int gives int do n 2 lt if n return end n 1 sub fib n 2 sub fib add end
+def main or fail do
+  1 env.arg or_else to e "32" end str.to_int or_fail to n
+  args "fib " n " " n fib . cat io.println
+end
+main or_else to e args "fib: " e err_text . cat io.println end
