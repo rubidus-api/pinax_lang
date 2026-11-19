@@ -52,10 +52,11 @@
 <body>
 <div id="top">Pinax playground &middot; manual: <a href="https://rubidus-api.github.io/pinax_lang/manual/html-en/"
   target="_blank" rel="noopener">English</a> &middot; <a href="https://rubidus-api.github.io/pinax_lang/manual/html-ko/"
-  target="_blank" rel="noopener">&#xD55C;&#xAD6D;&#xC5B4;</a> &middot; <button id="toggle" type="button">commands (F1)</button> &middot; F5 :run (resets) &middot; F2 :edit</div>
+  target="_blank" rel="noopener">&#xD55C;&#xAD6D;&#xC5B4;</a> &middot; <button id="toggle" type="button">commands (F1)</button> &middot; F5 :run (resets) &middot; F4 :list &middot; F2 :edit &middot; F7 trace &middot; F8 continue &middot; F9 breakpoint &middot; F10 step</div>
 <div id="main">
 <div id="screen">
-<div id="log"><span class="info">Pinax. Code runs when it is whole: it ends with "," or ".", and a loop or a block runs at its end.
+<div id="log"><span class="info">Pinax @PINAX_VERSION@, released @PINAX_DATE@ &middot; <a href="https://github.com/rubidus-api/pinax_lang" target="_blank" rel="noopener">github.com/rubidus-api/pinax_lang</a>
+Code runs when it is whole: it ends with "," or ".", and a loop or a block runs at its end.
 :help lists the commands; :list shows the program with its line numbers.
 </span></div>
 <div id="line"><div id="hint" class="hint"></div><span id="prompt">pinax> </span><textarea id="input" rows="1" spellcheck="false" autofocus></textarea></div>
@@ -332,6 +333,29 @@ document.addEventListener("keydown", (e) => {
             closeEditor(true);
         else
             act(con.enter(":run"));
+    } else if (e.key === "F4") { // as GW-BASIC listed the program with a key
+        e.preventDefault();
+        if (!open)
+            act(con.enter(":list"));
+    } else if (!open && (e.key === "F7" || e.key === "F8" || e.key === "F9" || e.key === "F10")) { // the debugger
+        e.preventDefault();
+        const state = con.debug();
+        if (e.key === "F7") { // as TRON and TROFF of GW-BASIC
+            act(con.enter(state.tracing ? ":trace off" : ":trace"));
+        } else if (e.key === "F8") { // to the next breakpoint; from nothing, the program from the start
+            act(con.enter(state.halted ? ":continue" : ":run"));
+        } else if (e.key === "F9") { // a breakpoint at the line typed, else at the line the run stopped at
+            const typed = input.value.trim();
+            if (/^\d+$/.test(typed)) {
+                input.value = "";
+                fit();
+                act(con.enter(":toggle " + typed));
+            } else {
+                act(con.enter(":toggle"));
+            }
+        } else { // F10: to the next period; from nothing, one statement at a time from line 1
+            act(con.enter(":next"));
+        }
     } else if (e.key === "F2" || (open && e.key === "s" && (e.ctrlKey || e.metaKey))) {
         e.preventDefault();
         if (open)

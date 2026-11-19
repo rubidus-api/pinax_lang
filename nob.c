@@ -622,6 +622,58 @@ static void put_module(FILE *out, const char *text) {
     }
 }
 
+// The version of include/pinax.h ("0.34.5") and the date of the newest release heading of CHANGELOG.md ("2026-11-19"), for the
+// start message of the playground. Each is "?" when it cannot be read.
+static void release_facts(char *version, size_t vn, char *date, size_t dn) {
+    snprintf(version, vn, "?");
+    snprintf(date, dn, "?");
+    size_t n;
+    char  *h = slurp("include/pinax.h", &n);
+    if (h) {
+        const char *k[3] = {"PINAX_VERSION_MAJOR", "PINAX_VERSION_MINOR", "PINAX_VERSION_PATCH"};
+        int         v[3] = {-1, -1, -1};
+        for (int i = 0; i < 3; ++i) {
+            const char *at = strstr(h, k[i]);
+            if (at)
+                v[i] = atoi(at + strlen(k[i]));
+        }
+        if (v[0] >= 0 && v[1] >= 0 && v[2] >= 0)
+            snprintf(version, vn, "%d.%d.%d", v[0], v[1], v[2]);
+        free(h);
+    }
+    char *c = slurp("CHANGELOG.md", &n);
+    if (c) {
+        const char *at = strstr(c, "\n## [Unreleased]");
+        const char *r = at ? strstr(at + 1, "\n## [") : NULL;
+        const char *close = r ? strstr(r + 1, "] - ") : NULL;
+        if (close && strlen(close) >= 14)
+            snprintf(date, dn, "%.10s", close + 4);
+        free(c);
+    }
+}
+
+// `page` with every `from` replaced by `to`, in memory the caller frees.
+static char *replace_all(const char *page, size_t *n, const char *from, const char *to) {
+    size_t count = 0, fl = strlen(from), tl = strlen(to);
+    for (const char *p = page; (p = strstr(p, from)); p += fl)
+        ++count;
+    char *out = malloc(*n + count * (tl > fl ? tl - fl : 0) + 1), *w = out;
+    if (!out)
+        return NULL;
+    const char *p = page, *q;
+    while ((q = strstr(p, from))) {
+        memcpy(w, p, (size_t)(q - p));
+        w += q - p;
+        memcpy(w, to, tl);
+        w += tl;
+        p = q + fl;
+    }
+    size_t rest = strlen(p);
+    memcpy(w, p, rest + 1);
+    *n = (size_t)(w - out) + rest;
+    return out;
+}
+
 // build/dist/pinax-playground.html: src/wasm/playground.html with, at its marker lines, pinax.wasm
 // in base64 (@PINAX_WASM_BASE64@), pinax.mjs (// @PINAX_MJS@) and console.mjs (// @PINAX_CONSOLE@),
 // in that order. One file that runs Pinax opened from disk, with no server (the page cannot fetch
@@ -629,6 +681,14 @@ static void put_module(FILE *out, const char *text) {
 static int write_playground(void) {
     size_t page_n, mjs_n, con_n, words_n, comp_n, wasm_n;
     char  *page = slurp("src/wasm/playground.html", &page_n);
+    if (page) { // the start message names the version and the day of its release
+        char version[32], date[32];
+        release_facts(version, sizeof version, date, sizeof date);
+        char *a1 = replace_all(page, &page_n, "@PINAX_VERSION@", version);
+        char *a2 = a1 ? replace_all(a1, &page_n, "@PINAX_DATE@", date) : NULL;
+        free(page), free(a1);
+        page = a2;
+    }
     char  *mjs = slurp("src/wasm/pinax.mjs", &mjs_n);
     char  *con = slurp("src/wasm/console.mjs", &con_n);
     char  *words = slurp("src/wasm/words.mjs", &words_n);

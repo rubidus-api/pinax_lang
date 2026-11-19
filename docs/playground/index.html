@@ -52,10 +52,11 @@
 <body>
 <div id="top">Pinax playground &middot; manual: <a href="https://rubidus-api.github.io/pinax_lang/manual/html-en/"
   target="_blank" rel="noopener">English</a> &middot; <a href="https://rubidus-api.github.io/pinax_lang/manual/html-ko/"
-  target="_blank" rel="noopener">&#xD55C;&#xAD6D;&#xC5B4;</a> &middot; <button id="toggle" type="button">commands (F1)</button> &middot; F5 :run (resets) &middot; F2 :edit</div>
+  target="_blank" rel="noopener">&#xD55C;&#xAD6D;&#xC5B4;</a> &middot; <button id="toggle" type="button">commands (F1)</button> &middot; F5 :run (resets) &middot; F4 :list &middot; F2 :edit &middot; F7 trace &middot; F8 continue &middot; F9 breakpoint &middot; F10 step</div>
 <div id="main">
 <div id="screen">
-<div id="log"><span class="info">Pinax. Code runs when it is whole: it ends with "," or ".", and a loop or a block runs at its end.
+<div id="log"><span class="info">Pinax 0.34.5, released 2026-11-19 &middot; <a href="https://github.com/rubidus-api/pinax_lang" target="_blank" rel="noopener">github.com/rubidus-api/pinax_lang</a>
+Code runs when it is whole: it ends with "," or ".", and a loop or a block runs at its end.
 :help lists the commands; :list shows the program with its line numbers.
 </span></div>
 <div id="line"><div id="hint" class="hint"></div><span id="prompt">pinax> </span><textarea id="input" rows="1" spellcheck="false" autofocus></textarea></div>
@@ -14835,7 +14836,8 @@ const GUIDE = {
         [":trace", "RESETS like :run, then runs the program one statement at a time (one period each), showing the stack after each and every line of a procedure with its locals as it runs; :trace off stops the lines of procedures"],
         [":break N|NAME ...", "breakpoints: the run stops before those lines (a procedure: its first body line); :list marks them `*` and the stop `=>`; RESETS and runs the program again (:b)"],
         [":unbreak [N ...|all]", "removes breakpoints (:ub)"],
-        [":continue, :next, :stop", "after a stop: go on (:c), go on to the next line or statement (:n), or end the run (:stop)"],
+        [":continue, :next, :stop", "after a stop: go on (:c), go on to the next line or statement (:n), or end the run (:stop); :next with nothing stopped runs the program from line 1 one statement at a time"],
+        [":toggle [N|NAME]", "a breakpoint at that line or procedure, or at the line the run stopped at, put or taken away (F9)"],
         [":run", "RESETS: empties the stack and forgets every definition, then runs the program from line 1 (F5); the program's lines stay"],
         [":new", "no program, and a fresh state"],
         [":stack", "the values on the stack, the first pushed first (:s); it may be typed inside a block"],
@@ -14851,7 +14853,9 @@ const GUIDE = {
         ["Tab", "writes the name offered; names are offered as you type, in the prompt and in the editor"],
         ["Alt+1 to Alt+9", "write the nth name offered"], ["Alt+Up, Alt+Down", "choose among the names (Alt+Down offers them)"],
         ["Up, Down", "walk the history"], ["Esc", "drops the lines gathered, or ends :edit N and :insert N"],
-        ["F5", ":run"], ["F2", ":edit"], ["F1", "shows or hides this guide"], ["Ctrl+L", "clears the screen"],
+        ["F5", ":run"], ["F4", ":list"], ["F2", ":edit"], ["F1", "shows or hides this guide"], ["Ctrl+L", "clears the screen"],
+        ["F7", ":trace on or off (the lines of a procedure as it runs)"], ["F8", ":continue to the next breakpoint (:run when nothing is stopped)"],
+        ["F9", ":toggle: a breakpoint at the line typed in the prompt, or at the line the run stopped at"], ["F10", ":next, to the next period (steps from line 1 when nothing is stopped)"],
     ],
 };
 const width = Math.max(...GUIDE.commands.map(([c]) => c.length)) + 2;
@@ -15015,7 +15019,7 @@ async function createConsole({ createPinax, bytes, print, store = null }) {
     function pieces() {
         const out = [];
         for (const { start, end } of parts()) {
-            if (showLines || breaks.size) {
+            if (showLines || breaks.size || stepAll) {
                 const these = statements(start, end);
                 for (const { text, line } of these) {
                     const found = /^\s*def\s+([A-Za-z_][A-Za-z_0-9]*)/.exec(text);
@@ -15030,10 +15034,12 @@ async function createConsole({ createPinax, bytes, print, store = null }) {
         return out;
     }
 
-    function runProgram() {
+    let stepAll = false; // the run goes one statement at a time though no breakpoint is set (F10 from nothing)
+    function runProgram(step = false) {
         session.reset();
         halt = null;
-        stepping = false;
+        stepping = step;
+        stepAll = step;
         syncTrace();
         runner = { pieces: pieces(), i: 0, skip: -1 };
         return pump(false);
@@ -15244,6 +15250,30 @@ async function createConsole({ createPinax, bytes, print, store = null }) {
             runProgram();
             return {};
         }
+        case "toggle": case "t": { // a breakpoint put or taken away: at the line given, else the line the run stopped at
+            const g = line.slice(1).trim().split(/\s+/)[1];
+            let n = g && /^\d+$/.test(g) ? Number(g) : 0;
+            if (g && !n && /^[A-Za-z_][A-Za-z_0-9]*$/.test(g)) {
+                const d = declaration(g);
+                n = d ? (d[1] - d[0] > 1 ? d[0] + 2 : d[0] + 1) : 0;
+            } else if (!g && halt) {
+                n = halt.line;
+            }
+            if (!g && !halt)
+                return print("info", "toggle what? a line number (:toggle N), a procedure (:toggle NAME), or stop at a line first\n"), {};
+            if (n < 1 || n > lines.length)
+                return print("err", `no line or procedure ${g}; :list shows the lines\n`), {};
+            if (breaks.has(n)) {
+                breaks.delete(n);
+                syncTrace();
+                print("info", breaks.size ? `breakpoint at ${n} taken away; breakpoints at ${[...breaks].sort((x, y) => x - y).join(", ")}\n` : `breakpoint at ${n} taken away; no breakpoints\n`);
+                return {};
+            }
+            breaks.add(n);
+            print("info", `breakpoints at ${[...breaks].sort((x, y) => x - y).join(", ")}; the program runs again from a fresh state\n`);
+            runProgram();
+            return {};
+        }
         case "unbreak": case "ub": {
             const given = line.slice(1).trim().split(/\s+/).slice(1);
             if (!given.length || given[0] === "all")
@@ -15259,6 +15289,11 @@ async function createConsole({ createPinax, bytes, print, store = null }) {
             goOn(false);
             return {};
         case "next": case "n":
+            if (!halt && !runner) {
+                print("info", "reset; the program runs one statement at a time from line 1 (:next goes on, :continue runs to a breakpoint)\n");
+                runProgram(true);
+                return {};
+            }
             goOn(true);
             return {};
         case "stop": // ends a stopped run: the program is run again to its end without stopping
@@ -15516,7 +15551,7 @@ async function createConsole({ createPinax, bytes, print, store = null }) {
         print("info", `the program of the last visit: ${plural(lines.length, "line")} (:list)\n`);
         runProgram();
     }
-    return { enter, cancel, leaveEditor: () => { editRange = null; }, setProgram, status, history, prompt, mode: () => mode?.kind ?? null, program: () => lines.slice(), words: () => userWords(lines.join("\n")), used: () => usedModules(lines.join("\n")) };
+    return { debug: () => ({ halted: !!halt, tracing: showLines, breaks: [...breaks].sort((x, y) => x - y) }), enter, cancel, leaveEditor: () => { editRange = null; }, setProgram, status, history, prompt, mode: () => mode?.kind ?? null, program: () => lines.slice(), words: () => userWords(lines.join("\n")), used: () => usedModules(lines.join("\n")) };
 }
 const $ = (id) => document.getElementById(id);
 const log = $("log"), input = $("input"), prompt = $("prompt"), screen = $("screen");
@@ -15778,6 +15813,29 @@ document.addEventListener("keydown", (e) => {
             closeEditor(true);
         else
             act(con.enter(":run"));
+    } else if (e.key === "F4") { // as GW-BASIC listed the program with a key
+        e.preventDefault();
+        if (!open)
+            act(con.enter(":list"));
+    } else if (!open && (e.key === "F7" || e.key === "F8" || e.key === "F9" || e.key === "F10")) { // the debugger
+        e.preventDefault();
+        const state = con.debug();
+        if (e.key === "F7") { // as TRON and TROFF of GW-BASIC
+            act(con.enter(state.tracing ? ":trace off" : ":trace"));
+        } else if (e.key === "F8") { // to the next breakpoint; from nothing, the program from the start
+            act(con.enter(state.halted ? ":continue" : ":run"));
+        } else if (e.key === "F9") { // a breakpoint at the line typed, else at the line the run stopped at
+            const typed = input.value.trim();
+            if (/^\d+$/.test(typed)) {
+                input.value = "";
+                fit();
+                act(con.enter(":toggle " + typed));
+            } else {
+                act(con.enter(":toggle"));
+            }
+        } else { // F10: to the next period; from nothing, one statement at a time from line 1
+            act(con.enter(":next"));
+        }
     } else if (e.key === "F2" || (open && e.key === "s" && (e.ctrlKey || e.metaKey))) {
         e.preventDefault();
         if (open)

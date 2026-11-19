@@ -49,7 +49,8 @@ export const GUIDE = {
         [":trace", "RESETS like :run, then runs the program one statement at a time (one period each), showing the stack after each and every line of a procedure with its locals as it runs; :trace off stops the lines of procedures"],
         [":break N|NAME ...", "breakpoints: the run stops before those lines (a procedure: its first body line); :list marks them `*` and the stop `=>`; RESETS and runs the program again (:b)"],
         [":unbreak [N ...|all]", "removes breakpoints (:ub)"],
-        [":continue, :next, :stop", "after a stop: go on (:c), go on to the next line or statement (:n), or end the run (:stop)"],
+        [":continue, :next, :stop", "after a stop: go on (:c), go on to the next line or statement (:n), or end the run (:stop); :next with nothing stopped runs the program from line 1 one statement at a time"],
+        [":toggle [N|NAME]", "a breakpoint at that line or procedure, or at the line the run stopped at, put or taken away (F9)"],
         [":run", "RESETS: empties the stack and forgets every definition, then runs the program from line 1 (F5); the program's lines stay"],
         [":new", "no program, and a fresh state"],
         [":stack", "the values on the stack, the first pushed first (:s); it may be typed inside a block"],
@@ -65,7 +66,9 @@ export const GUIDE = {
         ["Tab", "writes the name offered; names are offered as you type, in the prompt and in the editor"],
         ["Alt+1 to Alt+9", "write the nth name offered"], ["Alt+Up, Alt+Down", "choose among the names (Alt+Down offers them)"],
         ["Up, Down", "walk the history"], ["Esc", "drops the lines gathered, or ends :edit N and :insert N"],
-        ["F5", ":run"], ["F2", ":edit"], ["F1", "shows or hides this guide"], ["Ctrl+L", "clears the screen"],
+        ["F5", ":run"], ["F4", ":list"], ["F2", ":edit"], ["F1", "shows or hides this guide"], ["Ctrl+L", "clears the screen"],
+        ["F7", ":trace on or off (the lines of a procedure as it runs)"], ["F8", ":continue to the next breakpoint (:run when nothing is stopped)"],
+        ["F9", ":toggle: a breakpoint at the line typed in the prompt, or at the line the run stopped at"], ["F10", ":next, to the next period (steps from line 1 when nothing is stopped)"],
     ],
 };
 const width = Math.max(...GUIDE.commands.map(([c]) => c.length)) + 2;
@@ -229,7 +232,7 @@ export async function createConsole({ createPinax, bytes, print, store = null })
     function pieces() {
         const out = [];
         for (const { start, end } of parts()) {
-            if (showLines || breaks.size) {
+            if (showLines || breaks.size || stepAll) {
                 const these = statements(start, end);
                 for (const { text, line } of these) {
                     const found = /^\s*def\s+([A-Za-z_][A-Za-z_0-9]*)/.exec(text);
@@ -244,10 +247,12 @@ export async function createConsole({ createPinax, bytes, print, store = null })
         return out;
     }
 
-    function runProgram() {
+    let stepAll = false; // the run goes one statement at a time though no breakpoint is set (F10 from nothing)
+    function runProgram(step = false) {
         session.reset();
         halt = null;
-        stepping = false;
+        stepping = step;
+        stepAll = step;
         syncTrace();
         runner = { pieces: pieces(), i: 0, skip: -1 };
         return pump(false);
@@ -458,6 +463,30 @@ export async function createConsole({ createPinax, bytes, print, store = null })
             runProgram();
             return {};
         }
+        case "toggle": case "t": { // a breakpoint put or taken away: at the line given, else the line the run stopped at
+            const g = line.slice(1).trim().split(/\s+/)[1];
+            let n = g && /^\d+$/.test(g) ? Number(g) : 0;
+            if (g && !n && /^[A-Za-z_][A-Za-z_0-9]*$/.test(g)) {
+                const d = declaration(g);
+                n = d ? (d[1] - d[0] > 1 ? d[0] + 2 : d[0] + 1) : 0;
+            } else if (!g && halt) {
+                n = halt.line;
+            }
+            if (!g && !halt)
+                return print("info", "toggle what? a line number (:toggle N), a procedure (:toggle NAME), or stop at a line first\n"), {};
+            if (n < 1 || n > lines.length)
+                return print("err", `no line or procedure ${g}; :list shows the lines\n`), {};
+            if (breaks.has(n)) {
+                breaks.delete(n);
+                syncTrace();
+                print("info", breaks.size ? `breakpoint at ${n} taken away; breakpoints at ${[...breaks].sort((x, y) => x - y).join(", ")}\n` : `breakpoint at ${n} taken away; no breakpoints\n`);
+                return {};
+            }
+            breaks.add(n);
+            print("info", `breakpoints at ${[...breaks].sort((x, y) => x - y).join(", ")}; the program runs again from a fresh state\n`);
+            runProgram();
+            return {};
+        }
         case "unbreak": case "ub": {
             const given = line.slice(1).trim().split(/\s+/).slice(1);
             if (!given.length || given[0] === "all")
@@ -473,6 +502,11 @@ export async function createConsole({ createPinax, bytes, print, store = null })
             goOn(false);
             return {};
         case "next": case "n":
+            if (!halt && !runner) {
+                print("info", "reset; the program runs one statement at a time from line 1 (:next goes on, :continue runs to a breakpoint)\n");
+                runProgram(true);
+                return {};
+            }
             goOn(true);
             return {};
         case "stop": // ends a stopped run: the program is run again to its end without stopping
@@ -730,5 +764,5 @@ export async function createConsole({ createPinax, bytes, print, store = null })
         print("info", `the program of the last visit: ${plural(lines.length, "line")} (:list)\n`);
         runProgram();
     }
-    return { enter, cancel, leaveEditor: () => { editRange = null; }, setProgram, status, history, prompt, mode: () => mode?.kind ?? null, program: () => lines.slice(), words: () => userWords(lines.join("\n")), used: () => usedModules(lines.join("\n")) };
+    return { debug: () => ({ halted: !!halt, tracing: showLines, breaks: [...breaks].sort((x, y) => x - y) }), enter, cancel, leaveEditor: () => { editRange = null; }, setProgram, status, history, prompt, mode: () => mode?.kind ?? null, program: () => lines.slice(), words: () => userWords(lines.join("\n")), used: () => usedModules(lines.join("\n")) };
 }
