@@ -48,6 +48,7 @@ enum {
     PNX_X_SREG,   // a register of the S bank that the instruction reads
     PNX_X_GLOBAL, // global index: the wide form of an instruction whose C names a global
     PNX_X_IMM,    // a number the instruction reads
+    PNX_X_JUMP,   // a compare and branch whose offset is too far for 8 bits: the signed distance, counted from the word after this one
 };
 
 // A global number that means "the one GSEL chose" (RFC-0018): in BX and in the second word of a
@@ -209,6 +210,14 @@ enum {
     X(JNEI, 0x4d, PNX_K_I, PNX_K_IMM, PNX_K_J, PNX_F_ABC, PNX_X_NONE, 0, "r--") \
     X(JLTI, 0x4e, PNX_K_I, PNX_K_IMM, PNX_K_J, PNX_F_ABC, PNX_X_NONE, 0, "r--") \
     X(JGEI, 0x4f, PNX_K_I, PNX_K_IMM, PNX_K_J, PNX_F_ABC, PNX_X_NONE, 0, "r--") \
+    X(JEQF, 0x44, PNX_K_I, PNX_K_I, PNX_K_NONE, PNX_F_ABC, PNX_X_JUMP, 0, "rr-") \
+    X(JNEF, 0x45, PNX_K_I, PNX_K_I, PNX_K_NONE, PNX_F_ABC, PNX_X_JUMP, 0, "rr-") \
+    X(JLTF, 0x46, PNX_K_I, PNX_K_I, PNX_K_NONE, PNX_F_ABC, PNX_X_JUMP, 0, "rr-") \
+    X(JLEF, 0x47, PNX_K_I, PNX_K_I, PNX_K_NONE, PNX_F_ABC, PNX_X_JUMP, 0, "rr-") \
+    X(JEQIF, 0x53, PNX_K_I, PNX_K_IMM, PNX_K_NONE, PNX_F_ABC, PNX_X_JUMP, 0, "r--") \
+    X(JNEIF, 0x54, PNX_K_I, PNX_K_IMM, PNX_K_NONE, PNX_F_ABC, PNX_X_JUMP, 0, "r--") \
+    X(JLTIF, 0x55, PNX_K_I, PNX_K_IMM, PNX_K_NONE, PNX_F_ABC, PNX_X_JUMP, 0, "r--") \
+    X(JGEIF, 0x56, PNX_K_I, PNX_K_IMM, PNX_K_NONE, PNX_F_ABC, PNX_X_JUMP, 0, "r--") \
     X(JMP, 0x50, PNX_K_NONE, PNX_K_NONE, PNX_K_NONE, PNX_F_AX, PNX_X_NONE, 0, "---") \
     X(JSEQ, 0x51, PNX_K_S, PNX_K_S, PNX_K_J, PNX_F_ABC, PNX_X_NONE, 0, "rr-") \
     X(JSNE, 0x52, PNX_K_S, PNX_K_S, PNX_K_J, PNX_F_ABC, PNX_X_NONE, 0, "rr-") \

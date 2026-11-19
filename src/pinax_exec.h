@@ -193,6 +193,15 @@ again:
         NEXT();                                                                                    \
     }
 
+        // Compare and branch, far: the offset is the word that follows, counted from the word after it.
+#define RUNJF(name)                                                                                \
+    CASE(name) {                                                                                   \
+        const int32_t far_off = (int32_t)*pc++;                                                    \
+        if (pnx_cond_##name(st, R, S, w))                                                          \
+            pc += far_off;                                                                         \
+        NEXT();                                                                                    \
+    }
+
         // every instruction that is one call of its pnx_op_ or pnx_cond_ function (PNX_RUN_KINDS)
 #define PNX_EXPAND(kind, name) kind(name)
         PNX_RUN_KINDS(PNX_EXPAND)
@@ -654,6 +663,7 @@ finished:
 #undef RUNF2
 #undef RUNF
 #undef RUNJ
+#undef RUNJF
 #undef AWAIT
 #undef PNX_EXEC_NAME
 #undef PNX_EXEC_STEP

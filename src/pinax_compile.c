@@ -1369,9 +1369,46 @@ static bool jump_later(comp *c, uint32_t *chain) {
     return true;
 }
 
+// The far form of the compare of entry `e` (a compare of the integer banks), or 0 for one that has none.
+static uint32_t far_form(uint32_t op) {
+    switch (op) {
+    case PNX_JEQ: return PNX_JEQF;
+    case PNX_JNE: return PNX_JNEF;
+    case PNX_JLT: return PNX_JLTF;
+    case PNX_JLE: return PNX_JLEF;
+    case PNX_JEQI: return PNX_JEQIF;
+    case PNX_JNEI: return PNX_JNEIF;
+    case PNX_JLTI: return PNX_JLTIF;
+    case PNX_JGEI: return PNX_JGEIF;
+    default: return 0;
+    }
+}
+
+// A compare and branch to a place not yet known, in one instruction of two words: the jump is taken when the condition of `e`
+// holds, and is added to `chain`, which `land` patches (the distance goes to the second word). Where the compare has no far form
+// the caller writes a short jump over a JMP, as before (dispatch fusion, part 1).
+static bool cond_jump_far(comp *c, const entry *e, uint32_t *chain) {
+    const uint32_t op = far_form(e->op);
+    const uint32_t at = emit(c, PNX_ABC(op, e->a, e->b, 0));
+    if (at == NONE)
+        return false;
+    if (at >= 0xffffffu)
+        return syntax(c, "the procedure is too long");
+    if (emit(c, *chain == NONE ? 0xffffffffu : *chain) == NONE)
+        return false;
+    *chain = at;
+    return true;
+}
+
 static void land(comp *c, uint32_t *chain) {
     fn *f = c->f;
     for (uint32_t at = *chain; at != NONE;) {
+        if (pnx_ops_info[*code_at(f, at) & 0xffu].second == PNX_X_JUMP) { // a far compare and branch: the link and then the distance live in its second word
+            const uint32_t next = *code_at(f, at + 1);
+            *code_at(f, at + 1) = (uint32_t)(int32_t)(f->code.n - (at + 2));
+            at = next == 0xffffffffu ? NONE : next;
+            continue;
+        }
         const uint32_t next = *code_at(f, at) >> 8;
         *code_at(f, at) = PNX_AX(PNX_JMP, f->code.n - (at + 1));
         at = next == 0xffffffu ? NONE : next;
@@ -3376,10 +3413,17 @@ static bool branch_unless(comp *c, bool negate, uint32_t *chain) {
     entry e;
     if (!pop_cond(c, &e))
         return false;
-    if (negate)
-        cond_negate(&e);
+    // The jump to `chain` is taken when the condition fails (with `negate`, when it holds). One instruction of two words does it
+    // for a compare of the integer banks; the other conditions keep the short jump over a JMP.
+    entry jump = e;
+    if (!negate)
+        cond_negate(&jump);
     // the condition was read from registers at and above its stack position, which stay
     // untouched while the values below are put into theirs
+    if (far_form(jump.op))
+        return settle_all(c) && cond_jump_far(c, &jump, chain);
+    if (negate)
+        cond_negate(&e);
     return settle_all(c) && cond_jump(c, &e, 1) && jump_later(c, chain);
 }
 

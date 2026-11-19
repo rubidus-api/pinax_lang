@@ -131,6 +131,14 @@ PNX_INLINE int pnx_tail_word(pinax_state *st, const pnx_wordrec *callee, uint32_
     X(RUNJ, JNEI) \
     X(RUNJ, JLTI) \
     X(RUNJ, JGEI) \
+    X(RUNJF, JEQF) \
+    X(RUNJF, JNEF) \
+    X(RUNJF, JLTF) \
+    X(RUNJF, JLEF) \
+    X(RUNJF, JEQIF) \
+    X(RUNJF, JNEIF) \
+    X(RUNJF, JLTIF) \
+    X(RUNJF, JGEIF) \
     X(RUN, GETG) \
     X(RUN, SETG) \
     X(RUNG, AGET) \
@@ -455,6 +463,15 @@ PNX_COND(JEQI) { return R[OP_A(w)] == OP_SB(w); }
 PNX_COND(JNEI) { return R[OP_A(w)] != OP_SB(w); }
 PNX_COND(JLTI) { return R[OP_A(w)] < OP_SB(w); }
 PNX_COND(JGEI) { return R[OP_A(w)] >= OP_SB(w); }
+// the far forms: the same compare, the offset in the word that follows (PNX_X_JUMP)
+PNX_COND(JEQF) { return R[OP_A(w)] == R[OP_B(w)]; }
+PNX_COND(JNEF) { return R[OP_A(w)] != R[OP_B(w)]; }
+PNX_COND(JLTF) { return R[OP_A(w)] < R[OP_B(w)]; }
+PNX_COND(JLEF) { return R[OP_A(w)] <= R[OP_B(w)]; }
+PNX_COND(JEQIF) { return R[OP_A(w)] == OP_SB(w); }
+PNX_COND(JNEIF) { return R[OP_A(w)] != OP_SB(w); }
+PNX_COND(JLTIF) { return R[OP_A(w)] < OP_SB(w); }
+PNX_COND(JGEIF) { return R[OP_A(w)] >= OP_SB(w); }
 PNX_COND(JSNE) {
     const pnx_scell a = S[OP_A(w)], b = S[OP_B(w)];
     return !(a.length == b.length &&

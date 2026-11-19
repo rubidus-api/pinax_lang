@@ -756,7 +756,11 @@ static void list_code(const pinax_state *state, uint32_t module, FILE *out) {
             }
             if (info->known && info->second != PNX_X_NONE && at + 1 < w->length) {
                 ++at;
-                fprintf(out, "  %4u    + word 0x%08x\n", (unsigned)at, (unsigned)state->code[w->entry + at]);
+                const uint32_t second = state->code[w->entry + at];
+                if (info->second == PNX_X_JUMP) // a far compare and branch: where it goes
+                    fprintf(out, "  %4u    + %+d (to %u)\n", (unsigned)at, (int)(int32_t)second, (unsigned)((int32_t)at + 1 + (int32_t)second));
+                else
+                    fprintf(out, "  %4u    + word 0x%08x\n", (unsigned)at, (unsigned)second);
             }
         }
     }

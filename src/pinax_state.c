@@ -547,6 +547,21 @@ static bool reg_ok(uint32_t kind, uint32_t value, const pnx_wordrec *word, uint3
     }
 }
 
+// The compare of a far compare and branch (PNX_X_JUMP) is the near one's; for any other instruction, itself.
+static uint32_t far_base(uint32_t op) {
+    switch (op) {
+    case PNX_JEQF: return PNX_JEQ;
+    case PNX_JNEF: return PNX_JNE;
+    case PNX_JLTF: return PNX_JLT;
+    case PNX_JLEF: return PNX_JLE;
+    case PNX_JEQIF: return PNX_JEQI;
+    case PNX_JNEIF: return PNX_JNEI;
+    case PNX_JLTIF: return PNX_JLTI;
+    case PNX_JGEIF: return PNX_JGEI;
+    default: return op;
+    }
+}
+
 // Where a jump goes, or -1 for an instruction that does not jump.
 static int64_t jump_of(const uint32_t *code, uint32_t i) {
     const uint32_t w = code[i];
@@ -555,6 +570,8 @@ static int64_t jump_of(const uint32_t *code, uint32_t i) {
         return (int64_t)i + 1 + ((int32_t)w >> 8);
     if (info.shape == PNX_F_ABC && info.c == PNX_K_J)
         return (int64_t)i + 1 + (int8_t)(w >> 24);
+    if (info.shape == PNX_F_ABC && info.second == PNX_X_JUMP) // far: the offset is the next word, counted from the one after it
+        return (int64_t)i + 2 + (int32_t)code[i + 1];
     return -1;
 }
 
@@ -668,6 +685,8 @@ static const char *check_word(const pinax_state *st, uint32_t index, span range,
                 return "code: register or global outside its table";
             if (info.c == PNX_K_J)
                 target = (int64_t)i + 1 + (int8_t)c;
+            else if (info.second == PNX_X_JUMP)
+                target = (int64_t)i + 2 + (int32_t)x;
             break;
         case PNX_F_IMM:
             if (!reg_ok(info.a, a, word, head->n_globals))
@@ -1052,6 +1071,8 @@ static const char *flow_step(const pinax_state *st, pnx_counts counts, span rang
     default:
         if (info.shape == PNX_F_ABC && info.c == PNX_K_J)
             target = (int64_t)i + 1 + (int8_t)reg[2];
+        else if (info.shape == PNX_F_ABC && info.second == PNX_X_JUMP)
+            target = (int64_t)i + 2 + (int32_t)code[i + 1];
         break;
     }
     // the shape check has seen that every way on stays inside the word
@@ -1439,8 +1460,10 @@ static void prove_step(pinax_state *st, span range, uint32_t i, facts *now, fact
             facts_drop_reg(now, a);
         break;
     }
-    case PNX_JEQ: case PNX_JNE: case PNX_JLT: case PNX_JLE: case PNX_JEQI: case PNX_JNEI: case PNX_JLTI: case PNX_JGEI: {
-        *target = (int64_t)i + 1 + (int8_t)c;
+    case PNX_JEQ: case PNX_JNE: case PNX_JLT: case PNX_JLE: case PNX_JEQI: case PNX_JNEI: case PNX_JLTI: case PNX_JGEI:
+    case PNX_JEQF: case PNX_JNEF: case PNX_JLTF: case PNX_JLEF: case PNX_JEQIF: case PNX_JNEIF: case PNX_JLTIF: case PNX_JGEIF: {
+        const uint32_t bop = far_base(op);
+        *target = bop != op ? (int64_t)i + 2 + (int32_t)x : (int64_t)i + 1 + (int8_t)c;
         const bool imm = info.b == PNX_K_IMM;
         int64_t alo, ahi, blo, bhi;
         (void)range_of(now, a, &alo, &ahi);
@@ -1449,8 +1472,8 @@ static void prove_step(pinax_state *st, span range, uint32_t i, facts *now, fact
         else
             (void)range_of(now, b, &blo, &bhi);
         // `alt` is the way the jump takes, `now` the way that falls through
-        const bool lt = op == PNX_JLT || op == PNX_JLTI, le = op == PNX_JLE;
-        const bool eq = op == PNX_JEQ || op == PNX_JEQI, ne = op == PNX_JNE || op == PNX_JNEI, ge = op == PNX_JGEI;
+        const bool lt = bop == PNX_JLT || bop == PNX_JLTI, le = bop == PNX_JLE;
+        const bool eq = bop == PNX_JEQ || bop == PNX_JEQI, ne = bop == PNX_JNE || bop == PNX_JNEI, ge = bop == PNX_JGEI;
         facts *below = lt || le ? alt : ge ? now : NULL; // where a < b (lt), a <= b (le), a < b (ge falls)
         facts *above = lt || le ? now : ge ? alt : NULL; // where a >= b (lt), a > b (le), a >= b (ge jumps)
         const bool strict_below = lt || ge, strict_above = le; // a < b (lt, ge falls); a > b (le falls)
@@ -1613,6 +1636,8 @@ static void prove_word(pinax_state *st, span range) {
         default:
             if (info.shape == PNX_F_ABC && info.c == PNX_K_J)
                 target = (int64_t)i + 1 + (int8_t)(w >> 24);
+            else if (info.shape == PNX_F_ABC && info.second == PNX_X_JUMP)
+                target = (int64_t)i + 2 + (int32_t)code[i + 1];
             break;
         }
         if (target >= range.begin && target < range.end)

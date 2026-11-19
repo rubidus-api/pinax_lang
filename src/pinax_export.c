@@ -49,7 +49,7 @@ static void put_hex(out *o, uint64_t v, int digits) {
     put(o, s);
 }
 
-enum { K_NONE, K_RUN, K_RUN2, K_RUNG, K_RUNGW, K_RUNF, K_RUNFG, K_RUNFGW, K_RUNF2, K_RUNJ };
+enum { K_NONE, K_RUN, K_RUN2, K_RUNG, K_RUNGW, K_RUNF, K_RUNFG, K_RUNFGW, K_RUNF2, K_RUNJ, K_RUNJF };
 
 static const char *const op_name[PNX_OP_COUNT] = {
 #define PNX_NAME(name, number, a, b, c, shape, second, fails, roles) [PNX_##name] = #name,
@@ -65,6 +65,7 @@ static const char *const op_name[PNX_OP_COUNT] = {
 #define K_RUNFG_(name) [PNX_##name] = K_RUNFG, [PNX_##name##W] = K_RUNFGW,
 #define K_RUNF2_(name) [PNX_##name] = K_RUNF2,
 #define K_RUNJ_(name) [PNX_##name] = K_RUNJ,
+#define K_RUNJF_(name) [PNX_##name] = K_RUNJF,
 #define PNX_KIND(kind, name) K_##kind##_(name)
 static const uint8_t op_kind[PNX_OP_COUNT] = {PNX_RUN_KINDS(PNX_KIND)};
 #undef PNX_KIND
@@ -75,6 +76,7 @@ static const uint8_t op_kind[PNX_OP_COUNT] = {PNX_RUN_KINDS(PNX_KIND)};
 #undef K_RUNFG_
 #undef K_RUNF2_
 #undef K_RUNJ_
+#undef K_RUNJF_
 
 // The function of a wide form is the narrow form's: AGETW calls pnx_op_AGET with x the second word.
 static void put_fn(out *o, const char *prefix, uint32_t op, bool wide) {
@@ -216,6 +218,13 @@ size_t pnx_export_c(const pinax_state *st, const char *name, char *buffer, size_
             put_hex(&o, w, 8);
             put(&o, "u)) ");
             go_to(&o, (uint32_t)((int32_t)after + OP_SC(w)));
+            break;
+        case K_RUNJF: // the offset is the second word, counted from the word after it
+            put_fn(&o, "if (pnx_cond_", op, false);
+            put(&o, "(st, R, S, ");
+            put_hex(&o, w, 8);
+            put(&o, "u)) ");
+            go_to(&o, (uint32_t)((int32_t)after + (int32_t)x));
             break;
         default:
             switch (op) {
