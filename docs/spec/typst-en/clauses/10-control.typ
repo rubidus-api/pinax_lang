@@ -196,7 +196,7 @@ The block takes the element and gives a `bool` (`filter` keeps the elements for 
 true, `head_while` ends the walk at the first for which it is false), or, for `map`, a value of the same type that takes the element's place. They run
 inside the loop, once for each element and in the order written, and never for an element an earlier one dropped; so there is one loop, no storage and no
 call. A block adapter works on any rail, closed or open (`str.words`, `str.lines`, ...). On a closed rail `skip`, `head`, `step` and `rev` come before them in a
-chain; on an open rail they may stand anywhere, and count the pieces that reach them. The name the block gives the element may be the one the final block uses.]
+chain; on an open rail they may stand anywhere, and count the pieces that reach them. The name the block gives the element may be the one the final block uses. The block gives a value and leaves no loop: `break` and `continue` in it are refused at load (a loop of its own inside the block may use them); drop an element with `filter`, end the walk with `head_while`.]
 #ex("spec", "10-rail-open.pnx")
 #ex("spec", "10-rail-open-rev.pnx")
 #ex("spec", "10-rail-lazy.pnx")

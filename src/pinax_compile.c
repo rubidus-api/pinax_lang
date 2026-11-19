@@ -455,6 +455,8 @@ typedef struct comp {
     adrec adrec[MAX_ADREC]; // the adapters of the chains being written (RFC-0050)
     uint32_t     n_adrec;
     uint8_t      ab_n, ab_kind[MAX_ADAPT], ab_idx[MAX_ADAPT]; // the block adapters of the rail stem_begin took: kind, and the register of N
+    fn          *ad_fn;                                       // the body whose adapter block is being compiled (break and continue do not leave it)
+    uint32_t     ad_floor;                                    // ... the blocks below this number enclose it
     lpos         ab_pos[MAX_ADAPT];                           // ... and where the block of each begins
     uint32_t     sql_host;   // MODULE.rows: the host word step
     uint8_t      json_path;  // json.items_at: the slot of the path
@@ -3520,6 +3522,10 @@ static bool leave_target(comp *c, block **out, pnx_word_id which) {
     }
     for (uint32_t k = f->n_blocks; k-- > 0;) {
         block *b = f->blocks[k];
+        if (c->ad_fn == f && k < c->ad_floor) // the block of filter, map, skip_while or head_while gives a value: it leaves no loop (RFC-0050)
+            return error_at(c, PINAX_ERR_SYNTAX, at.line, at.column,
+                            "the block of filter, map, skip_while or head_while gives a value and leaves no loop: "
+                            "break and continue belong to the block of each; drop an element with filter, end the walk with head_while");
         if (b->kind == B_DO) {
             // the block of a combining word that gives nothing is one loop with its stem (RFC-0036)
             const bool leaves = b->use == USE_EACH || b->use == USE_EACH_INDEX || b->use == USE_TIMES;
@@ -4315,12 +4321,18 @@ static bool ab_run(comp *c, const abset *a, uint32_t reg, tid etype, uint32_t *s
         } else if (!push_slot(c, etype) || !move_slot(c, etype, slot_of(c, f->depth - 1), reg)) {
             return false;
         }
+        fn *const saved_fn = c->ad_fn;
+        const uint32_t saved_floor = c->ad_floor;
+        c->ad_fn = f;
+        c->ad_floor = n_blocks;
         while (!(is_word(c, PNX_KW_end) && f->n_blocks == n_blocks)) {
             if (c->tok.kind == PNX_T_END)
                 return syntax(c, "the block of an adapter is not closed by end");
             if (!body_token(c))
                 return false;
         }
+        c->ad_fn = saved_fn;
+        c->ad_floor = saved_floor;
         if (f->dead)
             return type_error(c, "the block of an adapter does not leave the procedure or the loop");
         const bool value = a->kind[k] == AD_MAP;
