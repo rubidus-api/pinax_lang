@@ -10,6 +10,7 @@ pnx [--stats] [--lib NAME=PATH]... [--capacity NAME=N]... file.pnx [arguments]
 pnx test file.pnx
 pnx repl
 pnx see file.pnx
+pnx see --code file.pnx
 pnx fmt file.pnx
 pnx export-c file.pnx [NAME]
 ```]
@@ -32,6 +33,10 @@ name.]
 #para("3")[`--lib NAME=PATH` opens the shared library at `PATH` so that the resolver finds its functions for
 `extern … from "NAME"` (clause 18). It finds only the functions that library defines (not those it imports). Without
 `--lib`, every `extern` is refused.]
+
+#para("3c")[`pnx see --code file.pnx` loads the file without running it and lists the instructions of its procedures, one to a line: the address in
+the procedure, the name of the instruction and its fields, and the second word of an instruction that has one. It is for reading the code the
+compiler makes (how many instructions a turn of a loop costs); the format is not stable.]
 
 #para("3b")[`--stats` writes one line to standard error after the run, the highest use of a state as `pinax_stats_get` gives it (19.10):
 `pnx: stats: N instructions; highest use: int slots A, str slots B, region R bytes, handles H, call depth D; block U of B bytes (P percent)`.

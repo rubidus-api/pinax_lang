@@ -9,6 +9,7 @@ pnx [--stats] [--lib NAME=PATH]... [--capacity NAME=N]... file.pnx [arguments]
 pnx test file.pnx
 pnx repl
 pnx see file.pnx
+pnx see --code file.pnx
 pnx fmt file.pnx
 pnx export-c file.pnx [NAME]
 ```]
@@ -30,6 +31,9 @@ pnx export-c file.pnx [NAME]
 #para("3")[`--lib NAME=PATH` 는 `PATH` 의 공유 라이브러리를 열어 `extern … from "NAME"`(18절)의 해결 함수가 그
 라이브러리의 함수를 찾게 한다. 그 라이브러리가 정의한 함수만 찾는다(그것이 들여온 함수는 찾지 않는다). `--lib` 가
 없으면 `extern` 은 모두 거절된다.]
+
+#para("3c")[`pnx see --code file.pnx` 는 파일을 돌리지 않고 적재해 프로시저의 명령을 한 줄에 하나씩 보인다: 프로시저 안의 주소, 명령의 이름과
+필드, 둘째 낱말이 있는 명령은 그 낱말. 컴파일러가 만드는 코드(루프 한 바퀴가 명령 몇 개인지)를 읽는 데 쓴다. 형식은 안정적이지 않다.]
 
 #para("3b")[`--stats` 는 실행 뒤에 표준 오류에 한 줄을 쓴다. `pinax_stats_get`(19.10)이 주는 상태의 최고 사용량이다:
 `pnx: stats: N instructions; highest use: int slots A, str slots B, region R bytes, handles H, call depth D; block U of B bytes (P percent)`.

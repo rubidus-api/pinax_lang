@@ -721,19 +721,61 @@ static void give_sources(void) {
     n_sources = 0;
 }
 
+// pnx see --code: the instructions of the words of the file (the last module loaded), one per line: the address in the word, the
+// instruction and its fields, and the second word of the instructions that have one. To read the code the compiler makes (the count of
+// dispatches a loop pays, what a procedure turns into); not a stable format.
+static void list_code(const pinax_state *state, uint32_t module, FILE *out) {
+    static const char *names[256];
+#define PNX_CODE_NAME(name, number, a, b, c, shape, second, fails, roles) names[number] = #name;
+    PNX_OPS(PNX_CODE_NAME)
+#undef PNX_CODE_NAME
+    for (uint32_t k = 0; state->head && k < state->head->n_words; ++k) {
+        const pnx_wordrec *w = &state->words[k];
+        if (w->module != module || w->name[0] == '(' || memcmp(w->name, "test.", 5) == 0)
+            continue;
+        fprintf(out, "%s %s   (%u words of code)\n", w->name, w->signature, (unsigned)w->length);
+        for (uint32_t at = 0; at < w->length; ++at) {
+            const uint32_t code = state->code[w->entry + at], op = code & 0xffu;
+            const char *name = names[op] ? names[op] : "?";
+            const pnx_opinfo *info = &pnx_ops_info[op];
+            switch (info->known ? info->shape : PNX_F_ABC) {
+            case PNX_F_AX: {
+                int32_t x = (int32_t)(code >> 8);
+                if (x & 0x800000)
+                    x -= 0x1000000;
+                fprintf(out, "  %4u  %-8s %+d (to %u)\n", (unsigned)at, name, (int)x, (unsigned)((int32_t)at + 1 + x));
+                break;
+            }
+            case PNX_F_ABC:
+                fprintf(out, "  %4u  %-8s %u %u %u\n", (unsigned)at, name, (unsigned)(code >> 8 & 0xffu), (unsigned)(code >> 16 & 0xffu),
+                        (unsigned)(code >> 24));
+                break;
+            default: // A and a 16-bit number (an immediate, a constant or a global)
+                fprintf(out, "  %4u  %-8s %u %u\n", (unsigned)at, name, (unsigned)(code >> 8 & 0xffu), (unsigned)(code >> 16));
+                break;
+            }
+            if (info->known && info->second != PNX_X_NONE && at + 1 < w->length) {
+                ++at;
+                fprintf(out, "  %4u    + word 0x%08x\n", (unsigned)at, (unsigned)state->code[w->entry + at]);
+            }
+        }
+    }
+}
+
 static int run(int argc, char **argv) {
     const bool testing = argc > 1 && strcmp(argv[1], "test") == 0;
     const bool checking = argc > 2 && strcmp(argv[1], "see") == 0 && strcmp(argv[2], "--checks") == 0;
     const bool effects = argc > 2 && strcmp(argv[1], "see") == 0 && strcmp(argv[2], "--effects") == 0;
-    const bool seeing = argc > 1 && strcmp(argv[1], "see") == 0 && !checking && !effects;
+    const bool listing = argc > 2 && strcmp(argv[1], "see") == 0 && strcmp(argv[2], "--code") == 0;
+    const bool seeing = argc > 1 && strcmp(argv[1], "see") == 0 && !checking && !effects && !listing;
     const bool formatting = argc > 1 && strcmp(argv[1], "fmt") == 0;
     const bool talking = argc == 2 && strcmp(argv[1], "repl") == 0;
     const bool exporting = argc > 1 && strcmp(argv[1], "export-c") == 0;
-    const int  at = checking || effects ? 3 : testing || seeing || formatting || exporting ? 2 : 1;
+    const int  at = checking || effects || listing ? 3 : testing || seeing || formatting || exporting ? 2 : 1;
     if (argc <= at) {
         fprintf(stderr, "usage: pnx [--stats] [--lib NAME=PATH]... [--capacity NAME=N]... file.pnx [arguments]\n       pnx test file.pnx\n"
                         "       pnx repl\n       pnx see file.pnx\n       pnx see --checks file.pnx\n"
-                        "       pnx see --effects file.pnx\n"
+                        "       pnx see --effects file.pnx\n       pnx see --code file.pnx\n"
                         "       pnx fmt file.pnx\n       pnx export-c file.pnx [NAME]   (the code as C, RFC-0028)\n");
         return 2;
     }
@@ -784,7 +826,7 @@ static int run(int argc, char **argv) {
     }
     pinax_host_set_args(argc - at, (const char *const *)(argv + at));
     pnx_streams_own(!talking); // the repl reads standard input itself: no read-ahead there
-    if (exporting || effects)
+    if (exporting || effects || listing)
         state->export_only = true; // compile and check, run nothing
     tool_to_stderr = exporting;
 #if defined(PNX_WITH_NATIVE) // a pnx with a program's exported code linked in (tests/tools/export_check.sh)
@@ -847,6 +889,11 @@ static int run(int argc, char **argv) {
         for (uint32_t k = 0; state->head && k < state->head->n_words; ++k)
             module = state->words[k].module > module ? state->words[k].module : module;
         pnx_effects_report(state, module, put_text, stdout);
+    } else if (listing) { // the words of the file itself: the last module loaded
+        uint32_t module = 0;
+        for (uint32_t k = 0; state->head && k < state->head->n_words; ++k)
+            module = state->words[k].module > module ? state->words[k].module : module;
+        list_code(state, module, stdout);
     } else if (exporting) {
         const char *name = argc > at + 1 ? argv[at + 1] : "pnx_native";
         size_t      cap = 1u << 20, len = 0;
