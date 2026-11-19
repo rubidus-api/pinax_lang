@@ -16,29 +16,34 @@ are a record, and the programs are there so that you can measure on your own mac
 Both need `./nob` first, and Lua 5.4 and LuaJIT (named by `LUA=`, `JIT=`; `LUA_DIR=`, `JIT_DIR=` for the server programs). Run them
 on a quiet machine.
 
-## A record (2026-11-19, a shared machine with a load of 8 to 25: read a ratio of 20 percent or less as noise)
+## A record (2026-11-19, a machine with a load of about 2.5; the fastest of three runs, each the fastest of five)
 
-Seconds, the fastest of three runs, each the fastest of five:
+Seconds:
 
 | Program | n | Pinax | Exported C | Lua 5.4 | LuaJIT | Pinax / Lua 5.4 |
 |---|---|---|---|---|---|---|
-| fib | 32 | 0.152 | 0.052 | 0.165 | 0.024 | 0.92 |
-| sieve | 1000000 | 0.085 | 0.038 | 0.105 | 0.015 | 0.81 |
-| sort | 200000 | 0.211 | 0.093 | 0.218 | 0.054 | 0.97 |
-| heap | 200000 | 0.335 | 0.136 | 0.433 | 0.066 | 0.77 |
-| msort | 200000 | 0.260 | 0.080 | 0.311 | 0.045 | 0.84 |
-| kmp | 4000000 | 0.453 | 0.117 | 0.355 | 0.074 | 1.28 |
-| graph | 200000 | 0.157 | 0.067 | 0.193 | 0.042 | 0.81 |
-| dsu | 200000 | 0.049 | 0.022 | 0.067 | n/a | 0.73 |
-| hash | 200000 | 0.035 | 0.017 | 0.071 | 0.008 | 0.49 |
-| dp | 1500 | 0.170 | 0.055 | 0.135 | 0.021 | 1.26 |
-| sssp | 100000 | 0.361 | 0.146 | 0.606 | 0.092 | 0.60 |
-| matmul | 200 | 0.223 | 0.073 | 0.460 | 0.026 | 0.48 |
+| fib | 32 | 0.140 | 0.050 | 0.161 | 0.022 | 0.87 |
+| sieve | 1000000 | 0.074 | 0.033 | 0.077 | 0.012 | 0.96 |
+| sort | 200000 | 0.162 | 0.058 | 0.193 | 0.051 | 0.84 |
+| heap | 200000 | 0.243 | 0.095 | 0.339 | 0.062 | 0.72 |
+| msort | 200000 | 0.244 | 0.077 | 0.288 | 0.043 | 0.85 |
+| kmp | 4000000 | 0.300 | 0.091 | 0.345 | 0.073 | 0.87 |
+| graph | 200000 | 0.149 | 0.065 | 0.181 | 0.040 | 0.82 |
+| dsu | 200000 | 0.047 | 0.021 | 0.061 | n/a | 0.77 |
+| hash | 200000 | 0.029 | 0.017 | 0.063 | 0.009 | 0.46 |
+| dp | 1500 | 0.157 | 0.048 | 0.134 | 0.021 | 1.17 |
+| sssp | 100000 | 0.334 | 0.135 | 0.531 | 0.083 | 0.63 |
+| matmul | 200 | 0.209 | 0.065 | 0.411 | 0.026 | 0.51 |
 
-A ratio below 1 means Pinax takes less time. The geometric mean of Pinax / Lua 5.4 is 0.79 (ten programs faster, two slower: kmp and
-dp); the exported C takes 0.30 of Lua 5.4's time and LuaJIT 0.15; Pinax takes 5.4 times LuaJIT's. LuaJIT has doubles only, so dsu (a
+A ratio below 1 means Pinax takes less time. The geometric mean of Pinax / Lua 5.4 is 0.77 (eleven programs faster, one slower: dp);
+the exported C takes 0.29 of Lua 5.4's time and LuaJIT 0.16; Pinax takes 4.8 times LuaJIT's. LuaJIT has doubles only, so dsu (a
 64-bit wrapping product) is left out for it. The sizes of sort, heap and msort are larger than the usual 50000 so that a run is long
 enough to measure.
+
+**A correction.** The first record of this table (taken on a shared machine with a load of 8 to 25) showed kmp 1.28 and dp 1.26 times
+slower than Lua. The Pinax programs were not written like the Lua ones: kmp called a procedure for the letter where Lua read a table of
+four, dp read the letter of its row in the inner loop where Lua read it once, sort and heap called a procedure to swap where Lua swapped
+in place. They are written alike now, and the programs of each language do the same work.
 
 Microseconds a request costs on the script side, one thread (`server/`):
 

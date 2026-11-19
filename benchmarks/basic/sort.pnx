@@ -5,7 +5,6 @@ use env .
 use str .
 const most 400000
 array xs int most
-def exchange i int, j int do i xs idx to a  j xs idx i set xs  a j set xs end
 def qsort lo0 int, hi0 int do
   lo0 to lo
   hi0 to hi
@@ -16,10 +15,13 @@ def qsort lo0 int, hi0 int do
     lo to j
     loop
       j hi 1 sub lt not if break . end
-      j xs idx pivot le if i j exchange  i 1 add to i end
+      j xs idx to vj
+      vj pivot le if i xs idx to vi  vj i set xs  vi j set xs  i 1 add to i end
       j 1 add to j
     end
-    i hi 1 sub exchange
+    i xs idx to vi
+    hi 1 sub xs idx i set xs
+    vi hi 1 sub set xs
     i lo sub  hi i 1 add sub  le if lo i qsort  i 1 add to lo else i 1 add hi qsort  i to hi end
   end
 end

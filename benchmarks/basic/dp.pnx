@@ -19,13 +19,14 @@ def main or fail do
   loop
     i n le not if break . end
     i 0 set cur
+    i 1 sub a idx to ai
     1 to k
     loop
       k n le not if break . end
       k prev idx 1 add to best
       k 1 sub cur idx 1 add to ins
       ins best lt if ins to best end
-      i 1 sub a idx  k 1 sub b idx ne if 1 else 0 end to cost
+      ai  k 1 sub b idx ne if 1 else 0 end to cost
       k 1 sub prev idx cost add to sbc
       sbc best lt if sbc to best end
       best k set cur

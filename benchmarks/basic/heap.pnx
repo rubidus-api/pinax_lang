@@ -5,7 +5,6 @@ use env .
 use str .
 const most 400000
 array xs int most
-def exchange i int, j int do i xs idx to a  j xs idx i set xs  a j set xs end
 def sift root0 int, n int do
   root0 to root
   loop
@@ -14,7 +13,7 @@ def sift root0 int, n int do
     child to big
     child 1 add n lt if child xs idx  child 1 add xs idx lt if child 1 add to big end end
     root xs idx  big xs idx lt not if break . end
-    root big exchange
+    root xs idx to vr  big xs idx root set xs  vr big set xs
     big to root
   end
 end
@@ -30,7 +29,7 @@ def main or fail do
   n 1 sub to e
   loop
     e 0 gt not if break . end
-    0 e exchange
+    0 xs idx to v0  e xs idx 0 set xs  v0 e set xs
     0 e sift
     e 1 sub to e
   end
