@@ -128,6 +128,15 @@ as a value: its type is `proc` with the procedure's signature, and `call` calls 
 signature; inputs given as types only stay on the stack (9.2 (2)), so the block's body is the procedure alone:
 `def str, str gives bool do str.starts_with end`.]
 
+#para("2b")[A value of a `proc` type may also be the cell of an array or a list, a field of a record (so a row of a table or of a pool) or a `global`
+(`array ops Op 3`, `ref plus 0 set ops`, `3 4 0 ops idx call`). It is kept as the number of the procedure plus one, so that a cell nothing was written to
+holds none: `is_none` asks it, and calling none is the fault `range`. A cell cannot hold a procedure of another signature (the refusal is at the write).
+Such cells are not ordered, summed, compared or used as the key of an index. A container saved before this (version 5 or older) is refused when loaded.]
+
+#ex("spec", "10-proc-cells.pnx")
+#ex("spec", "10-proc-cell-none.pnx")
+#ex("spec", "10-proc-cell-signature.pnx")
+
 #ex("spec", "10-word-value.pnx")
 
 #part("Constraints")

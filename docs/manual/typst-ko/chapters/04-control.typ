@@ -132,6 +132,12 @@
 
 #ex("manual", "04-word-values.pnx")
 
+프로시저 값은 칸에도 둘 수 있다. 레코드의 필드, 배열이나 목록의 칸, `global` 이 `proc` 타입이면 된다. 줄마다 자기 프로시저를
+가진 표가 핸들러 표이고, `match` 로 번호를 고르던 일이 `r Route.run call` 한 줄이 된다. 쓰지 않은 칸은 없음이어서 `is_none` 으로 묻고,
+없음을 부르면 결함 `range` 다.
+
+#ex("manual", "04-proc-cells.pnx")
+
 #qa[`str.starts_with` 같은 언어의 프로시저는 어떻게 값으로 주는가?][블록의 서명을 타입만으로 쓴다:
 `def str, str gives bool do str.starts_with end`. 타입만 쓴 입력은 스택에 남으므로 프로시저가 그대로 받는다. 서명이 없으면
 블록은 아무것도 받지 않고, 메시지가 두 꼴을 보여 준다.]
@@ -154,4 +160,5 @@
 - 배열과 목록은 레일로 훑는다: `each` `each_index` `count` `fold` `sum` …(10.6). `each`, `each_index`, `times` 의
   블록은 `break .` 로 떠난다(10.6 (4)).
 - `ref 이름` 은 프로시저 `이름` 을 값으로 준다. 다른 프로시저는 `def 서명 do 프로시저 end` 로 준다(10.5).
+- `proc` 타입의 값은 레코드의 필드, 배열과 목록의 칸, `global` 에 둘 수 있고, 쓰지 않은 칸은 없음이다(10.5).
 ]

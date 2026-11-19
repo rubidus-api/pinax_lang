@@ -137,6 +137,12 @@ the program as a value, write `ref NAME`: the value is that procedure, with its 
 
 #ex("manual", "04-word-values.pnx")
 
+A procedure value can also live in a cell: a field of a record, a cell of an array or a list, or a `global` of the `proc` type. A table whose rows
+each carry their own procedure is a handler table, and the number-and-`match` that chose a procedure becomes one line, `r Route.run call`. A cell
+nothing was written to is none: ask it with `is_none`; calling none is the fault `range`.
+
+#ex("manual", "04-proc-cells.pnx")
+
 #qa[How is a procedure of the language, such as `str.starts_with`, given as a value?][With the block's signature written
 as types only: `def str, str gives bool do str.starts_with end`. Inputs written as types stay on the stack, so the procedure
 takes them as it is. Without a signature the block takes nothing, and the message shows both forms.]
@@ -161,4 +167,5 @@ other has not, that is a failure (chapter 8) or a row asked with `is_none` (chap
 - Arrays and lists are walked with rails: `each` `each_index` `count` `fold` `sum` … (10.6); the block of `each`,
   `each_index` or `times` is left with `break` (10.6 (4)).
 - `ref NAME` is the procedure `NAME` as a value; any other procedure is given as `def signature do procedure end` (10.5).
+- A value of a `proc` type can be a field of a record, a cell of an array or a list, or a `global`; a cell not written is none (10.5).
 ]

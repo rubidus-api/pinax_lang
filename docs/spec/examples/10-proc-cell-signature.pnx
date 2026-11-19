@@ -1,0 +1,9 @@
+rem refused
+type Op proc a int, b int gives int end
+type One proc n int gives int end
+def inc n int gives int do n 1 add end
+array ops Op 1
+def main do
+  ref inc 0 set ops                rem inc takes one int, the cells hold the Op signature
+end
+main

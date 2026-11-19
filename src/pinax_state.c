@@ -1882,11 +1882,8 @@ pinax_err pnx_load_container(pinax_state *st, pinax_str bytecode) {
     if (bytecode.len < sizeof h)
         return fail(st, PINAX_ERR_FORMAT, "bytecode: too short");
     __builtin_memcpy(&h, bytecode.ptr, sizeof h);
-    // version 4 is the same layout with no failure codes: its two words in place of n_errs and
-    // base_errs were reserved and zero
-    if (__builtin_memcmp(h.magic, PNX_MAGIC, 4) != 0 ||
-        (h.version != PNX_CONTAINER_VERSION && (h.version != 4 || h.n_errs != 0 || h.base_errs != 0)) ||
-        h.order != PNX_ORDER_MARK)
+    // only this version: a container of 5 or 4 holds a procedure value as the number of its word, and this one as that plus one (RFC-0055)
+    if (__builtin_memcmp(h.magic, PNX_MAGIC, 4) != 0 || h.version != PNX_CONTAINER_VERSION || h.order != PNX_ORDER_MARK)
         return fail(st, PINAX_ERR_FORMAT, "bytecode: not a container of this version and byte order");
     const pnx_head base = st->head ? *st->head : (pnx_head){0};
     if (h.base_words != base.n_words || h.base_globals != base.n_globals || h.base_imports != base.n_imports ||

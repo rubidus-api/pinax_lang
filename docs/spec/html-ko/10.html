@@ -157,7 +157,52 @@ demo <span style="color: #d73948">str</span>.to_str io.println
 </code></pre><p class="ex-label">출력</p><pre><code data-lang="text">$ pnx 10-value-block.pnx
 45
 42
-</code></pre></div><p class="para"><span class="pn">(2a)</span> <code>ref 이름</code> 은 <code>def</code> 로 정의한 프로시저(이 소스의 것이든 쓰는 모듈이 내보낸 것이든) 자체를 값으로 준다(<code>ref by_len</code>, <code>ref geo.area</code>). 타입은 그 프로시저의 서명을 가진 <code>proc</code> 이고, <code>call</code> 은 그 프로시저를 부른다. 언어의 다른 프로시저는 서명을 쓴 블록으로 준다. 타입만 쓴 입력은 스택에 남으므로(9.2 (2)) 블록의 몸은 그 프로시저 하나다: <code>def str, str gives bool do str.starts_with end</code>.</p><div class="example run"><p class="ex-file"><code>10-word-value.pnx</code></p><pre><code data-lang="pinax"><span style="color: #d73948">use</span> io .
+</code></pre></div><p class="para"><span class="pn">(2a)</span> <code>ref 이름</code> 은 <code>def</code> 로 정의한 프로시저(이 소스의 것이든 쓰는 모듈이 내보낸 것이든) 자체를 값으로 준다(<code>ref by_len</code>, <code>ref geo.area</code>). 타입은 그 프로시저의 서명을 가진 <code>proc</code> 이고, <code>call</code> 은 그 프로시저를 부른다. 언어의 다른 프로시저는 서명을 쓴 블록으로 준다. 타입만 쓴 입력은 스택에 남으므로(9.2 (2)) 블록의 몸은 그 프로시저 하나다: <code>def str, str gives bool do str.starts_with end</code>.</p><p class="para"><span class="pn">(2b)</span> <code>proc</code> 타입의 값은 배열이나 목록의 칸, 레코드의 필드(곧 표나 풀의 줄), <code>global</code> 에도 둘 수 있다(<code>array ops Op 3</code>, <code>ref plus 0 set ops</code>, <code>3 4 0 ops idx call</code>). 값은 프로시저 번호에 1 을 더해 보관하므로 아무것도 쓰지 않은 칸은 없음이다: <code>is_none</code> 으로 묻고, 없음을 부르면 결함 <code>range</code> 다. 다른 서명의 프로시저는 칸에 쓰는 자리에서 거절된다. 이런 칸은 정렬, 합, 비교, 찾아보기의 키로 쓰지 못한다. 이전(버전 5 이하)에 저장한 컨테이너는 적재할 때 거절된다.</p><div class="example run"><p class="ex-file"><code>10-proc-cells.pnx</code></p><pre><code data-lang="pinax"><span style="color: #d73948">use</span> io .
+<span style="color: #d73948">use</span> <span style="color: #d73948">str</span> .
+<span style="color: #d73948">type</span> Op proc a <span style="color: #d73948">int</span>, b <span style="color: #d73948">int</span> <span style="color: #d73948">gives</span> <span style="color: #d73948">int</span> <span style="color: #d73948">end</span>
+<span style="color: #d73948">def</span> plus a <span style="color: #d73948">int</span>, b <span style="color: #d73948">int</span> <span style="color: #d73948">gives</span> <span style="color: #d73948">int</span> <span style="color: #d73948">do</span> a b add <span style="color: #d73948">end</span>
+<span style="color: #d73948">record</span> Route
+  code <span style="color: #d73948">int</span>
+  run Op                           <span style="color: #74747c">rem a procedure value in a field</span>
+<span style="color: #d73948">end</span>
+<span style="color: #d73948">array</span> ops Op <span style="color: #b60157">2</span>
+<span style="color: #d73948">list</span> routes Route <span style="color: #b60157">4</span>
+<span style="color: #d73948">global</span> fallback Op
+<span style="color: #d73948">def</span> main <span style="color: #d73948">or</span> <span style="color: #d73948">fail</span> <span style="color: #d73948">do</span>
+  <span style="color: #d73948">ref</span> plus <span style="color: #b60157">0</span> set ops               <span style="color: #74747c">rem a cell holds the procedure; the other cell stays none</span>
+  <span style="color: #d73948">def</span> <span style="color: #d73948">int</span>, <span style="color: #d73948">int</span> <span style="color: #d73948">gives</span> <span style="color: #d73948">int</span> <span style="color: #d73948">do</span> mul <span style="color: #d73948">end</span> <span style="color: #b60157">1</span> set ops
+  <span style="color: #b60157">3</span> <span style="color: #b60157">4</span> <span style="color: #b60157">0</span> ops idx call <span style="color: #d73948">str</span>.to_str io.println
+  <span style="color: #b60157">3</span> <span style="color: #b60157">4</span> <span style="color: #b60157">1</span> ops idx call <span style="color: #d73948">str</span>.to_str io.println
+  routes add_row <span style="color: #d73948">or_fail</span> <span style="color: #d73948">to</span> r
+  <span style="color: #d73948">ref</span> plus r <span style="color: #d73948">to</span> Route.run
+  <span style="color: #b60157">5</span> <span style="color: #b60157">6</span> r Route.run call <span style="color: #d73948">str</span>.to_str io.println
+  fallback is_none <span style="color: #d73948">if</span> <span style="color: #198810">"no fallback yet"</span> io.println <span style="color: #d73948">end</span>
+<span style="color: #d73948">end</span>
+main <span style="color: #d73948">or_else</span> <span style="color: #d73948">to</span> e e err_text io.println <span style="color: #d73948">end</span>
+</code></pre><p class="ex-label">출력</p><pre><code data-lang="text">$ pnx 10-proc-cells.pnx
+7
+12
+11
+no fallback yet
+</code></pre></div><div class="example fault"><p class="ex-file"><code>10-proc-cell-none.pnx</code></p><pre><code data-lang="pinax"><span style="color: #d73948">type</span> Op proc a <span style="color: #d73948">int</span>, b <span style="color: #d73948">int</span> <span style="color: #d73948">gives</span> <span style="color: #d73948">int</span> <span style="color: #d73948">end</span>
+<span style="color: #d73948">array</span> ops Op <span style="color: #b60157">2</span>
+<span style="color: #d73948">def</span> main <span style="color: #d73948">do</span>
+  <span style="color: #b60157">3</span> <span style="color: #b60157">4</span> <span style="color: #b60157">1</span> ops idx call drop          <span style="color: #74747c">rem the cell was never written: none, and calling none is the fault range</span>
+<span style="color: #d73948">end</span>
+main
+</code></pre><p class="ex-label">결함으로 멈춤</p><pre><code data-lang="text">$ pnx 10-proc-cell-none.pnx
+10-proc-cell-none.pnx:4: index out of range
+</code></pre></div><div class="example refused"><p class="ex-file"><code>10-proc-cell-signature.pnx</code></p><pre><code data-lang="pinax"><span style="color: #d73948">type</span> Op proc a <span style="color: #d73948">int</span>, b <span style="color: #d73948">int</span> <span style="color: #d73948">gives</span> <span style="color: #d73948">int</span> <span style="color: #d73948">end</span>
+<span style="color: #d73948">type</span> One proc n <span style="color: #d73948">int</span> <span style="color: #d73948">gives</span> <span style="color: #d73948">int</span> <span style="color: #d73948">end</span>
+<span style="color: #d73948">def</span> inc n <span style="color: #d73948">int</span> <span style="color: #d73948">gives</span> <span style="color: #d73948">int</span> <span style="color: #d73948">do</span> n <span style="color: #b60157">1</span> add <span style="color: #d73948">end</span>
+<span style="color: #d73948">array</span> ops Op <span style="color: #b60157">1</span>
+<span style="color: #d73948">def</span> main <span style="color: #d73948">do</span>
+  <span style="color: #d73948">ref</span> inc <span style="color: #b60157">0</span> set ops                <span style="color: #74747c">rem inc takes one int, the cells hold the Op signature</span>
+<span style="color: #d73948">end</span>
+main
+</code></pre><p class="ex-label">거절</p><pre><code data-lang="text">$ pnx 10-proc-cell-signature.pnx
+10-proc-cell-signature.pnx:6:17: a cell is stored as: value index set name, with the value of the cell's type
+</code></pre></div><div class="example run"><p class="ex-file"><code>10-word-value.pnx</code></p><pre><code data-lang="pinax"><span style="color: #d73948">use</span> io .
 <span style="color: #d73948">use</span> <span style="color: #d73948">str</span> .
 <span style="color: #d73948">def</span> by_len a <span style="color: #d73948">str</span>, b <span style="color: #d73948">str</span> <span style="color: #d73948">gives</span> <span style="color: #d73948">bool</span> <span style="color: #d73948">do</span> a <span style="color: #d73948">str</span>.len b <span style="color: #d73948">str</span>.len lt <span style="color: #d73948">end</span>
 <span style="color: #d73948">type</span> Proc1 proc <span style="color: #d73948">str</span>, <span style="color: #d73948">str</span> <span style="color: #d73948">gives</span> <span style="color: #d73948">bool</span> <span style="color: #d73948">end</span> <span style="color: #d73948">def</span> shorter f Proc1, a <span style="color: #d73948">str</span>, b <span style="color: #d73948">str</span> <span style="color: #d73948">gives</span> <span style="color: #d73948">str</span> <span style="color: #d73948">do</span> a b f call <span style="color: #d73948">if</span> a <span style="color: #d73948">else</span> b <span style="color: #d73948">end</span> <span style="color: #d73948">end</span>

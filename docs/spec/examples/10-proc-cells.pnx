@@ -1,0 +1,23 @@
+rem run
+use io .
+use str .
+type Op proc a int, b int gives int end
+def plus a int, b int gives int do a b add end
+record Route
+  code int
+  run Op                           rem a procedure value in a field
+end
+array ops Op 2
+list routes Route 4
+global fallback Op
+def main or fail do
+  ref plus 0 set ops               rem a cell holds the procedure; the other cell stays none
+  def int, int gives int do mul end 1 set ops
+  3 4 0 ops idx call str.to_str io.println
+  3 4 1 ops idx call str.to_str io.println
+  routes add_row or_fail to r
+  ref plus r to Route.run
+  5 6 r Route.run call str.to_str io.println
+  fallback is_none if "no fallback yet" io.println end
+end
+main or_else to e e err_text io.println end

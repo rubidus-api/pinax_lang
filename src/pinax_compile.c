@@ -4976,7 +4976,8 @@ static bool ref_value(comp *c) {
     tid type;
     if (!block_type(c, &((const wordsym *)c->words.ptr + index)->sig, &type))
         return false;
-    return push(c, (entry){.type = type, .kind = E_CONST, .value = index}) && advance(c);
+    // the value is the number plus one, so that a cell nothing was written to (0) holds none, and calling it is a fault (RFC-0055)
+    return push(c, (entry){.type = type, .kind = E_CONST, .value = (int64_t)index + 1}) && advance(c);
 }
 
 static bool do_block(comp *c) {
@@ -7432,8 +7433,8 @@ static bool builtin(comp *c, const struct builtin *w) {
     case BW_ROW_INDEX: {
         if (!need(c, 1))
             return false;
-        if (!is_row(f->stack[f->depth - 1].type))
-            return type_error(c, "this procedure takes a row of a table");
+        if (!is_row(f->stack[f->depth - 1].type) && !(w->id == BW_IS_NONE && is_block(f->stack[f->depth - 1].type)))
+            return type_error(c, "this procedure takes a row of a table (is_none also a procedure value)");
         if (!reg_of(c, f->depth - 1, &ra))
             return false;
         --f->depth;
@@ -8759,7 +8760,7 @@ static bool value_block(comp *c, const sig *bs, uint32_t line, uint32_t column) 
     *keep = (pending_code){index, f->code.n, copy, copy + f->code.n};
     --c->nested;
     c->f = outer;
-    return push(c, (entry){.type = type, .kind = E_CONST, .value = index}) && advance(c); // past the end
+    return push(c, (entry){.type = type, .kind = E_CONST, .value = (int64_t)index + 1}) && advance(c); // past the end (the number plus one: RFC-0055)
 }
 
 // word NAME ( effect ) body end        test NAME body end
@@ -9420,7 +9421,7 @@ static bool declare_global(comp *c) {
     if (g.type == TY_STR) {
         if (!str_capacity(c, &g.strcap))
             return false;
-    } else if (g.type == TY_NONE || bank_of(g.type) != BANK_I || is_block(g.type) || g.type == TY_MARK) {
+    } else if (g.type == TY_NONE || bank_of(g.type) != BANK_I || g.type == TY_MARK) { // a proc type is fine: the number plus one, 0 none (RFC-0055)
         return type_error(c, "this type is not known, or not supported for a global yet");
     }
     if (c->globals.n >= REF_GLOBAL)
@@ -9521,6 +9522,8 @@ static bool declare_collection(comp *c, uint8_t kind) {
     const bool dec = g.record == NONE && name_is(tok_name(c), "dec");
     if (dec)
         g.type = TY_DEC; // the scale follows
+    if (g.record == NONE && g.type == TY_NONE && !dec && kind != GK_POOL && is_block(type_of_name(c, tok_name(c))))
+        g.type = type_of_name(c, tok_name(c)); // a declared proc type: the cells hold procedure values, 0 none (RFC-0055)
     if (g.record == NONE && g.type == TY_NONE && !dec && kind != GK_POOL) {
         // the name of a table: the cells are its rows, its number plus one each, 0 for none (RFC-0031)
         const uint32_t table = find_global(c, tok_name(c));
@@ -9529,7 +9532,7 @@ static bool declare_collection(comp *c, uint8_t kind) {
             g.type = row_type(table);
     }
     if (g.record == NONE && g.type != TY_INT && g.type != TY_BOOL && g.type != TY_ERR && g.type != TY_STR && !dec &&
-        !is_narrow(g.type) && !is_row(g.type))
+        !is_narrow(g.type) && !is_row(g.type) && !is_block(g.type))
         return type_error(c, "the cells are int, bool, err, dec(N), str(N), a narrow integer type, a record or the rows of a table; other types are not supported yet");
     if (slot && g.record == NONE)
         return type_error(c, "a table announced by forward holds a record");
@@ -9708,6 +9711,10 @@ static bool declare_record(comp *c) {
             fd.is_str = true;
             fd.extra = (uint8_t)n;
             bytes = n + 1;
+        } else if (is_block(type_of_name(c, tn))) { // a procedure value (RFC-0055): its number plus one, 0 for none; 64 bits
+            fd.type = type_of_name(c, tn);
+            fd.extra = PNX_W_64;
+            bytes = 8;
         } else if (is_row(type_of_name(c, tn))) { // a row of that table: its number plus one, 0 for none
             fd.type = type_of_name(c, tn);
             const bool pool = gsym(c, row_global(fd.type))->kind == GK_POOL;

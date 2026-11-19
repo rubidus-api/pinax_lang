@@ -1,0 +1,7 @@
+rem fault
+type Op proc a int, b int gives int end
+array ops Op 2
+def main do
+  3 4 1 ops idx call drop          rem the cell was never written: none, and calling none is the fault range
+end
+main

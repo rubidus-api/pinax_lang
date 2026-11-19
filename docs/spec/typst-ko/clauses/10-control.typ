@@ -127,6 +127,15 @@ block   = "do" { "to" NAME } { body } "end"
 서명을 쓴 블록으로 준다. 타입만 쓴 입력은 스택에 남으므로(9.2 (2)) 블록의 몸은 그 프로시저 하나다:
 `def str, str gives bool do str.starts_with end`.]
 
+#para("2b")[`proc` 타입의 값은 배열이나 목록의 칸, 레코드의 필드(곧 표나 풀의 줄), `global` 에도 둘 수 있다(`array ops Op 3`,
+`ref plus 0 set ops`, `3 4 0 ops idx call`). 값은 프로시저 번호에 1 을 더해 보관하므로 아무것도 쓰지 않은 칸은 없음이다: `is_none` 으로
+묻고, 없음을 부르면 결함 `range` 다. 다른 서명의 프로시저는 칸에 쓰는 자리에서 거절된다. 이런 칸은 정렬, 합, 비교, 찾아보기의 키로 쓰지 못한다.
+이전(버전 5 이하)에 저장한 컨테이너는 적재할 때 거절된다.]
+
+#ex("spec", "10-proc-cells.pnx")
+#ex("spec", "10-proc-cell-none.pnx")
+#ex("spec", "10-proc-cell-signature.pnx")
+
 #ex("spec", "10-word-value.pnx")
 
 #part("제약")

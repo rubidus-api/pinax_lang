@@ -477,7 +477,7 @@ enum {
 // records, integer constants, string constant records, code, string bytes, line records, local
 // records, the names of declared failure codes; in this order, native byte order.
 #define PNX_MAGIC "PNXB"
-#define PNX_CONTAINER_VERSION 5
+#define PNX_CONTAINER_VERSION 6 // 6: a procedure value is the number of the word plus one, 0 being none (RFC-0055); 5 holds the number itself
 #define PNX_WORD_TAKES_NAME 1 // pnx_wordrec.reserved: see redefine_old in pnx_head
 #define PNX_ORDER_MARK 0x0102
 #define PNX_ERR_DECLARED 0x400 // the first failure code a program declares (RFC-0037)

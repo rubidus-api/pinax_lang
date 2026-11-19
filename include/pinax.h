@@ -20,8 +20,8 @@ extern "C" {
 #endif
 
 #define PINAX_VERSION_MAJOR 0
-#define PINAX_VERSION_MINOR 34
-#define PINAX_VERSION_PATCH 8
+#define PINAX_VERSION_MINOR 35
+#define PINAX_VERSION_PATCH 0
 #define PINAX_FORMAT 2 /* source, bytecode and image format; bumped by breaking changes */
 
 #ifndef PINAX_API

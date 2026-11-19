@@ -217,6 +217,35 @@ scores skip <span style="color: #b60157">1</span> head <span style="color: #b601
 demo <span style="color: #d73948">or_else</span> <span style="color: #d73948">to</span> e e err_text io.println <span style="color: #d73948">end</span>
 </code></pre><p class="ex-label">출력</p><pre><code data-lang="text">$ pnx 04-word-values.pnx
 smallest 3, largest 7
+</code></pre></div><p>프로시저 값은 칸에도 둘 수 있다. 레코드의 필드, 배열이나 목록의 칸, <code>global</code> 이 <code>proc</code> 타입이면 된다. 줄마다 자기 프로시저를 가진 표가 핸들러 표이고, <code>match</code> 로 번호를 고르던 일이 <code>r Route.run call</code> 한 줄이 된다. 쓰지 않은 칸은 없음이어서 <code>is_none</code> 으로 묻고, 없음을 부르면 결함 <code>range</code> 다.</p><div class="example run"><p class="ex-file"><code>04-proc-cells.pnx</code></p><pre><code data-lang="pinax"><span style="color: #d73948">use</span> io .
+<span style="color: #d73948">use</span> <span style="color: #d73948">str</span> .
+<span style="color: #d73948">type</span> Handler proc n <span style="color: #d73948">int</span> <span style="color: #d73948">gives</span> <span style="color: #d73948">int</span> <span style="color: #d73948">end</span>
+<span style="color: #d73948">def</span> double n <span style="color: #d73948">int</span> <span style="color: #d73948">gives</span> <span style="color: #d73948">int</span> <span style="color: #d73948">do</span> n <span style="color: #b60157">2</span> mul <span style="color: #d73948">end</span>
+<span style="color: #d73948">def</span> square n <span style="color: #d73948">int</span> <span style="color: #d73948">gives</span> <span style="color: #d73948">int</span> <span style="color: #d73948">do</span> n n mul <span style="color: #d73948">end</span>
+<span style="color: #d73948">record</span> Route
+  code <span style="color: #d73948">int</span>
+  run Handler                        <span style="color: #74747c">rem each row carries its own procedure</span>
+<span style="color: #d73948">end</span>
+<span style="color: #d73948">list</span> routes Route <span style="color: #b60157">4</span>
+<span style="color: #d73948">def</span> add_route code <span style="color: #d73948">int</span>, h Handler <span style="color: #d73948">or</span> <span style="color: #d73948">fail</span> <span style="color: #d73948">do</span>
+  routes add_row <span style="color: #d73948">or_fail</span> <span style="color: #d73948">to</span> r
+  code r <span style="color: #d73948">to</span> Route.code
+  h r <span style="color: #d73948">to</span> Route.run
+<span style="color: #d73948">end</span>
+<span style="color: #d73948">def</span> main <span style="color: #d73948">or</span> <span style="color: #d73948">fail</span> <span style="color: #d73948">do</span>
+  <span style="color: #b60157">200</span> <span style="color: #d73948">ref</span> double add_route <span style="color: #d73948">or_fail</span>
+  <span style="color: #b60157">201</span> <span style="color: #d73948">ref</span> square add_route <span style="color: #d73948">or_fail</span>
+  routes <span style="color: #d73948">do</span> <span style="color: #d73948">to</span> r
+    <span style="color: #d73948">args</span> <span style="color: #198810">"route "</span> r Route.code <span style="color: #198810">" gives "</span> <span style="color: #b60157">7</span> r Route.run call . <span style="color: #d73948">cat</span> io.println
+  <span style="color: #d73948">end</span> each
+  routes add_row <span style="color: #d73948">or_fail</span> <span style="color: #d73948">to</span> empty    <span style="color: #74747c">rem a new row has no handler yet</span>
+  empty Route.run is_none <span style="color: #d73948">if</span> <span style="color: #198810">"the new row has no handler"</span> io.println <span style="color: #d73948">end</span>
+<span style="color: #d73948">end</span>
+main <span style="color: #d73948">or_else</span> <span style="color: #d73948">to</span> e e err_text io.println <span style="color: #d73948">end</span>
+</code></pre><p class="ex-label">출력</p><pre><code data-lang="text">$ pnx 04-proc-cells.pnx
+route 200 gives 14
+route 201 gives 49
+the new row has no handler
 </code></pre></div><div class="box qa"><p class="box-title">문답</p><p><strong>물음. <code>str.starts_with</code> 같은 언어의 프로시저는 어떻게 값으로 주는가?</strong></p><p>답. 블록의 서명을 타입만으로 쓴다: <code>def str, str gives bool do str.starts_with end</code>. 타입만 쓴 입력은 스택에 남으므로 프로시저가 그대로 받는다. 서명이 없으면 블록은 아무것도 받지 않고, 메시지가 두 꼴을 보여 준다.</p></div><div class="box mistake"><p class="box-title">흔한 오해: <code>match</code> 가지에 프로시저 자체를 둘 수 있다: <code>when "prefix" do str.starts_with end</code></p>가지는 프로시저를 실행한다. 값으로 만들지 않는다. 거기서 <code>str.starts_with</code> 가 불리고, 스택에 값이 모자란다. 블록으로 값을 만든다: <code>when "prefix" do def str, str gives bool do str.starts_with end end</code>, 프로그램의 프로시저면 <code>ref 이름</code>.<div class="example refused"><p class="ex-file"><code>04-word-values-branch.pnx</code></p><pre><code data-lang="pinax"><span style="color: #d73948">use</span> <span style="color: #d73948">str</span> .
 <span style="color: #d73948">type</span> Proc1 proc <span style="color: #d73948">str</span>, <span style="color: #d73948">str</span> <span style="color: #d73948">gives</span> <span style="color: #d73948">bool</span> <span style="color: #d73948">end</span> <span style="color: #d73948">def</span> test_named how <span style="color: #d73948">str</span> <span style="color: #d73948">gives</span> Proc1 <span style="color: #d73948">or</span> <span style="color: #d73948">fail</span> <span style="color: #d73948">do</span>
   how <span style="color: #d73948">match</span>
@@ -226,4 +255,4 @@ smallest 3, largest 7
 <span style="color: #d73948">end</span>
 </code></pre><p class="ex-label">거절</p><pre><code data-lang="text">$ pnx 04-word-values-branch.pnx
 04-word-values-branch.pnx:4:22: the stack does not hold enough values for this procedure
-</code></pre></div></div><div class="box qa"><p class="box-title">문답</p><p><strong>물음. <code>if</code> 의 두 가지가 다른 타입을 남기고 싶으면?</strong></p><p>답. 못 한다. <code>if</code> 뒤의 코드는 어느 가지로 왔는지 모르므로, 두 가지는 같은 개수·같은 타입을 남겨야 한다. 다른 것을 남기고 싶다면 그것은 “값이 있거나 없거나” 이고, 그때는 실패(8장)나 <code>is_none</code> 으로 묻는 줄(7장)을 쓴다.</p></div><div class="box summary"><p class="box-title">정리</p><ul><li><code>to 이름</code> 은 지역 변수에, <code>set 이름</code> 은 전역에 넣는다(표준 9.4).</li><li>가지 안에서 만든 이름은 가지 밖에서 보이지 않는다(9.4).</li><li><code>to</code> 는 맨 위 값을 내려 이름에 담고, 이름을 쓰면 값이 다시 올라간다(9.4).</li><li><code>if</code> 의 두 갈래와 <code>match</code> 의 가지는 같은 스택을, 루프의 한 바퀴는 들어올 때의 스택을 남긴다(10).</li><li>루프를 여럿 한 번에 떠나려면 <code>break 2 .</code> 처럼 수를 쓴다(10.2).</li><li>배열과 목록은 레일로 훑는다: <code>each</code> <code>each_index</code> <code>count</code> <code>fold</code> <code>sum</code> …(10.6). <code>each</code>, <code>each_index</code>, <code>times</code> 의 블록은 <code>break .</code> 로 떠난다(10.6 (4)).</li><li><code>ref 이름</code> 은 프로시저 <code>이름</code> 을 값으로 준다. 다른 프로시저는 <code>def 서명 do 프로시저 end</code> 로 준다(10.5).</li></ul></div></main><nav class="bottom"><a href="index.html">처음</a> · <a href="04.html">앞</a> · <a href="06.html">다음</a> · <a href="../html-en/05.html">English</a></nav></body></html>
+</code></pre></div></div><div class="box qa"><p class="box-title">문답</p><p><strong>물음. <code>if</code> 의 두 가지가 다른 타입을 남기고 싶으면?</strong></p><p>답. 못 한다. <code>if</code> 뒤의 코드는 어느 가지로 왔는지 모르므로, 두 가지는 같은 개수·같은 타입을 남겨야 한다. 다른 것을 남기고 싶다면 그것은 “값이 있거나 없거나” 이고, 그때는 실패(8장)나 <code>is_none</code> 으로 묻는 줄(7장)을 쓴다.</p></div><div class="box summary"><p class="box-title">정리</p><ul><li><code>to 이름</code> 은 지역 변수에, <code>set 이름</code> 은 전역에 넣는다(표준 9.4).</li><li>가지 안에서 만든 이름은 가지 밖에서 보이지 않는다(9.4).</li><li><code>to</code> 는 맨 위 값을 내려 이름에 담고, 이름을 쓰면 값이 다시 올라간다(9.4).</li><li><code>if</code> 의 두 갈래와 <code>match</code> 의 가지는 같은 스택을, 루프의 한 바퀴는 들어올 때의 스택을 남긴다(10).</li><li>루프를 여럿 한 번에 떠나려면 <code>break 2 .</code> 처럼 수를 쓴다(10.2).</li><li>배열과 목록은 레일로 훑는다: <code>each</code> <code>each_index</code> <code>count</code> <code>fold</code> <code>sum</code> …(10.6). <code>each</code>, <code>each_index</code>, <code>times</code> 의 블록은 <code>break .</code> 로 떠난다(10.6 (4)).</li><li><code>ref 이름</code> 은 프로시저 <code>이름</code> 을 값으로 준다. 다른 프로시저는 <code>def 서명 do 프로시저 end</code> 로 준다(10.5).</li><li><code>proc</code> 타입의 값은 레코드의 필드, 배열과 목록의 칸, <code>global</code> 에 둘 수 있고, 쓰지 않은 칸은 없음이다(10.5).</li></ul></div></main><nav class="bottom"><a href="index.html">처음</a> · <a href="04.html">앞</a> · <a href="06.html">다음</a> · <a href="../html-en/05.html">English</a></nav></body></html>

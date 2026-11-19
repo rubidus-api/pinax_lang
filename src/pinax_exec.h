@@ -221,7 +221,7 @@ again:
         }
         CASE(CALLR) { // the word number comes from a register; what it takes and gives is checked here
             const uint32_t expect = *pc++;
-            const uint64_t number = (uint64_t)R[OP_C(w)];
+            const uint64_t number = (uint64_t)R[OP_C(w)] - 1; // the value is the number plus one: 0 is none, and wraps out of range (RFC-0055)
             if (number >= st->head->n_words)
                 FAULT(PINAX_ERR_RANGE);
             const pnx_counts have = st->word_counts[number];
@@ -360,7 +360,7 @@ again:
             gl = OP_C(w);
         spawn:;
             const pnx_global *g = &st->globals[gl];
-            const uint64_t number = (uint64_t)R[OP_B(w)];
+            const uint64_t number = (uint64_t)R[OP_B(w)] - 1; // the number plus one; 0 is none (RFC-0055)
             if (number >= st->head->n_words)
                 FAULT(PINAX_ERR_RANGE);
             const pnx_counts have = st->word_counts[number];

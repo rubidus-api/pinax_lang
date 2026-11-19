@@ -157,7 +157,52 @@ demo <span style="color: #d73948">str</span>.to_str io.println
 </code></pre><p class="ex-label">Output</p><pre><code data-lang="text">$ pnx 10-value-block.pnx
 45
 42
-</code></pre></div><p class="para"><span class="pn">(2a)</span> <code>ref NAME</code> gives a procedure defined with <code>def</code>, of this source or exported by a module in use (<code>ref by_len</code>, <code>ref geo.area</code>), as a value: its type is <code>proc</code> with the procedure’s signature, and <code>call</code> calls it. Any other procedure is given in a block with the block’s signature; inputs given as types only stay on the stack (9.2 (2)), so the block’s body is the procedure alone: <code>def str, str gives bool do str.starts_with end</code>.</p><div class="example run"><p class="ex-file"><code>10-word-value.pnx</code></p><pre><code data-lang="pinax"><span style="color: #d73948">use</span> io .
+</code></pre></div><p class="para"><span class="pn">(2a)</span> <code>ref NAME</code> gives a procedure defined with <code>def</code>, of this source or exported by a module in use (<code>ref by_len</code>, <code>ref geo.area</code>), as a value: its type is <code>proc</code> with the procedure’s signature, and <code>call</code> calls it. Any other procedure is given in a block with the block’s signature; inputs given as types only stay on the stack (9.2 (2)), so the block’s body is the procedure alone: <code>def str, str gives bool do str.starts_with end</code>.</p><p class="para"><span class="pn">(2b)</span> A value of a <code>proc</code> type may also be the cell of an array or a list, a field of a record (so a row of a table or of a pool) or a <code>global</code> (<code>array ops Op 3</code>, <code>ref plus 0 set ops</code>, <code>3 4 0 ops idx call</code>). It is kept as the number of the procedure plus one, so that a cell nothing was written to holds none: <code>is_none</code> asks it, and calling none is the fault <code>range</code>. A cell cannot hold a procedure of another signature (the refusal is at the write). Such cells are not ordered, summed, compared or used as the key of an index. A container saved before this (version 5 or older) is refused when loaded.</p><div class="example run"><p class="ex-file"><code>10-proc-cells.pnx</code></p><pre><code data-lang="pinax"><span style="color: #d73948">use</span> io .
+<span style="color: #d73948">use</span> <span style="color: #d73948">str</span> .
+<span style="color: #d73948">type</span> Op proc a <span style="color: #d73948">int</span>, b <span style="color: #d73948">int</span> <span style="color: #d73948">gives</span> <span style="color: #d73948">int</span> <span style="color: #d73948">end</span>
+<span style="color: #d73948">def</span> plus a <span style="color: #d73948">int</span>, b <span style="color: #d73948">int</span> <span style="color: #d73948">gives</span> <span style="color: #d73948">int</span> <span style="color: #d73948">do</span> a b add <span style="color: #d73948">end</span>
+<span style="color: #d73948">record</span> Route
+  code <span style="color: #d73948">int</span>
+  run Op                           <span style="color: #74747c">rem a procedure value in a field</span>
+<span style="color: #d73948">end</span>
+<span style="color: #d73948">array</span> ops Op <span style="color: #b60157">2</span>
+<span style="color: #d73948">list</span> routes Route <span style="color: #b60157">4</span>
+<span style="color: #d73948">global</span> fallback Op
+<span style="color: #d73948">def</span> main <span style="color: #d73948">or</span> <span style="color: #d73948">fail</span> <span style="color: #d73948">do</span>
+  <span style="color: #d73948">ref</span> plus <span style="color: #b60157">0</span> set ops               <span style="color: #74747c">rem a cell holds the procedure; the other cell stays none</span>
+  <span style="color: #d73948">def</span> <span style="color: #d73948">int</span>, <span style="color: #d73948">int</span> <span style="color: #d73948">gives</span> <span style="color: #d73948">int</span> <span style="color: #d73948">do</span> mul <span style="color: #d73948">end</span> <span style="color: #b60157">1</span> set ops
+  <span style="color: #b60157">3</span> <span style="color: #b60157">4</span> <span style="color: #b60157">0</span> ops idx call <span style="color: #d73948">str</span>.to_str io.println
+  <span style="color: #b60157">3</span> <span style="color: #b60157">4</span> <span style="color: #b60157">1</span> ops idx call <span style="color: #d73948">str</span>.to_str io.println
+  routes add_row <span style="color: #d73948">or_fail</span> <span style="color: #d73948">to</span> r
+  <span style="color: #d73948">ref</span> plus r <span style="color: #d73948">to</span> Route.run
+  <span style="color: #b60157">5</span> <span style="color: #b60157">6</span> r Route.run call <span style="color: #d73948">str</span>.to_str io.println
+  fallback is_none <span style="color: #d73948">if</span> <span style="color: #198810">"no fallback yet"</span> io.println <span style="color: #d73948">end</span>
+<span style="color: #d73948">end</span>
+main <span style="color: #d73948">or_else</span> <span style="color: #d73948">to</span> e e err_text io.println <span style="color: #d73948">end</span>
+</code></pre><p class="ex-label">Output</p><pre><code data-lang="text">$ pnx 10-proc-cells.pnx
+7
+12
+11
+no fallback yet
+</code></pre></div><div class="example fault"><p class="ex-file"><code>10-proc-cell-none.pnx</code></p><pre><code data-lang="pinax"><span style="color: #d73948">type</span> Op proc a <span style="color: #d73948">int</span>, b <span style="color: #d73948">int</span> <span style="color: #d73948">gives</span> <span style="color: #d73948">int</span> <span style="color: #d73948">end</span>
+<span style="color: #d73948">array</span> ops Op <span style="color: #b60157">2</span>
+<span style="color: #d73948">def</span> main <span style="color: #d73948">do</span>
+  <span style="color: #b60157">3</span> <span style="color: #b60157">4</span> <span style="color: #b60157">1</span> ops idx call drop          <span style="color: #74747c">rem the cell was never written: none, and calling none is the fault range</span>
+<span style="color: #d73948">end</span>
+main
+</code></pre><p class="ex-label">Fault</p><pre><code data-lang="text">$ pnx 10-proc-cell-none.pnx
+10-proc-cell-none.pnx:4: index out of range
+</code></pre></div><div class="example refused"><p class="ex-file"><code>10-proc-cell-signature.pnx</code></p><pre><code data-lang="pinax"><span style="color: #d73948">type</span> Op proc a <span style="color: #d73948">int</span>, b <span style="color: #d73948">int</span> <span style="color: #d73948">gives</span> <span style="color: #d73948">int</span> <span style="color: #d73948">end</span>
+<span style="color: #d73948">type</span> One proc n <span style="color: #d73948">int</span> <span style="color: #d73948">gives</span> <span style="color: #d73948">int</span> <span style="color: #d73948">end</span>
+<span style="color: #d73948">def</span> inc n <span style="color: #d73948">int</span> <span style="color: #d73948">gives</span> <span style="color: #d73948">int</span> <span style="color: #d73948">do</span> n <span style="color: #b60157">1</span> add <span style="color: #d73948">end</span>
+<span style="color: #d73948">array</span> ops Op <span style="color: #b60157">1</span>
+<span style="color: #d73948">def</span> main <span style="color: #d73948">do</span>
+  <span style="color: #d73948">ref</span> inc <span style="color: #b60157">0</span> set ops                <span style="color: #74747c">rem inc takes one int, the cells hold the Op signature</span>
+<span style="color: #d73948">end</span>
+main
+</code></pre><p class="ex-label">Refused</p><pre><code data-lang="text">$ pnx 10-proc-cell-signature.pnx
+10-proc-cell-signature.pnx:6:17: a cell is stored as: value index set name, with the value of the cell's type
+</code></pre></div><div class="example run"><p class="ex-file"><code>10-word-value.pnx</code></p><pre><code data-lang="pinax"><span style="color: #d73948">use</span> io .
 <span style="color: #d73948">use</span> <span style="color: #d73948">str</span> .
 <span style="color: #d73948">def</span> by_len a <span style="color: #d73948">str</span>, b <span style="color: #d73948">str</span> <span style="color: #d73948">gives</span> <span style="color: #d73948">bool</span> <span style="color: #d73948">do</span> a <span style="color: #d73948">str</span>.len b <span style="color: #d73948">str</span>.len lt <span style="color: #d73948">end</span>
 <span style="color: #d73948">type</span> Proc1 proc <span style="color: #d73948">str</span>, <span style="color: #d73948">str</span> <span style="color: #d73948">gives</span> <span style="color: #d73948">bool</span> <span style="color: #d73948">end</span> <span style="color: #d73948">def</span> shorter f Proc1, a <span style="color: #d73948">str</span>, b <span style="color: #d73948">str</span> <span style="color: #d73948">gives</span> <span style="color: #d73948">str</span> <span style="color: #d73948">do</span> a b f call <span style="color: #d73948">if</span> a <span style="color: #d73948">else</span> b <span style="color: #d73948">end</span> <span style="color: #d73948">end</span>
