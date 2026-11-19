@@ -32,7 +32,30 @@ size        = INT | NAME ;                         (* NAME: a const *)</code></p
 <span style="color: #d73948">global</span> total <span style="color: #d73948">int</span>
 </code></pre><p class="ex-label">Refused</p><pre><code data-lang="text">$ pnx 08-use-before.pnx
 08-use-before.pnx:2:25: this name is not declared before this place
-</code></pre></div><h3>8.2 Constants</h3><p class="para"><span class="pn">(1)</span> <code>const NAME literal</code> makes a <strong>constant</strong>. Its type is the literal’s. A constant has no storage: its value goes where it is used. Constants can be capacities, <code>match</code> values and <code>row</code> values.</p><h5>Constraints</h5><p class="para"><span class="pn">(2)</span> Nothing can be stored into a constant. Inside a definition <code>v to CONST</code> would make a new local of the same name and is refused by the rule against hiding names (9.5); outside a definition <code>to</code> makes no local, so it is refused. <code>set</code> writes globals only (9.4).</p><div class="example refused"><p class="ex-file"><code>08-const-store.pnx</code></p><pre><code data-lang="pinax"><span style="color: #d73948">const</span> limit <span style="color: #b60157">3</span>
+</code></pre></div><h3>8.2 Constants</h3><p class="para"><span class="pn">(1)</span> <code>const NAME literal</code> makes a <strong>constant</strong>. Its type is the literal’s. A constant has no storage: its value goes where it is used. Constants can be capacities, <code>match</code> values and <code>row</code> values.</p><p class="para"><span class="pn">(1a)</span> The value of an <code>int</code> constant, and the capacity of an <code>array</code>, <code>list</code>, <code>pool</code>, <code>queue</code> or <code>buffer</code>, may be a <strong>constant expression</strong>: integer literals, the names of earlier <code>int</code> constants and the procedures <code>add</code> <code>sub</code> <code>mul</code> <code>div</code> <code>mod</code> <code>neg</code> <code>abs</code> <code>min</code> <code>max</code> <code>shl</code> <code>shr</code> <code>bit_and</code> <code>bit_or</code> <code>bit_xor</code>, written as in code (the values first), on the line of the first token. It is worked out once, when the source is loaded, so the declaration is a literal to everything after: <code>const cells slots 2 mul</code>. An overflow, a division by zero, a shift outside 0 to 63 and a capacity below 1 are load errors at the expression; an expression that does not leave exactly one value is refused. The size of <code>str N</code> and the count, depth and region of <code>tasks</code> are one literal or one constant name, since more numbers follow them on the line.</p><div class="example run"><p class="ex-file"><code>08-const-expr.pnx</code></p><pre><code data-lang="pinax"><span style="color: #d73948">use</span> io .
+<span style="color: #d73948">use</span> <span style="color: #d73948">str</span> .
+<span style="color: #d73948">const</span> slots <span style="color: #b60157">8</span>
+<span style="color: #d73948">const</span> cells slots <span style="color: #b60157">2</span> mul        <span style="color: #74747c">rem 16: a size that follows from another, worked out when the source is loaded</span>
+<span style="color: #d73948">const</span> grid slots slots mul <span style="color: #b60157">1</span> sub
+<span style="color: #d73948">array</span> hm <span style="color: #d73948">int</span> cells
+<span style="color: #d73948">array</span> board <span style="color: #d73948">int</span> slots <span style="color: #b60157">3</span> mul <span style="color: #b60157">1</span> add
+<span style="color: #d73948">def</span> main <span style="color: #d73948">do</span>
+  cells <span style="color: #d73948">str</span>.to_str io.println
+  grid <span style="color: #d73948">str</span>.to_str io.println
+  hm len <span style="color: #d73948">str</span>.to_str io.println
+  board len <span style="color: #d73948">str</span>.to_str io.println
+<span style="color: #d73948">end</span>
+main
+</code></pre><p class="ex-label">Output</p><pre><code data-lang="text">$ pnx 08-const-expr.pnx
+16
+63
+16
+25
+</code></pre></div><div class="example refused"><p class="ex-file"><code>08-const-expr-overflow.pnx</code></p><pre><code data-lang="pinax"><span style="color: #d73948">const</span> big <span style="color: #b60157">9223372036854775807</span>
+<span style="color: #d73948">const</span> twice big <span style="color: #b60157">2</span> mul
+</code></pre><p class="ex-label">Refused</p><pre><code data-lang="text">$ pnx 08-const-expr-overflow.pnx
+08-const-expr-overflow.pnx:2:19: the constant expression overflows
+</code></pre></div><h5>Constraints</h5><p class="para"><span class="pn">(2)</span> Nothing can be stored into a constant. Inside a definition <code>v to CONST</code> would make a new local of the same name and is refused by the rule against hiding names (9.5); outside a definition <code>to</code> makes no local, so it is refused. <code>set</code> writes globals only (9.4).</p><div class="example refused"><p class="ex-file"><code>08-const-store.pnx</code></p><pre><code data-lang="pinax"><span style="color: #d73948">const</span> limit <span style="color: #b60157">3</span>
 <span style="color: #d73948">def</span> raise <span style="color: #d73948">do</span> <span style="color: #b60157">4</span> <span style="color: #d73948">to</span> limit <span style="color: #d73948">end</span>
 </code></pre><p class="ex-label">Refused</p><pre><code data-lang="text">$ pnx 08-const-store.pnx
 08-const-store.pnx:2:19: this name is already visible here; a new name may not hide it

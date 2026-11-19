@@ -63,6 +63,15 @@ there.]
 #para("1")[`const NAME literal` makes a #term("constant"). Its type is the literal's. A constant has no storage: its
 value goes where it is used. Constants can be capacities, `match` values and `row` values.]
 
+#para("1a")[The value of an `int` constant, and the capacity of an `array`, `list`, `pool`, `queue` or `buffer`, may be a #term("constant expression"):
+integer literals, the names of earlier `int` constants and the procedures `add` `sub` `mul` `div` `mod` `neg` `abs` `min` `max` `shl` `shr`
+`bit_and` `bit_or` `bit_xor`, written as in code (the values first), on the line of the first token. It is worked out once, when the source is
+loaded, so the declaration is a literal to everything after: `const cells slots 2 mul`. An overflow, a division by zero, a shift outside 0 to 63 and a
+capacity below 1 are load errors at the expression; an expression that does not leave exactly one value is refused. The size of `str N` and the
+count, depth and region of `tasks` are one literal or one constant name, since more numbers follow them on the line.]
+#ex("spec", "08-const-expr.pnx")
+#ex("spec", "08-const-expr-overflow.pnx")
+
 #part("Constraints")
 
 #para("2")[Nothing can be stored into a constant. Inside a definition `v to CONST` would make a new local of the same

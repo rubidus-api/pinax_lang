@@ -61,6 +61,14 @@ size        = INT | NAME ;                         (* NAME: a const *)
 #para("1")[`const 이름 리터럴` 은 #term("상수", en: "constant")를 만든다. 타입은 리터럴의 타입이다. 상수는
 저장소가 없다 --- 쓰는 자리에 값이 들어간다. 용량, `match` 의 가지 값, `row` 의 값에 쓸 수 있다.]
 
+#para("1a")[`int` 상수의 값과 `array`, `list`, `pool`, `queue`, `buffer` 의 용량은 #term("상수 식", en: "constant expression") 일 수 있다:
+정수 리터럴, 앞에서 선언한 `int` 상수의 이름, 그리고 프로시저 `add` `sub` `mul` `div` `mod` `neg` `abs` `min` `max` `shl` `shr` `bit_and`
+`bit_or` `bit_xor` 를 코드처럼(값을 먼저) 첫 토큰이 있는 줄에 쓴다. 소스를 적재할 때 한 번 계산하므로 그 뒤로는 선언이 리터럴이다:
+`const cells slots 2 mul`. 넘침, 0 으로 나누기, 0~63 밖의 시프트, 1 미만의 용량은 그 식에서 나는 적재 오류이고, 값 하나를 남기지 않는 식은 거절된다.
+`str N` 의 크기와 `tasks` 의 개수, 깊이, 구역은 줄에 숫자가 더 오므로 리터럴 하나나 상수 이름 하나이다.]
+#ex("spec", "08-const-expr.pnx")
+#ex("spec", "08-const-expr-overflow.pnx")
+
 #part("제약")
 
 #para("2")[상수에는 넣지 못한다. 정의 안에서 `v to 상수` 는 같은 이름의 지역 변수를 새로 만들려는 것이 되어

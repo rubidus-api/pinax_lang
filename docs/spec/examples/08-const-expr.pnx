@@ -1,0 +1,15 @@
+rem run
+use io .
+use str .
+const slots 8
+const cells slots 2 mul        rem 16: a size that follows from another, worked out when the source is loaded
+const grid slots slots mul 1 sub
+array hm int cells
+array board int slots 3 mul 1 add
+def main do
+  cells str.to_str io.println
+  grid str.to_str io.println
+  hm len str.to_str io.println
+  board len str.to_str io.println
+end
+main

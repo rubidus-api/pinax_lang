@@ -1,0 +1,3 @@
+rem refused
+const big 9223372036854775807
+const twice big 2 mul

@@ -455,6 +455,7 @@ typedef struct comp {
     adrec adrec[MAX_ADREC]; // the adapters of the chains being written (RFC-0050)
     uint32_t     n_adrec;
     uint8_t      ab_n, ab_kind[MAX_ADAPT], ab_idx[MAX_ADAPT]; // the block adapters of the rail stem_begin took: kind, and the register of N
+    uint32_t     expr_line, expr_column; // where the last constant expression began (RFC-0057)
     fn          *ad_fn;                                       // the body whose adapter block is being compiled (break and continue do not leave it)
     uint32_t     ad_floor;                                    // ... the blocks below this number enclose it
     lpos         ab_pos[MAX_ADAPT];                           // ... and where the block of each begins
@@ -9063,7 +9064,9 @@ static bool declare_extern(comp *c) {
 }
 
 static bool declared_size(comp *c, uint32_t *out);
+static bool declared_size_one(comp *c, uint32_t *out);
 static bool declared_capacity(comp *c, name decl, uint32_t *out);
+static bool declared_capacity_one(comp *c, name decl, uint32_t *out);
 
 // tasks NAME count [depth [region]] [apart] : a set of tasks (RFC-0005). Each has its own registers
 // for `depth` levels of calls and its own `region` bytes for the strings it builds. `apart`: a
@@ -9078,7 +9081,7 @@ static bool declare_tasks(comp *c) {
         return defined_twice(c, g.name);
     if (g.name.length > 31)
         return syntax(c, "a global name is at most 31 bytes long");
-    if (!advance(c) || !declared_capacity(c, g.name, &g.capacity))
+    if (!advance(c) || !declared_capacity_one(c, g.name, &g.capacity))
         return false;
     if (c->tok.kind == PNX_T_INT) { // the call depth of a task
         if (c->tok.integer < 1 || c->tok.integer > 4096)
@@ -9118,6 +9121,107 @@ static bool declare_tasks(comp *c) {
     return true;
 }
 
+// A constant expression (RFC-0057): integer literals, the names of int consts and the pure integer words add sub mul div mod neg abs
+// min max shl shr bit_and bit_or bit_xor, in the order of the stack words, over the tokens that stand on the line of the first one.
+// It is worked out here, once, with a stack of 16: the declaration sees a literal, so the proofs, the exported code and the image do.
+// An overflow, a division by zero or a shift outside 0 to 63 is a load error at the word. Leaves the token after the expression
+// current; `*count` is the number of tokens read. The first token must be an integer literal or the name of an int const.
+static bool const_expr(comp *c, int64_t *out, uint32_t *count) {
+    int64_t       stack[16];
+    uint32_t      n = 0, tokens = 0;
+    const uint32_t line = c->tok.line, column = c->tok.column;
+    for (;;) {
+        if (tokens && c->tok.line != line)
+            break;
+        int64_t value = 0;
+        bool    push = false;
+        if (c->tok.kind == PNX_T_INT) {
+            value = c->tok.integer;
+            push = true;
+        } else if (c->tok.kind == PNX_T_NAME) {
+            const name word = tok_name(c);
+            const constant *k = find_const(c, word);
+            if (k && k->type == TY_INT) {
+                value = k->value;
+                push = true;
+            } else if (name_is(word, "neg") || name_is(word, "abs")) {
+                if (!n)
+                    return syntax(c, "a constant expression: neg and abs take one value");
+                if (stack[n - 1] == INT64_MIN)
+                    return type_error(c, "the constant expression overflows");
+                if (name_is(word, "neg") || stack[n - 1] < 0)
+                    stack[n - 1] = -stack[n - 1];
+            } else if (name_is(word, "add") || name_is(word, "sub") || name_is(word, "mul") || name_is(word, "div") ||
+                       name_is(word, "mod") || name_is(word, "min") || name_is(word, "max") || name_is(word, "shl") ||
+                       name_is(word, "shr") || name_is(word, "bit_and") || name_is(word, "bit_or") ||
+                       name_is(word, "bit_xor")) {
+                if (n < 2)
+                    return syntax(c, "a constant expression: this word takes two values, written before it");
+                const int64_t b = stack[--n], a = stack[n - 1];
+                int64_t       r = 0;
+                bool          bad = false;
+                if (name_is(word, "add"))
+                    bad = __builtin_add_overflow(a, b, &r);
+                else if (name_is(word, "sub"))
+                    bad = __builtin_sub_overflow(a, b, &r);
+                else if (name_is(word, "mul"))
+                    bad = __builtin_mul_overflow(a, b, &r);
+                else if (name_is(word, "div") || name_is(word, "mod")) {
+                    if (b == 0)
+                        return type_error(c, "the constant expression divides by zero");
+                    if (a == INT64_MIN && b == -1)
+                        bad = true;
+                    else
+                        r = name_is(word, "div") ? a / b : a % b;
+                } else if (name_is(word, "min"))
+                    r = a < b ? a : b;
+                else if (name_is(word, "max"))
+                    r = a > b ? a : b;
+                else if (name_is(word, "shl") || name_is(word, "shr")) {
+                    if (b < 0 || b > 63)
+                        return type_error(c, "the constant expression shifts by 0 to 63 places");
+                    if (name_is(word, "shl")) {
+                        r = (int64_t)((uint64_t)a << b);
+                        bad = a < 0 || (r >> b) != a;
+                    } else {
+                        r = a >> b;
+                    }
+                } else if (name_is(word, "bit_and"))
+                    r = a & b;
+                else if (name_is(word, "bit_or"))
+                    r = a | b;
+                else
+                    r = a ^ b;
+                if (bad)
+                    return type_error(c, "the constant expression overflows");
+                stack[n - 1] = r;
+            } else {
+                break; // another name: the expression ends
+            }
+        } else {
+            break;
+        }
+        if (push) {
+            if (n == 16)
+                return syntax(c, "a constant expression holds at most 16 values at once");
+            stack[n++] = value;
+        }
+        ++tokens;
+        if (!advance(c))
+            return false;
+    }
+    if (n != 1)
+        return error_at(c, PINAX_ERR_SYNTAX, line, column,
+                        n ? "a constant expression leaves one int, and more are left: write the operations after the values"
+                          : "a size or a const value is an int expression");
+    *out = stack[0];
+    c->expr_line = line;
+    c->expr_column = column;
+    if (count)
+        *count = tokens;
+    return true;
+}
+
 // const NAME literal
 static bool declare_const(comp *c) {
     if (!advance(c))
@@ -9131,6 +9235,18 @@ static bool declare_const(comp *c) {
         return false;
     const name value = tok_name(c);
     const constant *other;
+    if (c->tok.kind == PNX_T_INT || (c->tok.kind == PNX_T_NAME && (other = find_const(c, value)) && other->type == TY_INT)) {
+        int64_t result;
+        if (!const_expr(c, &result, NULL)) // RFC-0057: a literal, an int const, or an expression of them on this line
+            return false;
+        k.type = TY_INT;
+        k.value = result;
+        constant *slot = vec_push(c, &c->consts, sizeof(constant));
+        if (!slot)
+            return false;
+        *slot = k;
+        return true;
+    }
     switch (c->tok.kind) {
     case PNX_T_INT:
     case PNX_T_CHAR:
@@ -9217,7 +9333,7 @@ static bool str_capacity(comp *c, uint8_t *out) {
     uint32_t n;
     if (c->tok.kind == PNX_T_INT || (c->tok.kind == PNX_T_NAME && find_const(c, tok_name(c)) &&
                                      find_const(c, tok_name(c))->type == TY_INT)) { // str 32 (RFC-0049)
-        if (!declared_size(c, &n))
+        if (!declared_size_one(c, &n))
             return false;
         if (n > 255)
             return type_error(c, "str N holds at most 255 bytes for now");
@@ -9227,7 +9343,7 @@ static bool str_capacity(comp *c, uint8_t *out) {
     return type_error(c, "stored text is written str N, N the size in bytes; a str view lives only in locals, arguments and results");
     if (c->tok.kind != PNX_T_LPAREN)
         return type_error(c, "stored text is str N; a str view lives only in locals, arguments and results");
-    if (!advance(c) || !declared_size(c, &n))
+    if (!advance(c) || !declared_size_one(c, &n))
         return false;
     if (c->tok.kind != PNX_T_RPAREN)
         return syntax(c, "str(N) is closed by )");
@@ -9275,9 +9391,9 @@ static bool declare_global(comp *c) {
 // A size in a declaration: an integer literal or the name of an int const.
 // The capacity of the declaration `decl`: a size, or `host` for the number the host gave
 // (pinax_capacity, RFC-0029 P-L2), by the name "decl" in the first source and "module.decl" in any.
-static bool declared_capacity(comp *c, name decl, uint32_t *out) {
+static bool declared_capacity_with(comp *c, name decl, uint32_t *out, bool one) {
     if (c->tok.kind != PNX_T_NAME || !name_eq(tok_name(c), cname("host"))) // a word only in this place
-        return declared_size(c, out);
+        return one ? declared_size_one(c, out) : declared_size(c, out);
     const name self = ((const name *)c->srcmods.ptr)[c->module];
     for (uint32_t k = 0; k < c->st->n_capacities; ++k) {
         const struct pnx_capacity *e = &c->st->capacities[k];
@@ -9301,19 +9417,36 @@ static bool declared_capacity(comp *c, name decl, uint32_t *out) {
     return syntax(c, c->note);
 }
 
-static bool declared_size(comp *c, uint32_t *out) {
+static bool declared_capacity(comp *c, name decl, uint32_t *out) { return declared_capacity_with(c, decl, out, false); }
+static bool declared_capacity_one(comp *c, name decl, uint32_t *out) { return declared_capacity_with(c, decl, out, true); }
+
+// One token: a literal or the name of an int const, where more numbers may follow on the line (str N, tasks).
+static bool declared_size_one(comp *c, uint32_t *out) {
     int64_t n;
     if (c->tok.kind == PNX_T_INT) {
         n = c->tok.integer;
     } else if (c->tok.kind == PNX_T_NAME && find_const(c, tok_name(c)) && find_const(c, tok_name(c))->type == TY_INT) {
         n = find_const(c, tok_name(c))->value;
     } else {
-        return syntax(c, "a size is an integer literal or the name of an int const");
+        return syntax(c, "a size is an integer literal, the name of an int const, or an expression of them (RFC-0057)");
     }
     if (n < 1 || n > 0x7fffffff)
         return type_error(c, "a size is at least 1 and fits in 31 bits");
     *out = (uint32_t)n;
     return advance(c);
+}
+
+// The last size of a declaration: a literal, an int const, or a constant expression of them on the line (RFC-0057).
+static bool declared_size(comp *c, uint32_t *out) {
+    if (c->tok.kind != PNX_T_INT && !(c->tok.kind == PNX_T_NAME && find_const(c, tok_name(c)) && find_const(c, tok_name(c))->type == TY_INT))
+        return declared_size_one(c, out); // the message
+    int64_t n;
+    if (!const_expr(c, &n, NULL))
+        return false;
+    if (n < 1 || n > 0x7fffffff)
+        return error_at(c, PINAX_ERR_TYPE, c->expr_line, c->expr_column, "a size is at least 1 and fits in 31 bits");
+    *out = (uint32_t)n;
+    return true;
 }
 
 // array NAME type size        list NAME type size
@@ -9510,7 +9643,7 @@ static bool declare_record(comp *c) {
             uint32_t n;
             if (c->tok.kind == PNX_T_INT || (c->tok.kind == PNX_T_NAME && find_const(c, tok_name(c)) &&
                                              find_const(c, tok_name(c))->type == TY_INT)) { // name str 8 (RFC-0049)
-                if (!declared_size(c, &n))
+                if (!declared_size_one(c, &n))
                     return false;
                 if (n > 255)
                     return type_error(c, "str N fields hold at most 255 bytes for now");
@@ -9518,7 +9651,7 @@ static bool declare_record(comp *c) {
                 return type_error(c, "a field holds str N, N the size in bytes; a str view lives only in locals, arguments and results");
                 if (c->tok.kind != PNX_T_LPAREN)
                     return type_error(c, "a field holds str N; a str view lives only in locals, arguments and results");
-                if (!advance(c) || !declared_size(c, &n))
+                if (!advance(c) || !declared_size_one(c, &n))
                     return false;
                 if (c->tok.kind != PNX_T_RPAREN)
                     return syntax(c, "str(N) is closed by )");
