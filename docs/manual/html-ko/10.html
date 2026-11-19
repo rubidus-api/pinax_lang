@@ -46,7 +46,7 @@ copied 3 lines
   drop                                <span style="color: #74747c">rem thrown away: it would never be closed</span>
 <span style="color: #d73948">end</span>
 </code></pre><p class="ex-label">거절</p><pre><code data-lang="text">$ pnx 09-drop-owned.pnx
-09-drop-owned.pnx:4:3: an owned value is kept in a local or given on at once; this word would lose it
+09-drop-owned.pnx:4:3: an owned value is kept in a local or given on at once; this procedure would lose it
 </code></pre></div></div><h3>9.2 구역을 아껴 쓰기</h3><p><code>cat</code> 은 새 글을 구역에 쓴다. 구역의 크기는 정해져 있으므로, 글을 계속 만드는 루프는 바퀴마다 <code>mark</code> 와 <code>release</code> 로 구역을 되돌린다. 실패해서 떠나는 길에서도 되돌린다 — <code>mark</code> 가 준 것도 한 번만 쓰는 값이기 때문이다.</p><div class="example run"><p class="ex-file"><code>09-region-loop.pnx</code></p><pre><code data-lang="pinax"><span style="color: #d73948">use</span> io .
 <span style="color: #d73948">use</span> <span style="color: #d73948">str</span> .
 <span style="color: #74747c">rem Make a long report in a small region: each turn gives its bytes back.</span>

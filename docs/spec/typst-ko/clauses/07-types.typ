@@ -216,7 +216,7 @@ DEC      = [ sign ] digits "." digits ;   (* 지수 없음: 6.4 *)
 #part("진단")
 #diag(
   ([조건 자리에 `bool` 이 아닌 값], "a bool is expected here"),
-  ([좁은 정수와 `int`, 또는 다른 좁은 정수 둘], "this word takes two values of one type: u8 with u8, int with int; u8 and raw convert"),
+  ([좁은 정수와 `int`, 또는 다른 좁은 정수 둘], "this procedure takes two values of one type: u8 with u8, int with int; u8 and raw convert"),
   ([범위 밖의 상수를 변환], "the constant is outside the range of this type; low_u8 and the others keep the low bits"),
   ([선언한 타입의 값을 바로 변환], "u8, u16, u32, u64, i8, i16, i32 and low_u8 ... are made from an int or from one another; for a declared type take raw first"),
   ([부호 있는 좁은 정수에 `u_shr`], "u_shr takes an int or an unsigned type; a signed type shifts with shr"),
@@ -225,9 +225,9 @@ DEC      = [ sign ] digits "." digits ;   (* 지수 없음: 6.4 *)
   ([`u64` 아닌 좁은 정수에 `rotl` `rotr`], "rotl and rotr take an int or a u64; for a narrow type take raw"),
   ([`u64` 아닌 좁은 정수에 `mul_hi` `u_mul_hi`], "mul_hi and u_mul_hi take an int or a u64; for a narrow type take raw"),
   ([좁은 정수에 `abs`], "abs takes an int or a declared type over int; a narrow type has no abs"),
-  ([산술 프로시저의 두 값의 타입이 다르거나 `int` 가 아님], "this word takes two int values, or two of the same declared type"),
+  ([산술 프로시저의 두 값의 타입이 다르거나 `int` 가 아님], "this procedure takes two int values, or two of the same declared type"),
   ([선언한 타입에 (3)과 (3a) 밖의 산술], "a declared type is added to and subtracted from its own type, and multiplied, divided or taken modulo by an int; for other arithmetic take raw"),
-  ([인자의 타입이 서명과 다름], "an argument has another type than the word's signature asks for"),
+  ([인자의 타입이 서명과 다름], "an argument has another type than the procedure's signature asks for"),
   ([전역 등에 `str`], "stored text is str N; a str view lives only in locals, arguments and results"),
   ([레코드의 필드에 `str`], "a field holds str N; a str view lives only in locals, arguments and results"),
   ([자리 수가 다른 `dec` 둘], "two dec values of different scales: rescale one first (d 2 rescale)"),

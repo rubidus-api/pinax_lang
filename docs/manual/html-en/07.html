@@ -69,7 +69,7 @@ the list holds 2
 </code></pre></div><p>Because they can fail, <code>push</code> and <code>pop</code> are always followed by a guard (chapter 8); leaving it out is refused at load. To ignore the failure, write <code>or_else to e end</code>, so that the source says it is ignored.</p><div class="example refused"><p class="ex-file"><code>06-push-unguarded.pnx</code></p><pre><code data-lang="pinax"><span style="color: #d73948">list</span> scores <span style="color: #d73948">int</span> <span style="color: #b60157">3</span>
 <span style="color: #d73948">def</span> add_score n <span style="color: #d73948">int</span> <span style="color: #d73948">do</span> n scores push <span style="color: #d73948">end</span>   <span style="color: #74747c">rem push can fail: what then? the guard is missing</span>
 </code></pre><p class="ex-label">Refused</p><pre><code data-lang="text">$ pnx 06-push-unguarded.pnx
-06-push-unguarded.pnx:2:38: a word that can fail is followed by or_fail, or_return or or_else
+06-push-unguarded.pnx:2:38: a procedure that can fail is followed by or_fail, or_return or or_else
 </code></pre></div><div class="box qa"><p class="box-title">Q&amp;A</p><p><strong>Q. Isn’t a generous capacity a waste of memory?</strong></p><p>A. It is. But the amount is in the source and fixed at load. Instead of a program stopping when memory runs out, it shows as a failing <code>push</code>, and that failure has to be handled before the program is even loaded.</p></div><h3>6.3 Queues</h3><p>In a <code>queue</code>, what goes in first comes out first. <code>put</code> puts in, <code>take</code> takes out, and <code>peek</code> looks without taking. <code>wait_take</code> and <code>wait_put</code>, which wait between tasks for an empty or full queue, are in chapter 13.</p><div class="example run"><p class="ex-file"><code>06-queue.pnx</code></p><pre><code data-lang="pinax"><span style="color: #d73948">use</span> io .
 <span style="color: #d73948">use</span> <span style="color: #d73948">str</span> .
 <span style="color: #d73948">queue</span> line <span style="color: #d73948">int</span> <span style="color: #b60157">3</span>
@@ -90,7 +90,7 @@ nobody waits: range
 <span style="color: #d73948">queue</span> q <span style="color: #d73948">int</span> <span style="color: #b60157">4</span>
 q <span style="color: #d73948">do</span> <span style="color: #d73948">to</span> x <span style="color: #d73948">end</span> each
 </code></pre><p class="ex-label">Refused</p><pre><code data-lang="text">$ pnx 06-queue-rail.pnx
-06-queue-rail.pnx:3:11: only an array, a list or a pool is a stem (not a queue, a buffer or an index)
+06-queue-rail.pnx:3:11: only an array, a list or a pool is a rail (not a queue, a buffer or an index)
 </code></pre></div></div><h3>6.4 Filtering and mapping into a place</h3><p><code>map_into</code> and <code>filter_into</code> put the results of transforming or filtering the elements of a rail with a block into a <strong>place that already exists</strong> no new array is made. A list destination is added to at the end; an array is written from cell 0, and the number of cells written is given. When the destination is full, they fail.</p><div class="example run"><p class="ex-file"><code>06-map-filter.pnx</code></p><pre><code data-lang="pinax"><span style="color: #d73948">use</span> io .
 <span style="color: #d73948">use</span> <span style="color: #d73948">str</span> .
 <span style="color: #d73948">array</span> prices <span style="color: #d73948">int</span> <span style="color: #b60157">6</span>

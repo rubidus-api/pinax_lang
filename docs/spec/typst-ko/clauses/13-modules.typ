@@ -89,8 +89,8 @@ data-value  = literal | NAME ;                      (* NAME: a const or a row na
   ([없는 모듈], "no module of this name is registered or loaded"),
   ([열지 않은 모듈이나 없는 레코드의 경로], "this path names neither a module in use nor a record"),
   ([내보내지 않은 이름], "the module exports nothing of this name"),
-  ([자료 적재의 정의나 `use`], "a data source defines no words and uses no modules"),
-  ([자료 적재의 프로시저 부르기], "a data source calls no words; only literals, const names and stores"),
+  ([자료 적재의 정의나 `use`], "a data source defines no procedures and uses no modules"),
+  ([자료 적재의 프로시저 부르기], "a data source calls no procedures; only literals, const names and stores"),
 )
 
 == 찾는 순서 <modules-search>

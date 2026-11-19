@@ -69,7 +69,7 @@ the list holds 2
 </code></pre></div><p>실패할 수 있으므로 <code>push</code> 와 <code>pop</code> 뒤에는 늘 지킴 프로시저(8장)이 와야 한다. 빠뜨리면 적재 때 거절된다. 실패를 무시하고 싶을 때도 <code>or_else to e end</code> 라고 적어서, 무시한다는 뜻을 소스에 남긴다.</p><div class="example refused"><p class="ex-file"><code>06-push-unguarded.pnx</code></p><pre><code data-lang="pinax"><span style="color: #d73948">list</span> scores <span style="color: #d73948">int</span> <span style="color: #b60157">3</span>
 <span style="color: #d73948">def</span> add_score n <span style="color: #d73948">int</span> <span style="color: #d73948">do</span> n scores push <span style="color: #d73948">end</span>   <span style="color: #74747c">rem push can fail: what then? the guard is missing</span>
 </code></pre><p class="ex-label">거절</p><pre><code data-lang="text">$ pnx 06-push-unguarded.pnx
-06-push-unguarded.pnx:2:38: a word that can fail is followed by or_fail, or_return or or_else
+06-push-unguarded.pnx:2:38: a procedure that can fail is followed by or_fail, or_return or or_else
 </code></pre></div><div class="box qa"><p class="box-title">문답</p><p><strong>물음. 용량을 넉넉히 잡으면 메모리를 버리지 않는가?</strong></p><p>답. 버린다. 그러나 그 양이 소스에 보이고, 적재할 때 정해진다. 돌다가 메모리가 모자라 멈추는 일 대신 <code>push</code> 의 실패로 드러나고, 그 실패는 다뤄야만 적재된다.</p></div><h3>6.3 큐</h3><p><code>queue</code> 는 먼저 넣은 것이 먼저 나온다. <code>put</code> 으로 넣고, <code>take</code> 로 꺼내고, <code>peek</code> 으로 꺼내지 않고 본다. 작업 사이에서 비거나 찬 큐를 기다리는 <code>wait_take</code>·<code>wait_put</code> 은 13장에서 본다.</p><div class="example run"><p class="ex-file"><code>06-queue.pnx</code></p><pre><code data-lang="pinax"><span style="color: #d73948">use</span> io .
 <span style="color: #d73948">use</span> <span style="color: #d73948">str</span> .
 <span style="color: #d73948">queue</span> line <span style="color: #d73948">int</span> <span style="color: #b60157">3</span>
@@ -90,7 +90,7 @@ nobody waits: range
 <span style="color: #d73948">queue</span> q <span style="color: #d73948">int</span> <span style="color: #b60157">4</span>
 q <span style="color: #d73948">do</span> <span style="color: #d73948">to</span> x <span style="color: #d73948">end</span> each
 </code></pre><p class="ex-label">거절</p><pre><code data-lang="text">$ pnx 06-queue-rail.pnx
-06-queue-rail.pnx:3:11: only an array, a list or a pool is a stem (not a queue, a buffer or an index)
+06-queue-rail.pnx:3:11: only an array, a list or a pool is a rail (not a queue, a buffer or an index)
 </code></pre></div></div><h3>6.4 거르고 바꿔 담기</h3><p><code>map_into</code> 와 <code>filter_into</code> 는 레일의 원소를 블록으로 바꾸거나 거른 결과를 <strong>이미 있는 자리</strong>에 담는다. 새 배열이 생기지 않는다. 목적지가 목록이면 끝에 넣고, 배열이면 0 번 칸부터 쓰고 쓴 칸의 수를 준다. 목적지가 차면 실패한다.</p><div class="example run"><p class="ex-file"><code>06-map-filter.pnx</code></p><pre><code data-lang="pinax"><span style="color: #d73948">use</span> io .
 <span style="color: #d73948">use</span> <span style="color: #d73948">str</span> .
 <span style="color: #d73948">array</span> prices <span style="color: #d73948">int</span> <span style="color: #b60157">6</span>

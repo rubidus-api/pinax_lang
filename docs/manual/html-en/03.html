@@ -84,11 +84,11 @@ ff
 <span style="color: #d73948">use</span> <span style="color: #d73948">str</span> .
 <span style="color: #b60157">5</span> add <span style="color: #d73948">str</span>.to_str io.println
 </code></pre><p class="ex-label">Refused</p><pre><code data-lang="text">$ pnx 02-stack-short.pnx
-02-stack-short.pnx:3:3: the stack does not hold enough values for this word
+02-stack-short.pnx:3:3: the stack does not hold enough values for this procedure
 </code></pre></div><p>Second, <strong>the wrong type</strong>. A string and an integer cannot be added.</p><div class="example refused"><p class="ex-file"><code>02-types-mixed.pnx</code></p><pre><code data-lang="pinax"><span style="color: #d73948">use</span> io .
 <span style="color: #198810">"3"</span> <span style="color: #b60157">4</span> add drop
 </code></pre><p class="ex-label">Refused</p><pre><code data-lang="text">$ pnx 02-types-mixed.pnx
-02-types-mixed.pnx:2:7: this word takes two int values, or two of the same declared type
+02-types-mixed.pnx:2:7: this procedure takes two int values, or two of the same declared type
 </code></pre></div><p>Third, <strong>values left over</strong>. A value that nothing took when the program ends (and when the body of a procedure ends, chapter 3) is refused: a left-over value is usually the trace of forgotten work.</p><div class="example refused"><p class="ex-file"><code>02-leftover.pnx</code></p><pre><code data-lang="pinax"><span style="color: #d73948">use</span> io .
 <span style="color: #d73948">use</span> <span style="color: #d73948">str</span> .
 <span style="color: #b60157">1</span> <span style="color: #b60157">2</span> add <span style="color: #d73948">str</span>.to_str io.println

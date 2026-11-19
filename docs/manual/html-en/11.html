@@ -93,7 +93,7 @@ pinax
 }
 </code></pre><p class="ex-label">Output</p><pre><code data-lang="text">$ ./10-data
 port: 8080
-refused: a data source defines no words and uses no modules
+refused: a data source defines no procedures and uses no modules
 </code></pre></div><p><code>pnx</code> does not do data loads; they are the host’s business (chapter 14).</p><h3>10.5 Modules the host lends</h3><p><code>io</code> <code>file</code> <code>clock</code> <code>random</code> <code>env</code> are not standard modules but <strong>host modules</strong>: they are not part of the language, and exist only when the host registers them (chapter 14). <code>pnx</code> registers all five. So the host decides the ways to files, the clock and the environment — a script that is not trusted is given no <code>file</code>.</p><div class="example run"><p class="ex-file"><code>10-host-modules.pnx</code></p><pre><code data-lang="pinax"><span style="color: #74747c">rem run: args alpha beta</span>
 <span style="color: #d73948">use</span> io .
 <span style="color: #d73948">use</span> <span style="color: #d73948">str</span> .

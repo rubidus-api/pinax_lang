@@ -46,7 +46,7 @@ export const GUIDE = {
         [":edit N-M", "lines N to M in the editor; saving puts them back in their place"],
         [":insert N", "new lines above line N (0: at the end); an empty line ends, and the program runs (:ins)"],
         [":delete N[-M]", "removes lines N to M (:del)"],
-        [":trace", "RESETS like :run, then runs the program one statement at a time (one period each), showing the stack after each and every line of a word with its locals as it runs; :trace off stops the lines of words"],
+        [":trace", "RESETS like :run, then runs the program one statement at a time (one period each), showing the stack after each and every line of a procedure with its locals as it runs; :trace off stops the lines of procedures"],
         [":break N|NAME ...", "breakpoints: the run stops before those lines (a procedure: its first body line); :list marks them `*` and the stop `=>`; RESETS and runs the program again (:b)"],
         [":unbreak [N ...|all]", "removes breakpoints (:ub)"],
         [":continue, :next, :stop", "after a stop: go on (:c), go on to the next line or statement (:n), or end the run (:stop)"],
@@ -56,14 +56,14 @@ export const GUIDE = {
         [":blocks", "the definitions and blocks open in the text being typed, the outer one first; it may be typed inside a block"],
         [":clear", "empties the stack only"],
         [":procs", "the procedures of the program, each with its signature"],
-        [":get_order", "the search order as it is, as the word get_order tells it"],
+        [":get_order", "the search order as it is, as get_order tells it"],
         [":save, :load", "the program as a .pnx file"],
         [":help", "this list"],
     ],
     keys: [
         ["Enter", "enters the line"], ["Shift+Enter", "a new line without entering"],
-        ["Tab", "writes the word offered; words are offered as you type, in the prompt and in the editor"],
-        ["Alt+1 to Alt+9", "write the nth word offered"], ["Alt+Up, Alt+Down", "choose among the words (Alt+Down offers them)"],
+        ["Tab", "writes the name offered; names are offered as you type, in the prompt and in the editor"],
+        ["Alt+1 to Alt+9", "write the nth name offered"], ["Alt+Up, Alt+Down", "choose among the names (Alt+Down offers them)"],
         ["Up, Down", "walk the history"], ["Esc", "drops the lines gathered, or ends :edit N and :insert N"],
         ["F5", ":run"], ["F2", ":edit"], ["F1", "shows or hides this guide"], ["Ctrl+L", "clears the screen"],
     ],
@@ -431,7 +431,7 @@ export async function createConsole({ createPinax, bytes, print, store = null })
                 return {};
             }
             showLines = true;
-            print("info", "reset; the program runs one statement at a time, and each line of a word as it runs " +
+            print("info", "reset; the program runs one statement at a time, and each line of a procedure as it runs " +
                             "(:trace off stops the lines)\n");
             runProgram();
             return {};
@@ -669,7 +669,7 @@ export async function createConsole({ createPinax, bytes, print, store = null })
             print("info", "(that line is back in the prompt to be corrected; the lines before it stay)\n");
             return false;
         } else {
-            print("info", "(so far no mistake; the word is not finished)\n");
+            print("info", "(so far no mistake; the procedure is not finished)\n");
         }
     }
 

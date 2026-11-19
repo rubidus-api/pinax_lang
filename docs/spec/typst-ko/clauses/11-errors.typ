@@ -104,8 +104,8 @@ guard = "or_fail" | "or_return" | "or_else" [ "(" NAME ")" ] { body } "end" ;
 
 #part("진단")
 #diag(
-  ([실패할 수 있는 프로시저 뒤에 지킴이 없음], "a word that can fail is followed by or_fail, or_return or or_else"),
-  ([`or fail` 없는 프로시저의 `or_fail`], "or_fail passes the failure on, so this word needs `or fail` in its signature"),
-  ([`or fail` 없는 프로시저의 `fail`], "fail needs `or fail` in the signature of this word"),
-  ([`or_else` 의 몸이 남기는 값이 다름], "the body of or_else must leave what the word would have given, or leave the word or the loop"),
+  ([실패할 수 있는 프로시저 뒤에 지킴이 없음], "a procedure that can fail is followed by or_fail, or_return or or_else"),
+  ([`or fail` 없는 프로시저의 `or_fail`], "or_fail passes the failure on, so this procedure needs `or fail` in its signature"),
+  ([`or fail` 없는 프로시저의 `fail`], "fail needs `or fail` in the signature of this procedure"),
+  ([`or_else` 의 몸이 남기는 값이 다름], "the body of or_else must leave what the procedure would have given, or leave the procedure or the loop"),
 )

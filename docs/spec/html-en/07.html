@@ -37,7 +37,7 @@ true false or not is false
 07-bool-not-int.pnx:1:3: a bool is expected here
 </code></pre></div><div class="example refused"><p class="ex-file"><code>07-int-not-bool.pnx</code></p><pre><code data-lang="pinax"><span style="color: #d73948">true</span> <span style="color: #b60157">1</span> add drop
 </code></pre><p class="ex-label">Refused</p><pre><code data-lang="text">$ pnx 07-int-not-bool.pnx
-07-int-not-bool.pnx:1:8: this word takes two int values, or two of the same declared type
+07-int-not-bool.pnx:1:8: this procedure takes two int values, or two of the same declared type
 </code></pre></div><h3>7.3 Strings</h3><p class="para"><span class="pn">(1)</span> A <strong>string</strong> is a sequence of bytes. There is no rule that it be UTF-8: procedures that work on bytes read bytes, and procedures that work on characters (<code>str.char_count</code> and so on) read UTF-8.</p><p class="para"><p><span class="pn">(2)</span> There are two string types.</p><ul><li><code>str</code> is a <strong>view</strong>: the start and length of bytes that are somewhere (a literal, the text of a global, a buffer, the region). Making one copies no bytes. It lives only in locals, arguments, results and on the stack.</li><li><code>str N</code> is <strong>stored text</strong>. It takes N bytes of room and copies the bytes put into it. It is used only in globals, cells of arrays and lists, and fields of records. Reading it gives a <code>str</code> view of that room.</li></ul></p><div class="example run"><p class="ex-file"><code>07-str.pnx</code></p><pre><code data-lang="pinax"><span style="color: #d73948">use</span> io .
 <span style="color: #d73948">use</span> <span style="color: #d73948">str</span> .
 <span style="color: #d73948">global</span> name <span style="color: #d73948">str</span> <span style="color: #b60157">8</span>                 <span style="color: #74747c">rem stored text: up to 8 bytes, copied in</span>
@@ -126,7 +126,7 @@ base      = "int" | "bool" | "str" | "dec" INT | "proc" effect "end" ;</code></p
 <span style="color: #d73948">def</span> pace d meters, t seconds <span style="color: #d73948">gives</span> <span style="color: #d73948">int</span> <span style="color: #d73948">do</span> d raw t raw div <span style="color: #d73948">end</span>
 <span style="color: #b60157">300</span> seconds <span style="color: #b60157">1500</span> meters pace drop          <span style="color: #74747c">rem the two arguments are swapped</span>
 </code></pre><p class="ex-label">Refused</p><pre><code data-lang="text">$ pnx 07-type-mixed.pnx
-07-type-mixed.pnx:4:25: an argument has another type than the word's signature asks for
+07-type-mixed.pnx:4:25: an argument has another type than the procedure's signature asks for
 </code></pre></div><p class="para"><span class="pn">(5)</span> Arithmetic procedures other than <code>add</code> and <code>sub</code> on two values of a declared type are refused. So is any arithmetic procedure outside (3a) on a declared type and an <code>int</code>.</p><div class="example refused"><p class="ex-file"><code>07-type-arith.pnx</code></p><pre><code data-lang="pinax"><span style="color: #d73948">type</span> meters <span style="color: #d73948">int</span>
 <span style="color: #b60157">2</span> meters <span style="color: #b60157">3</span> meters mul drop
 </code></pre><p class="ex-label">Refused</p><pre><code data-lang="text">$ pnx 07-type-arith.pnx
@@ -194,7 +194,7 @@ u64 compares unsigned
 -1
 </code></pre></div><h5>Constraints</h5><p class="para"><span class="pn">(6)</span> An <code>int</code> with a narrow integer, or two narrow integers of different types, given to one procedure is refused. A constant outside the range converted is refused.</p><div class="example refused"><p class="ex-file"><code>07-narrow-mix.pnx</code></p><pre><code data-lang="pinax"><span style="color: #d73948">def</span> f <span style="color: #d73948">gives</span> <span style="color: #d73948">u8</span> <span style="color: #d73948">do</span> <span style="color: #b60157">1</span> <span style="color: #d73948">u8</span> <span style="color: #b60157">1</span> add <span style="color: #d73948">end</span>
 </code></pre><p class="ex-label">Refused</p><pre><code data-lang="text">$ pnx 07-narrow-mix.pnx
-07-narrow-mix.pnx:1:26: this word takes two values of one type: u8 with u8, int with int; u8 and raw convert
+07-narrow-mix.pnx:1:26: this procedure takes two values of one type: u8 with u8, int with int; u8 and raw convert
 </code></pre></div><div class="example refused"><p class="ex-file"><code>07-narrow-range.pnx</code></p><pre><code data-lang="pinax"><span style="color: #d73948">def</span> f <span style="color: #d73948">gives</span> <span style="color: #d73948">u8</span> <span style="color: #d73948">do</span> <span style="color: #b60157">256</span> <span style="color: #d73948">u8</span> <span style="color: #d73948">end</span>
 </code></pre><p class="ex-label">Refused</p><pre><code data-lang="text">$ pnx 07-narrow-range.pnx
 07-narrow-range.pnx:1:23: the constant is outside the range of this type; low_u8 and the others keep the low bits

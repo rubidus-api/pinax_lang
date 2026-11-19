@@ -10,7 +10,7 @@ Hello, Pinax!
 <span style="color: #d73948">use</span> <span style="color: #d73948">str</span> .
 <span style="color: #b60157">1</span> + <span style="color: #b60157">2</span> <span style="color: #d73948">str</span>.to_str io.println
 </code></pre><p class="ex-label">Refused</p><pre><code data-lang="text">$ pnx 01-plus.pnx
-01-plus.pnx:3:3: a sign is attached to its number; arithmetic uses words (add, sub)
+01-plus.pnx:3:3: a sign is attached to its number; arithmetic uses procedures (add, sub)
 </code></pre></div>A sign attached to a number, as in <code>-7</code>, is part of the number and fine. Only a <code>+</code> or <code>-</code> standing apart is not.</div><h3>1.3 Remarks and line breaks</h3><p>A line that starts with <code>rem</code> is a remark. <code>rem</code> after code makes the rest of the line a remark. The examples of this book use remarks to say what each line does.</p><div class="example run"><p class="ex-file"><code>01-comments.pnx</code></p><pre><code data-lang="pinax"><span style="color: #74747c">rem A line that starts with rem is a comment: Pinax reads nothing on it.</span>
 <span style="color: #d73948">use</span> io .
 <span style="color: #198810">"one"</span> io.println          <span style="color: #74747c">rem rem after code: the rest of the line is a comment</span>

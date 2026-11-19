@@ -7,11 +7,11 @@
 //   const s = pinax.session();
 //   s.eval("3 4");            // { ok: true, unfinished: false, stack: ["3", "4"] }
 //   s.eval("add.");           // { ok: true, unfinished: false, stack: ["7"] }
-//   s.eval("word f (gives int)");   // { ok: false, unfinished: true, ... }: give it more text
+//   s.eval("def f gives int do");   // { ok: false, unfinished: true, ... }: give it more text
 //
 // write(stream, text) receives what io.print and io.println print (stream 1) and io.eprint and
 // what goes wrong (stream 2), as pnx writes them: a load error with its place, a fault with its
-// line and the locals of the word it happened in. run() opens a fresh state, loads the source
+// line and the locals of the procedure it happened in. run() opens a fresh state, loads the source
 // under `name`, runs the code outside definitions and returns { ok: true } or
 // { ok: false, error: "what went wrong" }. io.read_line always fails with not_found.
 //
@@ -24,7 +24,7 @@
 // ends a session, which starts again from nothing at its next eval().
 //
 // blocks(text) reads a text without running it: { ok, open, depth, closed }, `open` the
-// definitions and blocks still open at its end, the outermost first ("word sq", "loop", "if"),
+// definitions and blocks still open at its end, the outermost first ("def sq", "loop", "if"),
 // `depth` how many; `closed` is 1 when the text's last token is the `end` of its outermost one, 2
 // when that one was a `do` block. ok is false for text that is not Pinax (a string not closed).
 // MIT (see ../../LICENSE).
@@ -102,7 +102,7 @@ export async function createPinax(bytes, { write = () => {}, blockBytes = 16 << 
         }
         return w[0] === VALUE_ERR ? `err.${text(7)}` : w[0] === VALUE_BOOL ? (i ? "true" : "false") : `${i}`;
     }
-    // what went wrong, as pnx says it; the locals of the word a fault happened in
+    // what went wrong, as pnx says it; the locals of the procedure a fault happened in
     function report(err, name) {
         const kind = errors.get(err) ?? "error";
         if (!told && err !== SYNTAX && err !== TYPE) { // those two are always reported with their place

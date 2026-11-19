@@ -271,7 +271,7 @@ read back: version 1, length 300
 <span style="color: #d73948">buffer</span> out <span style="color: #b60157">64</span>
 <span style="color: #d73948">def</span> write p points <span style="color: #d73948">do</span> p out json.pack <span style="color: #d73948">end</span>   <span style="color: #74747c">rem pack fails when the buffer is full: no guard</span>
 </code></pre><p class="ex-label">거절</p><pre><code data-lang="text">$ pnx 11-pack-unguarded.pnx
-11-pack-unguarded.pnx:8:39: a word that can fail is followed by or_fail, or_return or or_else
+11-pack-unguarded.pnx:8:39: a procedure that can fail is followed by or_fail, or_return or or_else
 </code></pre></div><div class="box qa"><p class="box-title">문답</p><p><strong>물음. 메모리 안의 레코드도 큰 끝으로 놓이는가?</strong></p><p>답. 아니다. <code>big_endian</code> 은 <code>pack</code> 과 <code>unpack</code> 이 쓰는 바이트의 차례만 정한다. 메모리 안의 모양은 처리기가 정하고, 스크립트는 그것을 볼 수 없다.</p></div><h3>11.4 그 밖의 바꾸기</h3><p><code>fmt</code> 는 수를 십육진, 이진, 0 을 채운 모양으로 바꾼다. <code>hash</code> 는 CRC-32, FNV-1a, SipHash 를, <code>encode</code> 는 Base64, 십육진, URL 퍼센트 부호화를 준다. 바꾼 결과를 버퍼에 쓰는 프로시저는 버퍼가 차면 실패한다. 자세한 목록은 표준 16절에 있다.</p><p>해시는 글을 받아 <code>int</code> 를 준다. <code>hash.crc32</code> 는 검사합으로, <code>hash.fnv1a</code> 와 <code>hash.hash64</code> 는 키를 섞는 데 쓴다. 레코드 한 줄이 <code>bytes.pack</code> 으로 몇 바이트가 되는지는 <code>bytes.packed_size</code> 가 미리 알려 준다 — 버퍼의 자리를 가늠할 때 쓴다.</p><div class="example run"><p class="ex-file"><code>11-hash.pnx</code></p><pre><code data-lang="pinax"><span style="color: #d73948">use</span> io .
 <span style="color: #d73948">use</span> fmt .
 <span style="color: #d73948">use</span> hash .

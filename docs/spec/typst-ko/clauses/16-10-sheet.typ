@@ -152,6 +152,6 @@
 #part("진단")
 #diag(
   ([`sheet` 의 프로시저에 다른 형의 값], "this word of sheet takes int for row, column and number, str for text, bool for put_bool, dec N for put_dec"),
-  ([`sheet` 의 프로시저인데 끝에 버퍼가 없음], "the words of sheet take a buffer last: v row column grid sheet.put_int"),
-  ([파일을 받는 프로시저에 참조인 작업책이나 버퍼가 아닌 파일], "this word of sheet takes the buffer of the file, then the book: 0 file book sheet.load_csv"),
+  ([`sheet` 의 프로시저인데 끝에 버퍼가 없음], "the procedures of sheet take a buffer last: v row column grid sheet.put_int"),
+  ([파일을 받는 프로시저에 참조인 작업책이나 버퍼가 아닌 파일], "this procedure of sheet takes the buffer of the file, then the book: 0 file book sheet.load_csv"),
 )

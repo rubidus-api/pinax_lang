@@ -106,7 +106,7 @@ tasks-decl = "tasks" NAME size [ size [ size [ size ] ] ] [ "apart" ] ;   (* cou
 #part("진단")
 #diag(
   ([매개변수나 결과가 있는 블록을 `spawn` 에 줌], "spawn takes a block that takes and gives nothing, and a set of tasks: do ... end workers spawn"),
-  ([작업이 아닌 값에 `resume` `is_done` `cancel`], "this word takes a task"),
+  ([작업이 아닌 값에 `resume` `is_done` `cancel`], "this procedure takes a task"),
   ([작업 묶음이 아닌 모음(배열, 목록)에 `run_all`], "run_all takes a set of tasks"),
   ([`tasks` 의 수가 4096 을 넘음], "a set holds at most 4096 tasks"),
   ([작업의 호출 깊이가 1 부터 4096 밖], "the call depth of a task is 1 to 4096"),

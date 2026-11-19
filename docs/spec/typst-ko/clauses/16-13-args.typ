@@ -58,7 +58,7 @@ param      = NAME "args" ;                      (* a parameter that takes an arg
 #diag(
   ([args 를 담거나 돌려줌], "an args is only a parameter: it is not stored in a local or a global, and not given back"),
   ([args 안의 args, 또는 int bool str dec N 이 아닌 값], "an args holds no args: its values are int, bool, str and dec N"),
-  ([args 의 프로시저에 값의 차례가 거꾸로], "this word takes the number of the value, and then the args: 0 rest args.int"),
+  ([args 의 프로시저에 값의 차례가 거꾸로], "this procedure takes the number of the value, and then the args: 0 rest args.int"),
   ([`args.dec` 의 자리가 상수가 아님], "the digits of args.dec are a constant 0 to 18: 2 rest args.dec"),
   ([앞에 args 가 없는 `cat`], "cat takes args: args a b . cat, or an args parameter"),
 )

@@ -81,6 +81,6 @@
   ([`rx` 에 상수가 아닌 패턴], "rx takes a string literal or a const name; a pattern made while running is rex.compile"),
   ([거꾸로 된 횟수], "a counted repetition goes downwards"),
   ([역참조], "back references are not supported"),
-  ([`regex` 자리의 `str`], "this word takes a str and a regex: s re rex.match"),
+  ([`regex` 자리의 `str`], "this procedure takes a str and a regex: s re rex.match"),
   ([`str` 가 아닌 묶음 매개변수], "the groups are named str parameters"),
 )

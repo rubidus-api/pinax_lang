@@ -21,5 +21,5 @@
 
 #part("진단")
 #diag(
-  ([`str` 와 버퍼가 아닌 값], "this word takes a str and a buffer, as: s buf encode.base64_encode"),
+  ([`str` 와 버퍼가 아닌 값], "this procedure takes a str and a buffer, as: s buf encode.base64_encode"),
 )

@@ -84,7 +84,7 @@ a note
   path <span style="color: #d73948">file</span>.open_read <span style="color: #d73948">or_fail</span> dup <span style="color: #d73948">file</span>.close <span style="color: #d73948">file</span>.close
 <span style="color: #d73948">end</span>
 </code></pre><p class="ex-label">Refused</p><pre><code data-lang="text">$ pnx 12-owned-dup.pnx
-12-owned-dup.pnx:3:31: an owned value is kept in a local or given on at once; this word would lose it
+12-owned-dup.pnx:3:31: an owned value is kept in a local or given on at once; this procedure would lose it
 </code></pre></div><p class="para"><span class="pn">(6)</span> A single path that does not hand it over is enough to refuse.</p><div class="example refused"><p class="ex-file"><code>12-owned-path.pnx</code></p><pre><code data-lang="pinax"><span style="color: #d73948">use</span> <span style="color: #d73948">file</span> .
 <span style="color: #d73948">def</span> f path <span style="color: #d73948">str</span>, quick <span style="color: #d73948">bool</span> <span style="color: #d73948">or</span> <span style="color: #d73948">fail</span> <span style="color: #d73948">do</span>
   path <span style="color: #d73948">file</span>.open_read <span style="color: #d73948">or_fail</span> <span style="color: #d73948">to</span> h

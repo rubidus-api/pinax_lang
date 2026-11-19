@@ -186,7 +186,7 @@ takes every N-th element (the first one first), and `rev` walks from the last to
 however many there are, the loop is one: `scores skip 2 head 3` is the third to the fifth, `scores head 3 skip 1` the second and the third.
 `N` is code that leaves one `int`; it ends at a comma, at `do`, at the next adapter and before `sum`, `minimum` or `maximum`. It is worked out once, before the loop.
 A negative `N` (a `step` of less than 1) is the fault `range`. `step` and `rev` need a closed rail. `skip` and `head` also work on an open rail, where they count the pieces as they come;
-`step` comes last; a rail takes four of them. `each_index` does not count along an adapted rail yet. `each`, `fold`, `count`, `any`, `all`,
+`step` comes last; a rail takes sixteen of them. `each_index` does not count along an adapted rail yet. `each`, `fold`, `count`, `any`, `all`,
 `first`, `map_into`, `filter_into`, `sum`, `minimum` and `maximum` take them.]
 #ex("spec", "10-rail-adapters.pnx")
 #ex("spec", "10-rail-adapter-step.pnx")

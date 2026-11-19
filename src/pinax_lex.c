@@ -553,7 +553,7 @@ static bool lex_token(pnx_lexer *lx, pnx_token *t) {
             if (c == '.')
                 return fail_at(lx, lx->at, "a dot joins two names or sits inside a number, or ends a statement");
             if (c == '+' || c == '-')
-                return fail_at(lx, lx->at, "a sign is attached to its number; arithmetic uses words (add, sub)");
+                return fail_at(lx, lx->at, "a sign is attached to its number; arithmetic uses procedures (add, sub)");
             return fail_at(lx, lx->at, "this character is not allowed outside literals and remarks");
         }
 

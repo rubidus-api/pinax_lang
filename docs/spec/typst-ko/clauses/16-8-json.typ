@@ -84,5 +84,5 @@
 
 #part("진단")
 #diag(
-  ([JSON 글이 `str` 이 아님], "this word takes the JSON text as a str"),
+  ([JSON 글이 `str` 이 아님], "this procedure takes the JSON text as a str"),
 )

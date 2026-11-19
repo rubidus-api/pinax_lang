@@ -103,6 +103,6 @@
   ([`release` 할 때 거둘 값이 스택에 있음], "a str made after this mark is still on the stack; the release gives its bytes back"),
   ([거둔 값을 읽음], "this str was made after a mark that was released since; the region may hold other bytes there now"),
   ([넘겨준 값을 다시 읽음], "this local gave its owned value away; it holds nothing to read"),
-  ([`owned` 값을 늘리거나 버림], "an owned value is kept in a local or given on at once; this word would lose it"),
+  ([`owned` 값을 늘리거나 버림], "an owned value is kept in a local or given on at once; this procedure would lose it"),
   ([넘겨주지 않는 경로], "an owned value in a local is not given on every path (close, free or store it)"),
 )

@@ -31,5 +31,5 @@
 
 #part("진단")
 #diag(
-  ([`int` 가 아닌 값], "this word takes an int"),
+  ([`int` 가 아닌 값], "this procedure takes an int"),
 )

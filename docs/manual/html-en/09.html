@@ -51,16 +51,16 @@ noted 3
   s <span style="color: #d73948">str</span>.to_int <span style="color: #d73948">or_else</span> <span style="color: #d73948">to</span> e <span style="color: #198810">"none"</span> <span style="color: #d73948">end</span>  <span style="color: #74747c">rem success gives an int, this block a str</span>
 <span style="color: #d73948">end</span>
 </code></pre><p class="ex-label">Refused</p><pre><code data-lang="text">$ pnx 08-or-else-wrong.pnx
-08-or-else-wrong.pnx:3:36: the body of or_else must leave what the word would have given, or leave the word or the loop
+08-or-else-wrong.pnx:3:36: the body of or_else must leave what the procedure would have given, or leave the procedure or the loop
 </code></pre></div><div class="example refused"><p class="ex-file"><code>08-guard-missing.pnx</code></p><pre><code data-lang="pinax"><span style="color: #d73948">use</span> <span style="color: #d73948">str</span> .
 <span style="color: #d73948">def</span> twice s <span style="color: #d73948">str</span> <span style="color: #d73948">gives</span> <span style="color: #d73948">int</span> <span style="color: #d73948">do</span> s <span style="color: #d73948">str</span>.to_int <span style="color: #b60157">2</span> mul <span style="color: #d73948">end</span>
 </code></pre><p class="ex-label">Refused</p><pre><code data-lang="text">$ pnx 08-guard-missing.pnx
-08-guard-missing.pnx:2:43: a word that can fail is followed by or_fail, or_return or or_else
+08-guard-missing.pnx:2:43: a procedure that can fail is followed by or_fail, or_return or or_else
 </code></pre></div><div class="box mistake"><p class="box-title">Common mistake: Using <code>or_fail</code> at the outermost level of a file</p>Code outside definitions counts as having no <code>or fail</code> signature, so neither <code>or_fail</code> nor <code>or_return</code> nor <code>return</code> can be used there. Put the work into a procedure, and take its failure with <code>or_else</code> at the outer level.<div class="example refused"><p class="ex-file"><code>08-load-code-or-fail.pnx</code></p><pre><code data-lang="pinax"><span style="color: #d73948">use</span> io .
 <span style="color: #d73948">use</span> <span style="color: #d73948">str</span> .
 <span style="color: #198810">"42"</span> <span style="color: #d73948">str</span>.to_int <span style="color: #d73948">or_fail</span> <span style="color: #d73948">str</span>.to_str io.println
 </code></pre><p class="ex-label">Refused</p><pre><code data-lang="text">$ pnx 08-load-code-or-fail.pnx
-08-load-code-or-fail.pnx:3:17: or_fail passes the failure on, so this word needs `or fail` in its signature
+08-load-code-or-fail.pnx:3:17: or_fail passes the failure on, so this procedure needs `or fail` in its signature
 </code></pre></div></div><h3>8.3 Faults</h3><div class="example fault"><p class="ex-file"><code>08-fault.pnx</code></p><pre><code data-lang="pinax"><span style="color: #d73948">use</span> io .
 <span style="color: #d73948">use</span> <span style="color: #d73948">str</span> .
 <span style="color: #d73948">def</span> average total <span style="color: #d73948">int</span>, n <span style="color: #d73948">int</span> <span style="color: #d73948">gives</span> <span style="color: #d73948">int</span> <span style="color: #d73948">do</span> total n div <span style="color: #d73948">end</span>

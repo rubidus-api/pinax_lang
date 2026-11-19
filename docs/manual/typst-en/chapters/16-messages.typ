@@ -16,10 +16,10 @@ are exactly what the processor prints; the chapters in the right column have exa
 
 #table(columns: (1.3fr, 1fr, auto), inset: 5pt, stroke: 0.5pt + luma(170),
   table.header([*Message*], [*Meaning and fix*], [*Chapter*]),
-  [`an argument has another type than the word's signature asks for`],
+  [`an argument has another type than the procedure's signature asks for`],
   [A value given to a procedure has another type than its signature asks. Read the signature, and convert the value or fix
    the order.], [3],
-  [`this word takes a str`, `this word takes an int`],
+  [`this procedure takes a str`, `this procedure takes an int`],
   [That procedure takes that one type. A number becomes text with `str.to_str`, text becomes a number with `str.to_int`.], [5],
   [`the two values compared must have the same type`],
   [A comparison such as `eq` or `lt` got two values of different types. Convert one; `int` and `dec` are different
@@ -35,7 +35,7 @@ are exactly what the processor prints; the chapters in the right column have exa
   [The block of a combining procedure such as `each` left a value. Use it inside the block, or `drop` it.], [4],
   [`stored text is str N; a str view lives only in locals, arguments and results`],
   [A `str` was put where a global, a cell or a field lives. Places that live long take `str N`.], [5],
-  [`the stack does not hold enough values for this word`],
+  [`the stack does not hold enough values for this procedure`],
   [The procedure takes more values than the stack holds. Check that the values were put on first, and in the right order.
    `pnx see` shows the stack after each line.], [2, 15],
   [`values are left on the stack at the end of the source`],
@@ -43,7 +43,7 @@ are exactly what the processor prints; the chapters in the right column have exa
   [`the stack does not hold exactly the results of the signature here`],
   [What is left when the body of a procedure ends differs from the results of its signature. Write the results into the
    signature, or clear what is left.], [3],
-  [`this word takes two int values, or two of the same declared type`],
+  [`this procedure takes two int values, or two of the same declared type`],
   [An arithmetic procedure got another type. Text becomes a number with `str.to_int`, a number becomes text with
    `str.to_str`.], [2],
   [`an if without else must leave the stack as it found it`],
@@ -61,7 +61,7 @@ are exactly what the processor prints; the chapters in the right column have exa
   [`this character is not allowed outside literals and remarks`],
   [A symbol such as `+`, `;` or `{` is in the code. Arithmetic and separation are all procedures: `add`, `mul`, a line
    break.], [1],
-  [`a sign is attached to its number; arithmetic uses words (add, sub)`],
+  [`a sign is attached to its number; arithmetic uses procedures (add, sub)`],
   [Written like `3 - 1`. A `-` is only the sign of a number; write `3 1 sub`.], [2],
   [`unknown escape; a raw string r"..." keeps backslashes as written`],
   [An ordinary string holds an escape such as `\d`. Patterns go into raw strings `r"…"`.], [12],
@@ -93,7 +93,7 @@ are exactly what the processor prints; the chapters in the right column have exa
   [`this name is already visible here; a new name may not hide it`],
   [A visible name of the program (a procedure, a global, a constant, a local outside) was used for a new name. Choose
    another.], [3],
-  [`NAME is a word of the language; choose another name`],
+  [`NAME is a procedure of the language; choose another name`],
   [A procedure of the language --- a reserved word, a core procedure such as `sum`, `count` or `first`, a procedure such as `sort`, a
    type --- was used for a new name, wherever the name was made. Choose another.], [3],
   [`rows do not move: sort a list of their numbers by a field: order table sort_by record.field`],
@@ -125,13 +125,13 @@ are exactly what the processor prints; the chapters in the right column have exa
   [The procedure using `or_fail` has no `or fail` in its signature. Add it, or handle the failure there with `or_else`.], [8],
   [`this list's rows are kept by a field, a global, a collection, a named row or an index; it cannot be truncated`],
   [A list whose rows are held by something cannot be truncated. Check before adding instead.], [11],
-  [`a word that can fail is followed by or_fail, or_return or or_else`],
+  [`a procedure that can fail is followed by or_fail, or_return or or_else`],
   [A procedure that can fail (`push`, `str.to_int`, a procedure with `or fail` in its signature) has no guard after it. Even
    to ignore the failure, write `or_else to e end`.], [6, 8],
-  [`the body of or_else must leave what the word would have given, or leave the word or the loop`],
+  [`the body of or_else must leave what the procedure would have given, or leave the procedure or the loop`],
   [The body of `or_else` leaves other values than success would. Leave a stand-in of the same type, or leave with
    `return` or `break`.], [8],
-  [`an owned value is kept in a local or given on at once; this word would lose it`],
+  [`an owned value is kept in a local or given on at once; this procedure would lose it`],
   [An `owned` value is about to be lost with `drop`, or left on the stack. Keep it in a local and close it at the end
    (`defer` makes it easy).], [9],
   [`a field holds str N; a str view lives only in locals, arguments and results`],

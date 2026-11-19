@@ -245,7 +245,7 @@ version")을 밝힌다. 이 문서는 판 2 를 정한다. 적지 않으면 판 
   ([리터럴과 주석 밖의 허용되지 않은 글자], "this character is not allowed outside literals and remarks"),
   ([점 뒤에 공백이나 이름이 아닌 것], "a dot is followed by a name, with no space"),
   ([수에 글자·밑줄·점이 붙음], "a number must not run into letters, an underscore or a dot"),
-  ([부호와 숫자 사이의 공백], "a sign is attached to its number; arithmetic uses words (add, sub)"),
+  ([부호와 숫자 사이의 공백], "a sign is attached to its number; arithmetic uses procedures (add, sub)"),
   ([64 비트를 넘는 정수], "the integer does not fit in 64 bits"),
   ([점 아래 18 자리를 넘음], "a decimal has at most 18 digits after the point"),
   ([64 비트를 넘는 소수], "the decimal does not fit in 64 bits at its scale"),

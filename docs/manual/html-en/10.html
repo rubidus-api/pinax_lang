@@ -46,7 +46,7 @@ copied 3 lines
   drop                                <span style="color: #74747c">rem thrown away: it would never be closed</span>
 <span style="color: #d73948">end</span>
 </code></pre><p class="ex-label">Refused</p><pre><code data-lang="text">$ pnx 09-drop-owned.pnx
-09-drop-owned.pnx:4:3: an owned value is kept in a local or given on at once; this word would lose it
+09-drop-owned.pnx:4:3: an owned value is kept in a local or given on at once; this procedure would lose it
 </code></pre></div></div><h3>9.2 Sparing the region</h3><p><code>cat</code> writes new text into the region. The region has a fixed size, so a loop that keeps making text gives the region back in every turn with <code>mark</code> and <code>release</code>. It gives it back on the way out through a failure too — what <code>mark</code> gives is an owned value as well.</p><div class="example run"><p class="ex-file"><code>09-region-loop.pnx</code></p><pre><code data-lang="pinax"><span style="color: #d73948">use</span> io .
 <span style="color: #d73948">use</span> <span style="color: #d73948">str</span> .
 <span style="color: #74747c">rem Make a long report in a small region: each turn gives its bytes back.</span>

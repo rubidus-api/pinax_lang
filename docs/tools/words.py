@@ -66,6 +66,7 @@ def words_of(path):
     core = os.path.basename(path).startswith("15-")
     for pos, cs in tables(src):
         names = [plain(c) for c in cs[:3]]
+        names = ["Word" if n == "Procedure" else n for n in names]  # the standard says procedure
         if names[:3] == ["Word", "Signature", "Meaning"]:
             cols = 3
         elif names[:2] == ["Word", "Meaning"]:

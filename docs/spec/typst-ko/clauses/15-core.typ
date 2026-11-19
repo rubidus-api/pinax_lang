@@ -159,7 +159,7 @@
 
 #part("진단")
 #diag(
-  ([정수 프로시저에 `int` 가 아닌 값], "this word takes two int values"),
+  ([정수 프로시저에 `int` 가 아닌 값], "this procedure takes two int values"),
   ([비교하는 두 값의 타입이 다름], "the two values compared must have the same type"),
   ([`select` 의 값의 타입이 다름], "select takes a bool and two values of one type: flag a b select"),
   ([레코드의 배열이나 목록의 `sort`], "rows do not move: sort a list of their numbers by a field: order table sort_by record.field"),

@@ -66,5 +66,5 @@
 
 #part("진단")
 #diag(
-  ([`toml` 의 말에 다른 형의 값], "this word takes a str (the text, and the path before it)"),
+  ([`toml` 의 말에 다른 형의 값], "this procedure takes a str (the text, and the path before it)"),
 )

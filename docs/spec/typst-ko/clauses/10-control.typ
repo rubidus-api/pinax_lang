@@ -184,7 +184,7 @@ block   = "do" { "to" NAME } { body } "end"
 `step N` 은 N 개마다 하나(첫째부터)를, `rev` 는 끝에서 처음으로 훑는다. 레일 뒤에 쓴 차례대로 적용되어 어댑터가 몇이든 루프는 하나다:
 `scores skip 2 head 3` 은 셋째부터 다섯째까지, `scores head 3 skip 1` 은 둘째와 셋째다. `N` 은 `int` 를 하나 남기는 코드이고 쉼표, `do`,
 다음 어댑터, `sum` `minimum` `maximum` 앞에서 끝난다. 루프 앞에서 한 번만 계산한다. `N` 이 음수(`step` 은 1 보다 작음)이면 결함 `range` 다.
-`step` 과 `rev` 는 닫힌 레일에만 쓴다. `skip` 과 `head` 는 열린 레일에도 쓰고, 거기서는 조각이 오는 대로 센다. `step` 은 맨 끝에만 온다. 한 레일에 넷까지 쓴다.
+`step` 과 `rev` 는 닫힌 레일에만 쓴다. `skip` 과 `head` 는 열린 레일에도 쓰고, 거기서는 조각이 오는 대로 센다. `step` 은 맨 끝에만 온다. 한 레일에 열여섯까지 쓴다.
 `each_index` 는 어댑터 뒤의 레일을 아직 세지 않는다. `each` `fold` `count` `any` `all` `first` `map_into` `filter_into` `sum` `minimum` `maximum` 이 받는다.]
 #ex("spec", "10-rail-adapters.pnx")
 #ex("spec", "10-rail-adapter-step.pnx")
@@ -267,7 +267,7 @@ defer = "defer" { body } "end" ;
   ([두 갈래의 스택이 다름], "the two branches of this if leave different stacks"),
   ([한 바퀴가 스택을 바꿈], "one turn of a loop must leave the stack as it found it"),
   ([루프 밖의 `break` `continue`], "break and continue belong inside a loop"),
-  ([결과를 주는 프로시저의 블록 안의 `break`], "only the block of each, each_index or times is left early; this word gives a result made from every element"),
+  ([결과를 주는 프로시저의 블록 안의 `break`], "only the block of each, each_index or times is left early; this procedure gives a result made from every element"),
   ([`do` 블록 밖 루프로의 `break N .`], "a named loop outside this block is not left from inside it; break leaves the block"),
   ([닿지 않는 코드], "this code cannot be reached: the code before it always leaves"),
   ([`match` 의 같은 값], "this value is already in an earlier branch of the case"),
@@ -275,14 +275,14 @@ defer = "defer" { body } "end" ;
   ([정의 밖의 `return`], "return belongs inside a definition"),
   ([상수가 아닌 가지의 값], "a case value is a literal or the name of a const"),
   ([레일이 아닌 것에 조합 프로시저], "only an array, a list or a pool is a rail (not a queue, a buffer or an index)"),
-  ([가지 안의 `defer`], "defer is written right in a word's body, a loop's body or a do block, not in a branch"),
+  ([가지 안의 `defer`], "defer is written right in a procedure's body, a loop's body or a do block, not in a branch"),
   ([정의 밖의 `defer`], "defer belongs inside a definition"),
   ([미룬 코드가 스택을 바꿈], "a defer leaves the stack as it found it"),
   ([미룬 코드 안의 떠나는 프로시저], "a defer holds no return, fail, break, continue, to, set, loop, do, match or defer"),
-  ([미룬 코드 안의 `or_fail` `or_return`], "a defer does not leave the word; a failure in it is taken with or_else"),
+  ([미룬 코드 안의 `or_fail` `or_return`], "a defer does not leave the procedure; a failure in it is taken with or_else"),
   ([미룬 코드가 맡은 값을 소비], "a defer gives this owned value when the block is left; here it can only be lent"),
-  ([서명이 없는 값이 되는 블록에서 값이 모자람], "a block without a signature takes nothing; a procedure of the program is given as ref NAME, any other word with the block's signature: def str, str gives bool do str.starts_with end"),
-  ([정의 전의 forward 프로시저를 값으로], "a word declared with forward is given as a value only after its definition"),
+  ([서명이 없는 값이 되는 블록에서 값이 모자람], "a block without a signature takes nothing; a procedure of the program is given as ref NAME, any other procedure with the block's signature: def str, str gives bool do str.starts_with end"),
+  ([정의 전의 forward 프로시저를 값으로], "a procedure declared with forward is given as a value only after its definition"),
 )
 
 == 문장의 끝 <control-ends>

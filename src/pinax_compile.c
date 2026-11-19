@@ -69,6 +69,8 @@ enum { USE_EACH, USE_FOLD, USE_TIMES, USE_COUNT, USE_ANY, USE_ALL, USE_FIRST, US
 #define MAX_PARAMS 16
 #define MAX_MODULES 16
 #define MAX_CASE 32
+#define MAX_ADAPT 16 // adapters in one rail chain (RFC-0050)
+#define MAX_ADREC 32 // adapter records alive at once in a load: the chains being written, not yet taken by their combining word
 #define SLOT0 128u // virtual register of stack position 0
 #define NONE UINT32_MAX
 
@@ -76,6 +78,13 @@ typedef struct name {
     const uint8_t *text;
     uint32_t       length;
 } name;
+
+// Where a block adapter's block begins in the source: it is compiled where the loop reads an element.
+typedef struct lpos { uint32_t at, line, line_start; } lpos;
+// One adapter of a chain being written: its kind, the register of its N, and for a block adapter where its block begins.
+// The records of a chain are consecutive in comp.adrec, from the entry's ad0; the chain's combining word takes them and
+// gives the room back, so the room is not paid by every stack entry.
+typedef struct adrec { lpos pos; uint8_t kind, reg; } adrec;
 
 typedef struct entry {
     tid     type;
@@ -88,8 +97,7 @@ typedef struct entry {
     uint8_t src;     // read from this local (its number plus one): lent, or given when it reaches a taker
     uint8_t born;    // a str: the marks made before it (fn.marks then); a mark: its own number
     uint16_t lit;    // pushed by a string literal or const: its constant number plus one
-    uint8_t  nad;    // a rail: the adapters written after it (RFC-0050): kind and the register of N, in order
-    uint8_t  ad[8];
+    uint8_t  nad, ad0; // a rail: how many adapters were written after it (RFC-0050) and where its records start in comp.adrec
     int64_t value;   // E_CONST
 } entry;
 
@@ -444,9 +452,10 @@ typedef struct comp {
     bool         data_only; // PINAX_LOAD_DATA: declarations, literals, stores and rows only
     bool         sink;      // the word being compiled may take an owned value off the stack
     pnx_lexer    scan_after; // scan_user: the lexer just after the word that follows the block's end
-    struct { uint32_t at, line, line_start; } adpos[16]; // where the blocks of rail adapters begin (RFC-0050)
-    uint32_t     n_adpos;
-    uint8_t      ab_n, ab_kind[4], ab_idx[4]; // the block adapters of the rail stem_begin took: kind and place in adpos
+    adrec adrec[MAX_ADREC]; // the adapters of the chains being written (RFC-0050)
+    uint32_t     n_adrec;
+    uint8_t      ab_n, ab_kind[MAX_ADAPT], ab_idx[MAX_ADAPT]; // the block adapters of the rail stem_begin took: kind, and the register of N
+    lpos         ab_pos[MAX_ADAPT];                           // ... and where the block of each begins
     uint32_t     sql_host;   // MODULE.rows: the host word step
     uint8_t      json_path;  // json.items_at: the slot of the path
     bool         json_has_path;
@@ -1052,7 +1061,7 @@ static bool parse_sig(comp *c, sig *s, pnx_word_id stop) {
                     return false;
             } else if (!c->in_host && ref_word(c)) { // a collection (RFC-0018)
                 if (outputs || owned)
-                    return type_error(c, outputs ? "a word gives no collection; it takes one as a parameter"
+                    return type_error(c, outputs ? "a procedure gives no collection; it takes one as a parameter"
                                                  : "a collection parameter is not owned");
                 if (!parse_ref(c, &t))
                     return false;
@@ -1215,7 +1224,7 @@ static bool host_sig(comp *c, const pnx_host *h, sig *s) {
     c->tok = saved_tok;
     if (!ok) { // registration accepted it, so this is a type the compiler does not have yet
         c->err = PINAX_OK;
-        return type_error(c, "this host word uses a type the compiler does not support yet");
+        return type_error(c, "this host procedure uses a type the compiler does not support yet");
     }
     return true;
 }
@@ -1352,7 +1361,7 @@ static bool jump_later(comp *c, uint32_t *chain) {
     if (at == NONE)
         return false;
     if (at >= 0xffffffu)
-        return syntax(c, "the word is too long");
+        return syntax(c, "the procedure is too long");
     *chain = at;
     return true;
 }
@@ -1495,7 +1504,7 @@ static bool settle(comp *c, uint32_t index) {
 static bool settle_all(comp *c) {
     for (uint32_t k = 0; k < c->f->depth; ++k) {
         if (c->f->stack[k].type == TY_COLL)
-            return type_error(c, "the name of an array or list is used at once by a word (idx, len, each ...)");
+            return type_error(c, "the name of an array or list is used at once by a procedure (idx, len, each ...)");
         if (!settle(c, k))
             return false;
     }
@@ -1521,18 +1530,18 @@ static bool need(comp *c, uint32_t count) {
     c->sink = false;
     if (c->f->depth - c->f->floor < count)
         return type_error(c, c->f->bare && c->f->n_blocks == 0
-                                 ? "a block without a signature takes nothing; a word of the program is given as ref NAME, "
-                                   "any other word with the block's signature: def str, str gives bool do "
+                                 ? "a block without a signature takes nothing; a procedure of the program is given as ref NAME, "
+                                   "any other procedure with the block's signature: def str, str gives bool do "
                                    "str.starts_with end"
-                                 : "the stack does not hold enough values for this word");
+                                 : "the stack does not hold enough values for this procedure");
     for (uint32_t k = 0; k < count; ++k) {
         const tid type = c->f->stack[c->f->depth - 1 - k].type;
         if (c->f->stack[c->f->depth - 1 - k].owned && !sink)
-            return type_error(c, "an owned value is kept in a local or given on at once; this word would lose it");
+            return type_error(c, "an owned value is kept in a local or given on at once; this procedure would lose it");
         if (type == TY_STEM)
-            return type_error(c, "a stem is not a value: a combining word takes it at once");
+            return type_error(c, "a rail is not a value: a combining procedure takes it at once");
         if (type == TY_COLL)
-            return type_error(c, "the name of an array or list is not a value; a word like idx or len takes it");
+            return type_error(c, "the name of an array or list is not a value; a procedure like idx or len takes it");
     }
     return true;
 }
@@ -1621,7 +1630,7 @@ static bool select_ref(comp *c, uint32_t reg) {
 static bool need_coll(comp *c, const globalsym **out, uint32_t *index) {
     fn *f = c->f;
     if (f->depth == f->floor || f->stack[f->depth - 1].type != TY_COLL)
-        return type_error(c, "this word takes the name of an array or list last: i names idx");
+        return type_error(c, "this procedure takes the name of an array or list last: i names idx");
     *index = (uint32_t)f->stack[f->depth - 1].value;
     *out = gsym(c, *index);
     --f->depth;
@@ -1948,7 +1957,7 @@ static bool language_name(name n) {
 
 // A new name that the language has taken (RFC-0030 Q4): one message wherever the name is made.
 static bool language_taken(comp *c, pinax_err err, name n) {
-    static const char said[] = " is a word of the language; choose another name";
+    static const char said[] = " is a procedure of the language; choose another name";
     uint32_t at = 0;
     for (uint32_t i = 0; i < n.length && at + sizeof said < sizeof c->note; ++i)
         c->note[at++] = (char)n.text[i];
@@ -2041,7 +2050,7 @@ static bool fits8(int64_t v) {
 static bool narrow_arith(comp *c, uint32_t op, const entry *a, const entry *b, uint32_t width) {
     fn *f = c->f;
     if (a->type != b->type || width == NONE)
-        return type_error(c, "this word takes two values of one type: u8 with u8, int with int; u8 and raw convert");
+        return type_error(c, "this procedure takes two values of one type: u8 with u8, int with int; u8 and raw convert");
     const bool u64 = width == PNX_W_64, is_signed = width >= PNX_W_I8;
     uint32_t   narrow = NONE, plain = NONE;
     switch (op) {
@@ -2082,7 +2091,7 @@ static bool narrow_arith(comp *c, uint32_t op, const entry *a, const entry *b, u
             return type_error(c, "rotl and rotr take an int or a u64; for a narrow type take raw");
         plain = op;
         break;
-    default: return type_error(c, "this word takes int values; for a narrow type take raw");
+    default: return type_error(c, "this procedure takes int values; for a narrow type take raw");
     }
     const uint32_t dst = slot_of(c, f->depth - 2);
     uint32_t       ra, rb;
@@ -2215,7 +2224,7 @@ static bool arith_word(comp *c, uint32_t op) {
         return type_error(c, (da || db) && (a->type == b->type || a->type == TY_INT || b->type == TY_INT)
                                  ? "a declared type is added to and subtracted from its own type, and multiplied, divided "
                                    "or taken modulo by an int; for other arithmetic take raw"
-                                 : "this word takes two int values, or two of the same declared type");
+                                 : "this procedure takes two int values, or two of the same declared type");
     const uint32_t dst = slot_of(c, f->depth - 2);
     uint32_t ra, rb;
     // a small constant on top goes into the instruction (C, a signed byte)
@@ -2318,7 +2327,7 @@ static bool bool_word(comp *c, uint32_t op) {
     if (!need(c, 2))
         return false;
     if (f->stack[f->depth - 2].type != TY_BOOL || f->stack[f->depth - 1].type != TY_BOOL)
-        return type_error(c, "and, or take two bool values; the bit words are bit_and, bit_or");
+        return type_error(c, "and, or take two bool values; the bit procedures are bit_and, bit_or");
     const uint32_t dst = slot_of(c, f->depth - 2);
     uint32_t ra, rb;
     if (!reg_of(c, f->depth - 2, &ra) || !reg_of(c, f->depth - 1, &rb) ||
@@ -2361,7 +2370,7 @@ static bool core(comp *c, const core_word *w) {
         }
         if (f->stack[f->depth - 1].type != TY_INT &&
             !(w->op == PNX_ABS && num_base(c, f->stack[f->depth - 1].type) == TY_INT)) // abs keeps a declared type
-            return type_error(c, "this word takes an int");
+            return type_error(c, "this procedure takes an int");
         const uint32_t dst = slot_of(c, f->depth - 1);
         if (!reg_of(c, f->depth - 1, &ra) || emit_def(c, PNX_ABC(w->op, dst, ra, 0), BANK_I) == NONE)
             return false;
@@ -2379,7 +2388,7 @@ static bool core(comp *c, const core_word *w) {
         if (narrow_width(c, ta) != NONE || narrow_width(c, tb) != NONE) { // a narrow type (RFC-0025)
             narrow = narrow_width(c, ta);
             if (ta != tb || narrow == NONE)
-                return type_error(c, "this word takes two values of one type: u8 with u8, int with int");
+                return type_error(c, "this procedure takes two values of one type: u8 with u8, int with int");
             if (w->kind == C_UCMP && narrow >= PNX_W_I8)
                 return type_error(c, "u_lt, u_le, u_gt and u_ge take an int or an unsigned type; a signed type compares with lt");
             result = ta;
@@ -2392,7 +2401,7 @@ static bool core(comp *c, const core_word *w) {
                                      "dec, and divided by an int");
             result = both ? (tid)(TY_DEC + (ta - TY_DEC) + (tb - TY_DEC)) : is_dec(ta) ? ta : tb;
         } else if (tb != TY_INT || ta != TY_INT) {
-            return type_error(c, "this word takes two int values");
+            return type_error(c, "this procedure takes two int values");
         }
         if (!settle(c, f->depth - 2) || !settle(c, f->depth - 1))
             return false;
@@ -2528,9 +2537,9 @@ static bool call_args(comp *c, const sig *s, uint32_t base[2], bool lent) {
         if (s->in[k] == TY_BUF) { // a buffer goes to a host word as its number
             entry *e = &f->stack[f->depth - s->n_in + k];
             if (e->type != TY_COLL || gsym(c, e->value)->kind != GK_BUFFER)
-                return type_error(c, "this host word takes a buffer here");
+                return type_error(c, "this host procedure takes a buffer here");
             if (e->kind != E_LOCAL && gsym(c, e->value)->shared)
-                return type_error(c, "a shared buffer is read-only: it is not given to a host word, which may write it");
+                return type_error(c, "a shared buffer is read-only: it is not given to a host procedure, which may write it");
             if (e->kind == E_LOCAL && !read_only(c, (uint32_t)e->value)) // the host word may change the parameter
                 return false;
             if (!make_room(c, f->depth - s->n_in + k))
@@ -2547,7 +2556,7 @@ static bool call_args(comp *c, const sig *s, uint32_t base[2], bool lent) {
             const globalsym *g = gsym(c, (uint32_t)e->value);
             const rtype     *r = (const rtype *)c->rtypes.ptr + (s->in[k] - TY_REF);
             if (e->kind != E_LOCAL && g->shared && !lent)
-                return type_error(c, "a shared collection is read-only: it is not given to the word a block value "
+                return type_error(c, "a shared collection is read-only: it is not given to the procedure a block value "
                                      "names, which may change it");
             if (g->kind != r->kind || g->record != r->record || g->strcap != r->strcap ||
                 (r->record == NONE && r->kind != GK_BUFFER && (g->strcap ? TY_STR : g->type) != r->cell))
@@ -2565,7 +2574,7 @@ static bool call_args(comp *c, const sig *s, uint32_t base[2], bool lent) {
     const uint32_t first = f->depth - s->n_in;
     for (uint32_t k = 0; k < s->n_in; ++k) {
         if (f->stack[first + k].type != s->in[k])
-            return type_error(c, "an argument has another type than the word's signature asks for");
+            return type_error(c, "an argument has another type than the procedure's signature asks for");
         if (s->in_owned[k] ? !give(c, first + k) : f->stack[first + k].owned)
             return type_error(c, s->in_owned[k] ? "this parameter takes an owned value; what is given here is not one"
                                                 : "an owned value is lent from a local, not straight from the stack");
@@ -2599,7 +2608,7 @@ static bool push_results(comp *c, const sig *s, const uint32_t base[2], const ui
     for (uint32_t k = 0; k < s->n_out; ++k) { // a mark given back is a new one: made after the call's values
         if (s->out[k] == TY_MARK) {
             if (c->f->marks == UINT8_MAX)
-                return syntax(c, "a word makes at most 255 marks");
+                return syntax(c, "a procedure makes at most 255 marks");
             ++c->f->marks;
             break;
         }
@@ -2631,10 +2640,10 @@ static bool name_is_free(comp *c, name n);
 static bool guard(comp *c, const sig *s, const uint32_t base[2], const uint32_t in[2], bool host) {
     fn *f = c->f;
     if (c->in_defer && (is_word(c, PNX_KW_or_fail) || is_word(c, PNX_KW_or_return)))
-        return syntax(c, "a defer does not leave the word; a failure in it is taken with or_else");
+        return syntax(c, "a defer does not leave the procedure; a failure in it is taken with or_else");
     if (is_word(c, PNX_KW_or_fail)) {
         if (f->is_top || !f->sig->fails)
-            return type_error(c, "or_fail passes the failure on, so this word needs `or fail` in its signature");
+            return type_error(c, "or_fail passes the failure on, so this procedure needs `or fail` in its signature");
         if (!f->n_defers)
             return nothing_owned(c) && emit(c, PNX_ABC(PNX_RETF, 0, 0, 0)) != NONE &&
                    push_results(c, s, base, in, host) && advance(c);
@@ -2669,7 +2678,7 @@ static bool guard(comp *c, const sig *s, const uint32_t base[2], const uint32_t 
     }
     const bool returns = is_word(c, PNX_KW_or_return);
     if (!returns && !is_word(c, PNX_KW_or_else))
-        return type_error(c, "a word that can fail is followed by or_fail, or_return or or_else");
+        return type_error(c, "a procedure that can fail is followed by or_fail, or_return or or_else");
     if (returns && f->is_top)
         return syntax(c, "or_return belongs inside a definition");
     uint32_t handler = NONE, resume = NONE;
@@ -2717,7 +2726,7 @@ static bool guard(comp *c, const sig *s, const uint32_t base[2], const uint32_t 
         if (!name_is_free(c, n))
             return false;
         if (f->n_locals == MAX_LOCALS || f->nloc[BANK_I] >= SLOT0 - 1)
-            return syntax(c, "too many local variables in this word");
+            return syntax(c, "too many local variables in this procedure");
         local *l = &f->locals[f->n_locals++];
         *l = (local){.name = n, .type = TY_ERR, .reg = f->nloc[BANK_I]++};
         if (f->nloc[BANK_I] > f->maxloc[BANK_I])
@@ -2975,7 +2984,7 @@ static bool store_local(comp *c, name n) {
         if (!name_is_free(c, n))
             return false;
         if (f->n_locals == MAX_LOCALS || f->nloc[bank] >= SLOT0 - 1)
-            return syntax(c, "too many local variables in this word");
+            return syntax(c, "too many local variables in this procedure");
         l = &f->locals[f->n_locals++];
         *l = (local){.name = n, .type = e.type, .reg = f->nloc[bank]++, .drec = NONE};
         if (f->nloc[bank] > f->maxloc[bank])
@@ -3522,7 +3531,7 @@ static bool leave_target(comp *c, block **out, pnx_word_id which) {
                 continue; // break 2 . across the block of an each: it is one of the levels (RFC-0049)
             return error_at(c, PINAX_ERR_SYNTAX, at.line, at.column,
                             leaves ? "a named loop outside this block is not left from inside it; break leaves the block"
-                                   : "only the block of each, each_index or times is left early; this word gives a "
+                                   : "only the block of each, each_index or times is left early; this procedure gives a "
                                      "result made from every element");
         }
         if (b->kind == B_LOOP && (n.length ? b->name.length && name_eq(b->name, n) : ++seen == want)) {
@@ -3722,7 +3731,7 @@ static bool end_orelse(comp *c, block *b) {
         if (!settle_all(c))
             return false;
         if (!same_stack(f, &b->out))
-            return type_error(c, "the body of or_else must leave what the word would have given, or leave the word or the loop");
+            return type_error(c, "the body of or_else must leave what the procedure would have given, or leave the procedure or the loop");
         if (!same_owns(c, b, b->owns_in))
             return false;
     }
@@ -4155,12 +4164,13 @@ static int adapter_id(name n) {
 static bool do_adapter(comp *c, int id) {
     fn *f = c->f;
     const uint32_t rail = f->depth - 1;
-    if (f->stack[rail].nad >= 4)
-        return syntax(c, "a chain holds four adapters at most");
+    if (f->stack[rail].nad >= MAX_ADAPT || c->n_adrec == MAX_ADREC)
+        return syntax(c, "a chain holds sixteen adapters at most");
     for (uint32_t k = 0; k < f->stack[rail].nad; ++k) {
-        if (f->stack[rail].ad[2 * k] == AD_STEP)
+        const uint8_t kind = c->adrec[f->stack[rail].ad0 + k].kind;
+        if (kind == AD_STEP)
             return syntax(c, "step comes last in a chain: nothing follows it");
-        if (f->stack[rail].ad[2 * k] >= AD_FILTER && !(f->stack[rail].type == TY_STEM && stem_takes(f->stack[rail].op) && id <= AD_HEAD))
+        if (kind >= AD_FILTER && !(f->stack[rail].type == TY_STEM && stem_takes(f->stack[rail].op) && id <= AD_HEAD))
             return syntax(c, "skip, head, step and rev come before filter, map, skip_while and head_while in a chain");
     }
     if (!advance(c))
@@ -4195,8 +4205,11 @@ static bool do_adapter(comp *c, int id) {
             return false;
     }
     entry *e = &f->stack[rail];
-    e->ad[2 * e->nad] = (uint8_t)id;
-    e->ad[2 * e->nad + 1] = reg;
+    if (c->n_adrec == MAX_ADREC || (e->nad && e->ad0 + e->nad != c->n_adrec))
+        return syntax(c, "too many adapters are being written at once");
+    if (!e->nad)
+        e->ad0 = (uint8_t)c->n_adrec;
+    c->adrec[c->n_adrec++] = (adrec){.kind = (uint8_t)id, .reg = reg};
     ++e->nad;
     return true;
 }
@@ -4206,24 +4219,27 @@ static bool do_adapter(comp *c, int id) {
 static bool capture_adapter_block(comp *c, name user) {
     fn *f = c->f;
     const uint32_t rail = f->depth - 1;
-    if (f->stack[rail].nad >= 4 || c->n_adpos == 16)
-        return syntax(c, "a chain holds four adapters at most");
-    c->adpos[c->n_adpos] = (__typeof__(c->adpos[0])){c->lx->at, c->lx->line, c->lx->line_start};
     entry *e = &f->stack[rail];
-    e->ad[2 * e->nad] = (uint8_t)block_adapter_id(user);
-    e->ad[2 * e->nad + 1] = (uint8_t)c->n_adpos++;
+    if (e->nad >= MAX_ADAPT)
+        return syntax(c, "a chain holds sixteen adapters at most");
+    if (c->n_adrec == MAX_ADREC || (e->nad && e->ad0 + e->nad != c->n_adrec))
+        return syntax(c, "too many adapters are being written at once");
+    if (!e->nad)
+        e->ad0 = (uint8_t)c->n_adrec;
+    c->adrec[c->n_adrec++] = (adrec){.pos = {c->lx->at, c->lx->line, c->lx->line_start}, .kind = (uint8_t)block_adapter_id(user)};
     ++e->nad;
     *c->lx = c->scan_after;
     return advance(c);
 }
 
 // The block adapters of a rail, taken by stem_begin: the flag of each skip_while is made before the loop begins
-typedef struct abset { uint8_t n, kind[4], idx[4], flag[4]; } abset;
+typedef struct abset { uint8_t n, kind[MAX_ADAPT], idx[MAX_ADAPT], flag[MAX_ADAPT]; lpos pos[MAX_ADAPT]; } abset;
 static bool ab_init(comp *c, abset *a) {
     *a = (abset){.n = c->ab_n};
     for (uint32_t k = 0; k < c->ab_n; ++k) {
         a->kind[k] = c->ab_kind[k];
         a->idx[k] = c->ab_idx[k];
+        a->pos[k] = c->ab_pos[k];
         if (a->kind[k] == AD_SKIP || a->kind[k] == AD_HEAD) { // a count of the pieces seen
             local *l = new_local(c, (name){0}, TY_INT);
             if (!l || emit(c, PNX_ABX(PNX_LOADI, l->reg, 0)) == NONE)
@@ -4274,9 +4290,9 @@ static bool ab_run(comp *c, const abset *a, uint32_t reg, tid etype, uint32_t *s
         uint32_t       pass = NONE;
         if (a->kind[k] == AD_SKIPW && (emit(c, PNX_ABC(PNX_JNEI, a->flag[k], 0, 1)) == NONE || !jump_later(c, &pass)))
             return false;
-        c->lx->at = c->adpos[a->idx[k]].at;
-        c->lx->line = c->adpos[a->idx[k]].line;
-        c->lx->line_start = c->adpos[a->idx[k]].line_start;
+        c->lx->at = a->pos[k].at;
+        c->lx->line = a->pos[k].line;
+        c->lx->line_start = a->pos[k].line_start;
         if (!advance(c))
             return false;
         f->floor = depth;
@@ -4306,7 +4322,7 @@ static bool ab_run(comp *c, const abset *a, uint32_t reg, tid etype, uint32_t *s
                 return false;
         }
         if (f->dead)
-            return type_error(c, "the block of an adapter does not leave the word or the loop");
+            return type_error(c, "the block of an adapter does not leave the procedure or the loop");
         const bool value = a->kind[k] == AD_MAP;
         if (f->depth != depth + 1 || f->stack[depth].type != (value ? etype : TY_BOOL))
             return type_error(c, value ? "the block of map gives one value of the element's type"
@@ -4357,22 +4373,24 @@ static bool apply_adapters(comp *c, const entry *rail, uint8_t kind, uint8_t cur
     fn *f = c->f;
     bool window = false;
     for (uint32_t k = 0; k < rail->nad; ++k)
-        window = window || rail->ad[2 * k] < AD_FILTER;
+        window = window || c->adrec[rail->ad0 + k].kind < AD_FILTER;
     if (!window)
         return true;
     if (stem_takes(kind)) { // an open rail: skip and head count the pieces as they come; the others need a closed one
         c->ab_n = 0; // in the order written, the counting ones among the blocks
         for (uint32_t k = 0; k < rail->nad; ++k) {
-            const uint8_t id = rail->ad[2 * k];
+            const adrec *r = &c->adrec[rail->ad0 + k];
+            const uint8_t id = r->kind;
             if (id == AD_STEP || id == AD_REV)
                 return type_error(c, "step and rev need a closed rail (a range, an array, a list, the bytes of a str); this rail is open: its length is not known before the walk");
             if (id < AD_FILTER) {
-                if (emit(c, PNX_ABC(PNX_JGEI, rail->ad[2 * k + 1], 0, 1)) == NONE ||
+                if (emit(c, PNX_ABC(PNX_JGEI, r->reg, 0, 1)) == NONE ||
                     emit(c, PNX_ABX(PNX_FAULT, 0, PINAX_ERR_RANGE)) == NONE)
                     return false;
             }
             c->ab_kind[c->ab_n] = id;
-            c->ab_idx[c->ab_n++] = rail->ad[2 * k + 1];
+            c->ab_pos[c->ab_n] = r->pos;
+            c->ab_idx[c->ab_n++] = r->reg;
         }
         return true;
     }
@@ -4384,7 +4402,7 @@ static bool apply_adapters(comp *c, const entry *rail, uint8_t kind, uint8_t cur
     if (!tmp)
         return false;
     for (uint32_t k = 0; k < rail->nad; ++k) {
-        const uint8_t id = rail->ad[2 * k], n = rail->ad[2 * k + 1];
+        const uint8_t id = c->adrec[rail->ad0 + k].kind, n = c->adrec[rail->ad0 + k].reg;
         if (id >= AD_FILTER)
             continue;
         if (id == AD_REV) {
@@ -4445,14 +4463,20 @@ static bool stem_begin(comp *c, uint8_t *kind, uint8_t *cur, uint8_t *lim, uint1
         return type_error(c, "an adapter (skip, head, step, rev, filter, map ...) is taken by each, fold, count, any, all, first, map_into, filter_into, sum, minimum and maximum");
     c->ab_n = 0;
     for (uint32_t k = 0; k < rail.nad; ++k) {
-        if (rail.ad[2 * k] >= AD_FILTER) {
-            c->ab_kind[c->ab_n] = rail.ad[2 * k];
-            c->ab_idx[c->ab_n++] = rail.ad[2 * k + 1];
+        const adrec *r = &c->adrec[rail.ad0 + k];
+        if (r->kind >= AD_FILTER) {
+            c->ab_kind[c->ab_n] = r->kind;
+            c->ab_pos[c->ab_n] = r->pos;
+            c->ab_idx[c->ab_n++] = r->reg;
         }
     }
     if (!stem_begin_raw(c, kind, cur, lim, src, count, element))
         return false;
-    return !rail.nad || apply_adapters(c, &rail, *kind, *cur, *lim);
+    if (!rail.nad)
+        return true;
+    const bool applied = apply_adapters(c, &rail, *kind, *cur, *lim);
+    c->n_adrec = rail.ad0; // the chain is taken: its records are free again
+    return applied;
 }
 
 static bool stem_begin_raw(comp *c, uint8_t *kind, uint8_t *cur, uint8_t *lim, uint16_t *src, uint8_t *count,
@@ -4498,7 +4522,7 @@ static bool stem_begin_raw(comp *c, uint8_t *kind, uint8_t *cur, uint8_t *lim, u
             return emit(c, PNX_ABX(PNX_LOADI, *cur, 0)) != NONE;
         }
         if (g->kind != GK_ARRAY && g->kind != GK_LIST)
-            return type_error(c, "only an array, a list or a pool is a stem (not a queue, a buffer or an index)");
+            return type_error(c, "only an array, a list or a pool is a rail (not a queue, a buffer or an index)");
         if (!push_slot(c, TY_INT) || !push_slot(c, TY_INT))
             return false;
         f->stack[f->depth - 2].hidden = f->stack[f->depth - 1].hidden = true;
@@ -4686,7 +4710,7 @@ static local *new_local(comp *c, name n, tid type) {
     if (n.length && !name_is_free(c, n))
         return NULL;
     if (f->n_locals == MAX_LOCALS || f->nloc[bank] >= SLOT0 - 1) {
-        syntax(c, "too many local variables in this word");
+        syntax(c, "too many local variables in this procedure");
         return NULL;
     }
     local *l = &f->locals[f->n_locals++];
@@ -4705,7 +4729,7 @@ static bool rex_block(comp *c, name user, sig *bs, uint32_t line, uint32_t colum
     name real;
     const name module = {user.text, (uint32_t)(user.length - sizeof "with_match")}; // both words are 10 bytes
     if (!module_of(c, module, &real) || !name_is(real, "rex"))
-        return error_at(c, PINAX_ERR_NOT_FOUND, line, column, "with_match and replace_by are words of rex");
+        return error_at(c, PINAX_ERR_NOT_FOUND, line, column, "with_match and replace_by are procedures of rex");
     const globalsym *g = NULL;
     uint32_t         gi = 0;
     if (by && !need_coll(c, &g, &gi))
@@ -4847,7 +4871,7 @@ static bool end_rex_block(comp *c, block *b) {
     if (!advance(c)) // past the end
         return false;
     if (c->tok.kind != PNX_T_PATH || !name_eq(tok_name(c), done.user))
-        return syntax(c, "the word that uses the block is expected right after its end");
+        return syntax(c, "the procedure that uses the block is expected right after its end");
     if (!settle_all(c))
         return false;
     f->def_at = NONE;
@@ -4875,7 +4899,7 @@ static bool ref_value(comp *c) {
     if (c->tok.kind == PNX_T_NAME) {
         if (!find_word(c, n, &index)) {
             if (find_fwd(c, n, NULL))
-                return type_error(c, "a word declared with forward is given as a value only after its definition");
+                return type_error(c, "a procedure declared with forward is given as a value only after its definition");
             return type_error(c, "ref names a procedure of the program");
         }
     } else {
@@ -4993,7 +5017,7 @@ static bool do_block(comp *c) {
                                                                                                     : USE_EACH_INDEX;
         if (!has_stem)
             return error_at(c, PINAX_ERR_TYPE, at.line, at.column,
-                            "this combining word needs a stem before its block (for example lo hi range)");
+                            "this combining procedure needs a rail before its block (for example lo hi range)");
         c->pool_each = use == USE_EACH;
         c->ad_ok = true;
         if (!stem_begin(c, &kind, &cur, &lim, &src, &hidden, &element))
@@ -5008,7 +5032,7 @@ static bool do_block(comp *c) {
             return error_at(c, PINAX_ERR_TYPE, at.line, at.column, "each_index does not count along an adapted rail yet");
     } else {
         return error_at(c, PINAX_ERR_SYNTAX, at.line, at.column,
-                        "this block is used by a word the compiler does not expand yet");
+                        "this block is used by a procedure the compiler does not expand yet");
     }
     if (bare && use != USE_TIMES) {
         const uint32_t base = c->el_n > 1 ? c->el_n : use == USE_EACH_INDEX || use == USE_FOLD ? 2u : 1u;
@@ -5112,7 +5136,7 @@ static bool do_block(comp *c) {
     } else if (use == USE_FOLD) {
         init = f->depth - hidden - 1;
         if (f->depth - f->floor < (uint32_t)hidden + 1 || f->stack[init].type == TY_STEM)
-            return error_at(c, PINAX_ERR_TYPE, at.line, at.column, "fold takes a first value before the stem");
+            return error_at(c, PINAX_ERR_TYPE, at.line, at.column, "fold takes a first value before the rail");
         const tid acc = f->stack[init].type;
         if (bs.n_in != 2 || !bs.named || bs.n_out != 1 || bs.in[0] != acc || bs.out[0] != acc || bs.in[1] != element)
             return error_at(c, PINAX_ERR_TYPE, at.line, at.column,
@@ -5571,7 +5595,7 @@ static bool end_do(comp *c, block *b) {
         return guard_op(c, TY_NONE);
     }
     if (c->tok.kind != PNX_T_NAME || !name_eq(tok_name(c), done.user))
-        return syntax(c, "the word that uses the block is expected right after its end");
+        return syntax(c, "the procedure that uses the block is expected right after its end");
     if (done.use == USE_FIRST) // the element found, or the failure not_found
         return found_or_fail(c, done.element, done.val, done.acc);
     if (done.fails_rail) { // success skips the jump of the guard; a failure of the walk takes it
@@ -5610,7 +5634,7 @@ static bool adapted_cursor(comp *c, uint8_t cur, adapted *a) {
 static bool do_extreme(comp *c, bool largest) {
     fn *f = c->f;
     if (f->depth == f->floor || bank_of(f->stack[f->depth - 1].type) != BANK_NONE)
-        return type_error(c, "this word takes a stem of int values");
+        return type_error(c, "this procedure takes a rail of int values");
     uint8_t  kind, cur, lim, hidden;
     uint16_t src;
     tid     element_type;
@@ -5619,7 +5643,7 @@ static bool do_extreme(comp *c, bool largest) {
         return false;
     adapted ad;
     if ((element_type != TY_INT && !is_dec(element_type)) || stem_takes(kind))
-        return type_error(c, "this word takes a stem of int or dec(N) values");
+        return type_error(c, "this procedure takes a rail of int or dec(N) values");
     if (!push_slot(c, element_type) || !push_slot(c, TY_INT))
         return false;
     const uint32_t best = slot_of(c, f->depth - 2), flag = slot_of(c, f->depth - 1);
@@ -5666,14 +5690,14 @@ static bool do_join(comp *c) {
     uint16_t src;
     tid      element;
     if (f->depth == f->floor || f->stack[f->depth - 1].type != TY_STEM)
-        return type_error(c, "join_into takes a separator, a buffer and a stem of str: \",\" out s str.words str.join_into");
+        return type_error(c, "join_into takes a separator, a buffer and a rail of str: \",\" out s str.words str.join_into");
     if (!stem_begin(c, &kind, &cur, &lim, &src, &hidden, &element))
         return false;
     const uint32_t base = f->depth - hidden; // the operands of the stem begin here
     if (element != TY_STR || base < f->floor + 2 || f->stack[base - 1].type != TY_COLL ||
         gsym(c, f->stack[base - 1].value)->kind != GK_BUFFER ||
         f->stack[base - 2].type != TY_STR)
-        return type_error(c, "join_into takes a separator, a buffer and a stem of str: \",\" out s str.words str.join_into");
+        return type_error(c, "join_into takes a separator, a buffer and a rail of str: \",\" out s str.words str.join_into");
     const uint32_t gi = (uint32_t)f->stack[base - 1].value;
     // the name of the buffer is no value: out of the stack; the registers of the others stay
     for (uint32_t k = base - 1; k + 1 < f->depth; ++k)
@@ -6093,7 +6117,7 @@ static bool text_put(comp *c, uint32_t op, uint32_t kind, tid value) {
     if (!need_coll(c, &g, &gi) || (value != TY_NONE && !need(c, 1)))
         return false;
     if (g->kind != GK_BUFFER || (value != TY_NONE && f->stack[f->depth - 1].type != value))
-        return type_error(c, value == TY_NONE ? "this word takes a buffer" : "this word takes a value and a buffer: v buf json.put_int");
+        return type_error(c, value == TY_NONE ? "this procedure takes a buffer" : "this procedure takes a value and a buffer: v buf json.put_int");
     if (value != TY_NONE) {
         if (!settle(c, f->depth - 1))
             return false;
@@ -6119,7 +6143,7 @@ static bool json_word(comp *c, name n) {
     if (at || name_is(n, "items") || name_is(n, "members")) { // the rails (RFC-0051)
         const uint32_t k = at ? 2 : 1;
         if (!need(c, k) || f->stack[f->depth - 1].type != TY_STR || (at && f->stack[f->depth - 2].type != TY_STR))
-            return type_error(c, at ? "this word takes the path and the text: path s json.items_at" : "this word takes a str: the JSON text");
+            return type_error(c, at ? "this procedure takes the path and the text: path s json.items_at" : "this procedure takes a str: the JSON text");
         const bool members = name_is(n, "members") || name_is(n, "members_at");
         if (!settle(c, f->depth - 1) || (at && !settle(c, f->depth - 2)))
             return false;
@@ -6157,11 +6181,11 @@ static bool json_word(comp *c, name n) {
     if (txw_find(8, n))
         return txw_word(c, 8, n);
     if (!name_is(n, "next") && !name_is(n, "skip"))
-        return error(c, PINAX_ERR_NOT_FOUND, "the module has no word of this name");
+        return error(c, PINAX_ERR_NOT_FOUND, "the module has no procedure of this name");
     if (!need(c, 1))
         return false;
     if (f->stack[f->depth - 1].type != TY_STR)
-        return type_error(c, "this word takes the JSON text as a str");
+        return type_error(c, "this procedure takes the JSON text as a str");
     if (!settle(c, f->depth - 1))
         return false;
     const uint32_t rs = slot_of(c, f->depth - 1);
@@ -6200,7 +6224,7 @@ static bool csv_word(comp *c, name n) {
     if (name_is(n, "pack") || name_is(n, "unpack"))
         return text_record(c, false, name_is(n, "unpack"));
     if (!name_is(n, "fields"))
-        return error(c, PINAX_ERR_NOT_FOUND, "the module has no word of this name");
+        return error(c, PINAX_ERR_NOT_FOUND, "the module has no procedure of this name");
     if (!need(c, 1))
         return false;
     if (f->stack[f->depth - 1].type != TY_STR)
@@ -6239,23 +6263,23 @@ static bool sheet_word(comp *c, name n) {
         return push(c, (entry){.type = TY_INT, .kind = E_CONST, .value = constant}) && advance(c);
     const pnx_shword *sw = sheet_find(n);
     if (!sw)
-        return error(c, PINAX_ERR_NOT_FOUND, "the module has no word of this name");
+        return error(c, PINAX_ERR_NOT_FOUND, "the module has no procedure of this name");
     const globalsym *g;
     uint32_t         gi;
     if (!need_coll(c, &g, &gi))
         return false;
     if (g->kind != GK_BUFFER)
-        return type_error(c, "the words of sheet take a buffer last: v row column grid sheet.put_int");
+        return type_error(c, "the procedures of sheet take a buffer last: v row column grid sheet.put_int");
     const bool       two = pnx_shhas(sw->flags, 'O'); // a file and a book: file book sheet.load_csv (RFC-0045)
     const globalsym *g2 = NULL;
     uint32_t         gi2 = 0;
     if (two) {
         if (gi >= REF_GLOBAL)
-            return type_error(c, "this word of sheet takes a book of its own, not a reference: 0 file book sheet.load_csv");
+            return type_error(c, "this procedure of sheet takes a book of its own, not a reference: 0 file book sheet.load_csv");
         if (!need_coll(c, &g2, &gi2))
             return false;
         if (g2->kind != GK_BUFFER)
-            return type_error(c, "this word of sheet takes the buffer of the file, then the book: 0 file book sheet.load_csv");
+            return type_error(c, "this procedure of sheet takes the buffer of the file, then the book: 0 file book sheet.load_csv");
     }
     const uint32_t k_in = (uint32_t)pnx_shlen(sw->in);
     if (!need(c, k_in))
@@ -6269,7 +6293,7 @@ static bool sheet_word(comp *c, name n) {
                           : t == 'd' ? is_dec(e->type) : (e->type == TY_INT && e->kind == E_CONST && e->value >= 0 && e->value <= 18);
         if (!ok)
             return type_error(c, t == 'n' ? "the digits after the point are a constant 0 to 18: row column 2 grid sheet.dec"
-                                          : "this word of sheet takes int for row, column and number, str for text, bool for put_bool, dec(N) for put_dec");
+                                          : "this procedure of sheet takes int for row, column and number, str for text, bool for put_bool, dec(N) for put_dec");
         if (t == 'd') {
             scale = e->type - TY_DEC;
             have_scale = true;
@@ -6372,7 +6396,7 @@ static bool txw_word(comp *c, uint8_t module, name n) {
     }
     const pnx_txword *tw = txw_find(module, n);
     if (!tw)
-        return error(c, PINAX_ERR_NOT_FOUND, "the module has no word of this name");
+        return error(c, PINAX_ERR_NOT_FOUND, "the module has no procedure of this name");
     const bool       writes = pnx_txhas(tw->flags, 'W'), fails = pnx_txhas(tw->flags, 'F');
     const globalsym *g = NULL;
     uint32_t         gi = 0;
@@ -6380,7 +6404,7 @@ static bool txw_word(comp *c, uint8_t module, name n) {
         if (!need_coll(c, &g, &gi))
             return false;
         if (g->kind != GK_BUFFER)
-            return type_error(c, "this word writes into a buffer, which comes last: text buf md.html");
+            return type_error(c, "this procedure writes into a buffer, which comes last: text buf md.html");
     }
     const uint32_t k_in = (uint32_t)pnx_shlen(tw->in);
     if (!need(c, k_in))
@@ -6389,9 +6413,9 @@ static bool txw_word(comp *c, uint8_t module, name n) {
         const entry *e = &f->stack[f->depth - k_in + k];
         const char   t = tw->in[k];
         if (t == 'a' ? e->type != TY_ARGS : t == 's' ? e->type != TY_STR : e->type != TY_INT)
-            return type_error(c, t == 'a' ? "this word takes the number of the value, and then the args: 0 rest args.int"
-                                 : t == 's' ? "this word takes a str (the text, and the path before it)"
-                                            : "this word takes an int (the indent, the number of a value, the digits of a dec)");
+            return type_error(c, t == 'a' ? "this procedure takes the number of the value, and then the args: 0 rest args.int"
+                                 : t == 's' ? "this procedure takes a str (the text, and the path before it)"
+                                            : "this procedure takes an int (the indent, the number of a value, the digits of a dec)");
     }
     tid dec_type = TY_NONE; // args.dec: the scale is a constant, and the value is a dec of it
     if (module == 13 && tw == &pnx_txwords[PNX_TXW_ARGS_DEC]) {
@@ -6458,7 +6482,7 @@ static bool bytes_word(comp *c, name n) {
         return pack_word(c, n);
     const bool put = n.length > 4 && __builtin_memcmp(n.text, "put_", 4) == 0;
     if (!put && !(n.length > 4 && __builtin_memcmp(n.text, "get_", 4) == 0))
-        return error(c, PINAX_ERR_NOT_FOUND, "the module has no word of this name");
+        return error(c, PINAX_ERR_NOT_FOUND, "the module has no procedure of this name");
     name rest = {n.text + 4, n.length - 4};
     const bool be = rest.length > 3 && __builtin_memcmp(rest.text + rest.length - 3, "_be", 3) == 0;
     if (be)
@@ -6472,7 +6496,7 @@ static bool bytes_word(comp *c, name n) {
         }
     }
     if (code == NONE - 1 || (be && (code == NONE || code == PNX_W_VARINT || code == PNX_W_U8 || code == PNX_W_I8)))
-        return error(c, PINAX_ERR_NOT_FOUND, "the module has no word of this name");
+        return error(c, PINAX_ERR_NOT_FOUND, "the module has no procedure of this name");
     if (be)
         code |= PNX_W_BE;
     uint32_t ra;
@@ -6483,7 +6507,7 @@ static bool bytes_word(comp *c, name n) {
             return false;
         if (g->kind != GK_BUFFER || f->stack[f->depth - 1].type != type)
             return type_error(c, code == NONE ? "put_str takes a str and a buffer: s buf bytes.put_str"
-                                              : "this word takes a value of the type its name says and a buffer: n buf bytes.put_u32");
+                                              : "this procedure takes a value of the type its name says and a buffer: n buf bytes.put_u32");
         if (!settle(c, f->depth - 1))
             return false;
         ra = slot_of(c, f->depth - 1);
@@ -6496,7 +6520,7 @@ static bool bytes_word(comp *c, name n) {
     if (!need(c, 1))
         return false;
     if (f->stack[f->depth - 1].type != TY_STR)
-        return type_error(c, "this word takes a str: s bytes.get_u32");
+        return type_error(c, "this procedure takes a str: s bytes.get_u32");
     if (!settle(c, f->depth - 1))
         return false;
     ra = slot_of(c, f->depth - 1);
@@ -6550,7 +6574,7 @@ static bool rex_word(comp *c, uint32_t id) {
             return false;
         const entry pat = f->stack[f->depth - 1];
         if (pat.type != TY_STR)
-            return type_error(c, "this word takes the pattern as a str");
+            return type_error(c, "this procedure takes the pattern as a str");
         if (id == BW_RX_COMPILE) {
             if (!settle(c, f->depth - 1))
                 return false;
@@ -6591,8 +6615,8 @@ static bool rex_word(comp *c, uint32_t id) {
     const uint32_t first = f->depth - 2 - (args > 2);
     if (f->stack[first].type != TY_STR || f->stack[first + 1].type != TY_REGEX ||
         (args > 2 && f->stack[first + 2].type != TY_STR) || (g && g->kind != GK_BUFFER))
-        return type_error(c, args > 2 ? "this word takes a str, a regex, the new text (and a buffer): s re new rex.replace"
-                                      : "this word takes a str and a regex: s re rex.match");
+        return type_error(c, args > 2 ? "this procedure takes a str, a regex, the new text (and a buffer): s re new rex.replace"
+                                      : "this procedure takes a str and a regex: s re rex.match");
     for (uint32_t k = first; k < f->depth; ++k) {
         if (!settle(c, k))
             return false;
@@ -6645,7 +6669,7 @@ static bool ptn_word(comp *c, uint32_t id) {
     for (uint32_t k = 1; k <= args; ++k) {
         if (f->stack[f->depth - k].type != TY_STR)
             return type_error(c, id == BW_PTN_REPLACE ? "replace takes a str, a pattern and the new text: s \"%d+\" \"#\" ptn.replace"
-                                                      : "this word takes a str and a pattern: s \"%d+\" ptn.match");
+                                                      : "this procedure takes a str and a pattern: s \"%d+\" ptn.match");
     }
     const entry pat = f->stack[f->depth - args + 1];
     if (!pat.lit)
@@ -6684,7 +6708,7 @@ static bool ptn_word(comp *c, uint32_t id) {
 static bool do_sum(comp *c) {
     fn *f = c->f;
     if (f->depth == f->floor || bank_of(f->stack[f->depth - 1].type) != BANK_NONE)
-        return type_error(c, "sum takes a stem (for example lo hi range sum)");
+        return type_error(c, "sum takes a rail (for example lo hi range sum)");
     uint8_t  kind, cur, lim, hidden;
     uint16_t src;
     tid     element_type;
@@ -6811,7 +6835,7 @@ static bool builtin(comp *c, const struct builtin *w) {
         if (!need(c, 1))
             return false;
         if (f->stack[f->depth - 1].type != TY_STR)
-            return type_error(c, "this word takes a str");
+            return type_error(c, "this procedure takes a str");
         return settle(c, f->depth - 1) &&
                push(c, (entry){.type = TY_STEM, .kind = E_SLOT, .op = w->id == BW_CHARS ? STEM_CHARS : STEM_WORDS}) &&
                advance(c);
@@ -6826,7 +6850,7 @@ static bool builtin(comp *c, const struct builtin *w) {
         if (!need(c, 1))
             return false;
         if (f->stack[f->depth - 1].type != TY_STR)
-            return type_error(c, "this word takes a str");
+            return type_error(c, "this procedure takes a str");
         if (!reg_of(c, f->depth - 1, &ra))
             return false;
         --f->depth;
@@ -6998,7 +7022,7 @@ static bool builtin(comp *c, const struct builtin *w) {
         if (!need(c, 1))
             return false;
         if (f->stack[f->depth - 1].type != TY_STR)
-            return type_error(c, "this word takes a str");
+            return type_error(c, "this procedure takes a str");
         if (!reg_of(c, f->depth - 1, &ra))
             return false;
         --f->depth;
@@ -7016,7 +7040,7 @@ static bool builtin(comp *c, const struct builtin *w) {
         if (!need_coll(c, &g, &gi) || !need(c, 1))
             return false;
         if (g->kind != GK_BUFFER || f->stack[f->depth - 1].type != TY_STR)
-            return type_error(c, "this word takes a str and a buffer, as: s buf encode.base64_encode");
+            return type_error(c, "this procedure takes a str and a buffer, as: s buf encode.base64_encode");
         if (!settle(c, f->depth - 1))
             return false;
         ra = slot_of(c, f->depth - 1);
@@ -7080,7 +7104,7 @@ static bool builtin(comp *c, const struct builtin *w) {
     }
     case BW_MARK: // the top of the region now; release gives back everything made after it
         if (f->marks == UINT8_MAX)
-            return syntax(c, "a word makes at most 255 marks");
+            return syntax(c, "a procedure makes at most 255 marks");
         ++f->marks;
         if (!push_slot(c, TY_MARK))
             return false;
@@ -7134,7 +7158,7 @@ static bool builtin(comp *c, const struct builtin *w) {
         if (!need(c, 1))
             return false;
         if (f->stack[f->depth - 1].type != TY_STR)
-            return type_error(c, "this word takes a str");
+            return type_error(c, "this procedure takes a str");
         const uint32_t dst = slot_of(c, f->depth - 1);
         if (!reg_of(c, f->depth - 1, &ra) ||
             emit_def(c, PNX_ABC(PNX_STRIM, dst, ra, w->id == BW_TRIM ? 3 : w->id == BW_TRIM_LEFT ? 1 : 2), BANK_S) == NONE)
@@ -7179,7 +7203,7 @@ static bool builtin(comp *c, const struct builtin *w) {
                    advance(c);
         }
         if (f->stack[f->depth - 2].type != TY_STR || f->stack[f->depth - 1].type != TY_STR)
-            return type_error(c, "this word takes two str values: s sep cut");
+            return type_error(c, "this procedure takes two str values: s sep cut");
         if (!settle(c, f->depth - 2) || !settle(c, f->depth - 1))
             return false;
         ra = slot_of(c, f->depth - 2);
@@ -7232,7 +7256,7 @@ static bool builtin(comp *c, const struct builtin *w) {
         const tid given = f->stack[f->depth - (two ? 2 : 1)].type;
         if ((text ? given != TY_STR : given != TY_INT && narrow_width(c, given) == NONE) ||
             (two && f->stack[f->depth - 1].type != TY_INT))
-            return type_error(c, two ? "this word takes a value and a width" : "this word takes an int or a narrow integer");
+            return type_error(c, two ? "this procedure takes a value and a width" : "this procedure takes an int or a narrow integer");
         // the hex and binary words print the bits of the width (RFC-0025)
         if ((bits ? !pattern_of(c, f->depth - (two ? 2 : 1), &ra) : !reg_of(c, f->depth - (two ? 2 : 1), &ra)) ||
             (two && !reg_of(c, f->depth - 1, &rb)))
@@ -7256,7 +7280,7 @@ static bool builtin(comp *c, const struct builtin *w) {
             if (!need_coll(c, &g, &gi))
                 return false;
             if (g->kind == GK_INDEX || g->kind == GK_POOL)
-                return type_error(c, g->kind == GK_POOL ? "a pool does not count its rows; this word is not supported for it"
+                return type_error(c, g->kind == GK_POOL ? "a pool does not count its rows; this procedure is not supported for it"
                                                         : "an index has no length; ask its table");
             if (g->kind == GK_BUFFER) { // the length of its contents
                 const uint32_t view = top_slot(c, BANK_S, 1), dst = top_slot(c, BANK_I, 1);
@@ -7283,11 +7307,11 @@ static bool builtin(comp *c, const struct builtin *w) {
                    advance(c);
         }
         if (w->module == 0)
-            return type_error(c, "this word takes the name of an array, list, queue or buffer; of a str it is str.len");
+            return type_error(c, "this procedure takes the name of an array, list, queue or buffer; of a str it is str.len");
         if (!need(c, 1))
             return false;
         if (f->stack[f->depth - 1].type != TY_STR)
-            return type_error(c, "this word takes a str");
+            return type_error(c, "this procedure takes a str");
         if (!reg_of(c, f->depth - 1, &ra))
             return false;
         --f->depth;
@@ -7352,7 +7376,7 @@ static bool builtin(comp *c, const struct builtin *w) {
         if (!need(c, 1))
             return false;
         if (!is_row(f->stack[f->depth - 1].type))
-            return type_error(c, "this word takes a row of a table");
+            return type_error(c, "this procedure takes a row of a table");
         if (!reg_of(c, f->depth - 1, &ra))
             return false;
         --f->depth;
@@ -7369,7 +7393,7 @@ static bool builtin(comp *c, const struct builtin *w) {
             return false;
         if (f->stack[f->depth - 1].type != f->stack[f->depth - 2].type ||
             num_base(c, f->stack[f->depth - 1].type) != TY_INT)
-            return type_error(c, "this word takes two int values, or two of the same declared type");
+            return type_error(c, "this procedure takes two int values, or two of the same declared type");
         if (!settle(c, f->depth - 2) || !reg_of(c, f->depth - 1, &rb))
             return false;
         const uint32_t dst = slot_of(c, f->depth - 2);
@@ -7425,7 +7449,7 @@ static bool builtin(comp *c, const struct builtin *w) {
         if (!need_coll(c, &g, &gi) || !need(c, 1))
             return false;
         if (g->kind != GK_BUFFER)
-            return type_error(c, "this word appends to a buffer");
+            return type_error(c, "this procedure appends to a buffer");
         const tid given = f->stack[f->depth - 1].type;
         if (w->id == BW_APPEND ? given != TY_STR
             : w->id == BW_APPEND_INT ? given != TY_INT && narrow_width(c, given) == NONE
@@ -7480,7 +7504,7 @@ static bool builtin(comp *c, const struct builtin *w) {
         if (!need(c, 1))
             return false;
         if (g->kind != GK_POOL || f->stack[f->depth - 1].type != g->type)
-            return type_error(c, "this word takes a row of a pool and the pool: row nodes free");
+            return type_error(c, "this procedure takes a row of a pool and the pool: row nodes free");
         if (!reg_of(c, f->depth - 1, &ra))
             return false;
         if (w->id == BW_FREE) {
@@ -7532,7 +7556,7 @@ static bool builtin(comp *c, const struct builtin *w) {
         if (!need(c, 2))
             return false;
         if (f->stack[f->depth - 2].type != TY_STR || f->stack[f->depth - 1].type != TY_INT)
-            return type_error(c, "this word takes a str and a count: s n take");
+            return type_error(c, "this procedure takes a str and a count: s n take");
         if (!reg_of(c, f->depth - 2, &ra) || !reg_of(c, f->depth - 1, &rb))
             return false;
         const uint32_t dst = slot_of(c, f->depth - 2);
@@ -7549,7 +7573,7 @@ static bool builtin(comp *c, const struct builtin *w) {
         if (!need(c, 2))
             return false;
         if (f->stack[f->depth - 2].type != TY_STR || f->stack[f->depth - 1].type != TY_STR)
-            return type_error(c, "this word takes two str values: s part starts_with");
+            return type_error(c, "this procedure takes two str values: s part starts_with");
         if (!reg_of(c, f->depth - 2, &ra) || !reg_of(c, f->depth - 1, &rb))
             return false;
         f->depth -= 2;
@@ -7598,7 +7622,7 @@ static bool builtin(comp *c, const struct builtin *w) {
         if (!need(c, 1))
             return false;
         if (g->kind != GK_INDEX)
-            return type_error(c, "this word takes a row and the name of an index: row by_name insert");
+            return type_error(c, "this procedure takes a row and the name of an index: row by_name insert");
         if (f->stack[f->depth - 1].type != ((const globalsym *)c->globals.ptr + g->table)->type)
             return type_error(c, "the row belongs to another table than the index");
         if (!settle(c, f->depth - 1))
@@ -7693,7 +7717,7 @@ static bool builtin(comp *c, const struct builtin *w) {
         const tid type = f->stack[f->depth - 1].type;
         gi = is_row(type) ? row_global(type) : NONE;
         if (gi == NONE || gsym(c, gi)->kind != GK_TASKS)
-            return type_error(c, "this word takes a task");
+            return type_error(c, "this procedure takes a task");
         if (w->id == BW_RESUME && !settle_all(c))
             return false;
         if (!reg_of(c, f->depth - 1, &ra))
@@ -7805,7 +7829,7 @@ static bool builtin(comp *c, const struct builtin *w) {
             return false;
         return cond_jump(c, &e, 1) && emit(c, PNX_ABX(PNX_FAULT, 0, PINAX_ERR_FAILED)) != NONE && advance(c);
     }
-    default: return syntax(c, "this word follows the end of its block");
+    default: return syntax(c, "this procedure follows the end of its block");
     }
 }
 
@@ -7987,7 +8011,7 @@ static bool path_word(comp *c, name module, name n) {
         return push(c, (entry){.type = TY_ERR, .kind = E_CONST, .value = value}) && advance(c);
     }
     if (c->data_only)
-        return syntax(c, "a data source calls no words and reads no fields; only literals, const names and stores");
+        return syntax(c, "a data source calls no procedures and reads no fields; only literals, const names and stores");
     if (name_is(module, "args")) // the words that read an args value (RFC-0049); the module needs no use
         return txw_word(c, 13, n);
     name real;
@@ -8008,47 +8032,47 @@ static bool path_word(comp *c, name module, name n) {
     }
     if (standard == 8 || standard == 9) { // json, csv
         if (c->data_only)
-            return syntax(c, "a data source calls no words; only literals, const names and stores");
+            return syntax(c, "a data source calls no procedures; only literals, const names and stores");
         return standard == 8 ? json_word(c, n) : csv_word(c, n);
     }
     if (standard == 10) { // sheet
         if (c->data_only)
-            return syntax(c, "a data source calls no words; only literals, const names and stores");
+            return syntax(c, "a data source calls no procedures; only literals, const names and stores");
         return sheet_word(c, n);
     }
     if (standard == 11 || standard == 12) { // toml, md
         if (c->data_only)
-            return syntax(c, "a data source calls no words; only literals, const names and stores");
+            return syntax(c, "a data source calls no procedures; only literals, const names and stores");
         return txw_word(c, standard, n);
     }
     if (standard == 5) { // bytes: the name says the width
         if (c->data_only)
-            return syntax(c, "a data source calls no words; only literals, const names and stores");
+            return syntax(c, "a data source calls no procedures; only literals, const names and stores");
         return bytes_word(c, n);
     }
     if (standard) { // a word of a standard module
         if (c->data_only)
-            return syntax(c, "a data source calls no words; only literals, const names and stores");
+            return syntax(c, "a data source calls no procedures; only literals, const names and stores");
         const struct builtin *bw = find_builtin(n, standard);
         if (!bw)
-            return error(c, PINAX_ERR_NOT_FOUND, "the module has no word of this name");
+            return error(c, PINAX_ERR_NOT_FOUND, "the module has no procedure of this name");
         return builtin(c, bw);
     }
     if (c->data_only)
-        return syntax(c, "a data source calls no words; only literals, const names and stores");
+        return syntax(c, "a data source calls no procedures; only literals, const names and stores");
     if (name_is(n, "rows") && find_host(c, module, n) == NONE) { // st MODULE.rows : the rows of a statement, one a turn (RFC-0051)
         const uint32_t step = find_host(c, module, cname("step"));
         sig            ss;
         if (step == NONE || !host_sig(c, &c->st->hosts[step], &ss))
-            return error(c, PINAX_ERR_NOT_FOUND, "the module has no word of this name");
+            return error(c, PINAX_ERR_NOT_FOUND, "the module has no procedure of this name");
         if (!need(c, 1) || f_top_type(c) != ss.in[0])
-            return type_error(c, "rows takes the statement of a host module that has a step word: st MODULE.rows do to n ... end each or_fail");
+            return type_error(c, "rows takes the statement of a host module that has a step procedure: st MODULE.rows do to n ... end each or_fail");
         return settle(c, c->f->depth - 1) && (c->sql_host = step, true) &&
                push(c, (entry){.type = TY_STEM, .kind = E_SLOT, .op = STEM_SQL}) && advance(c);
     }
     const uint32_t host = find_host(c, module, n);
     if (host == NONE)
-        return error(c, PINAX_ERR_NOT_FOUND, "the module has no word of this name");
+        return error(c, PINAX_ERR_NOT_FOUND, "the module has no procedure of this name");
     return call_host(c, host);
 }
 
@@ -8096,7 +8120,7 @@ static bool body_name(comp *c) {
         if (g != NONE)
             return read_global(c, g);
         if (c->data_only)
-            return syntax(c, "a data source calls no words; only literals, const names and stores");
+            return syntax(c, "a data source calls no procedures; only literals, const names and stores");
         uint32_t index;
         if (find_word(c, n, &index))
             return call_word(c, &((const wordsym *)c->words.ptr + index)->sig, index);
@@ -8164,10 +8188,10 @@ static bool body_name(comp *c) {
         // not a name of the core: say so when it is a word of a module, which is written with it
         if (find_builtin(n, 1) || find_builtin(n, 2) || find_builtin(n, 3) || find_builtin(n, 4) || find_builtin(n, 6) ||
             find_builtin(n, 7))
-            return error(c, PINAX_ERR_NOT_FOUND, "a word of a module is written with the module: str.len, fmt.hex");
+            return error(c, PINAX_ERR_NOT_FOUND, "a procedure of a module is written with the module: str.len, fmt.hex");
         for (uint32_t k = 0; k < c->st->n_hosts; ++k) {
             if (name_eq(cname(c->st->hosts[k].name), n) && module_used(c, cname(c->st->hosts[k].module)))
-                return error(c, PINAX_ERR_NOT_FOUND, "a word of a module is written with the module: io.println");
+                return error(c, PINAX_ERR_NOT_FOUND, "a procedure of a module is written with the module: io.println");
         }
         if (name_is(n, "search")) // search (io, str) of 0.21 (RFC-0041)
             return error(c, PINAX_ERR_NOT_FOUND, "search is now set_order: set_order io str .");
@@ -8183,7 +8207,7 @@ static void stack_text(const comp *c, const fn *f, char *out, size_t cap) {
         if (f->stack[k].hidden)
             continue;
         const tid t = f->stack[k].type;
-        const name tn = t == TY_COLL ? cname("(names)") : t == TY_STEM ? cname("(stem)")
+        const name tn = t == TY_COLL ? cname("(names)") : t == TY_STEM ? cname("(rail)")
                         : is_block(t) ? cname("word") : type_name(c, t);
         if (n + tn.length + 2 >= cap)
             break;
@@ -8239,7 +8263,7 @@ static bool defer_body(comp *c, bool keep, uint64_t *taken) {
     c->in_defer = in_defer;
     c->see = see;
     if (f->dead)
-        return type_error(c, "a defer runs to its end; it does not leave the word or a loop");
+        return type_error(c, "a defer runs to its end; it does not leave the procedure or a loop");
     if (!settle_all(c))
         return false;
     if (f->depth != depth)
@@ -8305,13 +8329,13 @@ static bool do_defer(comp *c) {
     if (f->is_top)
         return syntax(c, "defer belongs inside a definition");
     if (f->n_blocks && f->blocks[f->n_blocks - 1]->kind != B_LOOP && f->blocks[f->n_blocks - 1]->kind != B_DO)
-        return syntax(c, "defer is written right in a word's body, a loop's body or a do block, not in a branch");
+        return syntax(c, "defer is written right in a procedure's body, a loop's body or a do block, not in a branch");
     for (uint32_t k = 0; k < f->n_blocks; ++k) {
         if (f->blocks[k]->fails_rail)
             return syntax(c, "a defer is not written inside the block of a rail that can fail yet");
     }
     if (f->n_defers == MAX_DEFERS)
-        return syntax(c, "a word has at most 16 defers");
+        return syntax(c, "a procedure has at most 16 defers");
     if (!advance(c))
         return false;
     deferred *d = &f->defers[f->n_defers];
@@ -8354,7 +8378,7 @@ static bool body_token(comp *c) {
     }
     if (c->data_only && t.kind == PNX_T_RESERVED && t.word != PNX_KW_true && t.word != PNX_KW_false &&
         t.word != PNX_KW_to && t.word != PNX_KW_set)
-        return syntax(c, "a data source holds declarations, literals, stores and rows; this word is not allowed");
+        return syntax(c, "a data source holds declarations, literals, stores and rows; this procedure is not allowed");
     const bool closer = t.kind == PNX_T_RESERVED && (t.word == PNX_KW_end || t.word == PNX_KW_else);
     if (f->dead && !closer)
         return syntax(c, "this code cannot be reached: the code before it always leaves");
@@ -8364,7 +8388,7 @@ static bool body_token(comp *c) {
         !(t.kind == PNX_T_NAME && (name_is(tok_name(c), "sum") || name_is(tok_name(c), "minimum") ||
                                    name_is(tok_name(c), "maximum") || adapter_id(tok_name(c)))) &&
         !(t.kind == PNX_T_PATH && ends_with_word(tok_name(c), "join_into")))
-        return type_error(c, "a stem is not a value: a block or a combining word takes it at once");
+        return type_error(c, "a rail is not a value: a block or a combining procedure takes it at once");
     // a pending condition survives only into the word that consumes it
     if (f->depth && f->stack[f->depth - 1].kind == E_COND) {
         const bool consumer = (t.kind == PNX_T_RESERVED && (t.word == PNX_KW_if || t.word == PNX_KW_while ||
@@ -8433,7 +8457,7 @@ static bool body_token(comp *c) {
         return emit_return(c) && advance(c);
     case PNX_KW_fail: {
         if (f->is_top || !f->sig->fails)
-            return type_error(c, "fail needs `or fail` in the signature of this word");
+            return type_error(c, "fail needs `or fail` in the signature of this procedure");
         if (!need(c, 1))
             return false;
         entry *e = &f->stack[f->depth - 1];
@@ -8463,7 +8487,7 @@ static bool body_token(comp *c) {
     }
     case PNX_KW_or_fail:
     case PNX_KW_or_return:
-    case PNX_KW_or_else: return syntax(c, "this word follows a word that can fail, and nothing else");
+    case PNX_KW_or_else: return syntax(c, "this procedure follows a procedure that can fail, and nothing else");
     case PNX_KW_case: return syntax(c, "case is now match: c match when 1 2 do ... end otherwise ... end end");
     case PNX_KW_match: return do_case(c);
     case PNX_KW_cat: return do_cat(c);
@@ -8495,7 +8519,7 @@ static bool remap(comp *c, uint32_t kind, uint32_t *value, const uint8_t locals[
     if (*value >= SLOT0) {
         *value = *value - SLOT0 + locals[kind == PNX_K_S];
         if (*value > 255)
-            return syntax(c, "this word needs more than 256 registers of one bank; split it");
+            return syntax(c, "this procedure needs more than 256 registers of one bank; split it");
     }
     return true;
 }
@@ -8533,7 +8557,7 @@ static bool finish_registers(comp *c, fn *f, uint16_t cells[2]) {
     for (int bank = 0; bank < 2; ++bank) {
         const uint32_t n = (uint32_t)f->maxloc[bank] + f->maxslot[bank];
         if (n > 256)
-            return syntax(c, "this word needs more than 256 registers of one bank; split it");
+            return syntax(c, "this procedure needs more than 256 registers of one bank; split it");
         cells[bank] = (uint16_t)n;
     }
     return true;
@@ -8715,18 +8739,18 @@ static bool definition(comp *c, bool is_test) {
             return error(c, PINAX_ERR_STATE, "redefine waits until no task is alive (run_all, or cancel them)");
         uint32_t old;
         if (!find_word(c, n, &old) || old >= c->base.words)
-            return type_error(c, "redefine replaces a word that an earlier line of the session defined");
+            return type_error(c, "redefine replaces a procedure that an earlier line of the session defined");
         if (c->redefine_old != NONE)
             return syntax(c, "one redefine in a text");
         c->redefine_old = old;
         c->old_name = n;
         n = cname("(replaced)");
     } else if (name_is_global(c, n) && !(find_fwd(c, n, NULL) && find_fwd(c, n, NULL)->index == NONE)) {
-        return c->eval && find_word(c, n, NULL) ? type_error(c, "a word of this name is defined earlier in this text")
+        return c->eval && find_word(c, n, NULL) ? type_error(c, "a procedure of this name is defined earlier in this text")
                                                 : defined_twice(c, n);
     }
     if (n.length > 31)
-        return syntax(c, "a word name is at most 31 bytes long");
+        return syntax(c, "a procedure name is at most 31 bytes long");
     if (!advance(c))
         return false;
     wordsym *w = vec_push(c, &c->words, sizeof(wordsym));
@@ -8804,7 +8828,7 @@ static bool open_module(comp *c, name n, name prefix, uint32_t *at);
 
 static bool use_module(comp *c) {
     if (c->data_only)
-        return syntax(c, "a data source defines no words and uses no modules");
+        return syntax(c, "a data source defines no procedures and uses no modules");
     if (!advance(c))
         return false;
     if (c->tok.kind != PNX_T_NAME)
@@ -8867,7 +8891,7 @@ static bool open_module(comp *c, name n, name prefix, uint32_t *at) {
 // lines after.
 static bool set_order(comp *c) {
     if (c->data_only)
-        return syntax(c, "a data source defines no words and uses no modules");
+        return syntax(c, "a data source defines no procedures and uses no modules");
     if (c->top_fn->n_blocks)
         return syntax(c, "set_order stands at the top level, outside definitions and blocks");
     if (!advance(c))
@@ -9009,7 +9033,7 @@ static bool declare_extern(comp *c) {
                         n.text == symbol.text ? "this name is already defined: give the function another with `as`"
                                               : "this name is already defined");
     if (n.length > 31)
-        return error_at(c, PINAX_ERR_SYNTAX, named.line, named.column, "a word name is at most 31 bytes long");
+        return error_at(c, PINAX_ERR_SYNTAX, named.line, named.column, "a procedure name is at most 31 bytes long");
     uint32_t host;
     const pinax_err err = pnx_extern_link(c->st, module, word, text, &host);
     if (err != PINAX_OK)
@@ -10070,7 +10094,7 @@ static bool compile(comp *c, image *im, bool *has_top) {
             if (!advance(c))
                 return false;
             if (!is_word(c, PNX_KW_word) && !is_word(c, PNX_KW_def))
-                return syntax(c, "redefine is followed by a word definition");
+                return syntax(c, "redefine is followed by a procedure definition");
             c->redefining = true;
             continue;
         }
@@ -10134,7 +10158,7 @@ static bool compile(comp *c, image *im, bool *has_top) {
             c->exporting = true;
             continue;
         } else if (c->data_only && (is_word(c, PNX_KW_word) || is_word(c, PNX_KW_def) || is_word(c, PNX_KW_test) || is_word(c, PNX_KW_use))) {
-            return syntax(c, "a data source defines no words and uses no modules");
+            return syntax(c, "a data source defines no procedures and uses no modules");
         } else if (is_word(c, PNX_KW_word) || (is_word(c, PNX_KW_def) && c->top_fn->depth == (c->eval ? c->eval_sig.n_in : c->top_fn->floor)) ||
                    is_word(c, PNX_KW_test)) { // a def after a value is a block value, not a definition
             if (!definition(c, is_word(c, PNX_KW_test)))
@@ -10250,7 +10274,7 @@ static bool compile(comp *c, image *im, bool *has_top) {
     }
     for (uint32_t k = 0; k < c->fwds.n; ++k) {
         if (((const fwd *)c->fwds.ptr + k)->index == NONE)
-            return type_error(c, "a word announced by forward is never defined");
+            return type_error(c, "a procedure announced by forward is never defined");
     }
     if (!sort_work(c))
         return false;
@@ -10265,7 +10289,7 @@ static bool compile(comp *c, image *im, bool *has_top) {
                 if (s->n_out == MAX_PARAMS || t == TY_COLL || t == TY_STEM || top->stack[k].owned)
                     return type_error(c, s->n_out == MAX_PARAMS ? "the session stack holds at most 16 values"
                                          : top->stack[k].owned  ? "the line leaves an owned value that nothing takes"
-                                                                : "the line leaves a name or a stem, which is not a value");
+                                                                : "the line leaves a name or a rail, which is not a value");
                 s->out[s->n_out++] = t;
             }
             top->sig = s;
@@ -10911,17 +10935,17 @@ static bool truncs_ok(comp *c) {
         }
     }
     if (c->redefine_new != NONE && !c->renames && (words[c->redefine_new].truncs & ~words[c->redefine_old].truncs))
-        return error(c, PINAX_ERR_TYPE, "redefine cannot make the word truncate a list parameter the old one did not "
+        return error(c, PINAX_ERR_TYPE, "redefine cannot make the procedure truncate a list parameter the old one did not "
                                         "truncate: the lists given to it were checked against the old one");
     if (c->redefine_new != NONE && !c->renames && (words[c->redefine_new].writes & ~words[c->redefine_old].writes))
-        return error(c, PINAX_ERR_TYPE, "redefine cannot make the word change a collection parameter the old one only "
+        return error(c, PINAX_ERR_TYPE, "redefine cannot make the procedure change a collection parameter the old one only "
                                         "read: shared collections may have been given to it");
     for (uint32_t k = 0; k < c->lends.n; ++k) {
         const trunc_site t = ((const trunc_site *)c->lends.ptr)[k];
         const uint32_t   callee = called(c, t.word);
         if (callee == NONE || (words[callee].writes >> t.param & 1u))
             return error_at(c, PINAX_ERR_TYPE, t.line, t.column,
-                            "a shared collection is read-only: the word it is given to changes this parameter");
+                            "a shared collection is read-only: the procedure it is given to changes this parameter");
     }
     for (uint32_t k = 0; k < c->truncs.n; ++k) {
         const trunc_site t = ((const trunc_site *)c->truncs.ptr)[k];
@@ -10941,7 +10965,7 @@ static bool truncs_ok(comp *c) {
         if (kept)
             return error_at(c, PINAX_ERR_TYPE, t.line, t.column,
                             t.word == NONE ? "this list's rows are kept by a field, a global, a collection, a named row or an index; it cannot be truncated"
-                                           : "this list's rows are kept by a field, a global, a collection, a named row or an index; the word it "
+                                           : "this list's rows are kept by a field, a global, a collection, a named row or an index; the procedure it "
                                              "is given to truncates it");
     }
     return true;
@@ -10958,7 +10982,7 @@ static pinax_err load_source(pinax_state *st, const char *file, pinax_str source
     if (!st || (!source.ptr && source.len))
         return PINAX_ERR_ARGUMENT;
     if (st->suspended || st->host_cur) {
-        st->error_text = "a run is suspended or a host word is running; finish it before loading";
+        st->error_text = "a run is suspended or a host procedure is running; finish it before loading";
         return PINAX_ERR_STATE;
     }
     if (st->frozen) {
@@ -11128,7 +11152,7 @@ static pinax_err load_source(pinax_state *st, const char *file, pinax_str source
     if (c.renames && st->diag) { // the words that still call the old body (RFC-0040 part D)
         uint32_t       who[8];
         const uint32_t n = pnx_callers_of(st, c.redefine_old, who, 8);
-        if (n) { // "3 words still call the old sq: cube, quad, tri"
+        if (n) { // "3 procedures still call the old sq: cube, quad, tri"
             char   text[400];
             size_t at = 0;
             char   count[12];
@@ -11137,7 +11161,7 @@ static pinax_err load_source(pinax_state *st, const char *file, pinax_str source
                 count[digits++] = (char)('0' + v % 10);
             while (digits)
                 text[at++] = count[--digits];
-            at = put_piece(text, at, sizeof text, n == 1 ? " word still calls the old " : " words still call the old ");
+            at = put_piece(text, at, sizeof text, n == 1 ? " procedure still calls the old " : " procedures still call the old ");
             at = put_piece(text, at, sizeof text, st->words[c.redefine_new].name);
             at = put_piece(text, at, sizeof text, ":");
             for (uint32_t k = 0; k < n && k < 8; ++k) {
