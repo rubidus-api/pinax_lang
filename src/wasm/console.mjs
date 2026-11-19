@@ -14,7 +14,7 @@
 // A line that begins with ":" is a command. Other lines gather until the text is whole: it ends
 // with "," or ".", or with the `end` of the definition or block it opened, and no definition or
 // block is open in it. Then it runs as one line of the session: a loop or a block runs once, when
-// it is all typed. A statement that succeeds and begins with a declaration (word, const, global,
+// it is all typed. A statement that succeeds and begins with a declaration (def, const, global,
 // use, set_order and the others) is added to the program; one that declares a name the program
 // declares already takes the place of those lines. :edit N and :insert N change lines by number
 // (:insert N above line N, :insert 0 at the end).
@@ -284,6 +284,9 @@ export async function createConsole({ createPinax, bytes, print, store = null })
                 const at = end - line === 1 ? `line ${line + 1}` : `lines ${line + 1}-${end}`;
                 print("info", r.unfinished ? `${at}: a definition or a block is not closed by the program's end\n`
                                            : `the program stops in ${at} (:list ${at.split(" ")[1]})\n`);
+                if (!r.unfinished && lines.slice(line, end).some((l) => /^\s*word\b/.test(l)))
+                    print("info", `a line begins with word, a form that is gone (a program saved by an earlier visit may have it): write ` +
+                                  `def NAME n int gives int do ... end, with :edit ${at.split(" ")[1]}; :clear empties the program\n`);
                 runner = null;
                 return false;
             }
@@ -586,7 +589,7 @@ export async function createConsole({ createPinax, bytes, print, store = null })
             print("info", `stopped ${halt.word ? `in ${halt.word} ` : ""}at line ${halt.line}: :continue (:c), :next (:n) or :stop first\n`);
             return { prompt: prompt() };
         }
-        if (line.trimStart().startsWith(":") && (gathered.length === 0 || /^:(stack|s|blocks|words|help|list)\b/.test(line.trim())))
+        if (line.trimStart().startsWith(":") && (gathered.length === 0 || /^:(stack|s|blocks|procs|help|list)\b/.test(line.trim())))
             return { ...command(line.trim()), prompt: prompt() };
         // an empty line after text that waits for its dot runs the text, when no block is open: the way out of a
         // forgotten dot (inside a block an empty line is only a line)
