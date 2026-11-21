@@ -42,7 +42,7 @@
 /MAP.md
 /REQUIREMENTS.md
 /LESSONS.md
-# Legacy rootsator files (TODO/HANDOFF/TESTS <=0.5, CHECKLIST <=0.6, WORKLOG <=0.8); keep them local if an older project still has them.
+# Legacy operating-doc files (TODO/HANDOFF/TESTS <=0.5, CHECKLIST <=0.6, WORKLOG <=0.8); keep them local if an older project still has them.
 /WORKLOG.md
 /TODO.md
 /HANDOFF.md
@@ -50,34 +50,6 @@
 /CHECKLIST.md
 *.local.md
 
-# ── Private layout (links into ../<project>_private/) ───────────────────
-# Kit documents and kit scripts live in the private sibling. Exact paths and
-# no trailing slash: a link to a directory is only matched without one.
-# The bootstrap drops this block under "Operating docs location: project".
-/DECISIONS.md
-/docs/agents
-/docs/rfc
-/docs/research
-/docs/benchmark
-/docs/backlogs
-/docs/plans
-/docs/requirements
-/docs/resources
-/docs/tests
-/docs/handoffs
-/scripts/README.md
-/scripts/check-tools.sh
-/scripts/project-check.sh
-/scripts/new-plan.sh
-/scripts/archive-plan.sh
-/scripts/changelog-entry.sh
-/scripts/readme-topline.sh
-/scripts/gate.sh
-/scripts/gate.conf
-/scripts/context-budget.sh
-/scripts/brief.sh
-/scripts/worklog.sh
-/scripts/commit-both.sh
 # agy reads .agents/ in place; it stays here, unpublished.
 /.agents
 
@@ -116,6 +88,3 @@ resources/cache/
 
 # The PDF editions are built, not kept (they would pile up in history).
 docs/*/pdf-*/
-/scripts/sot-check.sh
-/scripts/claim.sh
-/scripts/install-hook.sh
