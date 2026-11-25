@@ -1,0 +1,11 @@
+rem run
+use io .
+use f .
+def demo do
+  2.5e0 f.neg to x
+  args x " " x f.abs " " 10e0 4e0 f.sub " " 1.5e0 4e0 f.mul . cat io.println
+  args 9 f.from_int " " 9.99e0 f.to_int " " 1e0 1.0000001e0 1e-6 f.near . cat io.println
+  1e0 0e0 f.div to inf
+  args inf f.is_finite " " inf inf f.sub f.is_nan " " inf inf 0e0 f.near . cat io.println
+end
+demo

@@ -1,0 +1,3 @@
+rem refused
+use f .
+def area r int gives float do r r f.mul 3.14159e0 f.mul end

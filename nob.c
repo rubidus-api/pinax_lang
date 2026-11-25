@@ -646,11 +646,14 @@ static void release_facts(char *version, size_t vn, char *date, size_t dn) {
     }
     char *c = slurp("CHANGELOG.md", &n);
     if (c) {
-        const char *at = strstr(c, "\n## [Unreleased]");
-        const char *r = at ? strstr(at + 1, "\n## [") : NULL;
-        const char *close = r ? strstr(r + 1, "] - ") : NULL;
-        if (close && strlen(close) >= 14)
-            snprintf(date, dn, "%.10s", close + 4);
+        // the first heading with a date ("## [0.36.0] - 2026-11-25"), with or without an `## [Unreleased]` above it
+        for (const char *r = strstr(c, "\n## ["); r; r = strstr(r + 1, "\n## [")) {
+            const char *eol = strchr(r + 1, '\n'), *close = strstr(r + 1, "] - ");
+            if (close && (!eol || close < eol) && strlen(close) >= 14) {
+                snprintf(date, dn, "%.10s", close + 4);
+                break;
+            }
+        }
         free(c);
     }
 }

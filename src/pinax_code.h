@@ -199,6 +199,9 @@ enum {
     X(NARITH, 0x3c, PNX_K_I, PNX_K_I, PNX_K_I, PNX_F_ABC, PNX_X_IMM, 0, "wrr") \
     X(NCHK, 0x3d, PNX_K_I, PNX_K_I, PNX_K_I, PNX_F_ABC, PNX_X_IMM, 1, "wrr") \
     X(NUN, 0x3e, PNX_K_I, PNX_K_I, PNX_K_NONE, PNX_F_ABC, PNX_X_IMM, 0, "wr-") \
+    /* float (RFC-0056, D0112): a binary64 in an I register; the second word is the operation */ \
+    X(FLOP, 0x05, PNX_K_I, PNX_K_I, PNX_K_I, PNX_F_ABC, PNX_X_IMM, 0, "wrr") \
+    X(FLUN, 0x06, PNX_K_I, PNX_K_I, PNX_K_NONE, PNX_F_ABC, PNX_X_IMM, 0, "wr-") \
     X(RCATU, 0xf3, PNX_K_S, PNX_K_I, PNX_K_NONE, PNX_F_ABC, PNX_X_NONE, 0, "mr-") \
     X(RCATUW, 0xf4, PNX_K_S, PNX_K_I, PNX_K_I, PNX_F_ABC, PNX_X_NONE, 0, "mrr") \
     /* jumps */ \
@@ -432,6 +435,18 @@ enum { PNX_NC_ADD, PNX_NC_SUB, PNX_NC_MUL, PNX_NC_DIV, PNX_NC_COUNT };
 // keeps the low bits; NOT, POPC, CLZ, CTZ, BSWAP work at the width.
 enum { PNX_NU_FIT, PNX_NU_FITU, PNX_NU_LOW, PNX_NU_NOT, PNX_NU_POPC, PNX_NU_CLZ, PNX_NU_CTZ, PNX_NU_BSWAP, PNX_NU_COUNT };
 #define PNX_NX(fn, width) ((uint32_t)(fn) | (uint32_t)(width) << 8)
+
+// float (RFC-0056, D0111, D0112): a binary64 is its 64 bits in an I register. The second word of
+// FLOP and FLUN is the operation. FLOP gives R[B] op R[C], rounded once (IEEE, to nearest, ties
+// to even), or 1 or 0 for a compare (exact; every compare with a NaN is 0). FLUN: NEG and ABS
+// change the sign bit only; FROM_INT rounds an int to the nearest double; TO_INT truncates toward
+// zero and faults overflow for a NaN or a value outside int; IS_NAN and IS_FINITE give 1 or 0.
+// NaN and the infinities propagate: no float operation faults except TO_INT (D0111).
+// RCATD and STODEC with C = PNX_DEC_FLOAT print and read a float: the shortest text that reads
+// back as the value, with a point or an exponent always ("1.0", "1e20"), "nan", "inf", "-inf".
+enum { PNX_FL_ADD, PNX_FL_SUB, PNX_FL_MUL, PNX_FL_DIV, PNX_FL_EQ, PNX_FL_LT, PNX_FL_LE, PNX_FL_COUNT };
+enum { PNX_FU_NEG, PNX_FU_ABS, PNX_FU_FROM_INT, PNX_FU_TO_INT, PNX_FU_IS_NAN, PNX_FU_IS_FINITE, PNX_FU_COUNT };
+#define PNX_DEC_FLOAT 19u
 
 // The flags of SORT and SORTBY (their A): from the largest down, compared as u64, compared as
 // str(N) (the cells of SORT, the field of SORTBY), in the byte order of SCMP.

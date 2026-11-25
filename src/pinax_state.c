@@ -254,8 +254,7 @@ bool pnx_signature_counts(const char *sig, pnx_counts *out) {
         }
         // a parameter ends here
         if (tokens) {
-            if (token_is(type, type_len, "float"))
-                return false; // no F bank in P0
+            // a float is the 64 bits of a double in an int slot (D0112)
             // cstr: a str handed to a C function as a NUL-terminated copy (extern only)
             uint8_t *slot = token_is(type, type_len, "str") || token_is(type, type_len, "cstr")
                                 ? (results ? &n.str_results : &n.str_args)
@@ -734,7 +733,8 @@ static const char *check_word(const pinax_state *st, uint32_t index, span range,
                 pnx_txhas(tw->flags, 'W') != (op == PNX_TXTW || op == PNX_TXTWF))
                 return "code: text instruction outside the window or of the wrong kind";
         }
-        if (target >= 0 || info.c == PNX_K_J || info.shape == PNX_F_AX) {
+        // every jump, the far ones too: a target below 0 is checked like any other
+        if (target >= 0 || info.c == PNX_K_J || info.shape == PNX_F_AX || info.second == PNX_X_JUMP) {
             if (target < range.begin || target >= range.end || heads[target] != 1)
                 return "code: jump outside the word or into an instruction";
         }
@@ -862,7 +862,8 @@ static const char *check_word(const pinax_state *st, uint32_t index, span range,
             ((op == PNX_CPUTI || op == PNX_CPUTIW) && b > 3 + 18) || ((op == PNX_CPUTS || op == PNX_CPUTSW) && b != 0) ||
             (op == PNX_CNEXT && c > 2) || (op == PNX_FITW && c >= PNX_W_COUNT))
             return "code: unknown kind of a json or csv instruction";
-        if (((op == PNX_RCATD || op == PNX_STODEC || op == PNX_ARGPUTD) && c > 18) || (op == PNX_DRESC && (c == 0 || c > 18)))
+        if (((op == PNX_RCATD || op == PNX_STODEC) && c > 18 && c != PNX_DEC_FLOAT) || (op == PNX_ARGPUTD && c > 18) ||
+            (op == PNX_DRESC && (c == 0 || c > 18)))
             return "code: a decimal scale outside 0 to 18";
         if ((op == PNX_ARGHEAD && (b == 0 || b > 64)) || (op == PNX_ARGPUTI && (c != 1 && c != 2)))
             return "code: an args instruction with a count or a kind that is not one";
@@ -870,6 +871,8 @@ static const char *check_word(const pinax_state *st, uint32_t index, span range,
             (op == PNX_NCHK && ((x & 0xffu) >= PNX_NC_COUNT || (x >> 8) >= PNX_W_COUNT)) ||
             (op == PNX_NUN && ((x & 0xffu) >= PNX_NU_COUNT || (x >> 8) >= PNX_W_COUNT)))
             return "code: unknown operation or width of a narrow instruction";
+        if ((op == PNX_FLOP && x >= PNX_FL_COUNT) || (op == PNX_FLUN && x >= PNX_FU_COUNT))
+            return "code: unknown operation of a float instruction";
         if (info.second == PNX_X_SREG && x >= word->str_cells)
             return "code: register outside the window";
         { // string registers an instruction changes in place, or more than one it writes, are all

@@ -112,8 +112,8 @@ A query can fill a `sheet`. The two modules do not know each other; a few proced
 #qa[Does SQLite work in the web page?][No. `sqlite` is a host module that opens files, and the page has none. `pnx` has it;
 a host that embeds Pinax registers it with `pinax_host_register_sqlite` and links it only then (standard 17.6).]
 
-#qa[Why is there no procedure for a real?][This edition has no float type. Read a real column as a text with `col_str` and move
-it with `str.to_dec`; bind money as an integer in its smallest unit.]
+#qa[Why is there no procedure for a real?][The `sqlite` of this edition has none yet. Read a real column as a text with `col_str`
+and move it with `str.to_float` or `str.to_dec`; bind money as an integer in its smallest unit.]
 
 == Seeing the stack, and formatting
 

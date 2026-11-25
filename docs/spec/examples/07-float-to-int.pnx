@@ -1,0 +1,8 @@
+rem fault
+use io .
+use f .
+def whole x float gives int do x f.to_int end
+2.5e0 whole drop
+"before" io.println
+0e0 0e0 f.div whole drop
+"never printed" io.println

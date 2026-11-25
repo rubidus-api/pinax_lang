@@ -100,7 +100,12 @@ export async function createPinax(bytes, { write = () => {}, blockBytes = 16 << 
             const s = text(7);
             return short && s.length > 60 ? `"${s.slice(0, 60)}..."` : `"${s}"`;
         }
-        return w[0] === VALUE_ERR ? `err.${text(7)}` : w[0] === VALUE_BOOL ? (i ? "true" : "false") : `${i}`;
+        if (w[0] === VALUE_ERR)
+            return `err.${text(7)}`;
+        if (w[0] === VALUE_BOOL)
+            return i ? "true" : "false";
+        return text(5) === "float" ? text(7) : `${i}`; // a float: the text the C side wrote
+
     }
     // what went wrong, as pnx says it; the locals of the procedure a fault happened in
     function report(err, name) {

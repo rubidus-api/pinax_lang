@@ -6,6 +6,7 @@
 // which grows on demand; a module serves one state at a time.
 
 #include "pinax.h"
+#include "pinax_internal.h" // pnx_format_float
 #include "pinax_lex.h"
 
 #include <stddef.h>
@@ -407,7 +408,10 @@ WASM_EXPORT("pnx_wasm_blocks_closed") uint32_t pnx_wasm_blocks_closed(void) { re
 
 static const uint32_t *packed(pinax_str name, const pinax_value *value) {
     static uint32_t out[9];
-    const pinax_value v = *value;
+    static uint8_t  float_text[40];
+    pinax_value     v = *value;
+    if (v.type.len == 5 && __builtin_memcmp(v.type.ptr, "float", 5) == 0) // the bits of a double (D0112): its text in s
+        v.s = (pinax_str){float_text, pnx_format_float(v.i, float_text)};
     const uint64_t i = (uint64_t)v.i;
     out[0] = v.kind;
     out[1] = (uint32_t)i;

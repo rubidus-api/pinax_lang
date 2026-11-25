@@ -201,6 +201,30 @@ is left over. When that matters, take the cents with `raw` and share them out yo
 #mistake[`4.20` and `0.5` can be added][They are `dec 2` and `dec 1`, two types. Write `0.50`, or `rescale` one.
 #ex("manual", "02-dec-scales.pnx")]
 
+== Floating-point numbers
+
+Know this first: a `float` computation does not stop when it goes wrong. Zero divided by zero is not a fault but a
+#strong[NaN] (not a number), and a result too large becomes an infinity. The value passes on into the next computation,
+so without a check a NaN is printed in the result. This is the opposite of integer overflow, which is a fault. Where no
+value can come out, ask with `f.is_nan` or `f.is_finite`.
+
+#ex("manual", "02-float-nan.pnx")
+
+A `float` is a 64-bit IEEE 754 floating-point number. Use it for quantities of unknown scale: measurements, ratios, times
+in seconds. A literal has an exponent: `9.81e0`, `1e-3`; `9.81` with a point alone is a `dec 2`. Compute with `f.add`
+`f.sub` `f.mul` `f.div` of the module `f`; the `add` `mul` of `int` take no `float`. An `int` becomes a `float` with
+`f.from_int`, and `f.to_int` cuts toward zero. `str.to_str` and `cat` write the text with the fewest digits that reads back.
+
+#ex("manual", "02-float.pnx")
+
+#qa[Can a `float` and an `int` be multiplied directly?][No. Mixing them in one procedure is refused. Convert first with
+`r f.from_int`.
+#ex("manual", "02-float-mix.pnx")]
+
+#mistake[`0.1e0 0.2e0 f.add` is `eq` to `0.3e0`][`eq` compares exactly, to the bit. 0.1 and 0.2 are not held exactly in
+binary, and their sum is `0.30000000000000004`. To compare within a tolerance, use `f.near`.
+#ex("manual", "02-float-eq.pnx")]
+
 #summary[
 - Values go on the stack; a procedure takes values off the top, works, and puts its results on (standard 9.3).
 - The value put on first is on the left: `10 3 sub` is 7 (standard 9.3).
@@ -208,5 +232,6 @@ is left over. When that matters, take the cents with `raw` and share them out yo
 - The processor checks the depth and types of the stack at load: too few values, the wrong type and values left over
   are refused (7.1, 9.2, 9.3).
 - A number with a point is a `dec N`: N digits after it, exact arithmetic, `rescale` to round (standard 7.5).
+- A number with an exponent is a `float`. Compute with `f.add` and the others; a NaN and an infinity pass on without a fault, so ask with `f.is_nan` (standard 7.7, 16.14).
 - Integer overflow and division by zero are faults; other arithmetic procedures exist (7.1, 15.1).
 ]

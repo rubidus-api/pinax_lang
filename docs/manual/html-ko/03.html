@@ -119,4 +119,47 @@ split in three: 4.58
 </code></pre></div><p><code>int</code> 로 나누면 정수처럼 0 쪽으로 자른다: <code>9.75 3 div</code> 는 <code>3.25</code> 지만 <code>10.00 3 div</code> 는 <code>3.33</code> 이고 1 센트가 남는다. 그것이 중요하면 <code>raw</code> 로 센트를 꺼내 직접 나눈다.</p><div class="box mistake"><p class="box-title">흔한 오해: <code>4.20</code> 과 <code>0.5</code> 는 더할 수 있다</p>둘은 <code>dec 2</code> 와 <code>dec 1</code>, 다른 타입이다. <code>0.50</code> 으로 쓰거나 하나를 <code>rescale</code> 한다.<div class="example refused"><p class="ex-file"><code>02-dec-scales.pnx</code></p><pre><code data-lang="pinax"><span style="color: #d73948">def</span> demo <span style="color: #d73948">do</span> <span style="color: #b60157">4</span>.20 <span style="color: #b60157">0</span>.5 add drop <span style="color: #d73948">end</span>            <span style="color: #74747c">rem dec(2) and dec(1)</span>
 </code></pre><p class="ex-label">거절</p><pre><code data-lang="text">$ pnx 02-dec-scales.pnx
 02-dec-scales.pnx:1:22: two dec values of different scales: rescale one first (d 2 rescale)
-</code></pre></div></div><div class="box summary"><p class="box-title">정리</p><ul><li>값은 스택에 올라가고, 프로시저는 맨 위에서 값을 내려 일하고 결과를 올린다(표준 9.3).</li><li>먼저 올린 값이 왼쪽이다: <code>10 3 sub</code> 는 7 이다(표준 9.3).</li><li>스택 프로시저는 <code>dup</code> <code>drop</code> <code>swap</code> <code>over</code> <code>nip</code> 뿐이다. 값이 많아지면 이름을 붙인다(9.3).</li><li>처리기는 적재 때 스택의 깊이와 타입을 모두 검사한다: 모자란 값, 맞지 않는 타입, 남는 값은 거절된다(7.1, 9.2, 9.3).</li><li>점이 있는 수는 <code>dec N</code> 이다: 점 아래 N 자리, 정확한 셈, 반올림은 <code>rescale</code>(표준 7.5).</li><li>정수 넘침과 0 으로 나눔은 결함이다. 다른 산술 프로시저가 따로 있다(7.1, 15.1).</li></ul></div></main><nav class="bottom"><a href="index.html">처음</a> · <a href="02.html">앞</a> · <a href="04.html">다음</a> · <a href="../html-en/03.html">English</a></nav></body></html>
+</code></pre></div></div><h3>2.10 부동소수점 수</h3><p>먼저 알아 둘 것: <code>float</code> 의 계산은 잘못되어도 멈추지 않는다. 0 을 0 으로 나누면 결함이 아니라 <strong>NaN</strong>(수가 아님)이 나오고, 너무 큰 결과는 무한대가 된다. 그 값은 다음 계산으로 그대로 넘어가므로, 검사하지 않으면 NaN 이 결과에 찍힌다. 정수의 넘침이 결함인 것과 반대다. 값이 나올 수 없는 자리에서는 <code>f.is_nan</code> 이나 <code>f.is_finite</code> 로 묻는다.</p><div class="example run"><p class="ex-file"><code>02-float-nan.pnx</code></p><pre><code data-lang="pinax"><span style="color: #d73948">use</span> io .
+<span style="color: #d73948">use</span> f .
+<span style="color: #d73948">def</span> mean total float, n <span style="color: #d73948">int</span> <span style="color: #d73948">gives</span> float <span style="color: #d73948">do</span> total n f.from_int f.div <span style="color: #d73948">end</span>
+<span style="color: #d73948">def</span> demo <span style="color: #d73948">do</span>
+  0e0 <span style="color: #b60157">0</span> mean <span style="color: #d73948">to</span> empty                     <span style="color: #74747c">rem 0 / 0: no fault, a NaN</span>
+  empty 10e0 f.add <span style="color: #d73948">to</span> later               <span style="color: #74747c">rem the NaN goes on</span>
+  <span style="color: #d73948">args</span> <span style="color: #198810">"mean "</span> empty <span style="color: #198810">", later "</span> later . <span style="color: #d73948">cat</span> io.println
+  later f.is_nan <span style="color: #d73948">if</span> <span style="color: #198810">"no mean: the list was empty"</span> io.println <span style="color: #d73948">end</span>
+<span style="color: #d73948">end</span>
+demo
+</code></pre><p class="ex-label">출력</p><pre><code data-lang="text">$ pnx 02-float-nan.pnx
+mean nan, later nan
+no mean: the list was empty
+</code></pre></div><p><code>float</code> 는 IEEE 754 의 64 비트 부동소수점 수다. 크기를 모르는 양(측정값, 비율, 초 단위의 시간)에 쓴다. 리터럴은 지수를 쓴다: <code>9.81e0</code>, <code>1e-3</code>. 점만 있는 <code>9.81</code> 은 <code>dec 2</code> 다. 계산은 모듈 <code>f</code> 의 <code>f.add</code> <code>f.sub</code> <code>f.mul</code> <code>f.div</code> 로 하고, <code>int</code> 의 <code>add</code> <code>mul</code> 들은 <code>float</code> 를 받지 않는다. <code>int</code> 는 <code>f.from_int</code> 로 바꾸고, <code>f.to_int</code> 은 0 쪽으로 자른다. <code>str.to_str</code> 과 <code>cat</code> 은 다시 읽히는 글 가운데 숫자가 가장 적은 것을 쓴다.</p><div class="example run"><p class="ex-file"><code>02-float.pnx</code></p><pre><code data-lang="pinax"><span style="color: #d73948">use</span> io .
+<span style="color: #d73948">use</span> f .
+<span style="color: #d73948">def</span> demo <span style="color: #d73948">do</span>
+  <span style="color: #b60157">9</span>.81e0 <span style="color: #d73948">to</span> g                             <span style="color: #74747c">rem a float literal has an exponent</span>
+  <span style="color: #b60157">2</span>.5e0 <span style="color: #d73948">to</span> t
+  g t f.mul t f.mul 2e0 f.div <span style="color: #d73948">to</span> fallen   <span style="color: #74747c">rem g t t / 2</span>
+  <span style="color: #d73948">args</span> <span style="color: #198810">"fallen "</span> fallen <span style="color: #198810">" m"</span> . <span style="color: #d73948">cat</span> io.println
+  <span style="color: #d73948">args</span> <span style="color: #198810">"whole metres "</span> fallen f.to_int . <span style="color: #d73948">cat</span> io.println
+  <span style="color: #d73948">args</span> <span style="color: #198810">"per second "</span> fallen t f.div . <span style="color: #d73948">cat</span> io.println
+<span style="color: #d73948">end</span>
+demo
+</code></pre><p class="ex-label">출력</p><pre><code data-lang="text">$ pnx 02-float.pnx
+fallen 30.656250000000004 m
+whole metres 30
+per second 12.262500000000001
+</code></pre></div><div class="box qa"><p class="box-title">문답</p><p><strong>물음. <code>float</code> 와 <code>int</code> 를 바로 곱할 수 있는가?</strong></p><p>답. 없다. 한 프로시저에 섞으면 거절된다. <code>r f.from_int</code> 로 먼저 바꾼다.</p><div class="example refused"><p class="ex-file"><code>02-float-mix.pnx</code></p><pre><code data-lang="pinax"><span style="color: #d73948">use</span> f .
+<span style="color: #d73948">def</span> area r <span style="color: #d73948">int</span> <span style="color: #d73948">gives</span> float <span style="color: #d73948">do</span> r r f.mul <span style="color: #b60157">3</span>.14159e0 f.mul <span style="color: #d73948">end</span>
+</code></pre><p class="ex-label">거절</p><pre><code data-lang="text">$ pnx 02-float-mix.pnx
+02-float-mix.pnx:2:35: f.add, f.sub, f.mul and f.div take two float values; an int is made a float with f.from_int
+</code></pre></div></div><div class="box mistake"><p class="box-title">흔한 오해: <code>0.1e0 0.2e0 f.add</code> 는 <code>0.3e0</code> 과 <code>eq</code> 다</p><code>eq</code> 는 비트까지 정확히 견준다. 0.1 과 0.2 는 이진수로 정확히 담기지 않아 합이 <code>0.30000000000000004</code> 이다. 오차를 두고 견주려면 <code>f.near</code> 를 쓴다.<div class="example run"><p class="ex-file"><code>02-float-eq.pnx</code></p><pre><code data-lang="pinax"><span style="color: #d73948">use</span> io .
+<span style="color: #d73948">use</span> f .
+<span style="color: #d73948">def</span> demo <span style="color: #d73948">do</span>
+  <span style="color: #b60157">0</span>.1e0 <span style="color: #b60157">0</span>.2e0 f.add <span style="color: #d73948">to</span> sum3
+  <span style="color: #d73948">args</span> sum3 <span style="color: #198810">" eq 0.3: "</span> sum3 <span style="color: #b60157">0</span>.3e0 eq . <span style="color: #d73948">cat</span> io.println
+  <span style="color: #d73948">args</span> <span style="color: #198810">"near 0.3: "</span> sum3 <span style="color: #b60157">0</span>.3e0 1e-<span style="color: #b60157">9</span> f.near . <span style="color: #d73948">cat</span> io.println
+<span style="color: #d73948">end</span>
+demo
+</code></pre><p class="ex-label">출력</p><pre><code data-lang="text">$ pnx 02-float-eq.pnx
+0.30000000000000004 eq 0.3: false
+near 0.3: true
+</code></pre></div></div><div class="box summary"><p class="box-title">정리</p><ul><li>값은 스택에 올라가고, 프로시저는 맨 위에서 값을 내려 일하고 결과를 올린다(표준 9.3).</li><li>먼저 올린 값이 왼쪽이다: <code>10 3 sub</code> 는 7 이다(표준 9.3).</li><li>스택 프로시저는 <code>dup</code> <code>drop</code> <code>swap</code> <code>over</code> <code>nip</code> 뿐이다. 값이 많아지면 이름을 붙인다(9.3).</li><li>처리기는 적재 때 스택의 깊이와 타입을 모두 검사한다: 모자란 값, 맞지 않는 타입, 남는 값은 거절된다(7.1, 9.2, 9.3).</li><li>점이 있는 수는 <code>dec N</code> 이다: 점 아래 N 자리, 정확한 셈, 반올림은 <code>rescale</code>(표준 7.5).</li><li>지수가 있는 수는 <code>float</code> 다. 계산은 <code>f.add</code> 들이고, NaN 과 무한대는 결함 없이 넘어가므로 <code>f.is_nan</code> 으로 묻는다(표준 7.7, 16.14).</li><li>정수 넘침과 0 으로 나눔은 결함이다. 다른 산술 프로시저가 따로 있다(7.1, 15.1).</li></ul></div></main><nav class="bottom"><a href="index.html">처음</a> · <a href="02.html">앞</a> · <a href="04.html">다음</a> · <a href="../html-en/03.html">English</a></nav></body></html>

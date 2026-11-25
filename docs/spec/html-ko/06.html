@@ -78,7 +78,7 @@ bit-digits  = bit { [ "_" ] bit } ;          (* bit: 0, 1 *)</code></pre><p clas
 </code></pre></div><p class="para"><span class="pn">(7)</span> 밑줄은 숫자와 숫자 사이에만, 하나만 온다. <code>1__000</code> <code>_1</code> <code>1_</code> <code>0x_F</code> 는 거절된다.</p><div class="example refused"><p class="ex-file"><code>06-underscore.pnx</code></p><pre><code data-lang="pinax"><span style="color: #b60157">1__000</span> drop
 </code></pre><p class="ex-label">거절</p><pre><code data-lang="text">$ pnx 06-underscore.pnx
 06-underscore.pnx:1:2: an underscore stands between two digits
-</code></pre></div><p class="para"><span class="pn">(8)</span> 점 앞뒤에 숫자가 있고 지수가 없는 수는 십진 소수 리터럴이다(<code>12.50</code>, 7.5). 점 아래는 18 자리까지이고, 숫자 전체를 정수로 보아 64 비트에 들어야 한다. 지수가 있는 수(<code>2e3</code>, <code>2.5e0</code>)나 <code>p</code> 가 있는 십육진 수는 실수 리터럴이다. 그 모양은 문법(부속서 A)에 있으나 이 판에는 실수 타입이 없어 거절된다(부속서 D).</p><h3>6.5 문자, 문자열, 텍스트</h3><h5>구문</h5><pre><code data-lang="ebnf">CHAR      = [ "U" ] "'" ( char-byte | escape ) "'" ;
+</code></pre></div><p class="para"><span class="pn">(8)</span> 점 앞뒤에 숫자가 있고 지수가 없는 수는 십진 소수 리터럴이다(<code>12.50</code>, 7.5). 점 아래는 18 자리까지이고, 숫자 전체를 정수로 보아 64 비트에 들어야 한다. 지수가 있는 수(<code>2e3</code>, <code>2.5e0</code>)나 <code>p</code> 가 있는 십육진 수(<code>0x1.8p1</code>)는 <code>float</code> 리터럴이다(7.7). 가장 가까운 값으로 한 번 반올림하고, 너무 크면 무한대다.</p><h3>6.5 문자, 문자열, 텍스트</h3><h5>구문</h5><pre><code data-lang="ebnf">CHAR      = [ "U" ] "'" ( char-byte | escape ) "'" ;
 STRING    = '"' { string-byte | escape } '"' ;          (* closes on the same line *)
 RAWSTRING = "r" '"' { raw-byte } '"' ;                  (* no escapes; same line *)
 TEXT      = "text" TAG { blank } newline

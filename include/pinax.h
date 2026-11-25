@@ -20,7 +20,7 @@ extern "C" {
 #endif
 
 #define PINAX_VERSION_MAJOR 0
-#define PINAX_VERSION_MINOR 35
+#define PINAX_VERSION_MINOR 36
 #define PINAX_VERSION_PATCH 0
 #define PINAX_FORMAT 2 /* source, bytecode and image format; bumped by breaking changes */
 
@@ -78,7 +78,7 @@ typedef struct pinax_config {
     size_t   struct_size;   /* sizeof(pinax_config) */
     uint32_t int_slots;     /* I bank: 64-bit slots */
     uint32_t str_slots;     /* S bank: string view slots */
-    uint32_t float_slots;   /* F bank; 0 and no float in scripts = no bank */
+    uint32_t float_slots;   /* reserved, must be 0: a float is the bits of a double in an I slot */
     uint32_t region_bytes;  /* byte region of the main task */
     uint32_t handle_slots;  /* host objects alive at once */
     uint64_t budget;        /* instructions per call or resume; 0 = unlimited */

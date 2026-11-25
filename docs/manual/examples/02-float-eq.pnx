@@ -1,0 +1,9 @@
+rem run
+use io .
+use f .
+def demo do
+  0.1e0 0.2e0 f.add to sum3
+  args sum3 " eq 0.3: " sum3 0.3e0 eq . cat io.println
+  args "near 0.3: " sum3 0.3e0 1e-9 f.near . cat io.println
+end
+demo

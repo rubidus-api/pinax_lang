@@ -10,6 +10,7 @@
   [*타입*], [*값*],
   [`int`], [64 비트 2 의 보수 정수(7.1)],
   [`dec N`], [소수점 아래 N 자리의 십진 소수, N 은 0 부터 18(7.5)],
+  [`float`], [IEEE 754 binary64 부동소수점 수(7.7)],
   [`u8` `u16` `u32` `u64` `i8` `i16` `i32`], [그 폭의 부호 없는, 부호 있는 정수(7.6). `u8` 은 바이트, `u32` 는 코드포인트],
   [`bool`], [`true`, `false`(7.2)],
   [`str`], [바이트의 뷰(7.3). 지역 변수, 인자, 결과에만 쓴다],
@@ -239,4 +240,67 @@ DEC      = [ sign ] digits "." digits ;   (* 지수 없음: 6.4 *)
   ([선언되지 않은 이름 앞의 `fits`], "fits names a declared global, array or list; there is none of this name"),
   ([`str` 이 아닌 값의 `fits`], "fits takes a text: text fits place"),
   ([뒤에 자리가 없는 `fits`], "fits is followed by a place: text fits record.field, or the name of a global"),
+)
+
+== 부동소수점 수 <types-float>
+
+#part("구문")
+```ebnf
+float-type = "float" ;
+FLOAT      = [ sign ] digits [ "." digits ] exponent
+           | [ sign ] "0x" hex-digits [ "." hex-digits ] "p" [ sign ] digits ;   (* 6.4 (8) *)
+exponent   = "e" [ sign ] digits ;
+```
+
+#para("1")[`float` 의 값은 IEEE 754 의 binary64 수다: 유한한 수, `+0` 과 `-0`, 두 무한대, 그리고 수가 아님을 뜻하는
+#term("NaN", en: "NaN")이다. 값은 64 비트로 담긴다.]
+
+#para("2")[`float` 의 계산은 결함으로 멈추지 않는다. 결과가 너무 크면 무한대이고(`1e300 1e300 f.mul`), 뜻이 없으면
+NaN 이다(`0e0 0e0 f.div`, 무한대에서 무한대를 뺌). NaN 과 무한대는 그다음 계산으로 그대로 넘어간다: 검사하지 않는
+프로그램은 NaN 을 결과까지 들고 간다. 값이 NaN 인지, 유한한지는 `f.is_nan` 과 `f.is_finite`(16.14)가 묻는다.]
+
+#para("3")[지수가 있는 수(`2.5e0`, `1e-3`)와 `p` 가 있는 십육진 수(`0x1.8p1`)는 `float` 리터럴이다. 점만 있는 수는
+`dec` 다(7.5). 리터럴은 가장 가까운 값으로 한 번 반올림하고, 가운데이면 짝수 쪽으로 간다. 너무 큰 리터럴은 무한대다.]
+
+#para("4")[산술은 모듈 `f`(16.14)의 `f.add` `f.sub` `f.mul` `f.div` 다. 결과는 정확한 값을 가장 가까운 `float` 로 한 번
+반올림한 것이다(가운데이면 짝수 쪽). `int` 의 산술 프로시저(`add` `neg` `abs` `min` `max` 들, 15.1)는 `float` 를 받지 않고,
+`float` 와 `int`, `dec` 는 한 프로시저에 섞이지 않는다. `n f.from_int` 은 `int` 를 가장 가까운 `float` 로, `x f.to_int` 은
+`float` 를 0 쪽으로 잘라 `int` 로 만든다.]
+
+#para("5")[`eq` `ne` `lt` `le` `gt` `ge` 는 같은 `float` 둘을 정확히 비교한다. `-0e0 0e0 eq` 는 참이다. NaN 은 어느 값과도,
+자기 자신과도 같지 않다: NaN 이 끼면 `eq` `lt` `le` `gt` `ge` 는 거짓이고 `ne` 는 참이다. `if` 는 비교의 값을 따른다:
+`nan 1e0 lt if … else … end` 는 `else` 쪽으로 간다. 오차를 두고 견줄 때는 `f.near`(16.14)를 쓴다.]
+
+#ex("spec", "07-float.pnx")
+#ex("spec", "07-float-nan.pnx")
+
+#para("6")[어느 처리기에서나 같은 계산은 같은 비트를 준다. 계산이 만든 NaN 은 하나뿐이다: 부호 비트가 0 인 조용한 NaN
+(`0x7ff8000000000000`). 처리기는 곱과 합을 한 번의 반올림으로 합치지 않는다.]
+
+#para("7")[`float` 는 `int` 처럼 전역, 배열과 목록의 칸(8 바이트), 큐의 값, 지역 변수, 매개변수와 결과, `const` 의 값,
+호스트 프로시저의 서명(19.2)의 타입이 된다. 호스트에게는 `double` 의 64 비트가 정수 칸 하나에 담겨 간다. 레코드의 필드,
+`float` 위에 선언한 타입, `sort`, `sum` `minimum` `maximum`, 색인의 열쇠, `match`, args 값은 `float` 를 받지 않는다(부속서 D).]
+
+#para("8")[`str.to_str` 과 `cat` 은 같은 값으로 다시 읽히는 글 가운데 숫자가 가장 적은 것을 쓴다. 점이나 지수가 늘 있다: `1.0`, `0.1`,
+`1e20`, `-0.0`. 무한대는 `inf` 와 `-inf`, NaN 은 `nan` 이다. `str.to_float`(16.1)은 그 글을 읽는다.]
+
+#part("제약")
+
+#para("9")[`float` 와 `int` 나 `dec` 를 한 프로시저에 주거나, `int` 의 산술 프로시저에 `float` 를 주면 거절된다. 점만 있는
+수는 `dec` 이므로 `float` 자리에 오면 거절된다.]
+#ex("spec", "07-float-mix.pnx")
+#ex("spec", "07-float-int-word.pnx")
+#ex("spec", "07-float-dec.pnx")
+
+#part("결함")
+
+#para("10")[`f.to_int` 은 NaN 이나 `int` 의 범위 밖의 값을 받으면 결함 `overflow` 로 멈춘다. `float` 의 다른 계산은 결함을
+내지 않는다.]
+#ex("spec", "07-float-to-int.pnx")
+
+#part("진단")
+#diag(
+  ([`int` 의 산술 프로시저에 `float`], "the int procedures take no float; a float is computed with f.add, f.sub, f.mul and f.div"),
+  ([`neg` 에 `float`], "neg takes an int; a float is negated with f.neg"),
+  ([`float` 가 아닌 값의 `f.add` `f.sub` `f.mul` `f.div`], "f.add, f.sub, f.mul and f.div take two float values; an int is made a float with f.from_int"),
 )

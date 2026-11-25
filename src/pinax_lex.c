@@ -256,7 +256,8 @@ static bool number(pnx_lexer *lx, pnx_token *t) {
         const proven_u8str_view_t view = {(const proven_byte_t *)buf, n};
         if (real) {
             const proven_parse_double_result_t r = proven_parse_double_ascii(view);
-            if (r.err != PROVEN_OK || r.consumed != n)
+            // a value too large is the infinity, as a hexadecimal one is (values propagate, D0111)
+            if ((r.err != PROVEN_OK && r.err != PROVEN_ERR_OVERFLOW) || r.consumed != n)
                 return fail_at(lx, start, "the real number cannot be read");
             t->real = r.val;
         } else {

@@ -1,0 +1,12 @@
+rem run
+use io .
+use f .
+def demo do
+  9.81e0 to g                             rem a float literal has an exponent
+  2.5e0 to t
+  g t f.mul t f.mul 2e0 f.div to fallen   rem g t t / 2
+  args "fallen " fallen " m" . cat io.println
+  args "whole metres " fallen f.to_int . cat io.println
+  args "per second " fallen t f.div . cat io.println
+end
+demo

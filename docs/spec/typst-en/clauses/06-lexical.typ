@@ -137,8 +137,8 @@ hexadecimal digits `A`--`F` may be either case.]
 
 #para("8")[A number with a point and digits on both sides and no exponent is a decimal literal (`12.50`, 7.5). At most 18
 digits follow the point, and the digits together, as an integer, shall fit in 64 bits. A number with an exponent (`2e3`,
-`2.5e0`) or a hexadecimal one with `p` is a float literal; its form is in the grammar (annex A), but this edition has no
-float type, so it is refused (annex D).]
+`2.5e0`) or a hexadecimal one with `p` (`0x1.8p1`) is a `float` literal (7.7). It is rounded once to the nearest value,
+and a value too large is an infinity.]
 
 == Characters, strings, text <lex-strings>
 

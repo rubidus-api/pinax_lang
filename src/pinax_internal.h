@@ -727,6 +727,9 @@ uint32_t pnx_format_uint(uint64_t value, uint8_t out[24]); // a u64 (RFC-0025): 
 // optional sign, digits, and a point followed by at most `scale` digits.
 uint32_t pnx_format_dec(int64_t value, uint32_t scale, uint8_t out[24]);
 bool     pnx_parse_dec(const uint8_t *bytes, uint32_t length, uint32_t scale, int64_t *out);
+// float (RFC-0056): the shortest text that reads back (at most 26 bytes), and the whole view read as one.
+uint32_t pnx_format_float(int64_t bits, uint8_t out[40]);
+bool     pnx_parse_float(const uint8_t *bytes, uint32_t length, int64_t *out);
 extern const int64_t pnx_pow10[19];
 // Offset of the first `part` in `bytes`, or UINT32_MAX. An empty part is found at 0.
 uint32_t pnx_find(const uint8_t *bytes, uint32_t length, const uint8_t *part, uint32_t part_length);

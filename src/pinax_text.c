@@ -2,6 +2,8 @@
 #include "pinax_internal.h"
 
 #include "proven/encode.h"
+#include "proven/float_format.h"
+#include "proven/float_parse.h"
 #include "proven/fmt.h"
 #include "proven/hash.h"
 #include "proven/scan.h"
@@ -69,6 +71,51 @@ uint32_t pnx_format_dec(int64_t value, uint32_t scale, uint8_t out[24]) {
         frac /= 10;
     }
     return n + scale;
+}
+
+// float (RFC-0056, D0112): the shortest text that reads back as the value, from proven's shortest
+// form; a point is added when it has neither a point nor an exponent ("1.0"), and a NaN, whatever
+// its bits, is "nan".
+uint32_t pnx_format_float(int64_t bits, uint8_t out[40]) {
+    const uint64_t u = (uint64_t)bits, mag = u & ~(UINT64_C(1) << 63);
+    if (mag > UINT64_C(0x7ff0000000000000)) {
+        __builtin_memcpy(out, "nan", 3);
+        return 3;
+    }
+    if (mag == UINT64_C(0x7ff0000000000000)) {
+        __builtin_memcpy(out, u >> 63 ? "-inf" : "inf", u >> 63 ? 4 : 3);
+        return u >> 63 ? 4 : 3;
+    }
+    double d;
+    __builtin_memcpy(&d, &bits, 8);
+    proven_size_t n = 0;
+    if (proven_float_format_f64_policy((char *)out, 36, d, PROVEN_FLOAT_FORMAT_POLICY_RYU,
+                                       proven_float_format_options_shortest(), &n) != PROVEN_OK || n > 36)
+        n = 0;
+    bool plain = n > 0;
+    for (proven_size_t k = 0; k < n; ++k)
+        plain = plain && out[k] != '.' && out[k] != 'e' && out[k] != 'E';
+    if (plain) {
+        out[n++] = '.';
+        out[n++] = '0';
+    }
+    return (uint32_t)n;
+}
+
+// Reads the whole view as a binary64 (proven: decimal or hexadecimal, inf, infinity, nan); a number
+// too large is the signed infinity (values propagate, D0111). The NaN read is the one NaN.
+bool pnx_parse_float(const uint8_t *bytes, uint32_t length, int64_t *out) {
+    if (length == 0)
+        return false;
+    const proven_parse_double_result_t r = proven_parse_double_ascii((proven_u8str_view_t){bytes, length});
+    if ((r.err != PROVEN_OK && r.err != PROVEN_ERR_OVERFLOW) || r.consumed != length)
+        return false;
+    int64_t bits;
+    __builtin_memcpy(&bits, &r.val, 8);
+    if (((uint64_t)bits & ~(UINT64_C(1) << 63)) > UINT64_C(0x7ff0000000000000))
+        bits = INT64_C(0x7ff8000000000000);
+    *out = bits;
+    return true;
 }
 
 bool pnx_parse_dec(const uint8_t *bytes, uint32_t length, uint32_t scale, int64_t *out) {

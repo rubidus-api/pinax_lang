@@ -29,6 +29,7 @@ enum { TY_NONE, TY_INT, TY_BOOL, TY_ERR, TY_STEM, TY_COLL, TY_STR = TY_SBANK | 6
        TY_BUF = 8, // a buffer handed to a host word: only in the signatures of host words
        TY_REGEX = TY_SBANK | 9, // a program of rex (RFC-0011): a view of its bytes
        TY_ARGS = TY_SBANK | 10, // the values of `args ... .` (RFC-0049): a view of a block in the region; only a parameter holds one
+       TY_FLOAT = 11, // IEEE binary64 (RFC-0056, D0112): its 64 bits in an I-bank slot, like an int to everything that stores it
        TY_FIRST_DECLARED = 16 };
 enum { BANK_I, BANK_S, BANK_NONE };
 enum { E_SLOT, E_LOCAL, E_CONST, E_COND };
@@ -835,7 +836,7 @@ static name type_name(const comp *c, tid type) {
         return cname(c->st->handle_types[type - TY_HANDLE].name);
     if (base_of(c, type) != type)
         return ((const dtype *)c->dtypes.ptr + ((type & ~TY_SBANK) - TY_DISTINCT))->name;
-    return cname(type == TY_INT ? "int" : type == TY_BOOL ? "bool" : type == TY_ERR ? "err" : type == TY_MARK ? "mark"
+    return cname(type == TY_INT ? "int" : type == TY_FLOAT ? "float" : type == TY_BOOL ? "bool" : type == TY_ERR ? "err" : type == TY_MARK ? "mark"
                  : type == TY_BUF ? "buffer" : type == TY_REGEX ? "regex" : type == TY_ARGS ? "args" : "str");
 }
 
@@ -847,6 +848,8 @@ static tid basic_type(name n) {
         return (tid)(TY_NARROW + width);
     if (name_is(n, "bool"))
         return TY_BOOL;
+    if (name_is(n, "float"))
+        return TY_FLOAT;
     if (name_is(n, "str"))
         return TY_STR;
     if (name_is(n, "err"))
@@ -963,9 +966,9 @@ static bool parse_ref(comp *c, tid *out) {
             if (t && t->kind != GK_SCALAR && t->kind != GK_TASKS && (t->forward || t->record != NONE))
                 r.cell = row_type(table);
         }
-        if (r.record == NONE && r.cell != TY_INT && r.cell != TY_BOOL && r.cell != TY_ERR && r.cell != TY_STR && !dec &&
+        if (r.record == NONE && r.cell != TY_INT && r.cell != TY_FLOAT && r.cell != TY_BOOL && r.cell != TY_ERR && r.cell != TY_STR && !dec &&
             !is_row(r.cell))
-            return type_error(c, "the cells are int, bool, err, dec(N), str(N), a record or the rows of a table");
+            return type_error(c, "the cells are int, float, bool, err, dec(N), str(N), a record or the rows of a table");
         if (r.kind == GK_QUEUE && (r.record != NONE || r.cell == TY_STR || is_row(r.cell)))
             return type_error(c, "a queue holds int, bool, err or dec(N) values");
         if (!advance(c) || (r.cell == TY_STR && !str_capacity(c, &r.strcap)) || (dec && !dec_scale(c, &r.cell)))
@@ -1083,8 +1086,7 @@ static bool parse_sig(comp *c, sig *s, pnx_word_id stop) {
             c->cstr_mask |= 1u << s->n_in;
         }
         if (t == TY_NONE)
-            return type_error(c, name_is(type, "float") ? "float is not available: this build has no F bank"
-                                                        : "this type is not known here");
+            return type_error(c, "this type is not known here");
         uint8_t *count = outputs ? &s->n_out : &s->n_in;
         if (*count == MAX_PARAMS)
             return syntax(c, "too many parameters");
@@ -1891,7 +1893,9 @@ enum {
     BW_HEX_ENCODE, BW_HEX_DECODE, BW_URL_ENCODE, BW_URL_DECODE, BW_TRUNCATE, BW_PTN_IS_MATCH, BW_PTN_MATCH,
     BW_PTN_CAPTURE, BW_PTN_MATCHES, BW_PTN_REPLACE, BW_RX, BW_RX_COMPILE, BW_RX_IS_MATCH, BW_RX_MATCH, BW_RX_CUT,
     BW_RX_MATCHES, BW_RX_SPLIT, BW_RX_REPLACE, BW_RX_REPLACE_INTO, BW_WAIT_TAKE, BW_WAIT_PUT, BW_RESCALE, BW_TO_DEC,
-    BW_SORT, BW_SORT_DESC, BW_SORT_BY, BW_SORT_BY_DESC
+    BW_SORT, BW_SORT_DESC, BW_SORT_BY, BW_SORT_BY_DESC,
+    BW_F_ADD, BW_F_SUB, BW_F_MUL, BW_F_DIV, BW_F_NEG, BW_F_ABS, BW_NEAR, BW_IS_NAN, BW_IS_FINITE, BW_TO_FLOAT,
+    BW_F_TO_INT, BW_STR_TO_FLOAT
 };
 static const struct builtin {
     const char *name;
@@ -1947,6 +1951,10 @@ static const struct builtin {
     {"match", BW_RX_MATCH, 7},      {"cut_match", BW_RX_CUT, 7},   {"matches", BW_RX_MATCHES, 7},
     {"split", BW_RX_SPLIT, 7},      {"replace", BW_RX_REPLACE, 7}, {"replace_into", BW_RX_REPLACE_INTO, 7},
     {"len", BW_LEN, 1},             {"is_empty", BW_IS_EMPTY, 1},  {"take", BW_TAKE, 1},
+    {"add", BW_F_ADD, 13},          {"sub", BW_F_SUB, 13},         {"mul", BW_F_MUL, 13},
+    {"div", BW_F_DIV, 13},          {"neg", BW_F_NEG, 13},         {"abs", BW_F_ABS, 13},
+    {"near", BW_NEAR, 13},          {"is_nan", BW_IS_NAN, 13},     {"is_finite", BW_IS_FINITE, 13},
+    {"from_int", BW_TO_FLOAT, 13},  {"to_int", BW_F_TO_INT, 13},   {"to_float", BW_STR_TO_FLOAT, 1},
 };
 
 // A word of the core (module 0, written bare) or of a standard module (1: str, 2: fmt, written
@@ -1957,7 +1965,7 @@ static uint8_t standard_module(name n) {
     return name_is(n, "str") ? 1 : name_is(n, "fmt") ? 2 : name_is(n, "hash") ? 3 : name_is(n, "encode") ? 4
          : name_is(n, "bytes") ? 5 : name_is(n, "ptn") ? 6 : name_is(n, "rex") ? 7 : name_is(n, "json") ? 8
          : name_is(n, "csv") ? 9 : name_is(n, "sheet") ? 10
-         : name_is(n, "toml") ? 11 : name_is(n, "md") ? 12 : 0;
+         : name_is(n, "toml") ? 11 : name_is(n, "md") ? 12 : name_is(n, "f") ? 13 : 0;
 }
 
 static const struct builtin *find_builtin(name n, uint8_t module) {
@@ -2222,9 +2230,11 @@ static bool pattern_of(comp *c, uint32_t idx, uint32_t *reg) {
 }
 // Whether a value is printed as a decimal number: int, dec(N) and the narrow types (a u64 unsigned).
 static bool is_number(const comp *c, tid type) {
-    return type == TY_INT || is_dec(type) || narrow_width(c, type) != NONE;
+    return type == TY_INT || type == TY_FLOAT || is_dec(type) || narrow_width(c, type) != NONE;
 }
 static uint32_t decimal_op(const comp *c, tid type, uint32_t ra, uint32_t scratch) {
+    if (type == TY_FLOAT)
+        return PNX_ABC(PNX_RCATD, scratch, ra, PNX_DEC_FLOAT);
     if (is_dec(type))
         return PNX_ABC(PNX_RCATD, scratch, ra, type - TY_DEC);
     return narrow_width(c, type) == PNX_W_64 ? PNX_ABC(PNX_RCATU, scratch, ra, 0) : PNX_ABC(PNX_RCATI, scratch, ra, 0);
@@ -2235,6 +2245,8 @@ static bool arith_word(comp *c, uint32_t op) {
     if (!need(c, 2))
         return false;
     entry *a = &f->stack[f->depth - 2], *b = &f->stack[f->depth - 1];
+    if (a->type == TY_FLOAT || b->type == TY_FLOAT) // RFC-0056: the float words are their own (D0111)
+        return type_error(c, "the int procedures take no float; a float is computed with f.add, f.sub, f.mul and f.div");
     if (narrow_width(c, a->type) != NONE || narrow_width(c, b->type) != NONE) // RFC-0025
         return narrow_arith(c, op, a, b, narrow_width(c, a->type));
     if (op == PNX_MUL && is_dec(a->type) && is_dec(b->type)) { // dec(A) dec(B) mul : dec(A+B), exact (RFC-0019)
@@ -2297,6 +2309,19 @@ static bool compare_word(comp *c, int which) {
     entry *a = &f->stack[f->depth - 2], *b = &f->stack[f->depth - 1];
     if (a->type != b->type)
         return type_error(c, "the two values compared must have the same type");
+    if (a->type == TY_FLOAT) { // exact IEEE (D0111): a 0 or 1 in a register, so that no branch is inverted
+        if (!settle(c, f->depth - 2) || !settle(c, f->depth - 1))
+            return false;
+        const uint32_t ra = slot_of(c, f->depth - 2), rb = slot_of(c, f->depth - 1);
+        f->depth -= 2;
+        const bool     swap = which == CMP_GT || which == CMP_GE;
+        const uint32_t fl = which == CMP_EQ || which == CMP_NE ? PNX_FL_EQ : which == CMP_LT || which == CMP_GT ? PNX_FL_LT : PNX_FL_LE;
+        if (emit_def(c, PNX_ABC(PNX_FLOP, ra, swap ? rb : ra, swap ? ra : rb), BANK_I) == NONE || emit(c, fl) == NONE)
+            return false;
+        if (which == CMP_NE) // not equal: the 0 of FL_EQ (a NaN is not equal to itself)
+            return push(c, (entry){.type = TY_BOOL, .kind = E_COND, .op = PNX_JEQI, .a = (uint8_t)ra, .b = 0});
+        return push_slot(c, TY_BOOL);
+    }
     const uint32_t narrow = narrow_width(c, a->type);
     if (num_base(c, a->type) != TY_INT && narrow == NONE && a->type != TY_STR && which != CMP_EQ && which != CMP_NE)
         return type_error(c, "values of this type are compared with eq and ne only");
@@ -2522,6 +2547,8 @@ static bool core_plain(comp *c, const core_word *w) {
     default: { // C_NEG
         if (!need(c, 1))
             return false;
+        if (f->stack[f->depth - 1].type == TY_FLOAT)
+            return type_error(c, "neg takes an int; a float is negated with f.neg");
         if (num_base(c, f->stack[f->depth - 1].type) != TY_INT)
             return type_error(c, "neg takes an int, or a value of a declared type over int");
         const uint32_t dst = slot_of(c, f->depth - 1);
@@ -6868,6 +6895,51 @@ static bool sort_work(comp *c) {
     return true;
 }
 
+// float (RFC-0056): a FLOP or FLUN on the top two or the top value, the result in the place of the first.
+static bool float_op(comp *c, bool two, uint32_t sub, tid in, tid out, const char *msg) {
+    fn *f = c->f;
+    const uint32_t n = two ? 2 : 1;
+    if (!need(c, n))
+        return false;
+    for (uint32_t k = 0; k < n; ++k) {
+        if (f->stack[f->depth - 1 - k].type != in)
+            return type_error(c, msg);
+    }
+    const uint32_t dst = slot_of(c, f->depth - n);
+    uint32_t       ra, rb = 0;
+    if (!reg_of(c, f->depth - n, &ra) || (two && !reg_of(c, f->depth - 1, &rb)))
+        return false;
+    if (emit_def(c, PNX_ABC(two ? PNX_FLOP : PNX_FLUN, dst, ra, rb), BANK_I) == NONE || emit(c, sub) == NONE)
+        return false;
+    c->f->def_at = NONE;
+    f->depth -= n;
+    return push_slot(c, out) && advance(c);
+}
+
+// a b eps f.near : a eq b, or |a - b| le eps (a NaN is near nothing; two equal infinities are near)
+static bool float_near(comp *c) {
+    fn *f = c->f;
+    if (!need(c, 3))
+        return false;
+    for (uint32_t k = 0; k < 3; ++k) {
+        if (f->stack[f->depth - 1 - k].type != TY_FLOAT)
+            return type_error(c, "f.near takes three float values: a b eps f.near");
+        if (!settle(c, f->depth - 1 - k))
+            return false;
+    }
+    const uint32_t ra = slot_of(c, f->depth - 3), rb = slot_of(c, f->depth - 2), re = slot_of(c, f->depth - 1);
+    const uint32_t t = top_slot(c, BANK_I, 1); // above the three
+    if (emit(c, PNX_ABC(PNX_FLOP, t, ra, rb)) == NONE || emit(c, PNX_FL_EQ) == NONE ||
+        emit(c, PNX_ABC(PNX_FLOP, rb, ra, rb)) == NONE || emit(c, PNX_FL_SUB) == NONE ||
+        emit(c, PNX_ABC(PNX_FLUN, rb, rb, 0)) == NONE || emit(c, PNX_FU_ABS) == NONE ||
+        emit(c, PNX_ABC(PNX_FLOP, rb, rb, re)) == NONE || emit(c, PNX_FL_LE) == NONE ||
+        emit(c, PNX_ABC(PNX_OR, ra, t, rb)) == NONE)
+        return false;
+    c->f->def_at = NONE;
+    f->depth -= 3;
+    return push_slot(c, TY_BOOL) && advance(c);
+}
+
 static bool builtin(comp *c, const struct builtin *w) {
     fn *f = c->f;
     const globalsym *g;
@@ -7871,7 +7943,7 @@ static bool builtin(comp *c, const struct builtin *w) {
             return false;
         const tid type = f->stack[f->depth - 1].type;
         if (!is_number(c, type))
-            return type_error(c, "to_str takes an int, a dec(N) or a narrow integer");
+            return type_error(c, "to_str takes an int, a float, a dec(N) or a narrow integer");
         if (!reg_of(c, f->depth - 1, &ra))
             return false;
         --f->depth;
@@ -7880,6 +7952,34 @@ static bool builtin(comp *c, const struct builtin *w) {
             !push_slot(c, TY_STR))
             return false;
         return move_slot(c, TY_STR, slot_of(c, f->depth - 1), scratch) && advance(c);
+    }
+    case BW_F_ADD: case BW_F_SUB: case BW_F_MUL: case BW_F_DIV: {
+        static const uint8_t subs[] = {PNX_FL_ADD, PNX_FL_SUB, PNX_FL_MUL, PNX_FL_DIV};
+        return float_op(c, true, subs[w->id - BW_F_ADD], TY_FLOAT, TY_FLOAT,
+                        "f.add, f.sub, f.mul and f.div take two float values; an int is made a float with f.from_int");
+    }
+    case BW_F_NEG: case BW_F_ABS:
+        return float_op(c, false, w->id == BW_F_NEG ? PNX_FU_NEG : PNX_FU_ABS, TY_FLOAT, TY_FLOAT, "f.neg and f.abs take a float");
+    case BW_IS_NAN: case BW_IS_FINITE:
+        return float_op(c, false, w->id == BW_IS_NAN ? PNX_FU_IS_NAN : PNX_FU_IS_FINITE, TY_FLOAT, TY_BOOL,
+                        "f.is_nan and f.is_finite take a float");
+    case BW_TO_FLOAT:
+        return float_op(c, false, PNX_FU_FROM_INT, TY_INT, TY_FLOAT, "f.from_int takes an int (str.to_float reads a str)");
+    case BW_F_TO_INT: // toward zero; a NaN or a value outside int is the fault overflow
+        return float_op(c, false, PNX_FU_TO_INT, TY_FLOAT, TY_INT, "f.to_int takes a float (str.to_int reads a str)");
+    case BW_NEAR: return float_near(c);
+    case BW_STR_TO_FLOAT: { // s str.to_float : the text read as a float; fails with format
+        if (!need(c, 1))
+            return false;
+        if (f->stack[f->depth - 1].type != TY_STR)
+            return type_error(c, "to_float takes a str");
+        if (!settle(c, f->depth - 1))
+            return false;
+        ra = slot_of(c, f->depth - 1);
+        --f->depth;
+        if (!settle_all(c))
+            return false;
+        return emit(c, PNX_ABC(PNX_STODEC, top_slot(c, BANK_I, 1), ra, PNX_DEC_FLOAT)) != NONE && guard_op(c, TY_FLOAT);
     }
     case BW_ASSERT: { // a fault when the value is false
         entry e;
@@ -8475,7 +8575,11 @@ static bool body_token(comp *c) {
         return push(c, (entry){.type = char_type(c, &t), .kind = E_CONST, .value = t.integer}) && advance(c);
     case PNX_T_DEC: // 12.50 : a dec(2) of 1250 (RFC-0019)
         return push(c, (entry){.type = (tid)(TY_DEC + t.scale), .kind = E_CONST, .value = t.integer}) && advance(c);
-    case PNX_T_FLOAT: return type_error(c, "float is not available: this build has no F bank; 2.5 without an exponent is a dec");
+    case PNX_T_FLOAT: { // 2.5e0, 1e-3, 0x1.8p1: a float (D0112); 2.5 without an exponent is a dec
+        int64_t bits;
+        __builtin_memcpy(&bits, &t.real, 8);
+        return push(c, (entry){.type = TY_FLOAT, .kind = E_CONST, .value = bits}) && advance(c);
+    }
     case PNX_T_STRING:
     case PNX_T_RAW:
     case PNX_T_TEXT: return string_literal(c) && advance(c);
@@ -9298,6 +9402,10 @@ static bool declare_const(comp *c) {
         k.type = c->tok.kind == PNX_T_CHAR ? char_type(c, &c->tok) : TY_INT;
         k.value = c->tok.integer;
         break;
+    case PNX_T_FLOAT: // const half 0.5e0 : the bits of the double (D0112)
+        k.type = TY_FLOAT;
+        __builtin_memcpy(&k.value, &c->tok.real, 8);
+        break;
     case PNX_T_STRING:
     case PNX_T_RAW:
     case PNX_T_TEXT: {
@@ -9531,9 +9639,9 @@ static bool declare_collection(comp *c, uint8_t kind) {
         if (t && t->kind != GK_SCALAR && t->kind != GK_TASKS && (t->forward || t->record != NONE))
             g.type = row_type(table);
     }
-    if (g.record == NONE && g.type != TY_INT && g.type != TY_BOOL && g.type != TY_ERR && g.type != TY_STR && !dec &&
+    if (g.record == NONE && g.type != TY_INT && g.type != TY_FLOAT && g.type != TY_BOOL && g.type != TY_ERR && g.type != TY_STR && !dec &&
         !is_narrow(g.type) && !is_row(g.type) && !is_block(g.type))
-        return type_error(c, "the cells are int, bool, err, dec(N), str(N), a narrow integer type, a record or the rows of a table; other types are not supported yet");
+        return type_error(c, "the cells are int, float, bool, err, dec(N), str(N), a narrow integer type, a record or the rows of a table; other types are not supported yet");
     if (slot && g.record == NONE)
         return type_error(c, "a table announced by forward holds a record");
     if (kind == GK_QUEUE && (g.record != NONE || g.type == TY_STR || is_row(g.type)))

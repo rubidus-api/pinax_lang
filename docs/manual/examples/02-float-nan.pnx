@@ -1,0 +1,11 @@
+rem run
+use io .
+use f .
+def mean total float, n int gives float do total n f.from_int f.div end
+def demo do
+  0e0 0 mean to empty                     rem 0 / 0: no fault, a NaN
+  empty 10e0 f.add to later               rem the NaN goes on
+  args "mean " empty ", later " later . cat io.println
+  later f.is_nan if "no mean: the list was empty" io.println end
+end
+demo

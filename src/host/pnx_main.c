@@ -331,7 +331,11 @@ static void show_values(const pinax_state *state) {
             written = snprintf(out + at, sizeof out - at, "%s%s", gap, v.i ? "true" : "false");
         else if (v.kind == PINAX_VALUE_ERR)
             written = snprintf(out + at, sizeof out - at, "%serr.%.*s", gap, (int)v.s.len, (const char *)v.s.ptr);
-        else
+        else if (v.type.len == 5 && memcmp(v.type.ptr, "float", 5) == 0) { // the bits of a double (D0112)
+            uint8_t text[40];
+            const uint32_t len = pnx_format_float(v.i, text);
+            written = snprintf(out + at, sizeof out - at, "%s%.*s", gap, (int)len, (const char *)text);
+        } else
             written = snprintf(out + at, sizeof out - at, "%s%lld", gap, (long long)v.i);
         at += (size_t)written;
     }
@@ -535,7 +539,11 @@ static void show_fault_locals(const pinax_state *state, FILE *out) {
             fprintf(out, "err.%.*s\n", (int)v.s.len, (const char *)v.s.ptr);
         else if (v.kind == PINAX_VALUE_BOOL)
             fprintf(out, "%s\n", v.i ? "true" : "false");
-        else
+        else if (v.type.len == 5 && memcmp(v.type.ptr, "float", 5) == 0) { // the bits of a double (D0112)
+            uint8_t text[40];
+            const uint32_t len = pnx_format_float(v.i, text);
+            fprintf(out, "%.*s\n", (int)len, (const char *)text);
+        } else
             fprintf(out, "%lld\n", (long long)v.i);
     }
 }

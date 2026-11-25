@@ -1,0 +1,13 @@
+rem run
+use io .
+use f .
+def demo do
+  0e0 0e0 f.div to nan                     rem no fault: the result is a NaN
+  1e0 0e0 f.div to inf
+  nan 1e0 f.add to still                   rem and the NaN goes on
+  args still " " inf " " inf f.neg " " 1e300 1e300 f.mul . cat io.println
+  args still f.is_nan " " inf f.is_finite " " nan nan eq " " nan nan ne . cat io.println
+  nan 1e0 lt if "lt" else "not lt" end io.println
+  nan 1e0 ge if "ge" else "not ge" end io.println
+end
+demo

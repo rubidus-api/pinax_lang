@@ -1,0 +1,3 @@
+rem refused
+use f .
+def f gives float do 1e0 1 f.add end

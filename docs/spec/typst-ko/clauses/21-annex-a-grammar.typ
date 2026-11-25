@@ -18,12 +18,14 @@ NAME        = letter { letter | digit } ;                (* not a reserved word 
 PATH        = NAME "." member { "." member } ;           (* member: a run of letters and digits *)
 INT         = [ "+" | "-" ] ( digits | "0x" hex-digits | "0b" bit-digits ) ;
 DEC         = [ "+" | "-" ] digits "." digits ;              (* 7.5 *)
+FLOAT       = [ "+" | "-" ] digits [ "." digits ] "e" [ "+" | "-" ] digits
+            | [ "+" | "-" ] "0x" hex-digits [ "." hex-digits ] "p" [ "+" | "-" ] digits ;   (* 7.7 *)
 CHAR        = [ "U" ] "'" ( char-byte | escape ) "'" ;
 STRING      = '"' { string-byte | escape } '"' ;
 RAWSTRING   = "r" '"' { raw-byte } '"' ;
 TEXT        = "text" TAG newline { text-line newline } TAG ;
 BOOL        = "true" | "false" ;
-literal     = INT | DEC | CHAR | STRING | RAWSTRING | TEXT | BOOL ;
+literal     = INT | DEC | FLOAT | CHAR | STRING | RAWSTRING | TEXT | BOOL ;
 
 (* 6.7, 13: a source *)
 source      = [ "pinax" INT ] { item } ;

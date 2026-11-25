@@ -17,7 +17,7 @@ body, that the stack is exactly the results when the body ends.
 #ex("manual", "03-temperature.pnx")
 
 `show` takes one `int` and gives one `str`, so `365 c_to_f show` can be one item of a `cat`. Temperatures are kept in
-tenths of a degree as `int`s because this edition has no floating point.
+tenths of a degree as `int`s, so the arithmetic is exact; for quantities of unknown scale there is `float` (chapter 2).
 
 A signature is one line that says what the procedure does to the stack. `(tenths int gives int)` means "takes one `int`
 off the top and puts one `int` on". So the caller's stack can be followed without reading the body.

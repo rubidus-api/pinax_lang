@@ -263,6 +263,8 @@ PNX_INLINE int pnx_tail_word(pinax_state *st, const pnx_wordrec *callee, uint32_
     X(RUN2, NARITH) \
     X(RUNF2, NCHK) \
     X(RUN2, NUN) \
+    X(RUN2, FLOP) \
+    X(RUN2, FLUN) \
     X(RUNF, JNEXT) \
     X(RUNF, JSKIP) \
     X(RUNFG, JPUTI) \
@@ -903,13 +905,14 @@ PNX_OP(RCATI) {
     return pnx_region_append(st, &S[OP_A(w)], digits, n);
 }
 PNX_OP(RCATD) {
-    uint8_t digits[24];
-    const uint32_t n = pnx_format_dec(R[OP_B(w)], OP_C(w), digits);
+    uint8_t digits[40];
+    const uint32_t n = OP_C(w) == PNX_DEC_FLOAT ? pnx_format_float(R[OP_B(w)], digits) : pnx_format_dec(R[OP_B(w)], OP_C(w), digits);
     return pnx_region_append(st, &S[OP_A(w)], digits, n);
 }
 PNX_OP(STODEC) {
     const pnx_scell s = S[OP_B(w)];
-    if (pnx_parse_dec(pnx_view_bytes(st, s), s.length, OP_C(w), &R[OP_A(w)]))
+    if (OP_C(w) == PNX_DEC_FLOAT ? pnx_parse_float(pnx_view_bytes(st, s), s.length, &R[OP_A(w)])
+                                 : pnx_parse_dec(pnx_view_bytes(st, s), s.length, OP_C(w), &R[OP_A(w)]))
         return PNX_R_OK;
     st->fail = PINAX_ERR_FORMAT;
     return PNX_R_FAILED;
@@ -2942,6 +2945,71 @@ PNX_OP(NUN) {
     case PNX_NU_CLZ: r = pattern == 0 ? (int64_t)bits : __builtin_clzll((unsigned long long)pattern) - (64 - (int64_t)bits); break;
     case PNX_NU_CTZ: r = pattern == 0 ? (int64_t)bits : __builtin_ctzll((unsigned long long)pattern); break;
     case PNX_NU_BSWAP: r = pnx_wrap_width((int64_t)(__builtin_bswap64(pattern) >> (64 - bits)), width); break;
+    default: return PINAX_ERR_FORMAT;
+    }
+    R[OP_A(w)] = r;
+    return PNX_R_OK;
+}
+
+// float (RFC-0056, D0112): the bits of a binary64 in an int64. Each operation is one IEEE operation in an
+// expression of its own, so no C compiler may fuse a product and a sum into one rounding (C23 6.5 (8):
+// contraction is only within an expression); clang is told so as well. ISO C mode (-std=c23) also keeps
+// GCC's default -ffp-contract=off and rounds excess precision away at each assignment.
+#if defined(__clang__)
+#pragma STDC FP_CONTRACT OFF
+#endif
+// A NaN an operation makes is the one quiet NaN 0x7ff8000000000000, so that its bits are the same on every processor (x86 makes the
+// sign bit 1, ARM 0).
+#define PNX_FLOAT_NAN INT64_C(0x7ff8000000000000)
+PNX_INLINE double pnx_f64(int64_t bits) {
+    double d;
+    __builtin_memcpy(&d, &bits, 8);
+    return d;
+}
+PNX_INLINE int64_t pnx_f64_bits(double d) {
+    int64_t bits;
+    __builtin_memcpy(&bits, &d, 8);
+    return bits;
+}
+PNX_INLINE bool pnx_f64_is_nan(int64_t bits) {
+    return ((uint64_t)bits & ~(UINT64_C(1) << 63)) > UINT64_C(0x7ff0000000000000);
+}
+PNX_INLINE int64_t pnx_f64_canonical(double d) {
+    const int64_t bits = pnx_f64_bits(d);
+    return pnx_f64_is_nan(bits) ? PNX_FLOAT_NAN : bits;
+}
+PNX_OP(FLOP) {
+    const double a = pnx_f64(R[OP_B(w)]), b = pnx_f64(R[OP_C(w)]);
+    int64_t r;
+    switch (x) {
+    case PNX_FL_ADD: r = pnx_f64_canonical(a + b); break;
+    case PNX_FL_SUB: r = pnx_f64_canonical(a - b); break;
+    case PNX_FL_MUL: r = pnx_f64_canonical(a * b); break;
+    case PNX_FL_DIV: r = pnx_f64_canonical(a / b); break;
+    case PNX_FL_EQ: r = a == b; break;
+    case PNX_FL_LT: r = a < b; break;
+    case PNX_FL_LE: r = a <= b; break;
+    default: return PINAX_ERR_FORMAT;
+    }
+    R[OP_A(w)] = r;
+    return PNX_R_OK;
+}
+PNX_OP(FLUN) {
+    const int64_t a = R[OP_B(w)];
+    int64_t r;
+    switch (x) {
+    case PNX_FU_NEG: r = (int64_t)((uint64_t)a ^ (UINT64_C(1) << 63)); break;
+    case PNX_FU_ABS: r = (int64_t)((uint64_t)a & ~(UINT64_C(1) << 63)); break;
+    case PNX_FU_FROM_INT: r = pnx_f64_bits((double)a); break;
+    case PNX_FU_TO_INT: {
+        const double d = pnx_f64(a); // [-2^63, 2^63): a NaN is neither
+        if (!(d >= -9223372036854775808.0 && d < 9223372036854775808.0))
+            return PINAX_ERR_OVERFLOW;
+        r = (int64_t)d;
+        break;
+    }
+    case PNX_FU_IS_NAN: r = pnx_f64_is_nan(a); break;
+    case PNX_FU_IS_FINITE: r = ((uint64_t)a & UINT64_C(0x7ff0000000000000)) != UINT64_C(0x7ff0000000000000); break;
     default: return PINAX_ERR_FORMAT;
     }
     R[OP_A(w)] = r;

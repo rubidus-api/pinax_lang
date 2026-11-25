@@ -172,9 +172,9 @@ is the handle `sqlite` and a statement the handle `stmt`; both are `owned` when 
 large), `err.not_found` (a file that cannot be opened, no row), `err.range` (a place that is not there), `err.format` (a
 file that is not a database, a statement that does not parse, a column of another kind), `err.state` (a statement used while
 it runs), and `err.failed` for the rest (a busy or locked database, a constraint, a read only database, an input or output
-error); `sqlite.last_code` tells which. This edition has no float type, so there are no procedures for a real: a real column
-is read as a text (`sqlite.col_str`) and moved with `str.to_dec` (7.5), and money is bound as an integer in its smallest
-unit.]
+error); `sqlite.last_code` tells which. In this edition `sqlite` has no procedures for a real column: a real column is read
+as a text (`sqlite.col_str`) and moved with `str.to_float` (7.7) or `str.to_dec` (7.5), and money is bound as an integer in
+its smallest unit.]
 
 #para("3")[The memory SQLite uses is limited for the process: past a hard limit (256 MiB unless the host sets another)
 an allocation fails as `err.full`. A connection is used by one thread at a time, as the state it belongs to is. A call

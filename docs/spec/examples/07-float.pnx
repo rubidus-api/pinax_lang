@@ -1,0 +1,15 @@
+rem run
+use io .
+use str .
+use f .
+def demo do
+  1.5e0 2.25e0 f.add to total              rem a float literal has an exponent
+  args total " " 1e0 3e0 f.div " " 1e20 " " 0x1.8p1 . cat io.println
+  0.1e0 0.2e0 f.add to near_third
+  args near_third " " near_third 0.3e0 eq " " near_third 0.3e0 1e-12 f.near . cat io.println
+  7 f.from_int 2e0 f.div to half_seven     rem int to float: rounded to the nearest
+  args half_seven " " half_seven f.to_int " " -7.9e0 f.to_int . cat io.println
+  "2.5e-3" str.to_float or_else to e 0e0 end to read
+  args read " " -0e0 " " 0e0 -0e0 eq . cat io.println
+end
+demo

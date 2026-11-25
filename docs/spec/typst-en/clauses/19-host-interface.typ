@@ -70,7 +70,8 @@ user pointer and flags. Signatures are checked once, here. Register procedures b
 state's slots. A narrow integer of the signature (7.6) travels as one 64-bit slot, and after the function returns the
 processor checks the range of each result: outside it is the fault `overflow` (the result of a waiting procedure gets the
 same check in `pinax_complete` and ends with that code). An argument of `pinax_run` outside its narrow type is
-`PINAX_ERR_ARGUMENT`, and nothing runs.]
+`PINAX_ERR_ARGUMENT`, and nothing runs. A `float` of the signature (7.7) travels in one integer slot too: the 64 bits of the
+slot are the bits of a `double` (moved with `memcpy`).]
 
 #para("3")[When the function returns something other than `PINAX_OK`, a procedure whose signature has `or fail` fails with
 that code (11.2), and a procedure without it ends the run with a fault.]

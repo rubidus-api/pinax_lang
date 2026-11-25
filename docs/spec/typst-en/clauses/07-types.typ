@@ -10,6 +10,7 @@ type while running. A program whose types do not match is refused at load.]
   [*Type*], [*Values*],
   [`int`], [64-bit two's complement integers (7.1)],
   [`dec N`], [decimals with N digits after the point, N from 0 to 18 (7.5)],
+  [`float`], [IEEE 754 binary64 floating-point numbers (7.7)],
   [`u8` `u16` `u32` `u64` `i8` `i16` `i32`], [unsigned and signed integers of that width (7.6); `u8` is a byte, `u32` a code point],
   [`bool`], [`true`, `false` (7.2)],
   [`str`], [a view of bytes (7.3); only in locals, arguments and results],
@@ -247,4 +248,71 @@ constant outside the range converted is refused.]
   ([`fits` before a name that is not declared], "fits names a declared global, array or list; there is none of this name"),
   ([`fits` with a value that is not `str`], "fits takes a text: text fits place"),
   ([`fits` with no place after it], "fits is followed by a place: text fits record.field, or the name of a global"),
+)
+
+== Floating-point numbers <types-float>
+
+#part("Syntax")
+```ebnf
+float-type = "float" ;
+FLOAT      = [ sign ] digits [ "." digits ] exponent
+           | [ sign ] "0x" hex-digits [ "." hex-digits ] "p" [ sign ] digits ;   (* 6.4 (8) *)
+exponent   = "e" [ sign ] digits ;
+```
+
+#para("1")[A value of `float` is an IEEE 754 binary64 number: a finite number, `+0` and `-0`, the two infinities, and
+#term("NaN", en: "NaN"), which means not a number. A value is held in 64 bits.]
+
+#para("2")[A `float` computation does not stop with a fault. A result too large is an infinity (`1e300 1e300 f.mul`), and
+a result with no meaning is a NaN (`0e0 0e0 f.div`, an infinity minus an infinity). A NaN and an infinity pass on into
+the next computation: a program that does not check carries a NaN to its result. `f.is_nan` and `f.is_finite` (16.14)
+ask whether a value is a NaN and whether it is finite.]
+
+#para("3")[A number with an exponent (`2.5e0`, `1e-3`) and a hexadecimal number with `p` (`0x1.8p1`) are `float`
+literals. A number with a point alone is a `dec` (7.5). A literal is rounded once to the nearest value, ties to even. A
+literal too large is an infinity.]
+
+#para("4")[The arithmetic is `f.add` `f.sub` `f.mul` `f.div` of the module `f` (16.14). The result is the exact value
+rounded once to the nearest `float` (ties to even). The arithmetic procedures of `int` (`add` `neg` `abs` `min` `max` and
+the others, 15.1) take no `float`, and `float`, `int` and `dec` do not mix in one procedure. `n f.from_int` makes an `int`
+the nearest `float`; `x f.to_int` makes a `float` an `int`, cut toward zero.]
+
+#para("5")[`eq` `ne` `lt` `le` `gt` `ge` compare two `float` values exactly. `-0e0 0e0 eq` is true. A NaN is equal to no
+value, itself included: with a NaN, `eq` `lt` `le` `gt` `ge` are false and `ne` is true. `if` follows the value of the
+compare: `nan 1e0 lt if … else … end` takes the `else` branch. To compare within a tolerance, use `f.near` (16.14).]
+
+#ex("spec", "07-float.pnx")
+#ex("spec", "07-float-nan.pnx")
+
+#para("6")[The same computation gives the same bits on every processor. There is one NaN that a computation makes: the
+quiet NaN with the sign bit 0 (`0x7ff8000000000000`). The processor does not fuse a product and a sum into one rounding.]
+
+#para("7")[Like `int`, `float` is the type of globals, cells of arrays and lists (8 bytes), values of queues, locals,
+parameters and results, the value of a `const`, and signatures of host procedures (19.2). A host receives the 64 bits of
+a `double` in one integer slot. Fields of records, types declared over `float`, `sort`, `sum` `minimum` `maximum`, keys
+of indexes, `match` and args values take no `float` (annex D).]
+
+#para("8")[`str.to_str` and `cat` write the text with the fewest digits that reads back as the same value, always with a
+point or an exponent: `1.0`, `0.1`, `1e20`, `-0.0`. The infinities are `inf` and `-inf`, a NaN is `nan`. `str.to_float` (16.1) reads
+that text.]
+
+#part("Constraints")
+
+#para("9")[Giving a `float` and an `int` or a `dec` to one procedure, or a `float` to an arithmetic procedure of `int`, is
+refused. A number with a point alone is a `dec`, so in the place of a `float` it is refused.]
+#ex("spec", "07-float-mix.pnx")
+#ex("spec", "07-float-int-word.pnx")
+#ex("spec", "07-float-dec.pnx")
+
+#part("Faults")
+
+#para("10")[`f.to_int` stops with the fault `overflow` when it takes a NaN or a value outside the range of `int`. No other
+`float` computation makes a fault.]
+#ex("spec", "07-float-to-int.pnx")
+
+#part("Diagnostics")
+#diag(
+  ([a `float` given to an arithmetic procedure of `int`], "the int procedures take no float; a float is computed with f.add, f.sub, f.mul and f.div"),
+  ([a `float` given to `neg`], "neg takes an int; a float is negated with f.neg"),
+  ([`f.add` `f.sub` `f.mul` `f.div` of a value that is not a `float`], "f.add, f.sub, f.mul and f.div take two float values; an int is made a float with f.from_int"),
 )
