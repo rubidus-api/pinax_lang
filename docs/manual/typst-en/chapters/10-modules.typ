@@ -117,6 +117,39 @@ long something took; `clock.now_ms` is the calendar time, and `clock.sleep` paus
 has not registered `io`, the module is refused. A module meant for many hosts is better off returning results than
 depending on a host module.]
 
+== A map written as a module
+
+A table that finds a value by a text key is made with a pool and an index (`index`), as in chapter 7; that is the
+default. But a pool and an index cannot be parameters of a procedure (standard 9.9), so doing the same thing to several
+maps means writing the procedures again for each. An array can be a parameter: a map written as a module over an array
+of records serves several maps with one set of procedures. `kvmap` below is such a module. It is not part of the
+language: copy it beside the program.
+
+#ex("manual", "kvmap.pnx")
+#ex("manual", "10-kvmap.pnx")
+
+The program declares a map with `array NAME entry N` and passes that name to every procedure. `store` gives a key its
+value; `fetch` finds the value (failing with `not_found` when the key is not there); `holds` asks whether a key is
+there; `forget` takes a key out; `size` gives the number of keys; `wipe` takes them all out. `live_slots` puts the
+numbers of the live slots in a list; sorting that list with `sort_by` walks the map in the order of its keys or values.
+
+#table(columns: (auto, 1fr, 1fr), inset: 5pt, stroke: 0.5pt + luma(170),
+  table.header([], [*`kvmap`*], [*A pool and an index*]),
+  [Passed to a procedure], [yes: the map is an array], [no],
+  [Several maps], [one set of procedures], [the procedures again for each map],
+  [Keys and values], [text up to 24 bytes and one `int`], [any record],
+  [Speed], [about twice the time (measured with 50 000 keys)], [the core's hash table],
+  [Room], [well above the number of keys; it slows as it fills], [the number of keys],
+)
+
+#qa[Why are the names not `put` and `get`?][`put`, `get`, `has`, `count`, `clear`, `remove`, `lookup` and `drop` are
+procedures of the language, and a module written in Pinax cannot define those names again (standard 9.5). So the
+module uses `store`, `fetch`, `holds` and `forget`.]
+
+#mistake[`kvmap` is a standard module][It is not. It is an example file of this manual: `use kvmap .` finds it only as
+`kvmap.pnx` beside the program. For other key lengths or value types, change the copy. When no map is passed around,
+use a pool and an index.]
+
 #summary[
 - One file is one module, and only what is `export`ed is seen outside (standard 13.1, 13.2).
 - After `use MODULE [as ALIAS] .` its parts are written `MODULE.NAME` (13.1).
@@ -124,4 +157,5 @@ depending on a host module.]
   `set module.name` (13.2).
 - Values of a declared type are added and subtracted only with the same type (7.4).
 - A data load accepts declarations and values only (13.4).
+- A pool and an index are not parameters; a map passed to procedures is a module over an array (`kvmap`) (9.9).
 ]

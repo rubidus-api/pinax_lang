@@ -1,0 +1,90 @@
+rem hide
+rem kvmap: a map from text (up to 24 bytes) to int over an array of records the program declares (array m entry N)
+rem and passes to every procedure. The start slot is the FNV-1a hash of the key modulo N, probing is linear, and a
+rem deleted slot is a tombstone that a later store takes again. Keep N well above the number of keys.
+use hash .
+use str .
+
+export const key_room 24
+const empty 0
+const live 1
+const gone 2
+
+export record entry
+  key str key_room
+  value int
+  state int
+end
+
+def start m array entry, k str gives int do k hash.fnv1a raw m capacity u_mod end
+
+rem the slot of k, or -1
+def slot_of m array entry, k str gives int do
+  m k start to i
+  0 to tries
+  loop
+    tries m capacity lt not if break . end
+    i m idx to r
+    r entry.state empty eq if -1 return end
+    r entry.state live eq if r entry.key k eq if i return end end
+    i 1 add m capacity mod to i
+    tries 1 add to tries
+  end
+  -1
+end
+
+rem k takes the value v: err.range when k is longer than key_room, err.full when every slot is live
+export def store m array entry, k str, v int or fail do
+  k str.len key_room gt if err.range fail end
+  m k slot_of to at
+  at 0 ge if v at m idx to entry.value return end
+  m k start to i
+  0 to tries
+  loop
+    tries m capacity lt not if break . end
+    i m idx to r
+    r entry.state live eq not if
+      k r to entry.key  v r to entry.value  live r to entry.state
+      return
+    end
+    i 1 add m capacity mod to i
+    tries 1 add to tries
+  end
+  err.full fail
+end
+
+rem the value of k: err.not_found when it is not there
+export def fetch m array entry, k str gives int or fail do
+  m k slot_of to at
+  at 0 lt if err.not_found fail end
+  at m idx entry.value
+end
+
+export def holds m array entry, k str gives bool do m k slot_of 0 ge end
+
+rem k is taken out; false when it was not there
+export def forget m array entry, k str gives bool do
+  m k slot_of to at
+  at 0 lt if false return end
+  at m idx to r
+  gone r to entry.state  "" r to entry.key
+  true
+end
+
+export def size m array entry gives int do
+  0 to n
+  m do to r r entry.state live eq if n 1 add to n end end each
+  n
+end
+
+export def wipe m array entry do
+  m do to r empty r to entry.state  "" r to entry.key end each
+end
+
+rem the numbers of the live slots put in l, for walking or for sort_by: err.full when l has too little room
+export def live_slots m array entry, l list int or fail do
+  0 l truncate
+  0 m capacity range do to i
+    i m idx entry.state live eq if i l push or_fail end
+  end each
+end

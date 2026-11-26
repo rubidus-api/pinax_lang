@@ -1,0 +1,25 @@
+rem run
+use io .
+use str .
+use kvmap .
+array fruit entry 16                       rem two maps of one entry: the same procedures serve both
+array veg entry 16
+list order int 16
+def count_into m array entry, line str do
+  line str.words do to w
+    m w kvmap.fetch or_else to e 0 end 1 add to c        rem a missing key counts from 0
+    m w c kvmap.store or_else to e args "no room for " w . cat io.println end
+  end each
+end
+def show title str, m array entry do
+  m order kvmap.live_slots or_else to e return end
+  order m sort_by_desc entry.value
+  title io.print
+  order do to i i m idx to r args " " r entry.key "=" r entry.value . cat io.print end each
+  "" io.println
+end
+fruit "pear fig pear plum pear fig" count_into
+veg "leek kale leek" count_into
+"fruit:" fruit show
+"veg:" veg show
+args "fig " fruit "fig" kvmap.holds ", gone " fruit "fig" kvmap.forget ", now " fruit "fig" kvmap.holds . cat io.println

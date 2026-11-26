@@ -117,4 +117,121 @@ arguments: 1
 getenv failed: not_found
 7 2 8
 the clock does not go back: true
-</code></pre></div><p><code>env.arg_count</code> 와 <code>env.arg</code> 는 명령줄의 인자이고(0 번은 프로그램 파일), <code>env.getenv</code> 는 환경 변수다. <code>random.seed</code> 뒤의 <code>random.random_below</code> 는 같은 씨앗에 같은 수열을 내므로 시험에서 쓰기 좋다. <code>clock.monotonic_ns</code> 는 거꾸로 가지 않는 시계라 걸린 시간을 재는 데 쓰고, <code>clock.now_ms</code> 는 달력의 시각이며, <code>clock.sleep</code> 은 밀리초만큼 멈춘다. <code>random.random</code> 은 범위 없는 64 비트 난수다(암호에 쓰는 것이 아니다).</p><table><thead><tr><th><strong>토큰</strong></th><th><strong>그 뒤의 스택</strong></th><th><strong>일어난 일</strong></th></tr></thead><tbody><tr><td><code>1</code></td><td><code>1</code></td><td>몇 번째 인자인지.</td></tr><tr><td><code>env.arg</code></td><td><code>"alpha"</code></td><td>그 인자. 없는 번호면 실패한다.</td></tr><tr><td><code>or_else to e "?" end</code></td><td><code>"alpha"</code></td><td>성공이라 건너뛴다. 실패였다면 <code>"?"</code> 가 그 자리에 온다.</td></tr><tr><td><code>io.println</code></td><td><code>—</code></td><td>찍는다.</td></tr></tbody></table><div class="box qa"><p class="box-title">문답</p><p><strong>물음. 모듈 파일 안에서 <code>io.println</code> 을 써도 되는가?</strong></p><p>답. 모듈도 <code>use io .</code> 를 적으면 된다. 다만 모듈을 적재하는 호스트가 <code>io</code> 를 등록하지 않았으면 그 모듈은 거절된다. 널리 쓰일 모듈은 호스트 모듈에 기대지 않고 결과를 돌려주는 편이 낫다.</p></div><div class="box summary"><p class="box-title">정리</p><ul><li>파일 하나가 모듈이고, <code>export</code> 한 것만 밖에서 보인다(표준 13.1, 13.2).</li><li><code>use 모듈 [as 별명] .</code> 뒤에 <code>모듈.이름</code> 으로 쓴다(13.1).</li><li>프로시저, 상수, 전역은 경로로, 타입과 레코드는 이름만으로 쓴다. 내보낸 전역에는 <code>set 모듈.이름</code> 으로 넣는다(13.2).</li><li>선언한 타입은 같은 타입끼리만 더하고 뺀다(7.4).</li><li>자료 적재는 선언과 값만 받는다(13.4).</li></ul></div></main><nav class="bottom"><a href="index.html">처음</a> · <a href="10.html">앞</a> · <a href="12.html">다음</a> · <a href="../html-en/11.html">English</a></nav></body></html>
+</code></pre></div><p><code>env.arg_count</code> 와 <code>env.arg</code> 는 명령줄의 인자이고(0 번은 프로그램 파일), <code>env.getenv</code> 는 환경 변수다. <code>random.seed</code> 뒤의 <code>random.random_below</code> 는 같은 씨앗에 같은 수열을 내므로 시험에서 쓰기 좋다. <code>clock.monotonic_ns</code> 는 거꾸로 가지 않는 시계라 걸린 시간을 재는 데 쓰고, <code>clock.now_ms</code> 는 달력의 시각이며, <code>clock.sleep</code> 은 밀리초만큼 멈춘다. <code>random.random</code> 은 범위 없는 64 비트 난수다(암호에 쓰는 것이 아니다).</p><table><thead><tr><th><strong>토큰</strong></th><th><strong>그 뒤의 스택</strong></th><th><strong>일어난 일</strong></th></tr></thead><tbody><tr><td><code>1</code></td><td><code>1</code></td><td>몇 번째 인자인지.</td></tr><tr><td><code>env.arg</code></td><td><code>"alpha"</code></td><td>그 인자. 없는 번호면 실패한다.</td></tr><tr><td><code>or_else to e "?" end</code></td><td><code>"alpha"</code></td><td>성공이라 건너뛴다. 실패였다면 <code>"?"</code> 가 그 자리에 온다.</td></tr><tr><td><code>io.println</code></td><td><code>—</code></td><td>찍는다.</td></tr></tbody></table><div class="box qa"><p class="box-title">문답</p><p><strong>물음. 모듈 파일 안에서 <code>io.println</code> 을 써도 되는가?</strong></p><p>답. 모듈도 <code>use io .</code> 를 적으면 된다. 다만 모듈을 적재하는 호스트가 <code>io</code> 를 등록하지 않았으면 그 모듈은 거절된다. 널리 쓰일 모듈은 호스트 모듈에 기대지 않고 결과를 돌려주는 편이 낫다.</p></div><h3>10.6 모듈로 쓴 맵</h3><p>글 키로 값을 찾는 표는 7장의 풀과 찾아보기(<code>index</code>)로 만든다. 그것이 기본이다. 다만 풀과 찾아보기는 프로시저의 매개변수가 될 수 없다(표준 9.9). 그래서 같은 일을 맵 여럿에 하려면 맵마다 프로시저를 다시 써야 한다. 배열은 매개변수가 되므로, 레코드의 배열 위에 맵을 모듈로 쓰면 프로시저 한 벌로 맵 여럿을 다룬다. 아래 <code>kvmap</code> 이 그런 모듈의 예다. 언어에 들어 있지 않으니 프로그램 옆에 복사해 두고 쓴다.</p><div class="example module"><p class="ex-file"><code>kvmap.pnx</code></p><pre><code data-lang="pinax"><span style="color: #74747c">rem kvmap: a map from text (up to 24 bytes) to int over an array of records the program declares (array m entry N)</span>
+<span style="color: #74747c">rem and passes to every procedure. The start slot is the FNV-1a hash of the key modulo N, probing is linear, and a</span>
+<span style="color: #74747c">rem deleted slot is a tombstone that a later store takes again. Keep N well above the number of keys.</span>
+<span style="color: #d73948">use</span> hash .
+<span style="color: #d73948">use</span> <span style="color: #d73948">str</span> .
+
+<span style="color: #d73948">export</span> <span style="color: #d73948">const</span> key_room <span style="color: #b60157">24</span>
+<span style="color: #d73948">const</span> empty <span style="color: #b60157">0</span>
+<span style="color: #d73948">const</span> live <span style="color: #b60157">1</span>
+<span style="color: #d73948">const</span> gone <span style="color: #b60157">2</span>
+
+<span style="color: #d73948">export</span> <span style="color: #d73948">record</span> entry
+  key <span style="color: #d73948">str</span> key_room
+  value <span style="color: #d73948">int</span>
+  state <span style="color: #d73948">int</span>
+<span style="color: #d73948">end</span>
+
+<span style="color: #d73948">def</span> start m <span style="color: #d73948">array</span> entry, k <span style="color: #d73948">str</span> <span style="color: #d73948">gives</span> <span style="color: #d73948">int</span> <span style="color: #d73948">do</span> k hash.fnv1a raw m capacity u_mod <span style="color: #d73948">end</span>
+
+<span style="color: #74747c">rem the slot of k, or -1</span>
+<span style="color: #d73948">def</span> slot_of m <span style="color: #d73948">array</span> entry, k <span style="color: #d73948">str</span> <span style="color: #d73948">gives</span> <span style="color: #d73948">int</span> <span style="color: #d73948">do</span>
+  m k start <span style="color: #d73948">to</span> i
+  <span style="color: #b60157">0</span> <span style="color: #d73948">to</span> tries
+  <span style="color: #d73948">loop</span>
+    tries m capacity lt not <span style="color: #d73948">if</span> <span style="color: #d73948">break</span> . <span style="color: #d73948">end</span>
+    i m idx <span style="color: #d73948">to</span> r
+    r entry.state empty eq <span style="color: #d73948">if</span> <span style="color: #b60157">-1</span> <span style="color: #d73948">return</span> <span style="color: #d73948">end</span>
+    r entry.state live eq <span style="color: #d73948">if</span> r entry.key k eq <span style="color: #d73948">if</span> i <span style="color: #d73948">return</span> <span style="color: #d73948">end</span> <span style="color: #d73948">end</span>
+    i <span style="color: #b60157">1</span> add m capacity mod <span style="color: #d73948">to</span> i
+    tries <span style="color: #b60157">1</span> add <span style="color: #d73948">to</span> tries
+  <span style="color: #d73948">end</span>
+  <span style="color: #b60157">-1</span>
+<span style="color: #d73948">end</span>
+
+<span style="color: #74747c">rem k takes the value v: err.range when k is longer than key_room, err.full when every slot is live</span>
+<span style="color: #d73948">export</span> <span style="color: #d73948">def</span> store m <span style="color: #d73948">array</span> entry, k <span style="color: #d73948">str</span>, v <span style="color: #d73948">int</span> <span style="color: #d73948">or</span> <span style="color: #d73948">fail</span> <span style="color: #d73948">do</span>
+  k <span style="color: #d73948">str</span>.len key_room gt <span style="color: #d73948">if</span> <span style="color: #d73948">err</span>.range <span style="color: #d73948">fail</span> <span style="color: #d73948">end</span>
+  m k slot_of <span style="color: #d73948">to</span> at
+  at <span style="color: #b60157">0</span> ge <span style="color: #d73948">if</span> v at m idx <span style="color: #d73948">to</span> entry.value <span style="color: #d73948">return</span> <span style="color: #d73948">end</span>
+  m k start <span style="color: #d73948">to</span> i
+  <span style="color: #b60157">0</span> <span style="color: #d73948">to</span> tries
+  <span style="color: #d73948">loop</span>
+    tries m capacity lt not <span style="color: #d73948">if</span> <span style="color: #d73948">break</span> . <span style="color: #d73948">end</span>
+    i m idx <span style="color: #d73948">to</span> r
+    r entry.state live eq not <span style="color: #d73948">if</span>
+      k r <span style="color: #d73948">to</span> entry.key  v r <span style="color: #d73948">to</span> entry.value  live r <span style="color: #d73948">to</span> entry.state
+      <span style="color: #d73948">return</span>
+    <span style="color: #d73948">end</span>
+    i <span style="color: #b60157">1</span> add m capacity mod <span style="color: #d73948">to</span> i
+    tries <span style="color: #b60157">1</span> add <span style="color: #d73948">to</span> tries
+  <span style="color: #d73948">end</span>
+  <span style="color: #d73948">err</span>.full <span style="color: #d73948">fail</span>
+<span style="color: #d73948">end</span>
+
+<span style="color: #74747c">rem the value of k: err.not_found when it is not there</span>
+<span style="color: #d73948">export</span> <span style="color: #d73948">def</span> fetch m <span style="color: #d73948">array</span> entry, k <span style="color: #d73948">str</span> <span style="color: #d73948">gives</span> <span style="color: #d73948">int</span> <span style="color: #d73948">or</span> <span style="color: #d73948">fail</span> <span style="color: #d73948">do</span>
+  m k slot_of <span style="color: #d73948">to</span> at
+  at <span style="color: #b60157">0</span> lt <span style="color: #d73948">if</span> <span style="color: #d73948">err</span>.not_found <span style="color: #d73948">fail</span> <span style="color: #d73948">end</span>
+  at m idx entry.value
+<span style="color: #d73948">end</span>
+
+<span style="color: #d73948">export</span> <span style="color: #d73948">def</span> holds m <span style="color: #d73948">array</span> entry, k <span style="color: #d73948">str</span> <span style="color: #d73948">gives</span> <span style="color: #d73948">bool</span> <span style="color: #d73948">do</span> m k slot_of <span style="color: #b60157">0</span> ge <span style="color: #d73948">end</span>
+
+<span style="color: #74747c">rem k is taken out; false when it was not there</span>
+<span style="color: #d73948">export</span> <span style="color: #d73948">def</span> forget m <span style="color: #d73948">array</span> entry, k <span style="color: #d73948">str</span> <span style="color: #d73948">gives</span> <span style="color: #d73948">bool</span> <span style="color: #d73948">do</span>
+  m k slot_of <span style="color: #d73948">to</span> at
+  at <span style="color: #b60157">0</span> lt <span style="color: #d73948">if</span> <span style="color: #d73948">false</span> <span style="color: #d73948">return</span> <span style="color: #d73948">end</span>
+  at m idx <span style="color: #d73948">to</span> r
+  gone r <span style="color: #d73948">to</span> entry.state  <span style="color: #198810">""</span> r <span style="color: #d73948">to</span> entry.key
+  <span style="color: #d73948">true</span>
+<span style="color: #d73948">end</span>
+
+<span style="color: #d73948">export</span> <span style="color: #d73948">def</span> size m <span style="color: #d73948">array</span> entry <span style="color: #d73948">gives</span> <span style="color: #d73948">int</span> <span style="color: #d73948">do</span>
+  <span style="color: #b60157">0</span> <span style="color: #d73948">to</span> n
+  m <span style="color: #d73948">do</span> <span style="color: #d73948">to</span> r r entry.state live eq <span style="color: #d73948">if</span> n <span style="color: #b60157">1</span> add <span style="color: #d73948">to</span> n <span style="color: #d73948">end</span> <span style="color: #d73948">end</span> each
+  n
+<span style="color: #d73948">end</span>
+
+<span style="color: #d73948">export</span> <span style="color: #d73948">def</span> wipe m <span style="color: #d73948">array</span> entry <span style="color: #d73948">do</span>
+  m <span style="color: #d73948">do</span> <span style="color: #d73948">to</span> r empty r <span style="color: #d73948">to</span> entry.state  <span style="color: #198810">""</span> r <span style="color: #d73948">to</span> entry.key <span style="color: #d73948">end</span> each
+<span style="color: #d73948">end</span>
+
+<span style="color: #74747c">rem the numbers of the live slots put in l, for walking or for sort_by: err.full when l has too little room</span>
+<span style="color: #d73948">export</span> <span style="color: #d73948">def</span> live_slots m <span style="color: #d73948">array</span> entry, l <span style="color: #d73948">list</span> <span style="color: #d73948">int</span> <span style="color: #d73948">or</span> <span style="color: #d73948">fail</span> <span style="color: #d73948">do</span>
+  <span style="color: #b60157">0</span> l truncate
+  <span style="color: #b60157">0</span> m capacity range <span style="color: #d73948">do</span> <span style="color: #d73948">to</span> i
+    i m idx entry.state live eq <span style="color: #d73948">if</span> i l push <span style="color: #d73948">or_fail</span> <span style="color: #d73948">end</span>
+  <span style="color: #d73948">end</span> each
+<span style="color: #d73948">end</span>
+</code></pre></div><div class="example run"><p class="ex-file"><code>10-kvmap.pnx</code></p><pre><code data-lang="pinax"><span style="color: #d73948">use</span> io .
+<span style="color: #d73948">use</span> <span style="color: #d73948">str</span> .
+<span style="color: #d73948">use</span> kvmap .
+<span style="color: #d73948">array</span> fruit entry <span style="color: #b60157">16</span>                       <span style="color: #74747c">rem two maps of one entry: the same procedures serve both</span>
+<span style="color: #d73948">array</span> veg entry <span style="color: #b60157">16</span>
+<span style="color: #d73948">list</span> order <span style="color: #d73948">int</span> <span style="color: #b60157">16</span>
+<span style="color: #d73948">def</span> count_into m <span style="color: #d73948">array</span> entry, line <span style="color: #d73948">str</span> <span style="color: #d73948">do</span>
+  line <span style="color: #d73948">str</span>.words <span style="color: #d73948">do</span> <span style="color: #d73948">to</span> w
+    m w kvmap.fetch <span style="color: #d73948">or_else</span> <span style="color: #d73948">to</span> e <span style="color: #b60157">0</span> <span style="color: #d73948">end</span> <span style="color: #b60157">1</span> add <span style="color: #d73948">to</span> c        <span style="color: #74747c">rem a missing key counts from 0</span>
+    m w c kvmap.store <span style="color: #d73948">or_else</span> <span style="color: #d73948">to</span> e <span style="color: #d73948">args</span> <span style="color: #198810">"no room for "</span> w . <span style="color: #d73948">cat</span> io.println <span style="color: #d73948">end</span>
+  <span style="color: #d73948">end</span> each
+<span style="color: #d73948">end</span>
+<span style="color: #d73948">def</span> show title <span style="color: #d73948">str</span>, m <span style="color: #d73948">array</span> entry <span style="color: #d73948">do</span>
+  m order kvmap.live_slots <span style="color: #d73948">or_else</span> <span style="color: #d73948">to</span> e <span style="color: #d73948">return</span> <span style="color: #d73948">end</span>
+  order m sort_by_desc entry.value
+  title io.print
+  order <span style="color: #d73948">do</span> <span style="color: #d73948">to</span> i i m idx <span style="color: #d73948">to</span> r <span style="color: #d73948">args</span> <span style="color: #198810">" "</span> r entry.key <span style="color: #198810">"="</span> r entry.value . <span style="color: #d73948">cat</span> io.print <span style="color: #d73948">end</span> each
+  <span style="color: #198810">""</span> io.println
+<span style="color: #d73948">end</span>
+fruit <span style="color: #198810">"pear fig pear plum pear fig"</span> count_into
+veg <span style="color: #198810">"leek kale leek"</span> count_into
+<span style="color: #198810">"fruit:"</span> fruit show
+<span style="color: #198810">"veg:"</span> veg show
+<span style="color: #d73948">args</span> <span style="color: #198810">"fig "</span> fruit <span style="color: #198810">"fig"</span> kvmap.holds <span style="color: #198810">", gone "</span> fruit <span style="color: #198810">"fig"</span> kvmap.forget <span style="color: #198810">", now "</span> fruit <span style="color: #198810">"fig"</span> kvmap.holds . <span style="color: #d73948">cat</span> io.println
+</code></pre><p class="ex-label">출력</p><pre><code data-lang="text">$ pnx 10-kvmap.pnx
+fruit: pear=3 fig=2 plum=1
+veg: leek=2 kale=1
+fig true, gone true, now false
+</code></pre></div><p>프로그램이 <code>array 이름 entry N</code> 으로 맵을 선언하고, 모든 프로시저에 그 이름을 넘긴다. <code>store</code> 는 키에 값을 주고, <code>fetch</code> 는 값을 찾는다(없으면 <code>not_found</code> 로 실패). <code>holds</code> 는 키가 있는지 묻고, <code>forget</code> 은 키를 지우고, <code>size</code> 는 키의 수를 주고, <code>wipe</code> 는 모두 지운다. <code>live_slots</code> 는 살아 있는 칸의 번호를 목록에 넣는다. 그 목록을 <code>sort_by</code> 로 정렬하면 키나 값의 차례로 걷는다.</p><table><thead><tr><th></th><th><strong><code>kvmap</code></strong></th><th><strong>풀과 찾아보기</strong></th></tr></thead><tbody><tr><td>프로시저에 넘기기</td><td>된다. 맵이 배열이다</td><td>안 된다</td></tr><tr><td>맵 여럿</td><td>프로시저 한 벌</td><td>맵마다 프로시저를 다시 쓴다</td></tr><tr><td>키와 값</td><td>24 바이트까지의 글과 <code>int</code> 하나</td><td>아무 레코드</td></tr><tr><td>빠르기</td><td>두 배쯤 걸린다(키 5만 개로 잰 것)</td><td>핵의 해시 표</td></tr><tr><td>자리</td><td>키보다 넉넉히 둔다. 찰수록 느려진다</td><td>키의 수만큼</td></tr></tbody></table><div class="box qa"><p class="box-title">문답</p><p><strong>물음. 이름이 왜 <code>put</code> 과 <code>get</code> 이 아닌가?</strong></p><p>답. <code>put</code>, <code>get</code>, <code>has</code>, <code>count</code>, <code>clear</code>, <code>remove</code>, <code>lookup</code>, <code>drop</code> 은 언어의 프로시저다. Pinax 로 쓴 모듈은 그 이름을 새로 정의할 수 없다(표준 9.5). 그래서 <code>store</code>, <code>fetch</code>, <code>holds</code>, <code>forget</code> 을 썼다.</p></div><div class="box mistake"><p class="box-title">흔한 오해: <code>kvmap</code> 은 표준 모듈이다</p>아니다. 이 매뉴얼의 예제 파일이다. 프로그램 옆에 <code>kvmap.pnx</code> 로 두어야 <code>use kvmap .</code> 이 찾는다. 키의 길이나 값의 타입이 다르면 복사본을 고쳐 쓴다. 맵을 넘길 일이 없으면 풀과 찾아보기를 쓴다.</div><div class="box summary"><p class="box-title">정리</p><ul><li>파일 하나가 모듈이고, <code>export</code> 한 것만 밖에서 보인다(표준 13.1, 13.2).</li><li><code>use 모듈 [as 별명] .</code> 뒤에 <code>모듈.이름</code> 으로 쓴다(13.1).</li><li>프로시저, 상수, 전역은 경로로, 타입과 레코드는 이름만으로 쓴다. 내보낸 전역에는 <code>set 모듈.이름</code> 으로 넣는다(13.2).</li><li>선언한 타입은 같은 타입끼리만 더하고 뺀다(7.4).</li><li>자료 적재는 선언과 값만 받는다(13.4).</li><li>풀과 찾아보기는 매개변수가 될 수 없다. 맵을 프로시저에 넘기려면 배열 위에 쓴 모듈(<code>kvmap</code>)을 쓴다(9.9).</li></ul></div></main><nav class="bottom"><a href="index.html">처음</a> · <a href="10.html">앞</a> · <a href="12.html">다음</a> · <a href="../html-en/11.html">English</a></nav></body></html>

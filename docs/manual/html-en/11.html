@@ -117,4 +117,121 @@ arguments: 1
 getenv failed: not_found
 7 2 8
 the clock does not go back: true
-</code></pre></div><p><code>env.arg_count</code> and <code>env.arg</code> are the arguments of the command line (0 is the program file); <code>env.getenv</code> reads an environment variable. After <code>random.seed</code>, <code>random.random_below</code> gives the same numbers for the same seed, which suits tests. <code>clock.monotonic_ns</code> never goes back, so it measures how long something took; <code>clock.now_ms</code> is the calendar time, and <code>clock.sleep</code> pauses for that many milliseconds. <code>random.random</code> is a 64-bit random number without a range (not for cryptography).</p><table><thead><tr><th><strong>Token</strong></th><th><strong>Stack after it</strong></th><th><strong>What happened</strong></th></tr></thead><tbody><tr><td><code>1</code></td><td><code>1</code></td><td>Which argument.</td></tr><tr><td><code>env.arg</code></td><td><code>"alpha"</code></td><td>That argument; a number past the last fails.</td></tr><tr><td><code>or_else to e "?" end</code></td><td><code>"alpha"</code></td><td>Skipped on success. On failure <code>"?"</code> takes the place.</td></tr><tr><td><code>io.println</code></td><td><code>—</code></td><td>Prints it.</td></tr></tbody></table><div class="box qa"><p class="box-title">Q&amp;A</p><p><strong>Q. May a module file use <code>io.println</code>?</strong></p><p>A. Yes, with <code>use io .</code> in the module too. But when the host that loads the module has not registered <code>io</code>, the module is refused. A module meant for many hosts is better off returning results than depending on a host module.</p></div><div class="box summary"><p class="box-title">Summary</p><ul><li>One file is one module, and only what is <code>export</code>ed is seen outside (standard 13.1, 13.2).</li><li>After <code>use MODULE [as ALIAS] .</code> its parts are written <code>MODULE.NAME</code> (13.1).</li><li>Procedures, constants and globals are used by path, types and records by name alone; an exported global is stored with <code>set module.name</code> (13.2).</li><li>Values of a declared type are added and subtracted only with the same type (7.4).</li><li>A data load accepts declarations and values only (13.4).</li></ul></div></main><nav class="bottom"><a href="index.html">Start</a> · <a href="10.html">Previous</a> · <a href="12.html">Next</a> · <a href="../html-ko/11.html">한국어</a></nav></body></html>
+</code></pre></div><p><code>env.arg_count</code> and <code>env.arg</code> are the arguments of the command line (0 is the program file); <code>env.getenv</code> reads an environment variable. After <code>random.seed</code>, <code>random.random_below</code> gives the same numbers for the same seed, which suits tests. <code>clock.monotonic_ns</code> never goes back, so it measures how long something took; <code>clock.now_ms</code> is the calendar time, and <code>clock.sleep</code> pauses for that many milliseconds. <code>random.random</code> is a 64-bit random number without a range (not for cryptography).</p><table><thead><tr><th><strong>Token</strong></th><th><strong>Stack after it</strong></th><th><strong>What happened</strong></th></tr></thead><tbody><tr><td><code>1</code></td><td><code>1</code></td><td>Which argument.</td></tr><tr><td><code>env.arg</code></td><td><code>"alpha"</code></td><td>That argument; a number past the last fails.</td></tr><tr><td><code>or_else to e "?" end</code></td><td><code>"alpha"</code></td><td>Skipped on success. On failure <code>"?"</code> takes the place.</td></tr><tr><td><code>io.println</code></td><td><code>—</code></td><td>Prints it.</td></tr></tbody></table><div class="box qa"><p class="box-title">Q&amp;A</p><p><strong>Q. May a module file use <code>io.println</code>?</strong></p><p>A. Yes, with <code>use io .</code> in the module too. But when the host that loads the module has not registered <code>io</code>, the module is refused. A module meant for many hosts is better off returning results than depending on a host module.</p></div><h3>10.6 A map written as a module</h3><p>A table that finds a value by a text key is made with a pool and an index (<code>index</code>), as in chapter 7; that is the default. But a pool and an index cannot be parameters of a procedure (standard 9.9), so doing the same thing to several maps means writing the procedures again for each. An array can be a parameter: a map written as a module over an array of records serves several maps with one set of procedures. <code>kvmap</code> below is such a module. It is not part of the language: copy it beside the program.</p><div class="example module"><p class="ex-file"><code>kvmap.pnx</code></p><pre><code data-lang="pinax"><span style="color: #74747c">rem kvmap: a map from text (up to 24 bytes) to int over an array of records the program declares (array m entry N)</span>
+<span style="color: #74747c">rem and passes to every procedure. The start slot is the FNV-1a hash of the key modulo N, probing is linear, and a</span>
+<span style="color: #74747c">rem deleted slot is a tombstone that a later store takes again. Keep N well above the number of keys.</span>
+<span style="color: #d73948">use</span> hash .
+<span style="color: #d73948">use</span> <span style="color: #d73948">str</span> .
+
+<span style="color: #d73948">export</span> <span style="color: #d73948">const</span> key_room <span style="color: #b60157">24</span>
+<span style="color: #d73948">const</span> empty <span style="color: #b60157">0</span>
+<span style="color: #d73948">const</span> live <span style="color: #b60157">1</span>
+<span style="color: #d73948">const</span> gone <span style="color: #b60157">2</span>
+
+<span style="color: #d73948">export</span> <span style="color: #d73948">record</span> entry
+  key <span style="color: #d73948">str</span> key_room
+  value <span style="color: #d73948">int</span>
+  state <span style="color: #d73948">int</span>
+<span style="color: #d73948">end</span>
+
+<span style="color: #d73948">def</span> start m <span style="color: #d73948">array</span> entry, k <span style="color: #d73948">str</span> <span style="color: #d73948">gives</span> <span style="color: #d73948">int</span> <span style="color: #d73948">do</span> k hash.fnv1a raw m capacity u_mod <span style="color: #d73948">end</span>
+
+<span style="color: #74747c">rem the slot of k, or -1</span>
+<span style="color: #d73948">def</span> slot_of m <span style="color: #d73948">array</span> entry, k <span style="color: #d73948">str</span> <span style="color: #d73948">gives</span> <span style="color: #d73948">int</span> <span style="color: #d73948">do</span>
+  m k start <span style="color: #d73948">to</span> i
+  <span style="color: #b60157">0</span> <span style="color: #d73948">to</span> tries
+  <span style="color: #d73948">loop</span>
+    tries m capacity lt not <span style="color: #d73948">if</span> <span style="color: #d73948">break</span> . <span style="color: #d73948">end</span>
+    i m idx <span style="color: #d73948">to</span> r
+    r entry.state empty eq <span style="color: #d73948">if</span> <span style="color: #b60157">-1</span> <span style="color: #d73948">return</span> <span style="color: #d73948">end</span>
+    r entry.state live eq <span style="color: #d73948">if</span> r entry.key k eq <span style="color: #d73948">if</span> i <span style="color: #d73948">return</span> <span style="color: #d73948">end</span> <span style="color: #d73948">end</span>
+    i <span style="color: #b60157">1</span> add m capacity mod <span style="color: #d73948">to</span> i
+    tries <span style="color: #b60157">1</span> add <span style="color: #d73948">to</span> tries
+  <span style="color: #d73948">end</span>
+  <span style="color: #b60157">-1</span>
+<span style="color: #d73948">end</span>
+
+<span style="color: #74747c">rem k takes the value v: err.range when k is longer than key_room, err.full when every slot is live</span>
+<span style="color: #d73948">export</span> <span style="color: #d73948">def</span> store m <span style="color: #d73948">array</span> entry, k <span style="color: #d73948">str</span>, v <span style="color: #d73948">int</span> <span style="color: #d73948">or</span> <span style="color: #d73948">fail</span> <span style="color: #d73948">do</span>
+  k <span style="color: #d73948">str</span>.len key_room gt <span style="color: #d73948">if</span> <span style="color: #d73948">err</span>.range <span style="color: #d73948">fail</span> <span style="color: #d73948">end</span>
+  m k slot_of <span style="color: #d73948">to</span> at
+  at <span style="color: #b60157">0</span> ge <span style="color: #d73948">if</span> v at m idx <span style="color: #d73948">to</span> entry.value <span style="color: #d73948">return</span> <span style="color: #d73948">end</span>
+  m k start <span style="color: #d73948">to</span> i
+  <span style="color: #b60157">0</span> <span style="color: #d73948">to</span> tries
+  <span style="color: #d73948">loop</span>
+    tries m capacity lt not <span style="color: #d73948">if</span> <span style="color: #d73948">break</span> . <span style="color: #d73948">end</span>
+    i m idx <span style="color: #d73948">to</span> r
+    r entry.state live eq not <span style="color: #d73948">if</span>
+      k r <span style="color: #d73948">to</span> entry.key  v r <span style="color: #d73948">to</span> entry.value  live r <span style="color: #d73948">to</span> entry.state
+      <span style="color: #d73948">return</span>
+    <span style="color: #d73948">end</span>
+    i <span style="color: #b60157">1</span> add m capacity mod <span style="color: #d73948">to</span> i
+    tries <span style="color: #b60157">1</span> add <span style="color: #d73948">to</span> tries
+  <span style="color: #d73948">end</span>
+  <span style="color: #d73948">err</span>.full <span style="color: #d73948">fail</span>
+<span style="color: #d73948">end</span>
+
+<span style="color: #74747c">rem the value of k: err.not_found when it is not there</span>
+<span style="color: #d73948">export</span> <span style="color: #d73948">def</span> fetch m <span style="color: #d73948">array</span> entry, k <span style="color: #d73948">str</span> <span style="color: #d73948">gives</span> <span style="color: #d73948">int</span> <span style="color: #d73948">or</span> <span style="color: #d73948">fail</span> <span style="color: #d73948">do</span>
+  m k slot_of <span style="color: #d73948">to</span> at
+  at <span style="color: #b60157">0</span> lt <span style="color: #d73948">if</span> <span style="color: #d73948">err</span>.not_found <span style="color: #d73948">fail</span> <span style="color: #d73948">end</span>
+  at m idx entry.value
+<span style="color: #d73948">end</span>
+
+<span style="color: #d73948">export</span> <span style="color: #d73948">def</span> holds m <span style="color: #d73948">array</span> entry, k <span style="color: #d73948">str</span> <span style="color: #d73948">gives</span> <span style="color: #d73948">bool</span> <span style="color: #d73948">do</span> m k slot_of <span style="color: #b60157">0</span> ge <span style="color: #d73948">end</span>
+
+<span style="color: #74747c">rem k is taken out; false when it was not there</span>
+<span style="color: #d73948">export</span> <span style="color: #d73948">def</span> forget m <span style="color: #d73948">array</span> entry, k <span style="color: #d73948">str</span> <span style="color: #d73948">gives</span> <span style="color: #d73948">bool</span> <span style="color: #d73948">do</span>
+  m k slot_of <span style="color: #d73948">to</span> at
+  at <span style="color: #b60157">0</span> lt <span style="color: #d73948">if</span> <span style="color: #d73948">false</span> <span style="color: #d73948">return</span> <span style="color: #d73948">end</span>
+  at m idx <span style="color: #d73948">to</span> r
+  gone r <span style="color: #d73948">to</span> entry.state  <span style="color: #198810">""</span> r <span style="color: #d73948">to</span> entry.key
+  <span style="color: #d73948">true</span>
+<span style="color: #d73948">end</span>
+
+<span style="color: #d73948">export</span> <span style="color: #d73948">def</span> size m <span style="color: #d73948">array</span> entry <span style="color: #d73948">gives</span> <span style="color: #d73948">int</span> <span style="color: #d73948">do</span>
+  <span style="color: #b60157">0</span> <span style="color: #d73948">to</span> n
+  m <span style="color: #d73948">do</span> <span style="color: #d73948">to</span> r r entry.state live eq <span style="color: #d73948">if</span> n <span style="color: #b60157">1</span> add <span style="color: #d73948">to</span> n <span style="color: #d73948">end</span> <span style="color: #d73948">end</span> each
+  n
+<span style="color: #d73948">end</span>
+
+<span style="color: #d73948">export</span> <span style="color: #d73948">def</span> wipe m <span style="color: #d73948">array</span> entry <span style="color: #d73948">do</span>
+  m <span style="color: #d73948">do</span> <span style="color: #d73948">to</span> r empty r <span style="color: #d73948">to</span> entry.state  <span style="color: #198810">""</span> r <span style="color: #d73948">to</span> entry.key <span style="color: #d73948">end</span> each
+<span style="color: #d73948">end</span>
+
+<span style="color: #74747c">rem the numbers of the live slots put in l, for walking or for sort_by: err.full when l has too little room</span>
+<span style="color: #d73948">export</span> <span style="color: #d73948">def</span> live_slots m <span style="color: #d73948">array</span> entry, l <span style="color: #d73948">list</span> <span style="color: #d73948">int</span> <span style="color: #d73948">or</span> <span style="color: #d73948">fail</span> <span style="color: #d73948">do</span>
+  <span style="color: #b60157">0</span> l truncate
+  <span style="color: #b60157">0</span> m capacity range <span style="color: #d73948">do</span> <span style="color: #d73948">to</span> i
+    i m idx entry.state live eq <span style="color: #d73948">if</span> i l push <span style="color: #d73948">or_fail</span> <span style="color: #d73948">end</span>
+  <span style="color: #d73948">end</span> each
+<span style="color: #d73948">end</span>
+</code></pre></div><div class="example run"><p class="ex-file"><code>10-kvmap.pnx</code></p><pre><code data-lang="pinax"><span style="color: #d73948">use</span> io .
+<span style="color: #d73948">use</span> <span style="color: #d73948">str</span> .
+<span style="color: #d73948">use</span> kvmap .
+<span style="color: #d73948">array</span> fruit entry <span style="color: #b60157">16</span>                       <span style="color: #74747c">rem two maps of one entry: the same procedures serve both</span>
+<span style="color: #d73948">array</span> veg entry <span style="color: #b60157">16</span>
+<span style="color: #d73948">list</span> order <span style="color: #d73948">int</span> <span style="color: #b60157">16</span>
+<span style="color: #d73948">def</span> count_into m <span style="color: #d73948">array</span> entry, line <span style="color: #d73948">str</span> <span style="color: #d73948">do</span>
+  line <span style="color: #d73948">str</span>.words <span style="color: #d73948">do</span> <span style="color: #d73948">to</span> w
+    m w kvmap.fetch <span style="color: #d73948">or_else</span> <span style="color: #d73948">to</span> e <span style="color: #b60157">0</span> <span style="color: #d73948">end</span> <span style="color: #b60157">1</span> add <span style="color: #d73948">to</span> c        <span style="color: #74747c">rem a missing key counts from 0</span>
+    m w c kvmap.store <span style="color: #d73948">or_else</span> <span style="color: #d73948">to</span> e <span style="color: #d73948">args</span> <span style="color: #198810">"no room for "</span> w . <span style="color: #d73948">cat</span> io.println <span style="color: #d73948">end</span>
+  <span style="color: #d73948">end</span> each
+<span style="color: #d73948">end</span>
+<span style="color: #d73948">def</span> show title <span style="color: #d73948">str</span>, m <span style="color: #d73948">array</span> entry <span style="color: #d73948">do</span>
+  m order kvmap.live_slots <span style="color: #d73948">or_else</span> <span style="color: #d73948">to</span> e <span style="color: #d73948">return</span> <span style="color: #d73948">end</span>
+  order m sort_by_desc entry.value
+  title io.print
+  order <span style="color: #d73948">do</span> <span style="color: #d73948">to</span> i i m idx <span style="color: #d73948">to</span> r <span style="color: #d73948">args</span> <span style="color: #198810">" "</span> r entry.key <span style="color: #198810">"="</span> r entry.value . <span style="color: #d73948">cat</span> io.print <span style="color: #d73948">end</span> each
+  <span style="color: #198810">""</span> io.println
+<span style="color: #d73948">end</span>
+fruit <span style="color: #198810">"pear fig pear plum pear fig"</span> count_into
+veg <span style="color: #198810">"leek kale leek"</span> count_into
+<span style="color: #198810">"fruit:"</span> fruit show
+<span style="color: #198810">"veg:"</span> veg show
+<span style="color: #d73948">args</span> <span style="color: #198810">"fig "</span> fruit <span style="color: #198810">"fig"</span> kvmap.holds <span style="color: #198810">", gone "</span> fruit <span style="color: #198810">"fig"</span> kvmap.forget <span style="color: #198810">", now "</span> fruit <span style="color: #198810">"fig"</span> kvmap.holds . <span style="color: #d73948">cat</span> io.println
+</code></pre><p class="ex-label">Output</p><pre><code data-lang="text">$ pnx 10-kvmap.pnx
+fruit: pear=3 fig=2 plum=1
+veg: leek=2 kale=1
+fig true, gone true, now false
+</code></pre></div><p>The program declares a map with <code>array NAME entry N</code> and passes that name to every procedure. <code>store</code> gives a key its value; <code>fetch</code> finds the value (failing with <code>not_found</code> when the key is not there); <code>holds</code> asks whether a key is there; <code>forget</code> takes a key out; <code>size</code> gives the number of keys; <code>wipe</code> takes them all out. <code>live_slots</code> puts the numbers of the live slots in a list; sorting that list with <code>sort_by</code> walks the map in the order of its keys or values.</p><table><thead><tr><th></th><th><strong><code>kvmap</code></strong></th><th><strong>A pool and an index</strong></th></tr></thead><tbody><tr><td>Passed to a procedure</td><td>yes: the map is an array</td><td>no</td></tr><tr><td>Several maps</td><td>one set of procedures</td><td>the procedures again for each map</td></tr><tr><td>Keys and values</td><td>text up to 24 bytes and one <code>int</code></td><td>any record</td></tr><tr><td>Speed</td><td>about twice the time (measured with 50 000 keys)</td><td>the core’s hash table</td></tr><tr><td>Room</td><td>well above the number of keys; it slows as it fills</td><td>the number of keys</td></tr></tbody></table><div class="box qa"><p class="box-title">Q&amp;A</p><p><strong>Q. Why are the names not <code>put</code> and <code>get</code>?</strong></p><p>A. <code>put</code>, <code>get</code>, <code>has</code>, <code>count</code>, <code>clear</code>, <code>remove</code>, <code>lookup</code> and <code>drop</code> are procedures of the language, and a module written in Pinax cannot define those names again (standard 9.5). So the module uses <code>store</code>, <code>fetch</code>, <code>holds</code> and <code>forget</code>.</p></div><div class="box mistake"><p class="box-title">Common mistake: <code>kvmap</code> is a standard module</p>It is not. It is an example file of this manual: <code>use kvmap .</code> finds it only as <code>kvmap.pnx</code> beside the program. For other key lengths or value types, change the copy. When no map is passed around, use a pool and an index.</div><div class="box summary"><p class="box-title">Summary</p><ul><li>One file is one module, and only what is <code>export</code>ed is seen outside (standard 13.1, 13.2).</li><li>After <code>use MODULE [as ALIAS] .</code> its parts are written <code>MODULE.NAME</code> (13.1).</li><li>Procedures, constants and globals are used by path, types and records by name alone; an exported global is stored with <code>set module.name</code> (13.2).</li><li>Values of a declared type are added and subtracted only with the same type (7.4).</li><li>A data load accepts declarations and values only (13.4).</li><li>A pool and an index are not parameters; a map passed to procedures is a module over an array (<code>kvmap</code>) (9.9).</li></ul></div></main><nav class="bottom"><a href="index.html">Start</a> · <a href="10.html">Previous</a> · <a href="12.html">Next</a> · <a href="../html-ko/11.html">한국어</a></nav></body></html>
