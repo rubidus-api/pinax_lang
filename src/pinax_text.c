@@ -74,7 +74,7 @@ uint32_t pnx_format_dec(int64_t value, uint32_t scale, uint8_t out[24]) {
 }
 
 // float (RFC-0056, D0112): the shortest text that reads back as the value, from proven's shortest
-// form; a point is added when it has neither a point nor an exponent ("1.0"), and a NaN, whatever
+// form, its exponent without leading zeros (D0114); a point is added when it has neither a point nor an exponent ("1.0"), and a NaN, whatever
 // its bits, is "nan".
 uint32_t pnx_format_float(int64_t bits, uint8_t out[40]) {
     const uint64_t u = (uint64_t)bits, mag = u & ~(UINT64_C(1) << 63);
@@ -92,6 +92,21 @@ uint32_t pnx_format_float(int64_t bits, uint8_t out[40]) {
     if (proven_float_format_f64_policy((char *)out, 36, d, PROVEN_FLOAT_FORMAT_POLICY_RYU,
                                        proven_float_format_options_shortest(), &n) != PROVEN_OK || n > 36)
         n = 0;
+    // the exponent without leading zeros, as Ryu and JavaScript write it (D0114): "1e06" is "1e6"
+    for (proven_size_t k = 0; k < n; ++k) {
+        if (out[k] != 'e' && out[k] != 'E')
+            continue;
+        proven_size_t d = k + 1 + (k + 1 < n && (out[k + 1] == '-' || out[k + 1] == '+'));
+        proven_size_t z = d;
+        while (z + 1 < n && out[z] == '0')
+            ++z;
+        if (z > d) {
+            for (proven_size_t j = z; j < n; ++j)
+                out[d + j - z] = out[j];
+            n -= z - d;
+        }
+        break;
+    }
     bool plain = n > 0;
     for (proven_size_t k = 0; k < n; ++k)
         plain = plain && out[k] != '.' && out[k] != 'e' && out[k] != 'E';
@@ -99,6 +114,21 @@ uint32_t pnx_format_float(int64_t bits, uint8_t out[40]) {
         out[n++] = '.';
         out[n++] = '0';
     }
+    return (uint32_t)n;
+}
+
+uint32_t pnx_format_fixed(int64_t bits, uint32_t digits, uint8_t out[PNX_FIXED_MAX]) {
+    const uint64_t mag = (uint64_t)bits & ~(UINT64_C(1) << 63);
+    if (mag >= UINT64_C(0x7ff0000000000000) || digits > 18) // nan, inf, -inf (the loader keeps digits to 18)
+        return pnx_format_float(bits, out);
+    double d;
+    __builtin_memcpy(&d, &bits, 8);
+    proven_float_format_options_t opt = {.mode = PROVEN_FLOAT_FORMAT_MODE_FIXED, .precision = (proven_i32)digits,
+                                         .never_scientific = true};
+    proven_size_t n = 0;
+    if (proven_float_format_f64_policy((char *)out, PNX_FIXED_MAX, d, PROVEN_FLOAT_FORMAT_POLICY_RYU, opt, &n) != PROVEN_OK ||
+        n > PNX_FIXED_MAX)
+        n = 0;
     return (uint32_t)n;
 }
 

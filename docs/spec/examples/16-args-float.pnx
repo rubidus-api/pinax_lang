@@ -1,0 +1,17 @@
+rem run
+use io .
+use f .
+use str .
+def mean rest args gives float do
+  0e0 to total
+  0 rest args.len range do to k
+    k rest args.float or_else to e 0e0 end total f.add to total    rem a value of another kind counts as 0e0
+  end each
+  total rest args.len f.from_int f.div
+end
+args 1.5e0 2.5e0 4e0 . mean str.to_str io.println
+def shown rest args do
+  1 rest args.kind or_else to e 0 end str.to_str io.println    rem 5 is args.k_float
+  rest cat io.println
+end
+args "x=" 2.5e0 . shown

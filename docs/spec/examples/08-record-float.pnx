@@ -1,0 +1,17 @@
+rem run
+use io .
+use f .
+record point
+  x float
+  y float
+  label str 8
+end
+list points point 4
+row points 1.5e0 -2e0 "a" .
+row points as origin .                       rem the fields left out are 0e0 and ""
+def length_sq p points gives float do p point.x p point.x f.mul p point.y p point.y f.mul f.add end
+def show p points do args p point.label " " p point.x " " p point.y " " p length_sq . cat io.println end
+0 points idx show
+origin show
+0.5e0 origin to point.x  1e300 origin to point.y   rem a float field takes a float only
+origin show                                  rem 1e300 squared is an infinity, not a fault

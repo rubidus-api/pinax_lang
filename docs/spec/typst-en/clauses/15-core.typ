@@ -114,12 +114,15 @@ plain words on an unsigned type and do not take a signed one. The bit procedures
 
 #para("3")[`c sort` puts the cells of an array, or of a list up to its length, in order from the smallest; `c sort_desc`
 from the largest. The cells change in place and the procedure gives nothing. The cells shall be `int`, a narrow integer,
-`dec N`, `bool` (`false` first) or `str N`, or of a type declared over one of them; `u64` cells are compared unsigned,
+`dec N`, `float`, `bool` (`false` first) or `str N`, or of a type declared over one of them. `float` cells go in one
+total order: `-inf`, the negative numbers, `-0.0`, `0.0`, the positive numbers, `inf`, then every NaN last;
+`sort_desc` puts the same order the other way, so a NaN comes first; `u64` cells are compared unsigned,
 `str N` cells in the byte order of `str.compare` (16.1). A collection parameter (9.9) is sorted the same way. A list or
 array of records is refused: an index, a field, a global or a named row may keep its rows. Its rows are put in order
 through a list of their numbers, by (4).]
 #ex("spec", "15-sort.pnx")
 #ex("spec", "15-sort-records.pnx")
+#ex("spec", "15-sort-float.pnx")
 
 #para("4")[`o t sort_by r.f` takes `o`, an array or list of `int`, each cell the number of a row of `t`, or of rows of `t`
 (8.8 (5a)); `t`, an array

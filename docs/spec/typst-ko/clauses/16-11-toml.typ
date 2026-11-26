@@ -27,7 +27,11 @@
 #para("4")[`path s toml.at` 은 `(kind int, value str)` 를 준다(`or fail`): 파일을 읽는 사람이 보는 대로 `path` 가 가리키는 값. 경로는 점으로 이은 이름(따옴표를
 친 이름 `"a.b"` `'a.b'` 에는 점이 들 수 있다)과 괄호 안의 번호다: `server.ports[1]`, `user[0].name`, `a."b c".d`. 점을 쓴 키(`a.b.c = 1`), 머리가 만든 표,
 인라인 표, 배열을 모두 따라가고, 번호는 값 배열이나 표 배열(`[[...]]` 머리의 차례, 한 원소 아래의 것은 그 원소에 속한다)의 원소를 고른다. 표를 가리키는
-경로는 `toml.table` 과 값 없음을 준다. 없으면 `err.not_found`, 경로가 잘못됐거나 읽은 곳의 글이 잘못됐으면 `err.format`.]
+경로는 `toml.table` 과 값 없음을 준다. 없으면 `err.not_found`, 경로가 잘못됐거나 읽은 곳의 글이 잘못됐으면 `err.format`.
+`toml.float` 값의 글은 `str.to_float`(16.1)이 `float` 로 읽는다. 다만 숫자 사이의 `_`(`1_000.5`)는 읽지 않고 `err.format` 이 된다.
+`float` 는 `str.to_str` 의 글과 종류 `toml.float` 로 `toml.set`(7)에 넘겨 쓴다. `nan`, `inf`, `-inf` 도 TOML 의 값이다.]
+
+#ex("spec", "16-toml-float.pnx")
 
 #para("5")[`s toml.valid` 는 `s` 의 모든 문장이 꼴이 맞는지 준다. 검사는 문장 하나하나의 문법이다: 두 번 준 키, 두 번 정의한 표, 수의 범위, 있는 날짜인지는 이 프로시저가 검사하지 않는다.]
 

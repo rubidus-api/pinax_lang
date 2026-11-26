@@ -148,6 +148,7 @@
   [`sqlite.clear_binds`], [`(s stmt)`], [모든 자리에 null 을 묶는다],
   [`sqlite.bind_null`], [`(i int, s stmt or fail)`], [자리 `i`(0부터)에 묶는다. 없는 자리는 `err.range`. 돌고 있는 문장(마지막 줄이나 끝 뒤에 `reset` 하지 않은 것)은 `err.state`],
   [`sqlite.bind_int` `sqlite.bind_str` `sqlite.bind_blob`], [`(v int, i int, s stmt or fail)` 와 `(v str, i int, s stmt or fail)`], [정수, 글, 바이트를 묶는다(복사한다)],
+  [`sqlite.bind_float`], [`(v float, i int, s stmt or fail)`], [실수를 묶는다. NaN 과 무한대는 `err.range`(SQLite 는 NaN 을 null 로 바꾼다)],
   [`sqlite.bind_name`], [`(name str, s stmt gives i int or fail)`], [`:name`, `@name`, `$name` 의 자리(표시까지 쓴다). 없으면 `err.not_found`],
   [`sqlite.step`], [`(s stmt gives more bool or fail)`], [한 걸음. 줄이 있으면 `true`, 끝이면 `false`],
   [`sqlite.col_count`], [`(s stmt gives n int)`], [결과의 열 수],
@@ -155,6 +156,7 @@
   [`sqlite.col_kind`], [`(i int, s stmt gives k int)`], [현재 줄의 열 `i` 에 든 값의 종류: `sqlite.k_null`, `k_int`, `k_real`, `k_text`, `k_blob`(순수 프로시저)와 견준다. 줄이 없으면 `k_null`. 없는 열은 결함 `range`],
   [`sqlite.col_is_null`], [`(i int, s stmt gives bool)`], [null 인가],
   [`sqlite.col_int`], [`(i int, s stmt gives n int or fail)`], [정수 열. 다른 종류는 `err.format`, 줄이 없으면 `err.not_found`],
+  [`sqlite.col_float`], [`(i int, s stmt gives x float or fail)`], [실수 열, 또는 가장 가까운 `float` 로 바꾼 정수 열. 다른 종류는 `err.format`, 줄이 없으면 `err.not_found`],
   [`sqlite.col_str` `sqlite.col_blob`], [`(i int, s stmt gives v str or fail)`], [글이나 바이트를 영역에 준다. `col_str` 는 정수와 실수도 글 꼴로 주고, `col_blob` 은 blob 만 받는다],
   [`sqlite.col_str_into` `sqlite.col_blob_into`], [`(i int, s stmt, buf buffer or fail)`], [같은 것을 버퍼에 덧붙인다. 들어가지 않으면 `err.full`],
   [`sqlite.last_code`], [`(gives n int)`], [상태를 돌리는 스레드의 마지막 거절의 SQLite 결과 코드(확장형, 예: 유일 키는 2067)],
@@ -163,6 +165,7 @@
 
 #ex("spec", "17-sqlite.pnx")
 #ex("spec", "17-sqlite-rows.pnx")
+#ex("spec", "17-sqlite-float.pnx")
 
 #para("2")[SQLite 의 거절은 다음 코드의 실패다: `err.full`(메모리 부족, 디스크 가득, 너무 큰 값), `err.not_found`(열 수 없는
 파일, 줄 없음), `err.range`(없는 자리), `err.format`(데이터베이스가 아닌 파일, 해석되지 않는 문장, 다른 종류의 열),

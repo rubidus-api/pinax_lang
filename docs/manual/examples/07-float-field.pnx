@@ -1,0 +1,18 @@
+rem run
+use io .
+use f .
+record reading
+  sensor str 8
+  celsius float
+end
+list readings reading 8
+row readings "hall" 21.5e0 .
+row readings "attic" 30.25e0 .
+row readings "cellar" 12e0 .
+def mean gives float do
+  0e0 to total
+  readings do to r total r reading.celsius f.add to total end each
+  total readings len f.from_int f.div
+end
+readings do to r args r reading.sensor " " r reading.celsius . cat io.println end each
+args "mean " mean . cat io.println

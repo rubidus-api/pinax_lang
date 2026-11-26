@@ -10,16 +10,19 @@
   [`hex_pad`], [`(n, width int gives str)`], [십육진을 앞에 0 을 채워 `width` 자리로. `n` 은 `hex` 와 같다],
   [`zero_pad`], [`(n, width int gives str)`], [십진을 앞에 0 을 채워 `width` 자리로. 부호도 자리를 차지한다. `n` 은 `int` 나 좁은 정수(`u64` 는 부호 없이)],
   [`append_hex`], [`(n, buf or fail)`], [십육진을 버퍼에 붙인다. `n` 은 `hex` 와 같다],
+  [`fixed`], [`(x float, n int gives str)`], [`x` 의 정확한 값을 점 아래 `n` 자리로 반올림한 십진(딱 반이면 짝수 쪽). 지수 꼴은 쓰지 않는다. `n` 은 0 부터 18 의 상수. NaN 과 무한대는 `nan`, `inf`, `-inf`],
 )
 십진은 `str.to_str`, 버퍼에 붙이는 십진은 `append_int`(15.3)다. `hex_pad` 와 `zero_pad` 의 `width` 가 음수이거나
 2#super[32] 이상이면 결함 `range`, 구역이 모자라면 결함 `full` 이다.]
 
 #ex("spec", "16-fmt.pnx")
+#ex("spec", "16-fmt-fixed.pnx")
 
 #part("제약")
 
-#para("2")[`fmt` 의 프로시저는 `int` 를 받는다. 다른 타입의 값은 거절된다. `dec N` 은 `str.to_str` 과 `cat` 이 적는다(7.5).]
+#para("2")[`fmt` 의 프로시저는 `fixed` 말고는 `int` 를 받고, `fixed` 는 `float` 와 상수 자릿수를 받는다. 다른 타입의 값은 거절된다. `dec N` 은 `str.to_str` 과 `cat` 이 적는다(7.5).]
 #ex("spec", "16-fmt-type.pnx")
+#ex("spec", "16-fmt-fixed-digits.pnx")
 
 #part("결함")
 
@@ -32,4 +35,6 @@
 #part("진단")
 #diag(
   ([`int` 가 아닌 값], "this procedure takes an int"),
+  ([자릿수가 0 부터 18 의 상수가 아닌 `fixed`], "the digits of fmt.fixed are a constant 0 to 18: x 2 fmt.fixed"),
+  ([`float` 가 아닌 값의 `fixed`], "fmt.fixed takes a float and the digits after the point: x 2 fmt.fixed"),
 )

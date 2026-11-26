@@ -54,7 +54,8 @@ int      pnx_rex_search(const uint8_t *prog, uint32_t plen, const uint8_t *s, ui
 // The module `sheet` (pinax_sheet.c, RFC-0042, RFC-0044): a book of sheets, each a table of rows and columns, in
 // one buffer. `b` is the buffer's bytes and `cap` its capacity; every function checks that the bytes still hold a
 // book. Words other than the book words work on the current sheet (STATE: there is none).
-typedef enum { PNX_SH_OK, PNX_SH_FULL, PNX_SH_RANGE, PNX_SH_KIND, PNX_SH_NONE, PNX_SH_BAD, PNX_SH_OVERFLOW, PNX_SH_STATE } pnx_sheet_result;
+// PNX_SH_VALUE: a value the module does not hold (a NaN or an infinity for put_float): the failure err.range
+typedef enum { PNX_SH_OK, PNX_SH_FULL, PNX_SH_RANGE, PNX_SH_KIND, PNX_SH_NONE, PNX_SH_BAD, PNX_SH_OVERFLOW, PNX_SH_STATE, PNX_SH_VALUE } pnx_sheet_result;
 pnx_sheet_result pnx_sheet_open(uint8_t *b, uint32_t cap, uint32_t nmax);
 pnx_sheet_result pnx_sheet_create(uint8_t *b, uint32_t cap, const uint8_t *name, uint32_t n, int64_t rmax, int64_t cols, bool colmajor, int64_t *num);
 pnx_sheet_result pnx_sheet_use(uint8_t *b, uint32_t cap, const uint8_t *name, uint32_t n);
@@ -82,6 +83,8 @@ pnx_sheet_result pnx_sheet_put_bool(uint8_t *b, uint32_t cap, int64_t v, int64_t
 pnx_sheet_result pnx_sheet_put_date(uint8_t *b, uint32_t cap, int64_t v, int64_t r, int64_t c);
 pnx_sheet_result pnx_sheet_get_date(uint8_t *b, uint32_t cap, int64_t r, int64_t c, int64_t *v);
 pnx_sheet_result pnx_sheet_put_dec(uint8_t *b, uint32_t cap, int64_t v, uint32_t scale, int64_t r, int64_t c);
+pnx_sheet_result pnx_sheet_put_float(uint8_t *b, uint32_t cap, int64_t bits, int64_t r, int64_t c);
+pnx_sheet_result pnx_sheet_get_float(uint8_t *b, uint32_t cap, int64_t r, int64_t c, int64_t *bits);
 pnx_sheet_result pnx_sheet_put_str(uint8_t *b, uint32_t cap, const uint8_t *s, uint32_t n, int64_t r, int64_t c);
 pnx_sheet_result pnx_sheet_clear_cell(uint8_t *b, uint32_t cap, int64_t r, int64_t c);
 pnx_sheet_result pnx_sheet_copy_cell(uint8_t *b, uint32_t cap, int64_t r1, int64_t c1, int64_t r2, int64_t c2);
@@ -110,7 +113,7 @@ pnx_sheet_result pnx_sheet_save_xlsx(uint8_t *b, uint32_t cap, uint8_t *dst, uin
 
 
 // The words of `sheet` (RFC-0042): id, name, what they take (in stack order: i int, b bool, s str, d a dec(N)
-// whose scale the compiler appends, n a constant scale), what they give (i, b, s, D a dec(N) of the scale n),
+// whose scale the compiler appends, n a constant scale, f a float), what they give (i, b, s, D a dec(N) of the scale n, f),
 // and flags: F can fail, R reads the sheet only. The ints go in the registers from A in the order written, the
 // str in register B; the result takes A (or B).
 #define PNX_SHEET_WORDS(X)                                                                          \
@@ -150,7 +153,8 @@ pnx_sheet_result pnx_sheet_save_xlsx(uint8_t *b, uint32_t cap, uint8_t *dst, uin
     X(MAX_SEL, "max_sel", "i", "i", "FR") X(COUNT_SEL, "count_sel", "i", "i", "R")                  \
     X(ORDER_BY, "order_by", "i", "", "F") X(ORDER_BY_DESC, "order_by_desc", "i", "", "F")                \
     X(LOAD_CSV, "load_csv", "i", "i", "FO") X(LOAD_XLSX, "load_xlsx", "ii", "i", "FO")              \
-    X(SAVE_CSV, "save_csv", "", "i", "FO") X(SAVE_XLSX, "save_xlsx", "", "i", "FO")
+    X(SAVE_CSV, "save_csv", "", "i", "FO") X(SAVE_XLSX, "save_xlsx", "", "i", "FO")                \
+    X(PUT_FLOAT, "put_float", "fii", "", "F") X(GET_FLOAT, "float", "ii", "f", "FR") /* 0.36.1: last */
 
 enum {
 #define X(id, name, in, out, flags) PNX_SHW_##id,
@@ -189,7 +193,7 @@ static inline void pnx_sheet_regs(const pnx_shword *w, uint32_t *int_in, uint32_
             ni += *p == 'd' ? 2u : 1u; // a dec value and its scale
     }
     *int_in = ni;
-    *int_out = (w->out[0] == 'i' || w->out[0] == 'b' || w->out[0] == 'D') ? 1u : 0u;
+    *int_out = (w->out[0] == 'i' || w->out[0] == 'b' || w->out[0] == 'D' || w->out[0] == 'f') ? 1u : 0u;
     *str_out = w->out[0] == 's';
 }
 
@@ -237,7 +241,7 @@ uint32_t pnx_md_inline(const uint8_t *s, uint32_t n, uint8_t *out, uint64_t cap)
 
 // The words of json (more than json.next), toml and md that read a text and give values or write a buffer
 // (RFC-0046): id, module (8 json, 11 toml, 12 md, 13 args), name, what they take in stack order (i int or bool, s str, a args), what
-// they give, flags: F can fail, W writes the buffer that comes last. The ints go in the registers from A in the
+// they give (also f a float, in an int register), flags: F can fail, W writes the buffer that comes last. The ints go in the registers from A in the
 // order written, the strs from B.
 #define PNX_TEXT_WORDS(X)                                                                           \
     X(JSON_VALID, 8, "valid", "s", "b", "") X(JSON_AT, 8, "at", "ss", "is", "F")                    \
@@ -251,7 +255,8 @@ uint32_t pnx_md_inline(const uint8_t *s, uint32_t n, uint8_t *out, uint64_t cap)
     X(ARGS_INT, 13, "int", "ia", "i", "F") X(ARGS_BOOL, 13, "bool", "ia", "b", "F")                 \
     X(ARGS_STR, 13, "str", "ia", "s", "F") X(ARGS_DEC, 13, "dec", "iia", "i", "F")                  \
     X(JSON_ENTER_A, 99, "enter_a", "ss", "s", "F") X(JSON_ENTER_O, 99, "enter_o", "ss", "s", "F")    \
-    X(JSON_ITEM, 99, "item", "s", "iss", "F") X(JSON_MEMBER, 99, "member", "s", "isss", "F")
+    X(JSON_ITEM, 99, "item", "s", "iss", "F") X(JSON_MEMBER, 99, "member", "s", "isss", "F") \
+    X(ARGS_FLOAT, 13, "float", "ia", "f", "F") /* 0.36.1: last, so that the numbers containers hold stay */
 
 enum {
 #define X(id, module, name, in, out, flags) PNX_TXW_##id,
@@ -729,6 +734,10 @@ uint32_t pnx_format_dec(int64_t value, uint32_t scale, uint8_t out[24]);
 bool     pnx_parse_dec(const uint8_t *bytes, uint32_t length, uint32_t scale, int64_t *out);
 // float (RFC-0056): the shortest text that reads back (at most 26 bytes), and the whole view read as one.
 uint32_t pnx_format_float(int64_t bits, uint8_t out[40]);
+// fmt.fixed (D0113): the exact value rounded to `digits` (0 to 18) decimals, ties to even, never scientific; nan, inf,
+// -inf as pnx_format_float writes them. At most PNX_FIXED_MAX bytes (a sign, 309 digits, a point and 18).
+#define PNX_FIXED_MAX 336u
+uint32_t pnx_format_fixed(int64_t bits, uint32_t digits, uint8_t out[PNX_FIXED_MAX]);
 bool     pnx_parse_float(const uint8_t *bytes, uint32_t length, int64_t *out);
 extern const int64_t pnx_pow10[19];
 // Offset of the first `part` in `bytes`, or UINT32_MAX. An empty part is found at 0.

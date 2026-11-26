@@ -190,15 +190,15 @@ sees.]
 record   = "record" NAME { field | "big_endian" } "end" ;
 field    = NAME width ;
 width    = "u8" | "u16" | "u32" | "u64" | "i8" | "i16" | "i32" | "i64"
-         | "int" | "bool" | "varint" | "dec" INT | "str" size
+         | "int" | "bool" | "float" | "varint" | "dec" INT | "str" size
          | NAME ;                                         (* NAME: a table *)
 row-item = [ "export" ] "row" NAME [ NAME ] "(" value { "," value } ")" ;
 value    = literal | NAME ;                         (* NAME: a const, a row name, none *)
 ```
 
 #para("1")[`record NAME … end` makes a #term("record") type, a sequence of fields, each with a width. An `int` or `i64` field
-reads as `int`, a `u8` … `i32` field as that narrow integer (7.6), a `bool` field as `bool`, a `dec N` field as
-`dec N` (8 bytes), a `str N` field as a `str` view. A field takes a value of its type only. A field whose type is the name of a table
+reads as `int`, a `u8` … `i32` field as that narrow integer (7.6), a `bool` field as `bool`, a `float` field as `float`
+(8 bytes), a `dec N` field as `dec N` (8 bytes), a `str N` field as a `str` view. A field takes a value of its type only. A field whose type is the name of a table
 holds a row of that table.]
 
 #para("2")[Records are not handled as values. One declares an array, list or pool of records (a #term("table")) and
@@ -212,6 +212,11 @@ without commas or parentheses; trailing fields may be left out (they are zero). 
 values and in code.]
 
 #ex("spec", "08-record.pnx")
+
+#para("4a")[A `float` field holds the 64 bits of a binary64 and starts as `0e0`. A row item takes a `float` literal. The
+value stored and read is the one the procedures of `f` compute; a NaN and an infinity are kept as they are.]
+
+#ex("spec", "08-record-float.pnx")
 
 #para("5")[A field or global that holds a row starts as "none". `row is_none` asks whether it is none, `TABLE none`
 gives the none row of that table, and `row row_index` gives the row's number.]

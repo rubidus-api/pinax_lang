@@ -38,6 +38,7 @@ the commas in themselves.
   [`put_key` `put_str`], [`(s str, buf or fail)`; the procedure does the escaping],
   [`put_int`], [`(n int, buf or fail)`],
   [`put_dec`], [`(d dec N, buf or fail)`],
+  [`put_float`], [`(x float, buf or fail)`; the shortest text that reads back. JSON has no NaN and no infinity: `err.range`],
   [`put_bool`], [`(b bool, buf or fail)`],
 )]
 
@@ -76,11 +77,14 @@ further. A rail that can fail is taken by `each` and is followed by a guard (`or
 #para("6")[`row buf json.pack` appends a row of a record as an object whose keys are the field names. `s row
 json.unpack` reads an object into the fields of the same names and gives the rest after the object. Values of unknown
 keys are passed over. Numbers shall be integers that fit the field's width; a `dec N` field takes a number with at most
-`N` digits after the point and is written with all `N` (7.5); `null` is not accepted. The row is written
+`N` digits after the point and is written with all `N` (7.5); a `float` field takes any number, read as the nearest `float`, and is written as the
+shortest text that reads back (7.7). JSON has no NaN and no infinity: `pack` of a row that holds one fails with
+`err.range` and the buffer is left as it was. `null` is not accepted. The row is written
 only when everything is right; when it fails (`err.format`) the row is unchanged.]
 
 #ex("spec", "16-json-record.pnx")
 #ex("spec", "16-dec-text.pnx")
+#ex("spec", "16-json-float-field.pnx")
 
 #part("Constraints")
 

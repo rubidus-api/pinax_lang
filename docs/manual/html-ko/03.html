@@ -151,7 +151,24 @@ per second 12.262500000000001
 <span style="color: #d73948">def</span> area r <span style="color: #d73948">int</span> <span style="color: #d73948">gives</span> float <span style="color: #d73948">do</span> r r f.mul <span style="color: #b60157">3</span>.14159e0 f.mul <span style="color: #d73948">end</span>
 </code></pre><p class="ex-label">거절</p><pre><code data-lang="text">$ pnx 02-float-mix.pnx
 02-float-mix.pnx:2:35: f.add, f.sub, f.mul and f.div take two float values; an int is made a float with f.from_int
-</code></pre></div></div><div class="box mistake"><p class="box-title">흔한 오해: <code>0.1e0 0.2e0 f.add</code> 는 <code>0.3e0</code> 과 <code>eq</code> 다</p><code>eq</code> 는 비트까지 정확히 견준다. 0.1 과 0.2 는 이진수로 정확히 담기지 않아 합이 <code>0.30000000000000004</code> 이다. 오차를 두고 견주려면 <code>f.near</code> 를 쓴다.<div class="example run"><p class="ex-file"><code>02-float-eq.pnx</code></p><pre><code data-lang="pinax"><span style="color: #d73948">use</span> io .
+</code></pre></div></div><div class="box qa"><p class="box-title">문답</p><p><strong>물음. <code>float</code> 의 목록도 <code>sum</code>, <code>minimum</code>, <code>sort</code> 를 쓸 수 있는가?</strong></p><p>답. 쓸 수 있다. <code>sum</code> 은 처음부터 차례로 더한다. <code>sort</code> 는 <code>-0.0</code> 을 <code>0.0</code> 앞에, NaN 을 맨 뒤에 놓는다. <code>minimum</code> 과 <code>maximum</code> 은 NaN 이 하나라도 있으면 NaN 을 준다: 여기서도 NaN 은 조용히 넘어간다.</p><div class="example run"><p class="ex-file"><code>02-float-sort.pnx</code></p><pre><code data-lang="pinax"><span style="color: #d73948">use</span> io .
+<span style="color: #d73948">use</span> f .
+<span style="color: #d73948">use</span> <span style="color: #d73948">str</span> .
+<span style="color: #d73948">list</span> laps float <span style="color: #b60157">8</span>
+<span style="color: #b60157">0</span>.25e0 laps push <span style="color: #d73948">or_else</span> <span style="color: #d73948">to</span> e <span style="color: #d73948">end</span>
+<span style="color: #b60157">0</span>.125e0 laps push <span style="color: #d73948">or_else</span> <span style="color: #d73948">to</span> e <span style="color: #d73948">end</span>
+<span style="color: #b60157">0</span>.5e0 laps push <span style="color: #d73948">or_else</span> <span style="color: #d73948">to</span> e <span style="color: #d73948">end</span>
+<span style="color: #d73948">args</span> <span style="color: #198810">"total "</span> laps sum <span style="color: #198810">", fastest "</span> laps minimum <span style="color: #d73948">or_else</span> <span style="color: #d73948">to</span> e 0e0 <span style="color: #d73948">end</span> . <span style="color: #d73948">cat</span> io.println
+0e0 0e0 f.div laps push <span style="color: #d73948">or_else</span> <span style="color: #d73948">to</span> e <span style="color: #d73948">end</span>      <span style="color: #74747c">rem a NaN joins the list</span>
+laps sort
+<span style="color: #d73948">def</span> show <span style="color: #d73948">do</span> <span style="color: #198810">""</span> <span style="color: #d73948">to</span> line  <span style="color: #198810">""</span> <span style="color: #d73948">to</span> gap  laps <span style="color: #d73948">do</span> <span style="color: #d73948">to</span> t <span style="color: #d73948">args</span> line gap t . <span style="color: #d73948">cat</span> <span style="color: #d73948">to</span> line  <span style="color: #198810">" "</span> <span style="color: #d73948">to</span> gap <span style="color: #d73948">end</span> each  line io.println <span style="color: #d73948">end</span>
+show
+<span style="color: #d73948">args</span> <span style="color: #198810">"fastest now "</span> laps minimum <span style="color: #d73948">or_else</span> <span style="color: #d73948">to</span> e 0e0 <span style="color: #d73948">end</span> . <span style="color: #d73948">cat</span> io.println
+</code></pre><p class="ex-label">출력</p><pre><code data-lang="text">$ pnx 02-float-sort.pnx
+total 0.875, fastest 0.125
+0.125 0.25 0.5 nan
+fastest now nan
+</code></pre></div></div><div class="box qa"><p class="box-title">문답</p><p><strong>물음. 소수점 아래 두 자리로만 찍으려면?</strong></p><p>답. <code>x 2 fmt.fixed</code> 를 쓴다. 정확한 값을 반올림하므로 <code>1.005e0 2 fmt.fixed</code> 는 <code>1.00</code> 이다: <code>1.005</code> 는 이진수로 1.00499… 이기 때문이다. 자릿수는 0 부터 18 의 상수다. 돈처럼 자리가 정해진 양은 처음부터 <code>dec N</code> 으로 둔다.</p></div><div class="box mistake"><p class="box-title">흔한 오해: <code>0.1e0 0.2e0 f.add</code> 는 <code>0.3e0</code> 과 <code>eq</code> 다</p><code>eq</code> 는 비트까지 정확히 견준다. 0.1 과 0.2 는 이진수로 정확히 담기지 않아 합이 <code>0.30000000000000004</code> 이다. 오차를 두고 견주려면 <code>f.near</code> 를 쓴다.<div class="example run"><p class="ex-file"><code>02-float-eq.pnx</code></p><pre><code data-lang="pinax"><span style="color: #d73948">use</span> io .
 <span style="color: #d73948">use</span> f .
 <span style="color: #d73948">def</span> demo <span style="color: #d73948">do</span>
   <span style="color: #b60157">0</span>.1e0 <span style="color: #b60157">0</span>.2e0 f.add <span style="color: #d73948">to</span> sum3

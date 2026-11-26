@@ -183,15 +183,15 @@ assign-item = "assign" NAME "(" value { "," value } ")" ;
 record   = "record" NAME { field | "big_endian" } "end" ;
 field    = NAME width ;
 width    = "u8" | "u16" | "u32" | "u64" | "i8" | "i16" | "i32" | "i64"
-         | "int" | "bool" | "varint" | "dec" INT | "str" size
+         | "int" | "bool" | "float" | "varint" | "dec" INT | "str" size
          | NAME ;                                         (* NAME: a table *)
 row-item = [ "export" ] "row" NAME [ "as" NAME ] { value } "." ;
 value    = literal | NAME ;                         (* NAME: a const, a row name, none *)
 ```
 
 #para("1")[`record 이름 … end` 는 필드의 나열인 #term("레코드", en: "record") 타입을 만든다. 필드마다 폭을
-적는다. `int` 와 `i64` 필드는 읽으면 `int`, `u8` … `i32` 필드는 그 좁은 정수(7.6), `bool` 필드는 `bool`, `dec N`
-필드는 `dec N`(8 바이트), `str N` 필드는 `str` 뷰가 된다. 필드에는 그 타입의 값만 넣는다. 필드의 타입에 표의
+적는다. `int` 와 `i64` 필드는 읽으면 `int`, `u8` … `i32` 필드는 그 좁은 정수(7.6), `bool` 필드는 `bool`, `float` 필드는
+`float`(8 바이트), `dec N` 필드는 `dec N`(8 바이트), `str N` 필드는 `str` 뷰가 된다. 필드에는 그 타입의 값만 넣는다. 필드의 타입에 표의
 이름을 쓰면 그 표의 줄을 담는다.]
 
 #para("2")[레코드는 값으로 다루지 않는다. 레코드를 원소로 하는 배열·목록·풀(#term("표", en: "table"))을
@@ -205,6 +205,11 @@ value    = literal | NAME ;                         (* NAME: a const, a row name
 그 줄로 쓴다.]
 
 #ex("spec", "08-record.pnx")
+
+#para("4a")[`float` 필드는 binary64 의 64 비트를 담고 `0e0` 으로 시작한다. 줄 항목은 `float` 리터럴을 받는다. 필드에
+넣고 꺼내는 값은 `f` 의 procedure 가 계산하는 그 값이며, NaN 과 무한대도 그대로 담긴다.]
+
+#ex("spec", "08-record-float.pnx")
 
 #para("5")[줄을 담는 필드와 전역의 처음 값은 "없음" 이다. `줄 is_none` 은 없음인지 묻고, `표 none` 은 그 표의
 없음 줄을 낸다. `줄 row_index` 는 줄의 번호를 준다.]

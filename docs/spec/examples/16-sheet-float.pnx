@@ -1,0 +1,19 @@
+rem run
+use io .
+use f .
+use sheet .
+buffer grid 8192
+buffer csv_out 512
+def main or fail do
+  1 grid sheet.open_book or_fail
+  "readings" 4 2 grid sheet.create or_fail drop
+  2 do grid sheet.add_row or_fail drop end times
+  "hall" 0 0 grid sheet.put_str or_fail  21.5e0 0 1 grid sheet.put_float or_fail
+  "attic" 1 0 grid sheet.put_str or_fail  1e-7 1 1 grid sheet.put_float or_fail
+  args 0 1 grid sheet.float or_fail " " 1 1 grid sheet.kind " is " sheet.k_float . cat io.println
+  0e0 0e0 f.div 1 1 grid sheet.put_float or_else to e args "NaN: " e err_text . cat io.println end
+  0 1 grid sheet.int or_else to e args "as int: " e err_text . cat io.println 0 end drop
+  csv_out grid sheet.save_csv or_fail drop
+  csv_out contents io.print
+end
+main or_else to e e err_text io.println end

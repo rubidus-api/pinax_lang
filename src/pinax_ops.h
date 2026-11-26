@@ -905,6 +905,10 @@ PNX_OP(RCATI) {
     return pnx_region_append(st, &S[OP_A(w)], digits, n);
 }
 PNX_OP(RCATD) {
+    if (OP_C(w) >= PNX_DEC_FIXED) { // fmt.fixed: C - PNX_DEC_FIXED decimals
+        uint8_t text[PNX_FIXED_MAX];
+        return pnx_region_append(st, &S[OP_A(w)], text, pnx_format_fixed(R[OP_B(w)], OP_C(w) - PNX_DEC_FIXED, text));
+    }
     uint8_t digits[40];
     const uint32_t n = OP_C(w) == PNX_DEC_FLOAT ? pnx_format_float(R[OP_B(w)], digits) : pnx_format_dec(R[OP_B(w)], OP_C(w), digits);
     return pnx_region_append(st, &S[OP_A(w)], digits, n);
@@ -936,7 +940,7 @@ PNX_OP(RCATB) {
 // 16 bytes for each value (kind u8, scale u8, 2 bytes, length u32, payload i64), then the bytes of the strs.
 // The payload of a str is its place from the start of the block. Everything a reader takes from a block it checks:
 // the region may have been rewound under a stale view.
-enum { PNX_ARG_INT = 1, PNX_ARG_BOOL, PNX_ARG_STR, PNX_ARG_DEC, PNX_ARG_MAX = 64 };
+enum { PNX_ARG_INT = 1, PNX_ARG_BOOL, PNX_ARG_STR, PNX_ARG_DEC, PNX_ARG_FLOAT, PNX_ARG_MAX = 64 }; // FLOAT: args.k_float 5
 
 PNX_OP(ARGHEAD) { // the string in S[A] is at the top of the region and empty
     pnx_scell *cell = &S[OP_A(w)];
@@ -1015,8 +1019,11 @@ PNX_OP(RCATA) {
         uint32_t length;
         __builtin_memcpy(&length, slot + 4, 4);
         __builtin_memcpy(&payload, slot + 8, 8);
-        uint8_t text[24];
+        uint8_t text[40];
         switch (slot[0]) {
+        case PNX_ARG_FLOAT: // as str.to_str writes one
+            rc = pnx_region_append(st, cell, text, pnx_format_float(payload, text));
+            break;
         case PNX_ARG_INT:
             rc = pnx_region_append(st, cell, text, pnx_format_int(payload, text));
             break;
@@ -1359,6 +1366,7 @@ PNX_INLINE int pnx_sheet_status(pinax_state *st, pnx_sheet_result e) {
     case PNX_SH_FULL: st->fail = PINAX_ERR_FULL; return PNX_R_FAILED;
     case PNX_SH_KIND: st->fail = PINAX_ERR_FORMAT; return PNX_R_FAILED;
     case PNX_SH_NONE: st->fail = PINAX_ERR_NOT_FOUND; return PNX_R_FAILED;
+    case PNX_SH_VALUE: st->fail = PINAX_ERR_RANGE; return PNX_R_FAILED;
     case PNX_SH_OVERFLOW: return PINAX_ERR_OVERFLOW;
     case PNX_SH_STATE: return PINAX_ERR_STATE; // no current sheet
     default: return PINAX_ERR_RANGE;
@@ -1430,6 +1438,8 @@ PNX_INLINE int pnx_sheet_exec(pinax_state *st, int64_t *R, pnx_scell *S, uint32_
     case PNX_SHW_PUT_BOOL: e = pnx_sheet_put_bool(b, cap, r[0], r[1], r[2]); break;
     case PNX_SHW_PUT_DATE: e = pnx_sheet_put_date(b, cap, r[0], r[1], r[2]); break;
     case PNX_SHW_PUT_DEC: e = pnx_sheet_put_dec(b, cap, r[0], (uint32_t)r[3], r[1], r[2]); break;
+    case PNX_SHW_PUT_FLOAT: e = pnx_sheet_put_float(b, cap, r[0], r[1], r[2]); break;
+    case PNX_SHW_GET_FLOAT: e = pnx_sheet_get_float(b, cap, r[0], r[1], &out); r[0] = out; break;
     case PNX_SHW_PUT_STR: e = pnx_sheet_put_str(b, cap, sb, sn, r[0], r[1]); break;
     case PNX_SHW_CLEAR_CELL: e = pnx_sheet_clear_cell(b, cap, r[0], r[1]); break;
     case PNX_SHW_COPY_CELL: e = pnx_sheet_copy_cell(b, cap, r[0], r[1], r[2], r[3]); break;
@@ -1764,7 +1774,8 @@ PNX_INLINE int pnx_text_exec(pinax_state *st, int64_t *R, pnx_scell *S, uint32_t
         r[0] = count;
         return PNX_R_OK;
     }
-    case PNX_TXW_ARGS_KIND: case PNX_TXW_ARGS_INT: case PNX_TXW_ARGS_BOOL: case PNX_TXW_ARGS_STR: case PNX_TXW_ARGS_DEC: {
+    case PNX_TXW_ARGS_KIND: case PNX_TXW_ARGS_INT: case PNX_TXW_ARGS_BOOL: case PNX_TXW_ARGS_STR: case PNX_TXW_ARGS_DEC:
+    case PNX_TXW_ARGS_FLOAT: {
         const uint8_t *slot;
         if ((rc = pnx_arg_slot(st, first, r[0], &slot)) != PNX_R_OK)
             return rc;
@@ -1773,7 +1784,8 @@ PNX_INLINE int pnx_text_exec(pinax_state *st, int64_t *R, pnx_scell *S, uint32_t
         __builtin_memcpy(&length, slot + 4, 4);
         __builtin_memcpy(&payload, slot + 8, 8);
         const uint32_t want = OP_C(w) == PNX_TXW_ARGS_INT ? PNX_ARG_INT : OP_C(w) == PNX_TXW_ARGS_BOOL ? PNX_ARG_BOOL
-                            : OP_C(w) == PNX_TXW_ARGS_STR ? PNX_ARG_STR : OP_C(w) == PNX_TXW_ARGS_DEC ? PNX_ARG_DEC : 0;
+                            : OP_C(w) == PNX_TXW_ARGS_STR ? PNX_ARG_STR : OP_C(w) == PNX_TXW_ARGS_DEC ? PNX_ARG_DEC
+                            : OP_C(w) == PNX_TXW_ARGS_FLOAT ? PNX_ARG_FLOAT : 0;
         if (OP_C(w) == PNX_TXW_ARGS_KIND) {
             r[0] = slot[0];
             return PNX_R_OK;
@@ -2430,7 +2442,7 @@ PNX_INLINE uint32_t pnx_json_comma(const pnx_global *g) {
 PNX_OP(JPUTI) {
     const pnx_global *g = &st->globals[PNX_GX(st, x)];
     const uint32_t    kind = OP_B(w);
-    uint8_t           out[32];
+    uint8_t           out[48]; // a comma, then a float takes up to 40
     uint32_t          n = 0;
     if (kind != PNX_JSON_OBJECT_END && kind != PNX_JSON_ARRAY_END && pnx_json_comma(g))
         out[n++] = ',';
@@ -2445,6 +2457,13 @@ PNX_OP(JPUTI) {
     case PNX_JSON_DEC + 10: case PNX_JSON_DEC + 11: case PNX_JSON_DEC + 12: case PNX_JSON_DEC + 13:
     case PNX_JSON_DEC + 14: case PNX_JSON_DEC + 15: case PNX_JSON_DEC + 16: case PNX_JSON_DEC + 17:
     case PNX_JSON_DEC + 18: n += pnx_format_dec(R[OP_A(w)], kind - PNX_JSON_DEC, out + n); break;
+    case PNX_JSON_DEC + PNX_DEC_FLOAT: // JSON has no NaN and no infinity: range (D0113); pack checks before, put_float here
+        if (((uint64_t)R[OP_A(w)] & UINT64_C(0x7ff0000000000000)) == UINT64_C(0x7ff0000000000000)) {
+            st->fail = PINAX_ERR_RANGE;
+            return PNX_R_FAILED;
+        }
+        n += pnx_format_float(R[OP_A(w)], out + n);
+        break;
     case PNX_JSON_BOOLEAN:
         __builtin_memcpy(out + n, R[OP_A(w)] ? "true" : "false", R[OP_A(w)] ? 4 : 5);
         n += R[OP_A(w)] ? 4 : 5;
@@ -2553,7 +2572,7 @@ PNX_OP(CPUTS) {
 PNX_OP(CPUTI) {
     const pnx_global *g = &st->globals[PNX_GX(st, x)];
     const uint64_t    len = pnx_buffer_len(g);
-    uint8_t           out[32];
+    uint8_t           out[48]; // a comma, then a float takes up to 40
     uint32_t          n = 0;
     if (OP_B(w) == 2) {
         out[n++] = '\n';
@@ -2562,6 +2581,8 @@ PNX_OP(CPUTI) {
             out[n++] = ',';
         if (OP_B(w) == 0) {
             n += pnx_format_int(R[OP_A(w)], out + n);
+        } else if (OP_B(w) == 3 + PNX_DEC_FLOAT) { // a float: the shortest text, nan, inf, -inf
+            n += pnx_format_float(R[OP_A(w)], out + n);
         } else if (OP_B(w) >= 3) { // a dec(B - 3)
             n += pnx_format_dec(R[OP_A(w)], OP_B(w) - 3, out + n);
         } else {
@@ -2974,6 +2995,13 @@ PNX_INLINE int64_t pnx_f64_bits(double d) {
 PNX_INLINE bool pnx_f64_is_nan(int64_t bits) {
     return ((uint64_t)bits & ~(UINT64_C(1) << 63)) > UINT64_C(0x7ff0000000000000);
 }
+// The bits of a binary64 as an int64 that orders as D0113 says: -inf, the negatives, -0.0, +0.0, the positives,
+// +inf, then every NaN (all equal, so a stable sort keeps their order). A negative float's other 63 bits are flipped.
+PNX_INLINE int64_t pnx_float_order(int64_t bits) {
+    if (pnx_f64_is_nan(bits))
+        return INT64_MAX;
+    return bits < 0 ? bits ^ INT64_MAX : bits;
+}
 PNX_INLINE int64_t pnx_f64_canonical(double d) {
     const int64_t bits = pnx_f64_bits(d);
     return pnx_f64_is_nan(bits) ? PNX_FLOAT_NAN : bits;
@@ -3010,6 +3038,8 @@ PNX_OP(FLUN) {
     }
     case PNX_FU_IS_NAN: r = pnx_f64_is_nan(a); break;
     case PNX_FU_IS_FINITE: r = ((uint64_t)a & UINT64_C(0x7ff0000000000000)) != UINT64_C(0x7ff0000000000000); break;
+    case PNX_FU_ORDER_HI: r = pnx_float_order(a); break; // a NaN above everything: what maximum compares
+    case PNX_FU_ORDER_LO: r = pnx_f64_is_nan(a) ? INT64_MIN : pnx_float_order(a); break; // below: minimum
     default: return PINAX_ERR_FORMAT;
     }
     R[OP_A(w)] = r;

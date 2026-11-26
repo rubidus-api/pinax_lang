@@ -1,0 +1,18 @@
+rem run
+use io .
+use str .
+use toml .
+use f .
+buffer out 128
+def show path str, doc str or fail do
+  path doc toml.at or_fail to v to k
+  v str.to_float or_else to e args path ": " v " is not read: " e err_text . cat io.println return end to x
+  args path ": " x . cat io.println
+end
+def demo or fail do
+  "pi = 3.1415\nfar = +inf\nbig = 1_000.5\n" to doc
+  "pi" doc show or_fail  "far" doc show or_fail  "big" doc show or_fail
+  "pi" doc 0e0 0e0 f.div str.to_str toml.float out toml.set or_fail    rem a float written back
+  out contents io.print
+end
+demo or_else to e e err_text io.println end

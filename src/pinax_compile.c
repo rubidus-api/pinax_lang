@@ -1887,7 +1887,7 @@ enum {
     BW_ALLOC, BW_FREE, BW_IS_ALIVE, BW_COUNT, BW_ANY, BW_ALL, BW_FIRST, BW_EACH_INDEX, BW_MAP_INTO, BW_FILTER_INTO, BW_MINIMUM, BW_MAXIMUM,
     BW_SPAWN, BW_YIELD, BW_RESUME, BW_IS_DONE, BW_CANCEL, BW_RUN_ALL, BW_TASK_TAG,
     BW_SLICE, BW_CUT, BW_TRY_CUT, BW_TRIM, BW_TRIM_LEFT, BW_TRIM_RIGHT, BW_LINES, BW_SPLIT, BW_FIND_LAST, BW_COMPARE,
-    BW_HEX, BW_BIN, BW_HEX_PAD, BW_ZERO_PAD, BW_PAD_LEFT, BW_PAD_RIGHT, BW_CALL, BW_MARK, BW_RELEASE, BW_REGION_FREE,
+    BW_FIXED, BW_HEX, BW_BIN, BW_HEX_PAD, BW_ZERO_PAD, BW_PAD_LEFT, BW_PAD_RIGHT, BW_CALL, BW_MARK, BW_RELEASE, BW_REGION_FREE,
     BW_SPAN, BW_CHARS, BW_JOIN_INTO, BW_UPPER, BW_LOWER, BW_REPEAT, BW_TO_INT_BASE, BW_IS_UTF8, BW_CHAR_COUNT,
     BW_REPLACE_INTO, BW_APPEND_HEX, BW_CRC32, BW_FNV1A, BW_HASH64, BW_BASE64_ENCODE, BW_BASE64_DECODE,
     BW_HEX_ENCODE, BW_HEX_DECODE, BW_URL_ENCODE, BW_URL_DECODE, BW_TRUNCATE, BW_PTN_IS_MATCH, BW_PTN_MATCH,
@@ -1932,7 +1932,7 @@ static const struct builtin {
     {"lines", BW_LINES, 1},         {"split", BW_SPLIT, 1},        {"find_last", BW_FIND_LAST, 1},
     {"compare", BW_COMPARE, 1},     {"pad_left", BW_PAD_LEFT, 1},  {"pad_right", BW_PAD_RIGHT, 1},
     {"hex", BW_HEX, 2},             {"bin", BW_BIN, 2},            {"hex_pad", BW_HEX_PAD, 2},
-    {"zero_pad", BW_ZERO_PAD, 2},   {"call", BW_CALL, 0},          {"mark", BW_MARK, 0},
+    {"zero_pad", BW_ZERO_PAD, 2},   {"fixed", BW_FIXED, 2},   {"call", BW_CALL, 0},          {"mark", BW_MARK, 0},
     {"release", BW_RELEASE, 0},     {"region_free", BW_REGION_FREE, 0},
     {"span", BW_SPAN, 1},           {"chars", BW_CHARS, 1},        {"join_into", BW_JOIN_INTO, 1},
     {"upper", BW_UPPER, 1},         {"lower", BW_LOWER, 1},        {"repeat", BW_REPEAT, 1},
@@ -4104,6 +4104,7 @@ static bool args_emit(comp *c, uint32_t first) {
         const uint32_t word = type == TY_STR ? PNX_ABC(PNX_ARGPUTS, scratch, slot_of(c, k), 0)
                             : type == TY_BOOL ? PNX_ABC(PNX_ARGPUTI, scratch, slot_of(c, k), 2)
                             : is_dec(type) ? PNX_ABC(PNX_ARGPUTD, scratch, slot_of(c, k), type - TY_DEC)
+                            : type == TY_FLOAT ? PNX_ABC(PNX_ARGPUTI, scratch, slot_of(c, k), 5) // its bits; args.k_float
                                            : PNX_ABC(PNX_ARGPUTI, scratch, slot_of(c, k), 1);
         if (emit(c, word) == NONE)
             return false;
@@ -4141,11 +4142,11 @@ static bool do_args(comp *c) {
     for (uint32_t k = first; k < f->depth; ++k) {
         const tid type = f->stack[k].type;
         if (type == TY_ARGS)
-            return type_error(c, "an args holds no args: its values are int, bool, str and dec N");
-        const bool plain = type == TY_STR || type == TY_BOOL || type == TY_INT || is_dec(type);
+            return type_error(c, "an args holds no args: its values are int, bool, str, dec N and float");
+        const bool plain = type == TY_STR || type == TY_BOOL || type == TY_INT || type == TY_FLOAT || is_dec(type);
         if (joined ? (type != TY_STR && type != TY_BOOL && !is_number(c, type)) : !plain)
             return type_error(c, joined ? "cat joins str, int and bool values"
-                                        : "an args holds int, bool, str and dec N values");
+                                        : "an args holds int, bool, str, dec N and float values");
         if (!settle(c, k))
             return false;
     }
@@ -5727,11 +5728,14 @@ static bool do_extreme(comp *c, bool largest) {
     if (!stem_begin(c, &kind, &cur, &lim, &src, &hidden, &element_type))
         return false;
     adapted ad;
-    if ((element_type != TY_INT && !is_dec(element_type)) || stem_takes(kind))
-        return type_error(c, "this procedure takes a rail of int or dec(N) values");
-    if (!push_slot(c, element_type) || !push_slot(c, TY_INT))
+    if ((element_type != TY_INT && element_type != TY_FLOAT && !is_dec(element_type)) || stem_takes(kind))
+        return type_error(c, "this procedure takes a rail of int, dec(N) or float values");
+    // a float is compared by its order key (D0113): -0.0 below +0.0, and a NaN beats every value, so it is the result
+    const bool fl = element_type == TY_FLOAT;
+    if (!push_slot(c, element_type) || !push_slot(c, TY_INT) || (fl && (!push_slot(c, TY_INT) || !push_slot(c, TY_INT))))
         return false;
-    const uint32_t best = slot_of(c, f->depth - 2), flag = slot_of(c, f->depth - 1);
+    const uint32_t best = slot_of(c, f->depth - 2 - 2 * fl), flag = slot_of(c, f->depth - 1 - 2 * fl);
+    const uint32_t best_key = fl ? slot_of(c, f->depth - 2) : 0, key = fl ? slot_of(c, f->depth - 1) : 0;
     uint32_t       exits = NONE, skipped = NONE;
     abset          ab;
     const bool     blocks = c->ab_n > 0;
@@ -5741,8 +5745,8 @@ static bool do_extreme(comp *c, bool largest) {
         f->stack[f->depth - 1].hidden = true;
     }
     uint32_t element = blocks ? slot_of(c, f->depth - 1) : top_slot(c, BANK_I, 1);
-    if (emit(c, PNX_ABX(PNX_LOADI, flag, 0)) == NONE || emit(c, PNX_ABX(PNX_LOADI, best, 0)) == NONE || !settle_all(c) ||
-        !ab_init(c, &ab))
+    if (emit(c, PNX_ABX(PNX_LOADI, flag, 0)) == NONE || emit(c, PNX_ABX(PNX_LOADI, best, 0)) == NONE ||
+        (fl && emit(c, PNX_ABX(PNX_LOADI, best_key, 0)) == NONE) || !settle_all(c) || !ab_init(c, &ab))
         return false;
     const uint32_t head = f->code.n;
     if (emit(c, PNX_ABC(PNX_JLT, cur, lim, 1)) == NONE || !jump_later(c, &exits) || !adapted_cursor(c, cur, &ad))
@@ -5753,16 +5757,23 @@ static bool do_extreme(comp *c, bool largest) {
              (blocks && !ab_run(c, &ab, element, element_type, &skipped, &exits)))
         return false;
     // the first element is taken as it is; a later one only when it beats the best so far
-    if (emit(c, PNX_ABC(PNX_JEQI, flag, 0, 1)) == NONE ||
-        emit(c, largest ? PNX_ABC(PNX_JLE, element, best, 1) : PNX_ABC(PNX_JLE, best, element, 1)) == NONE ||
-        emit(c, PNX_ABC(PNX_MOVI, best, element, 0)) == NONE || emit(c, PNX_ABX(PNX_LOADI, flag, 1)) == NONE)
+    if (fl) { // the keys are compared, and the float and its key kept together
+        if (emit(c, PNX_ABC(PNX_FLUN, key, element, 0)) == NONE || emit(c, largest ? PNX_FU_ORDER_HI : PNX_FU_ORDER_LO) == NONE ||
+            emit(c, PNX_ABC(PNX_JEQI, flag, 0, 1)) == NONE ||
+            emit(c, largest ? PNX_ABC(PNX_JLE, key, best_key, 2) : PNX_ABC(PNX_JLE, best_key, key, 2)) == NONE ||
+            emit(c, PNX_ABC(PNX_MOVI, best, element, 0)) == NONE || emit(c, PNX_ABC(PNX_MOVI, best_key, key, 0)) == NONE ||
+            emit(c, PNX_ABX(PNX_LOADI, flag, 1)) == NONE)
+            return false;
+    } else if (emit(c, PNX_ABC(PNX_JEQI, flag, 0, 1)) == NONE ||
+               emit(c, largest ? PNX_ABC(PNX_JLE, element, best, 1) : PNX_ABC(PNX_JLE, best, element, 1)) == NONE ||
+               emit(c, PNX_ABC(PNX_MOVI, best, element, 0)) == NONE || emit(c, PNX_ABX(PNX_LOADI, flag, 1)) == NONE)
         return false;
     land(c, &skipped);
     c->loop_stride = ad.stride;
     if (!loop_back(c, head, cur, 1))
         return false;
     land(c, &exits);
-    f->depth -= (uint32_t)hidden + 2 + blocks;
+    f->depth -= (uint32_t)hidden + 2 + 2 * fl + blocks;
     return found_or_fail(c, element_type, best, flag);
 }
 
@@ -6064,6 +6075,10 @@ static bool text_value(comp *c, const textregs *x, const field *fd, uint32_t whe
         if ((json && (emit(c, PNX_ABC(PNX_JEQI, x->t, PNX_JSON_NUMBER, 1)) == NONE || !jump_later(c, bad))) ||
             emit(c, PNX_ABC(PNX_STODEC, x->aux, x->val, fd->type - TY_DEC)) == NONE || !jump_later(c, bad))
             return false;
+    } else if (fd->type == TY_FLOAT) { // any number, rounded to the nearest double; CSV also nan, inf, -inf (D0113)
+        if ((json && (emit(c, PNX_ABC(PNX_JEQI, x->t, PNX_JSON_NUMBER, 1)) == NONE || !jump_later(c, bad))) ||
+            emit(c, PNX_ABC(PNX_STODEC, x->aux, x->val, PNX_DEC_FLOAT)) == NONE || !jump_later(c, bad))
+            return false;
     } else { // a number: an int that fits the field
         if ((json && (emit(c, PNX_ABC(PNX_JEQI, x->t, PNX_JSON_NUMBER, 1)) == NONE || !jump_later(c, bad))) ||
             emit(c, PNX_ABC(PNX_TOINT, x->aux, x->val, 0)) == NONE || !jump_later(c, bad) ||
@@ -6111,7 +6126,7 @@ static bool text_record(comp *c, bool json, bool unpack) {
     const uint32_t ib = top_slot(c, BANK_I, 6) + 1, sb = top_slot(c, BANK_S, 4);
     x.t = ib, x.aux = ib + 1, x.ok = ib + 2, x.size = ib + 3;
     x.v = sb + 1, x.val = sb + 2, x.key = sb + 3;
-    uint32_t bad = NONE, over = NONE;
+    uint32_t bad = NONE, over = NONE, nonfinite = NONE;
     if (emit(c, PNX_ABX(PNX_LOADI, x.ok, 1)) == NONE || emit(c, PNX_ABX(PNX_LOADI, x.t, 0)) == NONE)
         return false;
     if (!unpack) {
@@ -6128,9 +6143,14 @@ static bool text_record(comp *c, bool json, bool unpack) {
             if (fd->is_str ? emit(c, PNX_ABC(PNX_FGETS, x.v, x.rr, 0)) == NONE || emit(c, where) == NONE ||
                                  emit_g(c, json ? PNX_JPUTS : PNX_CPUTS, x.v, json ? PNX_JSON_STRING : 0, gi) == NONE
                            : emit(c, PNX_ABC(PNX_FGET, x.t, x.rr, 0)) == NONE || emit(c, where) == NONE ||
+                                 // JSON has no NaN and no infinity: such a value fails with range (D0113)
+                                 (json && fd->type == TY_FLOAT &&
+                                  (emit(c, PNX_ABC(PNX_FLUN, x.aux, x.t, 0)) == NONE || emit(c, PNX_FU_IS_FINITE) == NONE ||
+                                   emit(c, PNX_ABC(PNX_JNEI, x.aux, 0, 1)) == NONE || !jump_later(c, &nonfinite))) ||
                                  emit_g(c, json ? PNX_JPUTI : PNX_CPUTI, x.t,
                                         fd->type == TY_BOOL ? (json ? PNX_JSON_BOOLEAN : 1)
                                         : is_dec(fd->type) ? (json ? PNX_JSON_DEC : 3) + (fd->type - TY_DEC)
+                                        : fd->type == TY_FLOAT ? (json ? PNX_JSON_DEC : 3) + PNX_DEC_FLOAT
                                                            : (json ? PNX_JSON_NUMBER : 0), gi) == NONE)
                 return false;
             if (!jump_later(c, &bad))
@@ -6139,13 +6159,22 @@ static bool text_record(comp *c, bool json, bool unpack) {
         if (emit_g(c, json ? PNX_JPUTI : PNX_CPUTI, x.t, json ? PNX_JSON_OBJECT_END : 2, gi) == NONE ||
             !jump_later(c, &bad) || !jump_later(c, &over))
             return false;
+        uint32_t decided = NONE;
+        if (nonfinite != NONE) { // what was appended is cut back, and the failure is range
+            land(c, &nonfinite);
+            if (emit(c, PNX_ABX(PNX_BTRUNC, start, gi)) == NONE || emit(c, PNX_ABX(PNX_LOADI, x.ok, 0)) == NONE ||
+                emit(c, PNX_ABX(PNX_SETFAIL, 0, PINAX_ERR_RANGE)) == NONE || !jump_later(c, &decided))
+                return false;
+        }
         land(c, &bad);
         if (emit(c, PNX_ABX(PNX_BTRUNC, start, gi)) == NONE || emit(c, PNX_ABX(PNX_LOADI, x.ok, 0)) == NONE)
             return false;
         land(c, &over);
         f->def_at = NONE;
-        return emit(c, PNX_ABX(PNX_SETFAIL, 0, PINAX_ERR_FULL)) != NONE && emit(c, PNX_ABC(PNX_JNEI, x.ok, 0, 1)) != NONE &&
-               guard_op(c, TY_NONE);
+        if (emit(c, PNX_ABX(PNX_SETFAIL, 0, PINAX_ERR_FULL)) == NONE)
+            return false;
+        land(c, &decided);
+        return emit(c, PNX_ABC(PNX_JNEI, x.ok, 0, 1)) != NONE && guard_op(c, TY_NONE);
     }
     for (int pass = 0; pass < 2; ++pass) { // first everything is checked, then read again and stored
         if (emit(c, PNX_ABC(PNX_MOVS, x.v, x.rs, 0)) == NONE)
@@ -6259,6 +6288,8 @@ static bool json_word(comp *c, name n) {
             return type_error(c, "put_dec takes a dec(N) and a buffer: d buf json.put_dec");
         return text_put(c, PNX_JPUTI, PNX_JSON_DEC + (t - TY_DEC), t);
     }
+    if (name_is(n, "put_float")) // x buf json.put_float : the shortest text; a NaN or an infinity fails with range (D0113)
+        return text_put(c, PNX_JPUTI, PNX_JSON_DEC + PNX_DEC_FLOAT, TY_FLOAT);
     if (name_is(n, "put_key") || name_is(n, "put_str"))
         return text_put(c, PNX_JPUTS, name_is(n, "put_key") ? PNX_JSON_KEY : PNX_JSON_STRING, TY_STR);
     if (name_is(n, "pack") || name_is(n, "unpack"))
@@ -6304,6 +6335,8 @@ static bool csv_word(comp *c, name n) {
             return type_error(c, "put_dec takes a dec(N) and a buffer: d buf csv.put_dec");
         return text_put(c, PNX_CPUTI, 3 + (t - TY_DEC), t);
     }
+    if (name_is(n, "put_float")) // x buf csv.put_float : the shortest text, nan, inf, -inf
+        return text_put(c, PNX_CPUTI, 3 + PNX_DEC_FLOAT, TY_FLOAT);
     if (name_is(n, "end_line"))
         return text_put(c, PNX_CPUTI, 2, TY_NONE);
     if (name_is(n, "pack") || name_is(n, "unpack"))
@@ -6331,7 +6364,7 @@ static bool sheet_const(name n, int64_t *value) {
         const char *name;
         int64_t     value;
     } consts[] = {{"eq", 0},      {"ne", 1},     {"lt", 2},     {"le", 3},      {"gt", 4},       {"ge", 5},
-                  {"k_empty", 0}, {"k_int", 1},  {"k_bool", 2}, {"k_dec", 3},   {"k_str", 4}, {"k_date", 5}};
+                  {"k_empty", 0}, {"k_int", 1},  {"k_bool", 2}, {"k_dec", 3},   {"k_str", 4}, {"k_date", 5}, {"k_float", 6}};
     for (size_t k = 0; k < sizeof consts / sizeof consts[0]; ++k) {
         if (name_is(n, consts[k].name)) {
             *value = consts[k].value;
@@ -6375,10 +6408,11 @@ static bool sheet_word(comp *c, name n) {
         const entry *e = &f->stack[f->depth - k_in + k];
         const char   t = sw->in[k];
         const bool   ok = t == 'i' ? e->type == TY_INT : t == 'b' ? e->type == TY_BOOL : t == 's' ? e->type == TY_STR
+                          : t == 'f' ? e->type == TY_FLOAT
                           : t == 'd' ? is_dec(e->type) : (e->type == TY_INT && e->kind == E_CONST && e->value >= 0 && e->value <= 18);
         if (!ok)
             return type_error(c, t == 'n' ? "the digits after the point are a constant 0 to 18: row column 2 grid sheet.dec"
-                                          : "this procedure of sheet takes int for row, column and number, str for text, bool for put_bool, dec(N) for put_dec");
+                                          : "this procedure of sheet takes int for row, column and number, str for text, bool for put_bool, dec(N) for put_dec, float for put_float");
         if (t == 'd') {
             scale = e->type - TY_DEC;
             have_scale = true;
@@ -6427,7 +6461,7 @@ static bool sheet_word(comp *c, name n) {
     f->def_at = NONE;
     (void)have_scale;
     const char o = sw->out[0];
-    const tid  out = o == 'i' ? TY_INT : o == 'b' ? TY_BOOL : o == 's' ? TY_STR : o == 'D' ? (tid)(TY_DEC + scale) : TY_NONE;
+    const tid  out = o == 'i' ? TY_INT : o == 'b' ? TY_BOOL : o == 's' ? TY_STR : o == 'f' ? TY_FLOAT : o == 'D' ? (tid)(TY_DEC + scale) : TY_NONE;
     if (fails) {
         sig s = {0};
         if (out != TY_NONE) {
@@ -6455,7 +6489,7 @@ static const pnx_txword *txw_find(uint8_t module, name n) {
 static bool txw_const(uint8_t module, name n, int64_t *value) {
     static const char *const toml[] = {"table", "tables", "string", "int", "float", "bool", "datetime", "array", "inline"};
     static const char *const md[] = {"heading", "paragraph", "code", "quote", "list", "rule", "table"};
-    static const char *const args[] = {"k_int", "k_bool", "k_str", "k_dec"};
+    static const char *const args[] = {"k_int", "k_bool", "k_str", "k_dec", "k_float"};
     const char *const *names = module == 11 ? toml : module == 12 ? md : module == 13 ? args : NULL;
     const size_t       count = module == 11 ? sizeof toml / sizeof toml[0] : module == 12 ? sizeof md / sizeof md[0]
                                : module == 13 ? sizeof args / sizeof args[0] : 0;
@@ -6536,7 +6570,7 @@ static bool txw_word(comp *c, uint8_t module, name n) {
     f->def_at = NONE;
     sig out = {0};
     for (const char *p = tw->out; *p; ++p)
-        out.out[out.n_out++] = *p == 's' ? TY_STR : *p == 'b' ? TY_BOOL : dec_type != TY_NONE ? dec_type : TY_INT;
+        out.out[out.n_out++] = *p == 's' ? TY_STR : *p == 'b' ? TY_BOOL : *p == 'f' ? TY_FLOAT : dec_type != TY_NONE ? dec_type : TY_INT;
     if (fails) {
         out.fails = true;
         const uint32_t zero[2] = {0, 0};
@@ -6801,8 +6835,8 @@ static bool do_sum(comp *c) {
     if (!stem_begin(c, &kind, &cur, &lim, &src, &hidden, &element_type))
         return false;
     adapted ad;
-    if (element_type != TY_INT && !is_dec(element_type))
-        return type_error(c, "sum adds int or dec(N) values");
+    if (element_type != TY_INT && element_type != TY_FLOAT && !is_dec(element_type))
+        return type_error(c, "sum adds int, dec(N) or float values");
     if (!push_slot(c, element_type)) // a dec(N) sums to a dec(N)
         return false;
     const uint32_t acc = slot_of(c, f->depth - 1);
@@ -6824,7 +6858,9 @@ static bool do_sum(comp *c) {
         if (emit(c, PNX_ABC(PNX_ADD, acc, acc, cur)) == NONE)
             return false;
     } else if (!stem_element(c, kind, element, ad.ecur, src) || (blocks && !ab_run(c, &ab, element, element_type, &skipped, &exits)) ||
-               emit(c, PNX_ABC(PNX_ADD, acc, acc, element)) == NONE) {
+               (element_type == TY_FLOAT // from the first to the last, each addition rounded once (D0113); 0 is +0.0
+                    ? emit(c, PNX_ABC(PNX_FLOP, acc, acc, element)) == NONE || emit(c, PNX_FL_ADD) == NONE
+                    : emit(c, PNX_ABC(PNX_ADD, acc, acc, element)) == NONE)) {
         return false;
     }
     land(c, &skipped);
@@ -7072,8 +7108,10 @@ static bool builtin(comp *c, const struct builtin *w) {
         const tid cell = num_base(c, g->type);
         if (g->strcap)
             flags |= PNX_SORT_STR;
+        else if (cell == TY_FLOAT) // the total order of D0113: -0.0 below +0.0, every NaN last
+            flags |= PNX_SORT_FLOAT;
         else if (cell != TY_INT && cell != TY_BOOL && !is_narrow(cell))
-            return type_error(c, "sort orders cells of int, a narrow integer, dec(N), bool or str(N)");
+            return type_error(c, "sort orders cells of int, a narrow integer, dec(N), float, bool or str(N)");
         else if (cell == (tid)(TY_NARROW + PNX_W_64))
             flags |= PNX_SORT_U64;
         sort_seen(c, g, gi);
@@ -7112,8 +7150,10 @@ static bool builtin(comp *c, const struct builtin *w) {
         const tid key = num_base(c, fd->type);
         if (fd->is_str)
             flags |= PNX_SORT_STR;
+        else if (key == TY_FLOAT) // as sort orders floats (D0113)
+            flags |= PNX_SORT_FLOAT;
         else if (key != TY_INT && key != TY_BOOL && !is_narrow(key))
-            return type_error(c, "sort_by orders by a field of int, a narrow integer, dec(N), bool or str(N)");
+            return type_error(c, "sort_by orders by a field of int, a narrow integer, dec(N), float, bool or str(N)");
         else if (key == (tid)(TY_NARROW + PNX_W_64))
             flags |= PNX_SORT_U64;
         if (is_row(g->type))
@@ -7372,6 +7412,25 @@ static bool builtin(comp *c, const struct builtin *w) {
         f->depth -= 2;
         const uint32_t dst = top_slot(c, BANK_I, 1);
         return emit_def(c, PNX_ABC(PNX_SCMP, dst, ra, rb), BANK_I) != NONE && push_slot(c, TY_INT) && advance(c);
+    }
+    case BW_FIXED: { // x n fmt.fixed : n decimals, n a constant 0 to 18 (D0113)
+        if (!need(c, 2))
+            return false;
+        const entry *digits = &f->stack[f->depth - 1];
+        if (f->stack[f->depth - 2].type != TY_FLOAT || digits->type != TY_INT)
+            return type_error(c, "fmt.fixed takes a float and the digits after the point: x 2 fmt.fixed");
+        if (digits->kind != E_CONST || digits->value < 0 || digits->value > 18)
+            return type_error(c, "the digits of fmt.fixed are a constant 0 to 18: x 2 fmt.fixed");
+        const uint32_t n = (uint32_t)digits->value;
+        --f->depth;
+        if (!reg_of(c, f->depth - 1, &ra))
+            return false;
+        --f->depth;
+        const uint32_t scratch = top_slot(c, BANK_S, 2) + 1;
+        if (emit(c, PNX_ABC(PNX_RMARK, scratch, 0, 0)) == NONE || emit(c, PNX_ABC(PNX_RCATD, scratch, ra, PNX_DEC_FIXED + n)) == NONE ||
+            !push_slot(c, TY_STR))
+            return false;
+        return move_slot(c, TY_STR, slot_of(c, f->depth - 1), scratch) && advance(c);
     }
     case BW_HEX:
     case BW_BIN:
@@ -8128,9 +8187,9 @@ static bool module_has(comp *c, name real, name n) {
     const uint8_t standard = standard_module(real);
     static const char *const json_names[] = {"object", "object_end", "array", "array_end", "key", "string", "number",
                                              "boolean", "null", "begin_object", "end_object", "begin_array", "end_array",
-                                             "put_null", "put_int", "put_bool", "put_dec", "put_key", "put_str", "pack",
+                                             "put_null", "put_int", "put_bool", "put_dec", "put_float", "put_key", "put_str", "pack",
                                              "unpack", "next", "skip"};
-    static const char *const csv_names[] = {"end_line", "fields", "next", "pack", "put", "put_bool", "put_dec", "put_int",
+    static const char *const csv_names[] = {"end_line", "fields", "next", "pack", "put", "put_bool", "put_dec", "put_float", "put_int",
                                             "skip", "unpack"};
     static const char *const classes[] = {"digit", "alpha", "alnum", "space", "upper_case", "lower_case", "hex_digit", "punct"};
     const char *const *names = standard == 8 ? json_names : standard == 9 ? csv_names : standard == 1 ? classes : NULL;
@@ -9789,6 +9848,10 @@ static bool declare_record(comp *c) {
             fd.type = TY_BOOL;
             fd.extra = PNX_W_U8;
             bytes = 1;
+        } else if (name_is(tn, "float")) { // the 64 bits of a binary64, read and written as an int's (D0112)
+            fd.type = TY_FLOAT;
+            fd.extra = PNX_W_64;
+            bytes = 8;
         } else if (name_is(tn, "dec")) { // dec(N): the scaled int, 64 bits
             if (!dec_scale(c, &fd.type))
                 return false;
@@ -9972,6 +10035,10 @@ static bool item_value(comp *c, tid *type, int64_t *value) {
     case PNX_T_CHAR:
         *type = c->tok.kind == PNX_T_CHAR ? char_type(c, &c->tok) : TY_INT;
         *value = c->tok.integer;
+        return true;
+    case PNX_T_FLOAT: // the bits of the double (D0112)
+        *type = TY_FLOAT;
+        __builtin_memcpy(value, &c->tok.real, 8);
         return true;
     case PNX_T_STRING:
     case PNX_T_RAW:

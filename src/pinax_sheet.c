@@ -11,7 +11,8 @@
 // downward, so sheet data and indexes share the free middle and nothing is reserved in advance.
 #include "pinax_internal.h"
 
-#define MAGIC 0x32544853u // "SHT2"
+#define MAGIC 0x33544853u // "SHT3": since 0.36.1 a cell may be a float (T_WFLOAT); an older processor refuses such a book
+#define MAGIC_OLD 0x32544853u // "SHT2": a book of 0.36.0 and before, which opens as it did
 #define HDR 256u
 #define PAGE 512u
 #define LEAF_MAX 41u  // entries of a leaf: 16 byte head, 41 cells of 8, 41 rows of 4
@@ -39,7 +40,8 @@ typedef struct { uint64_t value; uint32_t count, next; } wslot;                 
 typedef struct { uint32_t off, len, count, next, hash; } tslot;                  // 20 bytes
 
 // cell tags (low 4 bits)
-enum { T_EMPTY, T_INT, T_BOOL, T_DEC, T_STR, T_WINT, T_WDEC, T_DATE }; // T_DATE: Unix seconds, kept in the cell like T_INT
+// T_DATE: Unix seconds, kept in the cell like T_INT; T_WFLOAT: the 64 bits of a double, always in the wide pool (D0114)
+enum { T_EMPTY, T_INT, T_BOOL, T_DEC, T_STR, T_WINT, T_WDEC, T_DATE, T_WFLOAT };
 
 static inline uint64_t mix(uint64_t x) {
     x ^= x >> 33; x *= 0xff51afd7ed558ccdull; x ^= x >> 33; x *= 0xc4ceb9fe1a85ec53ull; x ^= x >> 33;
@@ -60,7 +62,7 @@ static bool ok(const uint8_t *b, uint32_t cap) {
     if (cap < HDR || ((uintptr_t)b & 7u))
         return false;
     __builtin_memcpy(&h, b, sizeof h);
-    return h.magic == MAGIC && h.cap == cap && h.nmax > 0 && h.nmax <= 256 && h.nused <= h.nmax && h.arena_top <= h.arena_size &&
+    return (h.magic == MAGIC || h.magic == MAGIC_OLD) && h.cap == cap && h.nmax > 0 && h.nmax <= 256 && h.nused <= h.nmax && h.arena_top <= h.arena_size &&
            (h.cur == NO_SHEET || h.cur < h.nused) && h.data_lo <= h.data_top && h.data_top <= h.ptop && h.ptop <= cap;
 }
 static sht *SHT(uint8_t *b, uint32_t k) { return (sht *)(void *)(b + H(b)->off_sheets) + k; }
@@ -272,7 +274,7 @@ static void text_give(uint8_t *b, uint32_t s) {
 static void release(uint8_t *b, uint64_t c) {
     switch (c & 15u) {
     case T_STR: text_give(b, (uint32_t)(c >> 4)); break;
-    case T_WINT: wide_give(b, (uint32_t)(c >> 4)); break;
+    case T_WINT: case T_WFLOAT: wide_give(b, (uint32_t)(c >> 4)); break;
     case T_WDEC: wide_give(b, (uint32_t)(c >> 9)); break;
     default: break;
     }
@@ -281,7 +283,7 @@ static void release(uint8_t *b, uint64_t c) {
 static void retain(uint8_t *b, uint64_t c) {
     switch (c & 15u) {
     case T_STR: ++text_at(b, (uint32_t)(c >> 4))->count; break;
-    case T_WINT: ++wide_at(b, (uint32_t)(c >> 4))->count; break;
+    case T_WINT: case T_WFLOAT: ++wide_at(b, (uint32_t)(c >> 4))->count; break;
     case T_WDEC: ++wide_at(b, (uint32_t)(c >> 9))->count; break;
     default: break;
     }
@@ -1012,6 +1014,29 @@ pnx_sheet_result pnx_sheet_put_dec(uint8_t *b, uint32_t cap, int64_t v, uint32_t
         return e;
     return put_raw(b, cap, r, c, (uint64_t)s << 9 | (uint64_t)scale << 4 | T_WDEC);
 }
+// A float (D0114): its bits in the wide pool. A NaN or an infinity is refused (D0113 (3)): a file of a sheet holds neither.
+pnx_sheet_result pnx_sheet_put_float(uint8_t *b, uint32_t cap, int64_t bits, int64_t r, int64_t c) {
+    uint64_t *cell;
+    pnx_sheet_result e = at(b, cap, r, c, &cell);
+    if (e)
+        return e;
+    if (((uint64_t)bits & UINT64_C(0x7ff0000000000000)) == UINT64_C(0x7ff0000000000000))
+        return PNX_SH_VALUE;
+    uint32_t s;
+    if ((e = wide_take(b, (uint64_t)bits, &s)))
+        return e;
+    return put_raw(b, cap, r, c, (uint64_t)s << 4 | T_WFLOAT);
+}
+pnx_sheet_result pnx_sheet_get_float(uint8_t *b, uint32_t cap, int64_t r, int64_t c, int64_t *bits) {
+    uint64_t *cell;
+    pnx_sheet_result e = at(b, cap, r, c, &cell);
+    if (e)
+        return e;
+    if ((*cell & 15u) != T_WFLOAT)
+        return PNX_SH_KIND;
+    *bits = wide_value(b, (uint32_t)(*cell >> 4));
+    return PNX_SH_OK;
+}
 pnx_sheet_result pnx_sheet_put_str(uint8_t *b, uint32_t cap, const uint8_t *s, uint32_t n, int64_t r, int64_t c) {
     uint64_t *cell;
     pnx_sheet_result e = at(b, cap, r, c, &cell);
@@ -1066,6 +1091,7 @@ static uint32_t kind_of(uint64_t c) {
     case T_BOOL: return 2;
     case T_DEC: case T_WDEC: return 3;
     case T_DATE: return 5;
+    case T_WFLOAT: return 6;
     default: return 4;
     }
 }

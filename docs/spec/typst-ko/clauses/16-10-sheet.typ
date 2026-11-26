@@ -5,7 +5,7 @@
 #para("1")[모듈 `sheet` 는 프로그램이 선언한 버퍼(8.7) 안에 줄과 열의 표, 곧 #term("시트", en: "sheets")를 여럿 둔다. 버퍼 하나가 #term("작업책", en: "book")
 하나다. 자료형이 아니라 라이브러리이고, 어댑터처럼 돌아간다: 프로그램이 작업책을 열고, 그 안에 시트를 만들고, 이름이나
 번호로 하나를 고르면, 다른 모든 프로시저는 그 #term("현재 시트", en: "current sheet")에 닿는다. `sheet` 의 모든 프로시저는 모음 매개변수(9.9)처럼 버퍼를 맨
-끝에 받는다. 칸에는 아무것도 없거나, 프로그램이 넣은 `int`, `bool`, `dec N`, 날짜(Unix 초, UTC), `str` 이 들어 있다. 칸의 종류는 모듈 안에서만
+끝에 받는다. 칸에는 아무것도 없거나, 프로그램이 넣은 `int`, `bool`, `dec N`, `float`, 날짜(Unix 초, UTC), `str` 이 들어 있다. 칸의 종류는 모듈 안에서만
 알고, 값은 그 형의 프로시저(`int`, `str` ...)로만 칸에서 나온다. 그래서 모든 프로시저의 서명은 정해져 있고, 스택에 형이 없는 값이
 오르는 일이 없다. 칸과 풀과 색인이 버퍼 안에 어떻게 놓이는지는 인터페이스가 아니다.]
 
@@ -53,14 +53,16 @@
   [`put_int` `put_bool`], [`(v int, row int, col int, b buffer or fail)` `(v bool, row int, col int, b buffer or fail)`], [칸에 복사해 넣는다. 풀이 가득이면 `err.full`],
   [`put_date`], [`(secs int, row int, col int, b buffer or fail)`], [날짜, 곧 Unix 초 `secs`(UTC)를 칸에 넣는다. 60비트에 안 드는 값(1~9999년의 어느 날짜든 들어간다)은 결함 `range`],
   [`put_dec`], [`(v dec N, row int, col int, b buffer or fail)`], [자릿수와 함께 넣는다],
+  [`put_float`], [`(x float, row int, col int, b buffer or fail)`], [`float` 를 넣는다. NaN 과 무한대는 시트 파일에 담기지 않으므로 `err.range`(칸은 그대로)],
   [`put_str`], [`(s str, row int, col int, b buffer or fail)`], [글을 복사해 넣는다. 이 표 안을 보는 view 를 줘도 된다],
   [`clear_cell`], [`(row int, col int, b buffer)`], [칸을 비운다],
   [`copy_cell`], [`(row1 int, col1 int, row2 int, col2 int, b buffer)`], [칸을 다른 칸에 복사한다. 값은 나눠 쥔다],
   [`int` `bool`], [`(row int, col int, b buffer gives int or fail)` `(... gives bool or fail)`], [값. 다른 종류의 칸이면 `err.format`(날짜도 그렇다: 날짜는 `date` 로 읽는다)],
   [`date`], [`(row int, col int, b buffer gives int or fail)`], [날짜 칸의 Unix 초. 다른 종류의 칸이면 `err.format`],
   [`dec`], [`(row int, col int, N int, b buffer gives dec N or fail)`], [자릿수 `N`(0에서 18의 상수)의 decimal. 종류나 자릿수가 다르면 `err.format`],
+  [`float`], [`(row int, col int, b buffer gives float or fail)`], [`float` 칸의 값. 다른 종류면 `err.format`],
   [`str`], [`(row int, col int, b buffer gives str or fail)`], [표 안의 글을 보는 view. 그 표에 다음에 쓸 때까지 유효. 다른 종류면 `err.format`],
-  [`kind` `is_empty`], [`(row int, col int, b buffer gives int)` `(... gives bool)`], [종류(`sheet.k_empty` 0, `k_int` 1, `k_bool` 2, `k_dec` 3, `k_str` 4, `k_date` 5). 비었는가],
+  [`kind` `is_empty`], [`(row int, col int, b buffer gives int)` `(... gives bool)`], [종류(`sheet.k_empty` 0, `k_int` 1, `k_bool` 2, `k_dec` 3, `k_str` 4, `k_date` 5, `k_float` 6). 비었는가],
 )]
 
 === 찾기와 고르기
@@ -85,7 +87,7 @@
   [`select_all`], [`(b buffer)`], [모든 줄을 고른다],
   [`sel_len`], [`(b buffer gives int)`], [고른 줄의 수],
   [`sel_row`], [`(k int, b buffer gives int)`], [`k` 번째로 고른 줄의 번호. 범위 밖이면 결함 `range`],
-  [`order_by` `order_by_desc`], [`(col int, b buffer or fail)`], [고른 줄을 `col` 열의 순서로, 작은(큰) 것부터 안정적으로 놓는다. 수(날짜는 그 초), 글, 나머지 차례. 수를 놓을 자리는 버퍼의 빈 끝에서 가져온다(`err.full`)],
+  [`order_by` `order_by_desc`], [`(col int, b buffer or fail)`], [고른 줄을 `col` 열의 순서로, 작은(큰) 것부터 안정적으로 놓는다. 수(`int` 와 날짜, 날짜는 그 초), 글, 나머지(`bool` `dec` `float` 빈 칸) 차례. 수를 놓을 자리는 버퍼의 빈 끝에서 가져온다(`err.full`)],
 )]
 
 #para("8")[합계는 int 칸과 날짜 칸만 본다(날짜는 그 초로 센다). `sum_*` 는 합이 넘치면 결함 `overflow`, `min_*` 와 `max_*` 는 수가 없으면 `err.not_found` 로
@@ -123,8 +125,8 @@
   [*프로시저*], [*서명*], [*뜻*],
   [`load_csv`], [`(mode int, f buffer, b buffer gives n int or fail)`], [`f` 의 글을 읽는다. 줄은 LF나 CRLF로 끝나고 필드는 쉼표로 나뉘며, 따옴표 필드는 쉼표·줄바꿈·겹따옴표를 담을 수 있다(그 자리에서 풀어 쓴다). 빈 줄과 UTF-8 BOM은 건너뛴다. mode 0: 정규형 정수(`-?(0|[1-9][0-9]*)`, int에 들어가는 것)는 `int`, 소수점 뒤 1~18자리인 정규형 수(들어가는 것)는 그 자릿수의 `dec`(`1.50` 은 `dec 2`), 빈 필드는 빈 칸, 나머지는 글(`007`, `-0` 도). mode 2: mode 0과 같고, 실제로 있는 날짜인 필드(`YYYY-MM-DD`, 또는 `T`나 공백과 `hh:mm:ss`가 붙고 `Z`가 올 수도 있다)는 날짜 칸이 된다(UTC, 날짜만 있으면 자정). mode 1: 모두 글],
   [`load_xlsx`], [`(mode int, n int, f buffer, b buffer gives rows int or fail)`], [`f` 의 xlsx에서 `n` 번 시트(0부터, 통합 문서 순서, 없으면 `err.not_found`)를 읽는다. 숫자는 CSV 규칙을 따른다(소수 18자리를 넘는 자리는 반올림, 지수는 적용, 들어가지 않으면 글). 공유·인라인·수식 결과 문자열은 글(서식 있는 글은 이어 붙이고 발음 표기는 버린다), `t="b"` 는 `bool`, 오류값(`#N/A`)은 글, 수식은 저장된 결과를 준다. 숫자 서식이 날짜나 시간인 칸(내장 14~22, 27~36, 45~47, 50~58, 71~81, 또는 따옴표·대괄호 밖에 `y`, `d`, `h`, `s`, `m` 이 있는 사용자 서식, `[h]`, `[mm]` 포함)은 mode 0에서 Unix 초(UTC, 파일의 1900/1904 날짜 체계, 시각만 있는 값은 자정부터)의 `int`, mode 1에서는 일련번호 그대로의 `dec`, mode 2에서는 그 초를 가진 날짜 칸(다른 칸은 mode 0과 같다). 파일이 비운 줄과 열은 빈 칸],
-  [`save_csv`], [`(dst buffer, b buffer gives n int or fail)`], [`dst` 의 내용을 현재 시트의 CSV로 바꾼다(쓴 마지막 줄과 열까지, 쉼표·따옴표·줄바꿈이 든 글은 따옴표로 감싼다, `dec` 는 자릿수대로, `bool` 은 `true`/`false`, 날짜는 `YYYY-MM-DD`이고 자정이 아니면 `Thh:mm:ss`가 붙는다. 0~9999년 밖이면 초로 쓴다). 쓴 바이트 수를 준다. `dst` 가 작으면 `err.full`(그때 `dst` 는 비어 있다)],
-  [`save_xlsx`], [`(dst buffer, b buffer gives n int or fail)`], [`dst` 의 내용을 현재 시트의 xlsx로 바꾼다(시트 하나, 이름은 시트 이름대로 31자까지, `[]:*?/\` 는 뺀다. 글은 인라인 문자열, 수·`dec`·`bool` 은 그대로이고, 날짜는 엑셀 날짜로, 곧 1900 체계의 일련번호에 서식 `yyyy-mm-dd hh:mm:ss`를 붙여 쓴다. 날짜가 있는 시트에만 스타일 부분을 쓰며, mode 2로 읽으면 같은 초가 돌아온다. 1900-03-01 이전이나 9999-12-31 이후는 서식이 말할 수 없으니 초를 그냥 수로 쓴다). ZIP은 압축하지 않고 저장만 한다],
+  [`save_csv`], [`(dst buffer, b buffer gives n int or fail)`], [`dst` 의 내용을 현재 시트의 CSV로 바꾼다(쓴 마지막 줄과 열까지, 쉼표·따옴표·줄바꿈이 든 글은 따옴표로 감싼다, `dec` 는 자릿수대로, `float` 은 다시 읽히는 가장 짧은 글로, `bool` 은 `true`/`false`, 날짜는 `YYYY-MM-DD`이고 자정이 아니면 `Thh:mm:ss`가 붙는다. 0~9999년 밖이면 초로 쓴다). 쓴 바이트 수를 준다. `dst` 가 작으면 `err.full`(그때 `dst` 는 비어 있다)],
+  [`save_xlsx`], [`(dst buffer, b buffer gives n int or fail)`], [`dst` 의 내용을 현재 시트의 xlsx로 바꾼다(시트 하나, 이름은 시트 이름대로 31자까지, `[]:*?/\` 는 뺀다. 글은 인라인 문자열, 수·`dec`·`float`·`bool` 은 그대로이고, 날짜는 엑셀 날짜로, 곧 1900 체계의 일련번호에 서식 `yyyy-mm-dd hh:mm:ss`를 붙여 쓴다. 날짜가 있는 시트에만 스타일 부분을 쓰며, mode 2로 읽으면 같은 초가 돌아온다. 1900-03-01 이전이나 9999-12-31 이후는 서식이 말할 수 없으니 초를 그냥 수로 쓴다). ZIP은 압축하지 않고 저장만 한다],
 )
 #para("9b")[#term("작업 공간", en: "work area") 아무것도 할당하지 않는다(12절). `load_xlsx` 는 파일이 든 버퍼의 마지막 바이트 뒤 남은 용량을 쓴다: 약
 130 KB(inflate의 창과 훑개의 버퍼)에 풀어낸 공유 문자열(하나에 4바이트와 그 글)을 더한 만큼이다. 버퍼는 파일보다 크게 선언해야 하고 자리가 모자라면 `err.full` 이다.
@@ -135,6 +137,7 @@
 #ex("spec", "16-sheet-date.pnx")
 
 #ex("spec", "16-sheet.pnx")
+#ex("spec", "16-sheet-float.pnx")
 #ex("spec", "16-sheet-pipe.pnx")
 #ex("spec", "16-sheet-book.pnx")
 #ex("spec", "16-sheet-index.pnx")
@@ -151,7 +154,7 @@
 
 #part("진단")
 #diag(
-  ([`sheet` 의 프로시저에 다른 형의 값], "this word of sheet takes int for row, column and number, str for text, bool for put_bool, dec N for put_dec"),
+  ([`sheet` 의 프로시저에 다른 형의 값], "this procedure of sheet takes int for row, column and number, str for text, bool for put_bool, dec(N) for put_dec, float for put_float"),
   ([`sheet` 의 프로시저인데 끝에 버퍼가 없음], "the procedures of sheet take a buffer last: v row column grid sheet.put_int"),
   ([파일을 받는 프로시저에 참조인 작업책이나 버퍼가 아닌 파일], "this procedure of sheet takes the buffer of the file, then the book: 0 file book sheet.load_csv"),
 )

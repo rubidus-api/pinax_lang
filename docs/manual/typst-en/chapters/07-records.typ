@@ -23,6 +23,14 @@ outside definitions, and can name it. Adding rows while running is `add_row`.
 
 #ex("manual", "07-add-row.pnx")
 
+A `float` field holds a quantity whose size is not known in advance, such as a measurement (chapter 2). A NaN or an
+infinity stored in a field stays there, so ask with `f.is_finite` after reading it. `sort_by` a `float` field puts
+`-0.0` before `0.0` and a NaN last. A `float` field is not the key of an index (equality of floats cannot be trusted).
+`json.pack` refuses a row that holds a NaN or an infinity with `err.range` (JSON has no such number); `csv.pack`
+writes `nan` and `inf`.
+
+#ex("manual", "07-float-field.pnx")
+
 Here are the procedures for rows together, with remarks. The `r` that `add_row` gives is a number inside the table; a field
 is stored with `value row to record.field`, and read with `row record.field`, which takes one row off and puts the
 field's value on.

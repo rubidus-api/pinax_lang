@@ -25,7 +25,7 @@ procedures are `(s str gives value, rest str or fail)` (`err.format` when the by
 `row bytes.packed_size` is the number of bytes `pack` would write.]
 
 #para("4")[The bytes of a field: an integer width as that width (most significant byte first when the record has
-`big_endian`, least significant first otherwise), `int` as 8 bytes, `bool` as 1 byte, `varint` as LEB128, `str N` as a
+`big_endian`, least significant first otherwise), `int` as 8 bytes, `float` as the bits of its binary64 in 8 bytes, `bool` as 1 byte, `varint` as LEB128, `str N` as a
 length (varint) and the bytes, a field holding a row as the number it holds (varint).]
 
 #para("5")[When `pack` fails the buffer goes back to the length it had before the call. `unpack` writes into the row

@@ -36,6 +36,28 @@ path <span style="color: #d73948">do</span> <span style="color: #d73948">to</spa
 <span style="color: #198810">""</span> io.println
 </code></pre><p class="ex-label">Output</p><pre><code data-lang="text">$ pnx 07-add-row.pnx
 (0, 0)(3, 4)(6, 0)
+</code></pre></div><p>A <code>float</code> field holds a quantity whose size is not known in advance, such as a measurement (chapter 2). A NaN or an infinity stored in a field stays there, so ask with <code>f.is_finite</code> after reading it. <code>sort_by</code> a <code>float</code> field puts <code>-0.0</code> before <code>0.0</code> and a NaN last. A <code>float</code> field is not the key of an index (equality of floats cannot be trusted). <code>json.pack</code> refuses a row that holds a NaN or an infinity with <code>err.range</code> (JSON has no such number); <code>csv.pack</code> writes <code>nan</code> and <code>inf</code>.</p><div class="example run"><p class="ex-file"><code>07-float-field.pnx</code></p><pre><code data-lang="pinax"><span style="color: #d73948">use</span> io .
+<span style="color: #d73948">use</span> f .
+<span style="color: #d73948">record</span> reading
+  sensor <span style="color: #d73948">str</span> <span style="color: #b60157">8</span>
+  celsius float
+<span style="color: #d73948">end</span>
+<span style="color: #d73948">list</span> readings reading <span style="color: #b60157">8</span>
+<span style="color: #d73948">row</span> readings <span style="color: #198810">"hall"</span> <span style="color: #b60157">21</span>.5e0 .
+<span style="color: #d73948">row</span> readings <span style="color: #198810">"attic"</span> <span style="color: #b60157">30</span>.25e0 .
+<span style="color: #d73948">row</span> readings <span style="color: #198810">"cellar"</span> 12e0 .
+<span style="color: #d73948">def</span> mean <span style="color: #d73948">gives</span> float <span style="color: #d73948">do</span>
+  0e0 <span style="color: #d73948">to</span> total
+  readings <span style="color: #d73948">do</span> <span style="color: #d73948">to</span> r total r reading.celsius f.add <span style="color: #d73948">to</span> total <span style="color: #d73948">end</span> each
+  total readings len f.from_int f.div
+<span style="color: #d73948">end</span>
+readings <span style="color: #d73948">do</span> <span style="color: #d73948">to</span> r <span style="color: #d73948">args</span> r reading.sensor <span style="color: #198810">" "</span> r reading.celsius . <span style="color: #d73948">cat</span> io.println <span style="color: #d73948">end</span> each
+<span style="color: #d73948">args</span> <span style="color: #198810">"mean "</span> mean . <span style="color: #d73948">cat</span> io.println
+</code></pre><p class="ex-label">Output</p><pre><code data-lang="text">$ pnx 07-float-field.pnx
+hall 21.5
+attic 30.25
+cellar 12.0
+mean 21.25
 </code></pre></div><p>Here are the procedures for rows together, with remarks. The <code>r</code> that <code>add_row</code> gives is a number inside the table; a field is stored with <code>value row to record.field</code>, and read with <code>row record.field</code>, which takes one row off and puts the field’s value on.</p><div class="example run"><p class="ex-file"><code>07-row-steps.pnx</code></p><pre><code data-lang="pinax"><span style="color: #d73948">use</span> io .
 <span style="color: #d73948">record</span> item
   name <span style="color: #d73948">str</span> <span style="color: #b60157">12</span>                         <span style="color: #74747c">rem stored text: 12 bytes inside the row</span>

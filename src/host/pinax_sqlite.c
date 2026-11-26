@@ -419,6 +419,19 @@ static pinax_err w_bind_int(pinax_call *call, void *user, const pinax_args *args
         return PINAX_ERR_RANGE;
     return bind_done(s, sqlite3_bind_int64(s->st, at, args->i[0]));
 }
+// A float comes as the 64 bits of a double in an int slot (D0112). SQLite would keep an infinity and turn a NaN
+// into null, so both are refused with range (D0113).
+static pinax_err w_bind_float(pinax_call *call, void *user, const pinax_args *args) {
+    sq_stmt *s = stmt_of(call, user, args->i[2]);
+    int      at;
+    double   v;
+    if (!s)
+        return PINAX_ERR_STALE;
+    memcpy(&v, &args->i[0], 8);
+    if (position(args->i[1], &at) != PINAX_OK || !(v - v == 0.0)) // v - v is not 0 for a NaN or an infinity
+        return PINAX_ERR_RANGE;
+    return bind_done(s, sqlite3_bind_double(s->st, at, v));
+}
 static pinax_err bind_bytes(pinax_call *call, void *user, const pinax_args *args, bool text) {
     sq_stmt *s = stmt_of(call, user, args->i[1]);
     int      at;
@@ -533,6 +546,23 @@ static pinax_err w_col_int(pinax_call *call, void *user, const pinax_args *args)
     return PINAX_OK;
 }
 
+// A real column, or an integer column as the nearest double (D0113); any other kind is err.format.
+static pinax_err w_col_float(pinax_call *call, void *user, const pinax_args *args) {
+    sq_stmt *s = stmt_of(call, user, args->i[1]);
+    if (!s)
+        return PINAX_ERR_STALE;
+    pinax_err err = reader_check(s, args->i[0]);
+    if (err != PINAX_OK)
+        return err;
+    const int type = sqlite3_column_type(s->st, (int)args->i[0]);
+    if (type != SQLITE_FLOAT && type != SQLITE_INTEGER)
+        return PINAX_ERR_FORMAT;
+    const double v = type == SQLITE_FLOAT ? sqlite3_column_double(s->st, (int)args->i[0])
+                                          : (double)sqlite3_column_int64(s->st, (int)args->i[0]);
+    memcpy(&args->ri[0], &v, 8);
+    return PINAX_OK;
+}
+
 // The bytes of a column as a text (text, int, real) or as they are (blob).
 static pinax_err column_bytes(const sq_stmt *s, int64_t i, bool blob, const unsigned char **ptr, size_t *len) {
     const pinax_err err = reader_check(s, i);
@@ -624,6 +654,7 @@ pinax_err pinax_host_register_sqlite(pinax_state *state) {
         {"clear_binds", "(s stmt)", w_clear_binds, tag, 0},
         {"bind_null", "(i int, s stmt or fail)", w_bind_null, tag, 0},
         {"bind_int", "(v int, i int, s stmt or fail)", w_bind_int, tag, 0},
+        {"bind_float", "(v float, i int, s stmt or fail)", w_bind_float, tag, 0},
         {"bind_str", "(v str, i int, s stmt or fail)", w_bind_str, tag, 0},
         {"bind_blob", "(v str, i int, s stmt or fail)", w_bind_blob, tag, 0},
         {"bind_name", "(name str, s stmt gives i int or fail)", w_bind_name, tag, 0},
@@ -633,6 +664,7 @@ pinax_err pinax_host_register_sqlite(pinax_state *state) {
         {"col_kind", "(i int, s stmt gives k int)", w_col_kind, tag, 0},
         {"col_is_null", "(i int, s stmt gives bool)", w_col_is_null, tag, 0},
         {"col_int", "(i int, s stmt gives n int or fail)", w_col_int, tag, 0},
+        {"col_float", "(i int, s stmt gives x float or fail)", w_col_float, tag, 0},
         {"col_str", "(i int, s stmt gives v str or fail)", w_col_str, tag, 0},
         {"col_str_into", "(i int, s stmt, buf buffer or fail)", w_col_str_into, tag, 0},
         {"col_blob", "(i int, s stmt gives v str or fail)", w_col_blob, tag, 0},

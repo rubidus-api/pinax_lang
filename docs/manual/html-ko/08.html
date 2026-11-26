@@ -36,6 +36,28 @@ path <span style="color: #d73948">do</span> <span style="color: #d73948">to</spa
 <span style="color: #198810">""</span> io.println
 </code></pre><p class="ex-label">출력</p><pre><code data-lang="text">$ pnx 07-add-row.pnx
 (0, 0)(3, 4)(6, 0)
+</code></pre></div><p><code>float</code> 필드는 측정값처럼 크기를 미리 모르는 양을 담는다(2장). 필드에 들어간 NaN 과 무한대는 그대로 남으므로, 읽은 뒤에 <code>f.is_finite</code> 로 묻는다. <code>float</code> 필드로 <code>sort_by</code> 를 하면 <code>-0.0</code> 이 <code>0.0</code> 앞에, NaN 이 맨 뒤에 온다. <code>float</code> 필드는 찾아보기의 열쇠가 되지 못한다(같음을 믿을 수 없다). <code>json.pack</code> 은 NaN 이나 무한대를 담은 줄을 <code>err.range</code> 로 거절한다(JSON 에는 그런 수가 없다). <code>csv.pack</code> 은 <code>nan</code>, <code>inf</code> 로 적는다.</p><div class="example run"><p class="ex-file"><code>07-float-field.pnx</code></p><pre><code data-lang="pinax"><span style="color: #d73948">use</span> io .
+<span style="color: #d73948">use</span> f .
+<span style="color: #d73948">record</span> reading
+  sensor <span style="color: #d73948">str</span> <span style="color: #b60157">8</span>
+  celsius float
+<span style="color: #d73948">end</span>
+<span style="color: #d73948">list</span> readings reading <span style="color: #b60157">8</span>
+<span style="color: #d73948">row</span> readings <span style="color: #198810">"hall"</span> <span style="color: #b60157">21</span>.5e0 .
+<span style="color: #d73948">row</span> readings <span style="color: #198810">"attic"</span> <span style="color: #b60157">30</span>.25e0 .
+<span style="color: #d73948">row</span> readings <span style="color: #198810">"cellar"</span> 12e0 .
+<span style="color: #d73948">def</span> mean <span style="color: #d73948">gives</span> float <span style="color: #d73948">do</span>
+  0e0 <span style="color: #d73948">to</span> total
+  readings <span style="color: #d73948">do</span> <span style="color: #d73948">to</span> r total r reading.celsius f.add <span style="color: #d73948">to</span> total <span style="color: #d73948">end</span> each
+  total readings len f.from_int f.div
+<span style="color: #d73948">end</span>
+readings <span style="color: #d73948">do</span> <span style="color: #d73948">to</span> r <span style="color: #d73948">args</span> r reading.sensor <span style="color: #198810">" "</span> r reading.celsius . <span style="color: #d73948">cat</span> io.println <span style="color: #d73948">end</span> each
+<span style="color: #d73948">args</span> <span style="color: #198810">"mean "</span> mean . <span style="color: #d73948">cat</span> io.println
+</code></pre><p class="ex-label">출력</p><pre><code data-lang="text">$ pnx 07-float-field.pnx
+hall 21.5
+attic 30.25
+cellar 12.0
+mean 21.25
 </code></pre></div><p>줄을 다루는 프로시저를 주석과 함께 한 번에 보자. <code>add_row</code> 가 준 <code>r</code> 은 표 안의 번호이고, 필드에 넣는 꼴은 <code>값 줄 to<br>레코드.필드</code> 다. 읽는 꼴은 <code>줄 레코드.필드</code> 이고, 줄 하나를 내려 필드의 값을 올린다.</p><div class="example run"><p class="ex-file"><code>07-row-steps.pnx</code></p><pre><code data-lang="pinax"><span style="color: #d73948">use</span> io .
 <span style="color: #d73948">record</span> item
   name <span style="color: #d73948">str</span> <span style="color: #b60157">12</span>                         <span style="color: #74747c">rem stored text: 12 bytes inside the row</span>

@@ -1,0 +1,3 @@
+rem refused
+use fmt .
+def show x float, n int gives str do x n fmt.fixed end

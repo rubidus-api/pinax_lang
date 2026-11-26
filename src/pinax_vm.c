@@ -404,7 +404,9 @@ PNX_INLINE bool pnx_sort_less(const pnx_sortkey *k, const uint8_t *a, const uint
         const int c = n ? __builtin_memcmp(x + 1, y + 1, n) : 0;
         return c < 0 || (c == 0 && lx < ly);
     }
-    const int64_t vx = pnx_load_width(x, k->width), vy = pnx_load_width(y, k->width);
+    int64_t vx = pnx_load_width(x, k->width), vy = pnx_load_width(y, k->width);
+    if (k->flags & PNX_SORT_FLOAT)
+        vx = pnx_float_order(vx), vy = pnx_float_order(vy);
     return k->flags & PNX_SORT_U64 ? (uint64_t)vx < (uint64_t)vy : vx < vy;
 }
 
@@ -449,7 +451,7 @@ PNX_INLINE void pnx_merge_sort(const pnx_sortkey *k, uint8_t *items, uint8_t *sp
 }
 
 int pnx_sort_items(const pnx_sortkey *k, uint8_t *items, uint8_t *spare, uint32_t n, uint32_t size) {
-    if (!k->rows && size == 8 && k->width == PNX_W_64 && !(k->flags & (PNX_SORT_STR | PNX_SORT_U64))) {
+    if (!k->rows && size == 8 && k->width == PNX_W_64 && !(k->flags & (PNX_SORT_STR | PNX_SORT_U64 | PNX_SORT_FLOAT))) {
         // int cells, the commonest: the key known here, so that a comparison is one instruction
         static const pnx_sortkey up = {NULL, 0, 0, PNX_W_64, 0}, down = {NULL, 0, 0, PNX_W_64, PNX_SORT_DESC};
         if (k->flags & PNX_SORT_DESC)

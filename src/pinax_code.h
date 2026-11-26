@@ -445,12 +445,17 @@ enum { PNX_NU_FIT, PNX_NU_FITU, PNX_NU_LOW, PNX_NU_NOT, PNX_NU_POPC, PNX_NU_CLZ,
 // RCATD and STODEC with C = PNX_DEC_FLOAT print and read a float: the shortest text that reads
 // back as the value, with a point or an exponent always ("1.0", "1e20"), "nan", "inf", "-inf".
 enum { PNX_FL_ADD, PNX_FL_SUB, PNX_FL_MUL, PNX_FL_DIV, PNX_FL_EQ, PNX_FL_LT, PNX_FL_LE, PNX_FL_COUNT };
-enum { PNX_FU_NEG, PNX_FU_ABS, PNX_FU_FROM_INT, PNX_FU_TO_INT, PNX_FU_IS_NAN, PNX_FU_IS_FINITE, PNX_FU_COUNT };
+// ORDER_HI and ORDER_LO give an int that orders floats as D0113 (-0.0 below +0.0), a NaN above or below every other value.
+enum { PNX_FU_NEG, PNX_FU_ABS, PNX_FU_FROM_INT, PNX_FU_TO_INT, PNX_FU_IS_NAN, PNX_FU_IS_FINITE, PNX_FU_ORDER_HI, PNX_FU_ORDER_LO,
+       PNX_FU_COUNT };
 #define PNX_DEC_FLOAT 19u
+// RCATD with C = PNX_DEC_FIXED + n (n 0 to 18) prints a float with n decimals: fmt.fixed (D0113)
+#define PNX_DEC_FIXED 32u
 
 // The flags of SORT and SORTBY (their A): from the largest down, compared as u64, compared as
 // str(N) (the cells of SORT, the field of SORTBY), in the byte order of SCMP.
-enum { PNX_SORT_DESC = 1, PNX_SORT_U64 = 2, PNX_SORT_STR = 4, PNX_SORT_ROWS = 8, PNX_SORT_FLAGS = 15 };
+// PNX_SORT_FLOAT: the 64 bits are a binary64, in the one total order of D0113 (-0.0 below +0.0, every NaN last)
+enum { PNX_SORT_DESC = 1, PNX_SORT_U64 = 2, PNX_SORT_STR = 4, PNX_SORT_ROWS = 8, PNX_SORT_FLOAT = 16, PNX_SORT_FLAGS = 31 };
 
 // What SHASH computes (its C) and what BENC writes (its B).
 enum { PNX_HASH_CRC32, PNX_HASH_FNV1A, PNX_HASH_SIP, PNX_HASH_COUNT };

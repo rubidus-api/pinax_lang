@@ -221,6 +221,15 @@ in seconds. A literal has an exponent: `9.81e0`, `1e-3`; `9.81` with a point alo
 `r f.from_int`.
 #ex("manual", "02-float-mix.pnx")]
 
+#qa[Do `sum`, `minimum` and `sort` work on a list of `float`?][Yes. `sum` adds from the first value on. `sort` puts
+`-0.0` before `0.0` and a NaN last. `minimum` and `maximum` give a NaN when any value is one: here too a NaN passes on
+quietly.
+#ex("manual", "02-float-sort.pnx")]
+
+#qa[How do I print only two digits after the point?][With `x 2 fmt.fixed`. It rounds the exact value, so
+`1.005e0 2 fmt.fixed` is `1.00`: in binary `1.005` is 1.00499…. The digits are a constant 0 to 18. A quantity with fixed
+digits, such as money, is better kept as `dec N` from the start.]
+
 #mistake[`0.1e0 0.2e0 f.add` is `eq` to `0.3e0`][`eq` compares exactly, to the bit. 0.1 and 0.2 are not held exactly in
 binary, and their sum is `0.30000000000000004`. To compare within a tolerance, use `f.near`.
 #ex("manual", "02-float-eq.pnx")]

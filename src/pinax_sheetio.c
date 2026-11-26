@@ -1554,6 +1554,9 @@ pnx_sheet_result pnx_sheet_save_csv(uint8_t *b, uint32_t cap, uint8_t *dst, uint
                 uint32_t scale;
                 if (sio_dec_scale_of(b, cap, r, c, &v, &scale))
                     sio_out_bytes(&o, num, sio_out_dec(num, v, scale));
+            } else if (kind == 6) { // a float: the shortest text (finite: put_float takes no other)
+                if (pnx_sheet_get_float(b, cap, r, c, &v) == PNX_SH_OK)
+                    sio_out_bytes(&o, num, pnx_format_float(v, num));
             } else if (kind == 5) {
                 if (pnx_sheet_get_date(b, cap, r, c, &v) == PNX_SH_OK) {
                     const uint32_t dn = sio_out_date(num, v);
@@ -1792,6 +1795,12 @@ pnx_sheet_result pnx_sheet_save_xlsx(uint8_t *b, uint32_t cap, uint8_t *dst, uin
                 (void)sio_dec_scale_of(b, cap, r, c, &v, &scale);
                 sio_out_str(&o, "\"><v>");
                 sio_out_bytes(&o, num, sio_out_dec(num, v, scale));
+                sio_out_str(&o, "</v></c>");
+            } else if (kind == 6) { // a float: a number cell, the shortest text (an xsd:double)
+                v = 0;
+                (void)pnx_sheet_get_float(b, cap, r, c, &v);
+                sio_out_str(&o, "\"><v>");
+                sio_out_bytes(&o, num, pnx_format_float(v, num));
                 sio_out_str(&o, "</v></c>");
             } else {
                 uint32_t off = 0, n = 0;

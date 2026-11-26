@@ -31,7 +31,11 @@ see it. A path is names joined by dots (a quoted name, `"a.b"` or `'a.b'`, may h
 `user[0].name`, `a."b c".d`. Keys given with dots (`a.b.c = 1`), tables made by a header, inline tables and arrays are all followed, and
 an index chooses an element of an array of values or of tables (the order of the `[[...]]` headers; those below an element belong to
 it). A path that names a table gives `toml.table` and no value. `err.not_found` when there is none; `err.format` when the path is
-malformed or the text is malformed where it was read.]
+malformed or the text is malformed where it was read. The text of a `toml.float` value is read as a `float` by
+`str.to_float` (16.1), except that an `_` between digits (`1_000.5`) is not read: `err.format`. A `float` is written by giving its `str.to_str` text and the kind `toml.float` to
+`toml.set` (7); `nan`, `inf` and `-inf` are TOML values too.]
+
+#ex("spec", "16-toml-float.pnx")
 
 #para("5")[`s toml.valid` gives whether every statement of `s` is well formed. The check is of the syntax of each statement: a key
 given twice, a table defined twice and the range of a number or the existence of a date are not checked by it.]

@@ -1,0 +1,14 @@
+rem run
+use io .
+use f .
+use str .
+list laps float 8
+0.25e0 laps push or_else to e end
+0.125e0 laps push or_else to e end
+0.5e0 laps push or_else to e end
+args "total " laps sum ", fastest " laps minimum or_else to e 0e0 end . cat io.println
+0e0 0e0 f.div laps push or_else to e end      rem a NaN joins the list
+laps sort
+def show do "" to line  "" to gap  laps do to t args line gap t . cat to line  " " to gap end each  line io.println end
+show
+args "fastest now " laps minimum or_else to e 0e0 end . cat io.println

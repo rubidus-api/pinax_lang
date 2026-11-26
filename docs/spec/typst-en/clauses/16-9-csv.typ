@@ -10,14 +10,16 @@ with doubled quotes made single. An unclosed quote gives the rest of the text as
 failure).]
 
 #para("3")[The writing procedures append to a buffer (`or fail`, `err.full` when there is not enough room). `s buf csv.put`,
-`n buf csv.put_int`, `d buf csv.put_dec` and `b buf csv.put_bool` append one field (with the comma it needs); `buf csv.end_line` ends the
+`n buf csv.put_int`, `d buf csv.put_dec`, `x buf csv.put_float` (`nan`, `inf` and `-inf` too) and `b buf csv.put_bool` append one field (with the comma it needs); `buf csv.end_line` ends the
 line. Booleans are written `true` and `false`.]
 
 #para("4")[`row buf csv.pack` appends one row of a record as one line. `s row csv.unpack` reads one line into the fields
 in order and gives what follows the line. The row is written only when every field is right (`err.format`). A `dec N`
-field is read and written as in `json` (16.8).]
+field and a `float` field are read and written as in `json` (16.8), except that a NaN and the infinities of a `float`
+are written `nan`, `inf` and `-inf` and read back.]
 
 #ex("spec", "16-csv.pnx")
+#ex("spec", "16-csv-float-field.pnx")
 
 #part("Constraints")
 

@@ -36,6 +36,7 @@
   [`put_key` `put_str`], [`(s str, buf or fail)`. 이스케이프는 프로시저가 한다],
   [`put_int`], [`(n int, buf or fail)`],
   [`put_dec`], [`(d dec N, buf or fail)`],
+  [`put_float`], [`(x float, buf or fail)`. 다시 읽히는 가장 짧은 글. NaN 과 무한대는 JSON 에 없으므로 `err.range`],
   [`put_bool`], [`(b bool, buf or fail)`],
 )]
 
@@ -71,11 +72,14 @@
 
 #para("6")[`줄 buf json.pack` 은 레코드의 줄을 필드 이름을 키로 한 객체로 붙인다. `s 줄 json.unpack` 은 객체를
 읽어 이름이 같은 필드에 넣고 객체 뒤의 나머지를 준다. 모르는 키의 값은 건너뛴다. 수는 정수만 받고, 필드의
-폭에 맞아야 한다. `dec N` 필드는 점 아래 `N` 자리까지의 수를 받고, `N` 자리를 모두 써서 적는다(7.5). `null` 은
+폭에 맞아야 한다. `dec N` 필드는 점 아래 `N` 자리까지의 수를 받고, `N` 자리를 모두 써서 적는다(7.5). `float`
+필드는 어떤 수든 받아 가장 가까운 `float` 로 읽고, 다시 읽히는 가장 짧은 글로 적는다(7.7). JSON 에는 NaN 과 무한대가
+없으므로, 그런 값을 담은 줄의 `pack` 은 `err.range` 로 실패하고 버퍼는 그대로다. `null` 은
 받지 않는다. 모든 것이 맞을 때만 줄에 쓴다 --- 실패하면(`err.format`) 줄은 그대로다.]
 
 #ex("spec", "16-json-record.pnx")
 #ex("spec", "16-dec-text.pnx")
+#ex("spec", "16-json-float-field.pnx")
 
 #part("제약")
 

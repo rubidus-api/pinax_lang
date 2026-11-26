@@ -183,10 +183,10 @@ x=
 </code></pre></div><p class="para"><span class="pn">(3)</span> <code>contents</code> 가 준 뷰는 버퍼의 바이트를 가리킨다. 버퍼를 고치면 뷰가 보는 바이트도 바뀐다.</p><h3>8.8 레코드와 줄</h3><h5>구문</h5><pre><code data-lang="ebnf">record   = "record" NAME { field | "big_endian" } "end" ;
 field    = NAME width ;
 width    = "u8" | "u16" | "u32" | "u64" | "i8" | "i16" | "i32" | "i64"
-         | "int" | "bool" | "varint" | "dec" INT | "str" size
+         | "int" | "bool" | "float" | "varint" | "dec" INT | "str" size
          | NAME ;                                         (* NAME: a table *)
 row-item = [ "export" ] "row" NAME [ "as" NAME ] { value } "." ;
-value    = literal | NAME ;                         (* NAME: a const, a row name, none *)</code></pre><p class="para"><span class="pn">(1)</span> <code>record 이름 … end</code> 는 필드의 나열인 <strong>레코드</strong>(record) 타입을 만든다. 필드마다 폭을 적는다. <code>int</code> 와 <code>i64</code> 필드는 읽으면 <code>int</code>, <code>u8</code> … <code>i32</code> 필드는 그 좁은 정수(7.6), <code>bool</code> 필드는 <code>bool</code>, <code>dec N</code> 필드는 <code>dec N</code>(8 바이트), <code>str N</code> 필드는 <code>str</code> 뷰가 된다. 필드에는 그 타입의 값만 넣는다. 필드의 타입에 표의 이름을 쓰면 그 표의 줄을 담는다.</p><p class="para"><span class="pn">(2)</span> 레코드는 값으로 다루지 않는다. 레코드를 원소로 하는 배열·목록·풀(<strong>표</strong>(table))을 선언하고, 그 한 칸인 <strong>줄</strong>(row)을 다룬다. 줄의 타입은 표의 이름이다. 줄은 표의 번호 하나를 담고, 쓸 때마다 범위를 검사한다(풀이면 세대도, 8.9).</p><p class="para"><span class="pn">(3)</span> 필드는 경로 <code>레코드.필드</code> 로 적는다. <code>줄 레코드.필드</code> 는 읽고, <code>v 줄 to 레코드.필드</code> 는 넣는다.</p><p class="para"><span class="pn">(4)</span> <code>row 표 값… .</code> 는 정의 밖에서 목록에 줄 하나를 더한다. 값은 필드의 차례로 공백으로 늘어놓고(쉼표나 괄호 없이), 뒤쪽 필드는 줄일 수 있다(0 이 된다). <code>row 표 as 이름 값… .</code> 은 그 줄에 이름을 붙인다. 줄의 이름은 뒤의 <code>row</code> 값과 코드에서 그 줄로 쓴다.</p><div class="example run"><p class="ex-file"><code>08-record.pnx</code></p><pre><code data-lang="pinax"><span style="color: #d73948">use</span> io .
+value    = literal | NAME ;                         (* NAME: a const, a row name, none *)</code></pre><p class="para"><span class="pn">(1)</span> <code>record 이름 … end</code> 는 필드의 나열인 <strong>레코드</strong>(record) 타입을 만든다. 필드마다 폭을 적는다. <code>int</code> 와 <code>i64</code> 필드는 읽으면 <code>int</code>, <code>u8</code> … <code>i32</code> 필드는 그 좁은 정수(7.6), <code>bool</code> 필드는 <code>bool</code>, <code>float</code> 필드는 <code>float</code>(8 바이트), <code>dec N</code> 필드는 <code>dec N</code>(8 바이트), <code>str N</code> 필드는 <code>str</code> 뷰가 된다. 필드에는 그 타입의 값만 넣는다. 필드의 타입에 표의 이름을 쓰면 그 표의 줄을 담는다.</p><p class="para"><span class="pn">(2)</span> 레코드는 값으로 다루지 않는다. 레코드를 원소로 하는 배열·목록·풀(<strong>표</strong>(table))을 선언하고, 그 한 칸인 <strong>줄</strong>(row)을 다룬다. 줄의 타입은 표의 이름이다. 줄은 표의 번호 하나를 담고, 쓸 때마다 범위를 검사한다(풀이면 세대도, 8.9).</p><p class="para"><span class="pn">(3)</span> 필드는 경로 <code>레코드.필드</code> 로 적는다. <code>줄 레코드.필드</code> 는 읽고, <code>v 줄 to 레코드.필드</code> 는 넣는다.</p><p class="para"><span class="pn">(4)</span> <code>row 표 값… .</code> 는 정의 밖에서 목록에 줄 하나를 더한다. 값은 필드의 차례로 공백으로 늘어놓고(쉼표나 괄호 없이), 뒤쪽 필드는 줄일 수 있다(0 이 된다). <code>row 표 as 이름 값… .</code> 은 그 줄에 이름을 붙인다. 줄의 이름은 뒤의 <code>row</code> 값과 코드에서 그 줄로 쓴다.</p><div class="example run"><p class="ex-file"><code>08-record.pnx</code></p><pre><code data-lang="pinax"><span style="color: #d73948">use</span> io .
 <span style="color: #d73948">record</span> user
   name <span style="color: #d73948">str</span> <span style="color: #b60157">16</span>
   age <span style="color: #d73948">u8</span>
@@ -203,6 +203,26 @@ lee show
 kim 30 true
 lee 25 false
 lee 26 false
+</code></pre></div><p class="para"><span class="pn">(4a)</span> <code>float</code> 필드는 binary64 의 64 비트를 담고 <code>0e0</code> 으로 시작한다. 줄 항목은 <code>float</code> 리터럴을 받는다. 필드에 넣고 꺼내는 값은 <code>f</code> 의 procedure 가 계산하는 그 값이며, NaN 과 무한대도 그대로 담긴다.</p><div class="example run"><p class="ex-file"><code>08-record-float.pnx</code></p><pre><code data-lang="pinax"><span style="color: #d73948">use</span> io .
+<span style="color: #d73948">use</span> f .
+<span style="color: #d73948">record</span> point
+  x float
+  y float
+  label <span style="color: #d73948">str</span> <span style="color: #b60157">8</span>
+<span style="color: #d73948">end</span>
+<span style="color: #d73948">list</span> points point <span style="color: #b60157">4</span>
+<span style="color: #d73948">row</span> points <span style="color: #b60157">1</span>.5e0 -2e0 <span style="color: #198810">"a"</span> .
+<span style="color: #d73948">row</span> points <span style="color: #d73948">as</span> origin .                       <span style="color: #74747c">rem the fields left out are 0e0 and ""</span>
+<span style="color: #d73948">def</span> length_sq p points <span style="color: #d73948">gives</span> float <span style="color: #d73948">do</span> p point.x p point.x f.mul p point.y p point.y f.mul f.add <span style="color: #d73948">end</span>
+<span style="color: #d73948">def</span> show p points <span style="color: #d73948">do</span> <span style="color: #d73948">args</span> p point.label <span style="color: #198810">" "</span> p point.x <span style="color: #198810">" "</span> p point.y <span style="color: #198810">" "</span> p length_sq . <span style="color: #d73948">cat</span> io.println <span style="color: #d73948">end</span>
+<span style="color: #b60157">0</span> points idx show
+origin show
+<span style="color: #b60157">0</span>.5e0 origin <span style="color: #d73948">to</span> point.x  1e300 origin <span style="color: #d73948">to</span> point.y   <span style="color: #74747c">rem a float field takes a float only</span>
+origin show                                  <span style="color: #74747c">rem 1e300 squared is an infinity, not a fault</span>
+</code></pre><p class="ex-label">출력</p><pre><code data-lang="text">$ pnx 08-record-float.pnx
+a 1.5 -2.0 6.25
+ 0.0 0.0 0.0
+ 0.5 1e300 inf
 </code></pre></div><p class="para"><span class="pn">(5)</span> 줄을 담는 필드와 전역의 처음 값은 “없음” 이다. <code>줄 is_none</code> 은 없음인지 묻고, <code>표 none</code> 은 그 표의 없음 줄을 낸다. <code>줄 row_index</code> 는 줄의 번호를 준다.</p><p class="para"><span class="pn">(5a)</span> 원소 타입이 표의 이름인 배열이나 목록은 그 표의 줄을 8 바이트 칸에 담는다. 칸에는 줄의 번호에 1 을 더한 값이 들고, 풀의 줄이면 그 세대가 위쪽 32 비트에 든다. 0 은 없음이고, 칸은 모두 없음으로 시작한다. 칸은 다른 칸처럼 읽고, 넣고, <code>push</code>·<code>pop</code> 하고, 돌며, 들어가는 값은 그 표의 줄이어야 한다. 칸에서 읽은 줄은 다른 줄처럼 쓰는 자리에서 검사한다. 큐는 줄을 담지 않는다. <code>alloc</code> 이 막 준 줄(8.9)은 <code>set</code> 으로 칸에 넣는다. <code>set</code> 은 필드처럼 그 줄을 넘겨받는다. <code>push</code> 는 그 줄을 거부한다. 실패한 <code>push</code> 는 그 줄을 잃기 때문이다.</p><div class="example run"><p class="ex-file"><code>08-row-cells.pnx</code></p><pre><code data-lang="pinax"><span style="color: #d73948">use</span> io .
 <span style="color: #d73948">record</span> city
   name <span style="color: #d73948">str</span> <span style="color: #b60157">12</span>

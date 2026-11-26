@@ -1,0 +1,7 @@
+rem run
+use io .
+use f .
+use fmt .
+args 3.14159e0 2 fmt.fixed " " 2.5e0 0 fmt.fixed " " 3.5e0 0 fmt.fixed " " 1e20 1 fmt.fixed . cat io.println
+args 1.005e0 2 fmt.fixed " " 0.1e0 18 fmt.fixed . cat io.println   rem the exact values: 1.00499..., 0.1000000000000000055...
+args 0e0 0e0 f.div 2 fmt.fixed " " -0e0 1 fmt.fixed . cat io.println

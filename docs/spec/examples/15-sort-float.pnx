@@ -1,0 +1,13 @@
+rem run
+use io .
+use f .
+list xs float 8
+def show do "" to s  "" to gap  xs do to v args s gap v . cat to s  " " to gap end each  s io.println end
+def nan gives float do 0e0 0e0 f.div end
+2.5e0 xs push or_else to e end  nan xs push or_else to e end  0e0 xs push or_else to e end
+-0e0 xs push or_else to e end  -1e300 xs push or_else to e end  1e0 0e0 f.div xs push or_else to e end
+xs sort show                                   rem -0.0 before 0.0, the NaN last
+xs sort_desc show                              rem the same order the other way
+args xs sum " " xs minimum or_else to e 0e0 end . cat io.println   rem a NaN among them: both NaN
+xs sort  xs pop or_else to e 0e0 end drop      rem the NaN, last after sort, taken off
+args xs minimum or_else to e 0e0 end " " xs maximum or_else to e 0e0 end . cat io.println

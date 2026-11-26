@@ -151,6 +151,7 @@ is the handle `sqlite` and a statement the handle `stmt`; both are `owned` when 
   [`sqlite.clear_binds`], [`(s stmt)`], [binds null to every place],
   [`sqlite.bind_null`], [`(i int, s stmt or fail)`], [binds place `i`, counted from 0. A place that is not there is `err.range`; a statement that is running (not reset since its last row or its end) is `err.state`],
   [`sqlite.bind_int` `sqlite.bind_str` `sqlite.bind_blob`], [`(v int, i int, s stmt or fail)` and `(v str, i int, s stmt or fail)`], [bind an integer, a text or bytes (copied)],
+  [`sqlite.bind_float`], [`(v float, i int, s stmt or fail)`], [binds a real. A NaN or an infinity is `err.range` (SQLite turns a NaN into null)],
   [`sqlite.bind_name`], [`(name str, s stmt gives i int or fail)`], [the place of `:name`, `@name` or `$name` (written with its mark); `err.not_found` when there is none],
   [`sqlite.rows`], [`(s stmt gives rail)`], [a rail: each turn takes a step and gives the number of the row, from 0; it ends when there is no row (10.6 (1e))],
   [`sqlite.step`], [`(s stmt gives more bool or fail)`], [takes one step: `true` when a row is there, `false` at the end],
@@ -159,6 +160,7 @@ is the handle `sqlite` and a statement the handle `stmt`; both are `owned` when 
   [`sqlite.col_kind`], [`(i int, s stmt gives k int)`], [the kind of the value in column `i` of the current row: `sqlite.k_null`, `k_int`, `k_real`, `k_text` or `k_blob` (pure procedures). With no row it is `k_null`. A column that is not there is the fault `range`],
   [`sqlite.col_is_null`], [`(i int, s stmt gives bool)`], [whether it is null],
   [`sqlite.col_int`], [`(i int, s stmt gives n int or fail)`], [an integer column; any other kind is `err.format`, no row `err.not_found`],
+  [`sqlite.col_float`], [`(i int, s stmt gives x float or fail)`], [a real column, or an integer column as the nearest `float`; any other kind is `err.format`, no row `err.not_found`],
   [`sqlite.col_str` `sqlite.col_blob`], [`(i int, s stmt gives v str or fail)`], [a text, or bytes, in the region. `col_str` also gives an integer or a real in its text form; `col_blob` takes only a blob],
   [`sqlite.col_str_into` `sqlite.col_blob_into`], [`(i int, s stmt, buf buffer or fail)`], [the same appended to a buffer; `err.full` when it does not fit],
   [`sqlite.last_code`], [`(gives n int)`], [the SQLite result code (extended, for example 2067 for a unique key) of the last refusal of the thread that runs the state],
@@ -167,6 +169,7 @@ is the handle `sqlite` and a statement the handle `stmt`; both are `owned` when 
 
 #ex("spec", "17-sqlite.pnx")
 #ex("spec", "17-sqlite-rows.pnx")
+#ex("spec", "17-sqlite-float.pnx")
 
 #para("2")[A refusal of SQLite is a failure with one of these codes: `err.full` (out of memory, the disk full, a value too
 large), `err.not_found` (a file that cannot be opened, no row), `err.range` (a place that is not there), `err.format` (a

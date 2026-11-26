@@ -592,7 +592,8 @@ static bool repeats(const uint32_t *code, uint32_t i) {
 static const char *sort_check(const pinax_state *st, const uint32_t *code, uint32_t i, const uint8_t *heads) {
     const uint32_t w = code[i], op = w & 0xffu, flags = (w >> 8) & 0xffu, bx = w >> 16;
     const uint32_t x = op == PNX_SORTBY ? code[i + 1] : 0, n_globals = st->head->n_globals;
-    if ((flags & ~(uint32_t)PNX_SORT_FLAGS) || (op == PNX_SORT && (flags & PNX_SORT_ROWS)))
+    if ((flags & ~(uint32_t)PNX_SORT_FLAGS) || (op == PNX_SORT && (flags & PNX_SORT_ROWS)) ||
+        ((flags & PNX_SORT_FLOAT) && (flags & (PNX_SORT_STR | PNX_SORT_U64))))
         return "code: unknown flags of a sort";
     const bool sbx = bx == PNX_GSELECTED, sx = op == PNX_SORTBY && (x & 0xfffu) == PNX_FSELECTED;
     if (sbx && sx)
@@ -857,15 +858,16 @@ static const char *check_word(const pinax_state *st, uint32_t index, span range,
         if (((op == PNX_BENC || op == PNX_BENCW) && b >= PNX_ENC_COUNT) || (op == PNX_SHASH && c >= PNX_HASH_COUNT))
             return "code: unknown encoding or hash";
         if (((op == PNX_JPUTI || op == PNX_JPUTIW) && (b == 0 || b == PNX_JSON_KEY || b == PNX_JSON_STRING ||
-                                                       (b >= PNX_JSON_KINDS && (b < PNX_JSON_DEC || b > PNX_JSON_DEC + 18)))) ||
+                                                       (b >= PNX_JSON_KINDS && (b < PNX_JSON_DEC || b > PNX_JSON_DEC + PNX_DEC_FLOAT)))) ||
             ((op == PNX_JPUTS || op == PNX_JPUTSW) && b != PNX_JSON_KEY && b != PNX_JSON_STRING) ||
-            ((op == PNX_CPUTI || op == PNX_CPUTIW) && b > 3 + 18) || ((op == PNX_CPUTS || op == PNX_CPUTSW) && b != 0) ||
+            ((op == PNX_CPUTI || op == PNX_CPUTIW) && b > 3 + PNX_DEC_FLOAT) || ((op == PNX_CPUTS || op == PNX_CPUTSW) && b != 0) ||
             (op == PNX_CNEXT && c > 2) || (op == PNX_FITW && c >= PNX_W_COUNT))
             return "code: unknown kind of a json or csv instruction";
-        if (((op == PNX_RCATD || op == PNX_STODEC) && c > 18 && c != PNX_DEC_FLOAT) || (op == PNX_ARGPUTD && c > 18) ||
+        if (((op == PNX_RCATD || op == PNX_STODEC) && c > 18 && c != PNX_DEC_FLOAT &&
+             !(op == PNX_RCATD && c >= PNX_DEC_FIXED && c <= PNX_DEC_FIXED + 18)) || (op == PNX_ARGPUTD && c > 18) ||
             (op == PNX_DRESC && (c == 0 || c > 18)))
             return "code: a decimal scale outside 0 to 18";
-        if ((op == PNX_ARGHEAD && (b == 0 || b > 64)) || (op == PNX_ARGPUTI && (c != 1 && c != 2)))
+        if ((op == PNX_ARGHEAD && (b == 0 || b > 64)) || (op == PNX_ARGPUTI && (c != 1 && c != 2 && c != 5)))
             return "code: an args instruction with a count or a kind that is not one";
         if ((op == PNX_NARITH && ((x & 0xffu) >= PNX_NA_COUNT || (x >> 8) >= PNX_W_COUNT)) ||
             (op == PNX_NCHK && ((x & 0xffu) >= PNX_NC_COUNT || (x >> 8) >= PNX_W_COUNT)) ||

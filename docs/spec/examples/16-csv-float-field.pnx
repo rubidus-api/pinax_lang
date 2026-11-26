@@ -1,0 +1,19 @@
+rem run
+use io .
+use f .
+use csv .
+record reading
+  at int
+  value float
+end
+list readings reading 4
+buffer out 64
+def demo or fail do
+  readings add_row or_fail to r
+  1 r to reading.at  1e0 0e0 f.div f.neg r to reading.value
+  r out csv.pack or_fail                    rem CSV writes nan, inf and -inf
+  out contents io.print
+  "2,nan" r csv.unpack or_fail drop
+  args r reading.at " " r reading.value f.is_nan . cat io.println
+end
+demo or_else to e e err_text io.println end

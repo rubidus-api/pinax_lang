@@ -1,0 +1,22 @@
+rem run
+use io .
+use f .
+use json .
+record reading
+  at int
+  value float
+end
+list readings reading 4
+buffer out 64
+def demo or fail do
+  readings add_row or_fail to r
+  1 r to reading.at  0.1e0 r to reading.value
+  r out json.pack or_fail
+  out contents io.println
+  "{\"value\": 2, \"at\": 9}" r json.unpack or_fail drop       rem an integer too: the nearest double
+  args r reading.at " " r reading.value . cat io.println
+  out clear
+  0e0 0e0 f.div r to reading.value
+  r out json.pack or_else to e args "NaN: " e err_text ", the buffer holds \"" out contents "\"" . cat io.println end
+end
+demo or_else to e e err_text io.println end
