@@ -136,27 +136,65 @@ def write_html(tree, lang, doc, out):
         relink(k, where)
     label = {"ko": ("차례", "앞", "다음", "처음"), "en": ("Contents", "Previous", "Next", "Start")}[lang]
     other = "en" if lang == "ko" else "ko"
+    other_name = "English" if lang == "ko" else "한국어"
+    menu = {"ko": ("메뉴", "이전", "언어", "본문 폭", "960 고정", "창에 맞춤", "테마", "밝음", "어두움", "시스템", "이동"),
+            "en": ("Menu", "Back", "Language", "Content width", "Fixed at 960", "Fit the window", "Theme", "Light",
+                   "Dark", "System", "Go to")}[lang]
+    # The theme and the width are set before the page is drawn, so a reader's choice never flashes.
+    early = ("<script>try{var d=document.documentElement,t=localStorage.getItem('pnx-theme'),"
+             "w=localStorage.getItem('pnx-width');if(t)d.dataset.theme=t;if(w)d.dataset.width=w}catch(e){}</script>")
 
-    def page(head, content, nav):
+    def bar(here, items, prev, this_page):
+        """The menu bar: menu button, back, where the reader is, then the items."""
+        back = (f'<a class="bar-btn" href="{prev}" title="{menu[1]}" aria-label="{menu[1]}">‹</a>' if prev else
+                f'<span class="bar-btn off" aria-hidden="true">‹</span>')
+        links = "".join(f'<a href="{h}">{html.escape(t)}</a>' for t, h in items)
+        def choice(group, value, text):
+            return f'<button type="button" data-set="{group}" data-value="{value}">{text}</button>'
+        panel = (f'<div class="menu" id="menu" hidden role="dialog" aria-label="{menu[0]}">'
+                 f'<p class="menu-head">{menu[2]}</p><div class="menu-row">'
+                 f'<span class="on" aria-current="true">{"한국어" if lang == "ko" else "English"}</span>'
+                 f'<a href="../html-{other}/{this_page}" hreflang="{other}">{other_name}</a></div>'
+                 f'<p class="menu-head">{menu[3]}</p><div class="menu-row">'
+                 + choice("width", "fixed", menu[4]) + choice("width", "fit", menu[5]) + '</div>'
+                 f'<p class="menu-head">{menu[6]}</p><div class="menu-row">'
+                 + choice("theme", "light", menu[7]) + choice("theme", "dark", menu[8])
+                 + choice("theme", "system", menu[9]) + '</div>'
+                 f'<p class="menu-head">{menu[10]}</p><div class="menu-col">{links}</div></div>')
+        return (f'<header class="bar"><button type="button" class="bar-btn" id="menu-btn" aria-expanded="false" '
+                f'aria-controls="menu" aria-label="{menu[0]}">☰</button>{back}'
+                f'<span class="here">{here}</span><nav class="items">{links}</nav></header>{panel}')
+
+    def page(head, content, nav, top):
         return (f'<!DOCTYPE html>\n<html lang="{lang}"><head><meta charset="utf-8">'
                 f'<meta name="viewport" content="width=device-width, initial-scale=1">'
-                f"<title>{html.escape(head)}</title><link rel=\"stylesheet\" href=\"style.css\"></head>"
-                f'<body><nav class="top">{nav}</nav><main>{content}</main><nav class="bottom">{nav}</nav></body></html>\n')
+                f"<title>{html.escape(head)}</title>{early}<link rel=\"stylesheet\" href=\"style.css\">"
+                f'<script src="menu.js" defer></script></head>'
+                f'<body>{top}<main>{content}</main><nav class="bottom">{nav}</nav></body></html>\n')
 
     toc = "<ol class=\"toc\">" + "".join(
         f'<li><a href="{n}.html">{html.escape(t)}</a></li>' for (t, _, _), n in zip(parts, names)) + "</ol>"
-    lang_link = f'<a href="../html-{other}/index.html">{"English" if lang == "ko" else "한국어"}</a>'
+    lang_link = f'<a href="../html-{other}/index.html">{other_name}</a>'
+    home = f'<a href="index.html">{html.escape(title)}</a>'
+    first = [(label[2], f"{names[0]}.html")] if names else []
     (out / "index.html").write_text(page(title, "".join(to_html(k) for k in front) + f"<h2>{label[0]}</h2>" + toc,
-                                         lang_link), encoding="utf-8")
+                                         lang_link, bar(home, [(label[0], "index.html")] + first, None,
+                                                        "index.html")), encoding="utf-8")
     for i, ((t, _, nodes), n) in enumerate(zip(parts, names)):
         nav = [f'<a href="index.html">{label[3]}</a>']
+        items = [(label[0], "index.html")]
+        prev = f"{names[i - 1]}.html" if i > 0 else "index.html"
         if i > 0:
             nav.append(f'<a href="{names[i - 1]}.html">{label[1]}</a>')
+            items.append((label[1], f"{names[i - 1]}.html"))
         if i + 1 < len(parts):
             nav.append(f'<a href="{names[i + 1]}.html">{label[2]}</a>')
-        nav.append(f'<a href="../html-{other}/{n}.html">{"English" if lang == "ko" else "한국어"}</a>')
-        (out / f"{n}.html").write_text(page(f"{t} - {title}", "".join(to_html(k) for k in nodes), " · ".join(nav)),
-                                       encoding="utf-8")
+            items.append((label[2], f"{names[i + 1]}.html"))
+        nav.append(f'<a href="../html-{other}/{n}.html">{other_name}</a>')
+        here = f'{home}<span class="sep">›</span><span class="now">{html.escape(t)}</span>'
+        (out / f"{n}.html").write_text(page(f"{t} - {title}", "".join(to_html(k) for k in nodes), " · ".join(nav),
+                                            bar(here, items, prev, f"{n}.html")), encoding="utf-8")
+    shutil.copy(HERE / "menu.js", out / "menu.js")
     shutil.copy(HERE / "style.css", out / "style.css")
 
 

@@ -180,23 +180,94 @@ and `clear()` empties its stack. `blocks(text)` of the object `createPinax` give
 definitions and blocks are still open at the end of a text, the outermost first (`["def sq", "loop", "if"]`).
 
 `./nob wasm` also writes `build/dist/pinax-playground.html`, one page with the module inside it, which opens from disk
-with no server. The page is a terminal. Code runs when it is whole: it ends with `,` or `.`, or with the `end` of
-the block it opened. `use NAME .` and `set_order … .` end with a period, and `get_order` needs none (it takes nothing, so it runs when typed). A colon at the start of a line lists the commands, which are chosen as procedures are. `:procs` lists the procedures of the program with their signatures and `:get_order` tells the search order. An empty line runs the text gathered when no block is open, the way out of a forgotten dot. After `use` the completion offers the modules not in use yet, and after `set_order` the modules in use (and `get_order`), each with what it is and its procedures; the list opens downwards. Alt+0 offers at the place of the cursor: the procedure begun, or, in an empty place, ten names the program declares, the nearest and the most recent first. A loop or a block waits until its `end` is typed and then runs once, whole, and the status line
-at the bottom says how deep the typing is and in what (`depth 2: loop › if`). The stack shows after each statement.
-Every statement that ran without a fault (a `def`, a `use`, a number, a call) is added to a program, as
-GW-BASIC keeps one; a name declared again takes the place of its lines, and a refused or faulting statement is not kept. No command that begins with a colon is: a command only has its effect (`:clear` empties the stack and `:stack` shows it, and neither is a line of the program; the statements `clear.` and `stack.` are). `:list` shows the program with line
-numbers. `:edit N` puts line N in the prompt, `:edit NAME` brings a procedure (or a record, a const ...) whole into the editor and puts it back in its place when saved, `:edit N-M` does the same for lines N to M, `:insert N` adds lines above line N (0: at the end) until an empty line,
-`:delete N` (`:del`, also `N-M`) removes lines, and `:edit` (F2) opens the whole program in an editor; after each the
-program runs again. `:trace` resets like `:run` and runs the program one statement at a time (up to each period), showing the stack after each and, grey, every line of a procedure as it runs with the locals it holds; `:trace off` stops the lines of procedures. `:break 4 7` (or `:break sq`, a procedure's first body line) sets breakpoints and runs the program again; it stops before those lines, in a procedure or before a statement, and shows the locals and the lines around the stop. `:list` marks the breakpoints with `*` and the stop with `=>`; `:continue` (`:c`) goes on, `:next` (`:n`) goes on to the next line or statement, `:stop` ends the run, `:unbreak` removes breakpoints. `:toggle` (F9) puts a breakpoint at the line typed in the prompt, or at the line the run stopped at, or takes it away; `:next` with nothing stopped runs the program from line 1 one statement at a time. The keys: F4 `:list`, F5 `:run`, F7 `:trace` on or off, F8 `:continue` (`:run` when nothing is stopped), F9 `:toggle`, F10 `:next`. A typed statement stops in a procedure too. The breakpoints are line numbers: after `:insert` or `:delete` they stay at their numbers. `:run` (F5) is a reset: it empties the stack, forgets every definition and runs the program from
-line 1, the lines left as they are. Inside a procedure, nothing runs line by line: at each `,` or `.` the lines so far are only compiled, and a mistake is told at
-its line, with that line back in the prompt to be corrected. A procedure runs when it is called, its arguments first and then
-its name. Procedures are offered as you type, in the prompt and in the editor (F2), with their module, signature and meaning (taken from the
-standard) above the line. Only keys a typist does not need work the offer: Alt+Up and Alt+Down choose (Alt+Down also offers),
-Alt+1 to Alt+9 write the nth procedure, Tab writes the chosen one (in the editor Tab writes four spaces when nothing is offered), Esc closes it.
-The procedures of the program come first among the candidates, with their signatures. A procedure just compiled puts a call to try into the
-prompt (a sample value for each parameter, then the name and a dot); change the values and Enter runs it.
-`:help`, and the guide beside the terminal (F1), list the commands and keys; the page links to this manual. Each release
-carries the page as `pinax-playground.html`. The same page is on the web at `https://rubidus-api.github.io/pinax_lang/playground/`.
+with no server. Each release carries the page as `pinax-playground.html`, and the same page is on the web at
+`https://rubidus-api.github.io/pinax_lang/playground/`. The page is a terminal. `:help`, and the guide beside the
+terminal (F1), list the commands and keys; the page links to this manual.
+
+#part("When code runs")
+
+Code runs when it is whole: it ends with `,` or `.`, or with the `end` of the block it opened.
+
+- `use NAME .` and `set_order … .` end with a period. `get_order` needs none: it takes nothing, so it runs when typed.
+- A loop or a block waits until its `end` is typed and then runs once, whole. Meanwhile the status line at the bottom
+  says how deep the typing is and in what (`depth 2: loop › if`).
+- An empty line runs the text gathered when no block is open, the way out of a forgotten dot.
+- The stack shows after each statement.
+
+#part("The program")
+
+Every statement that ran without a fault (a `def`, a `use`, a number, a call) is added to a program, as GW-BASIC keeps
+one. A name declared again takes the place of its lines. A refused or faulting statement is not kept, and no command
+that begins with a colon is: a command only has its effect. `:clear` and `:stack` are not lines of the program; the
+statements `clear.` and `stack.` are.
+
+A colon at the start of a line lists the commands, which are chosen as procedures are. These commands show and change
+the program; after each change by `:edit`, `:insert` or `:delete` the program runs again.
+
+#table(columns: (auto, auto, 1fr), inset: 5pt, stroke: 0.5pt + luma(170),
+  table.header([*Command*], [*Key*], [*What it does*]),
+  [`:list`], [F4], [Shows the program with line numbers, the breakpoints marked `*` and the stop `=>`.],
+  [`:run`], [F5], [A reset: empties the stack, forgets every definition and runs the program from line 1, the lines left
+    as they are.],
+  [`:edit`], [F2], [Opens the whole program in an editor.],
+  [`:edit N`], [], [Puts line N in the prompt.],
+  [`:edit NAME`], [], [Brings a procedure (or a record, a const ...) whole into the editor and puts it back in its place
+    when saved.],
+  [`:edit N-M`], [], [Does as `:edit NAME` for lines N to M.],
+  [`:insert N`], [], [Adds lines above line N (0: at the end) until an empty line.],
+  [`:delete N`], [], [Removes lines; also `:del`, and `N-M`.],
+  [`:procs`], [], [Lists the procedures of the program with their signatures.],
+  [`:get_order`], [], [Tells the search order.],
+  [`:clear`, `:stack`], [], [Empties the stack; shows the stack.],
+  [`:help`], [F1], [Lists the commands and keys.],
+)
+
+#part("Writing a procedure")
+
+Inside a procedure, nothing runs line by line: at each `,` or `.` the lines so far are only compiled, and a mistake is
+told at its line, with that line back in the prompt to be corrected. A procedure runs when it is called, its arguments
+first and then its name. A procedure just compiled puts a call to try into the prompt (a sample value for each
+parameter, then the name and a dot); change the values and Enter runs it.
+
+#part("Tracing and breakpoints")
+
+#table(columns: (auto, auto, 1fr), inset: 5pt, stroke: 0.5pt + luma(170),
+  table.header([*Command*], [*Key*], [*What it does*]),
+  [`:trace`], [F7], [Resets like `:run` and runs the program one statement at a time (up to each period), showing the
+    stack after each and, grey, every line of a procedure as it runs with the locals it holds. F7 turns it on and off.],
+  [`:trace off`], [F7], [Stops the lines of procedures.],
+  [`:break 4 7`], [], [Sets breakpoints and runs the program again; `:break sq` sets one at the first body line of the
+    procedure `sq`.],
+  [`:continue`, `:c`], [F8], [Goes on; with nothing stopped, F8 is `:run`.],
+  [`:next`, `:n`], [F10], [Goes on to the next line or statement; with nothing stopped, runs the program from line 1 one
+    statement at a time.],
+  [`:toggle`], [F9], [Puts a breakpoint at the line typed in the prompt, or at the line the run stopped at, or takes it
+    away.],
+  [`:stop`], [], [Ends the run.],
+  [`:unbreak`], [], [Removes breakpoints.],
+)
+
+The program stops before a breakpoint's line, in a procedure or before a statement, and shows the locals and the lines
+around the stop. A typed statement stops in a procedure too. The breakpoints are line numbers: after `:insert` or
+`:delete` they stay at their numbers.
+
+#part("Completion")
+
+Procedures are offered as you type, in the prompt and in the editor (F2), with their module, signature and meaning
+(taken from the standard) above the line. The procedures of the program come first among the candidates, with their
+signatures. After `use` the completion offers the modules not in use yet, and after `set_order` the modules in use (and
+`get_order`), each with what it is and its procedures; the list opens downwards. Only keys a typist does not need work
+the offer.
+
+#table(columns: (auto, 1fr), inset: 5pt, stroke: 0.5pt + luma(170),
+  table.header([*Key*], [*What it does*]),
+  [Alt+Up, Alt+Down], [Choose a candidate; Alt+Down also offers.],
+  [Alt+1 … Alt+9], [Write the nth procedure.],
+  [Tab], [Writes the chosen one; in the editor, with nothing offered, four spaces.],
+  [Esc], [Closes the offer.],
+  [Alt+0], [Offers at the place of the cursor: the procedure begun, or, in an empty place, ten names the program
+    declares, the nearest and the most recent first.],
+)
 
 In this edition the WebAssembly host registers one module, `io`; `io.read_line` always fails with `not_found`. There is
 no `file`, `clock`, `random`, `env` or `extern`. The modules of the core (`str`, `json`, `csv`, `rex` and the rest) and
