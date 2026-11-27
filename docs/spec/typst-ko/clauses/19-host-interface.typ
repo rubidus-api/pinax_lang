@@ -9,6 +9,12 @@ C++ 컴파일러로 읽힌다. 이 절은 그 함수들이 무엇을 하는지 �
 #para("2")[한 상태는 한 번에 한 스레드만 쓴다. 상태 사이에는 나누는 것이 없다. 함수가 돌려주는 `pinax_str` 는
 따로 적지 않으면 그 상태에 대한 다음 호출 전까지만 쓸 수 있다.]
 
+#para("3")[`PINAX_ABI` 는 바이너리 인터페이스의 번호다. 헤더로 컴파일한 호스트는 같은 `PINAX_ABI` 의 그 뒤 라이브러리와
+돈다. `pinax_version()` 은 라이브러리의 `PINAX_VERSION_NUMBER(major, minor, patch)` 를, `pinax_abi()` 는 그
+`PINAX_ABI` 를 준다. `PINAX_ABI_OK()` 는 라이브러리의 `PINAX_ABI` 가 헤더와 같고 판이 헤더 이상일 때 참이며, 호스트는
+시작할 때 한 번 이를 본다. 오류 번호와 플래그는 모두 헤더에 값이 적혀 있고 그 값을 지킨다. 라이브러리가 모르는 플래그
+비트는 `PINAX_ERR_ARGUMENT` 로 거절한다. 이름이 `reserved_...` 인 칸은 0 이나 `NULL` 이어야 한다.]
+
 == 오류 번호 <host-errors>
 
 #para("1")[함수는 `pinax_err` 를 돌려준다. `PINAX_OK` 는 0 이다. 실패가 아닌 결과 셋이 있다:
@@ -306,3 +312,32 @@ CHECK 에서 멈춘다), 기다림과 작업이 같다. 내보낸 코드는 적�
 
 #para("4")[표는 상처럼 호스트가 보증하는 자료다(4 (2a)). 그 해시만 검사하고 기계어는 검사하지 않는다. 내보낸 코드에서 4 (2a)의
 보장은 적재기의 증명이 옳은 만큼 성립한다.]
+
+== 콜백 <host-callbacks>
+
+#para("1")[라이브러리는 일곱 곳에서 호스트를 다시 부른다: 호스트 프로시저, barrier 함수, trace 함수, task fault 함수,
+`config.diag`, 핸들 타입의 close 함수, `extern` 해석기(18). 모두 상태를 쓰고 있는 스레드에서
+돈다(`pinax_loop` 아래에서는 loop 스레드). 콜백이 도는 동안 상태는 그것이 무엇인지 알고, 표가 허락하지 않는 호출은
+거절한다. `pinax_err` 를 돌려주는 함수는 `PINAX_ERR_STATE` 로, 크기·개수·포인터를 돌려주는 함수는 0 이나 `NULL` 로
+답하고, 아무것도 돌려주지 않는 함수는 아무것도 하지 않는다. 오류 글은 그 콜백의 이름을 댄다. 콜백은 겹친다: 호스트
+프로시저에서 실행한 낱말이 다시 호스트 프로시저를 부르면, 그것도 도는 동안은 호스트 프로시저다.
+#table(columns: (auto, 1fr), inset: 5pt, stroke: 0.5pt + luma(170),
+  [*안에서*], [*상태에 불러도 되는 것*],
+  [호스트 프로시저], [`pinax_call_...`; `PINAX_FIND_NESTED` 를 준 `pinax_find`, `pinax_global_find`; 그렇게 찾은 낱말의 `pinax_run`; `pinax_handle_new`, `pinax_handle_get`, `pinax_handle_release`; 읽는 함수],
+  [barrier, trace, task fault, `diag`], [읽는 함수],
+  [핸들 타입의 close], [`pinax_handle_get` 과 `pinax_handle_release`(자기가 가진 객체를 닫는 객체)],
+  [해석기], [아무것도 없다],
+)]
+
+#para("2")[읽는 함수는 `pinax_error_text`, `pinax_needed`, `pinax_fault_local`, `pinax_task_faults`, `pinax_eval_count`,
+`pinax_eval_value`, `pinax_word_at`, `pinax_image_size`, `pinax_share_size`, `pinax_stats_get` 이다. `pinax_close` 는
+어느 콜백에서도 부르지 않는다.]
+
+#para("3")[콜백이 받는 것은 그 호출 동안만 산다: 호스트 프로시저의 문자열 인자(복사가 아니라 보기), `extern` C 함수의
+`str` 과 `cstr` 인자(간직하지도, 그것을 거쳐 쓰지도 않는다), 호스트 프로시저의 `pinax_call`, task fault 의 `where`,
+trace 의 프로시저 이름, `diag` 의 메시지. `pinax_call_alloc` 의 메모리는 호스트가 시작하는 다음 실행까지 산다.
+`pinax_loop_done` 은 상태의 콜백이 아니다: 불릴 때 실행은 이미 끝났고, 거기서 다른 실행을 시작해도 된다.]
+
+#para("4")[호스트 라이브러리는 핵과 달리 프로세스 전체의 데이터가 있다: 미리 읽은 표준 입력, 난수 생성기, `env` 의
+인자, 그리고 barrier 가 표준 출력을 비우는 일은 프로세스의 모든 상태가 나눈다. `pinax_host_exit_asked` 는 부른
+스레드의 것을 답한다.]

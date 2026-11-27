@@ -2,7 +2,7 @@
 #show: document-setup.with(
   title: "Pinax 매뉴얼",
   subtitle: "끼워 쓰는 스크립트 언어 Pinax 를 배우고 쓰기",
-  version: "0.36.2 판",
+  version: "0.37.0 판",
   date: "2026년 10월")
 
 #include "chapters/00-preface.typ"
@@ -22,5 +22,6 @@
 #include "chapters/14-embedding.typ"
 #include "chapters/15-tools.typ"
 #include "chapters/16-messages.typ"
+#include "chapters/17-abi.typ"
 
 #term-index()

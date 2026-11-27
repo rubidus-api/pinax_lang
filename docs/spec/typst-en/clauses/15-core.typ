@@ -56,7 +56,7 @@ plain words on an unsigned type and do not take a signed one. The bit procedures
 
 #part("Constraints")
 
-#para("5")[Integer procedures take `int` only (or two values of the same declared type, 7.4).]
+#para("5a")[Integer procedures take `int` only (or two values of the same declared type, 7.4).]
 #ex("spec", "15-max-str.pnx")
 
 #part("Faults")

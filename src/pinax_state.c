@@ -48,6 +48,19 @@ static pinax_err fail(pinax_state *st, pinax_err err, const char *text) {
     return err;
 }
 
+// A call that the callback running now may not make (spec 19, Callbacks; RFC-0058 G2). The state is the
+// host's memory, written here through a const pointer only for the error text of the refusal.
+pinax_err pnx_refused_in_callback(const pinax_state *state) {
+    static const char *const text[] = {
+        "", "not allowed inside a host procedure", "not allowed inside the barrier function",
+        "not allowed inside the trace function", "not allowed inside the task fault function",
+        "not allowed inside the diag function", "not allowed inside a handle type's close function",
+        "not allowed inside the extern resolver",
+    };
+    pinax_state *st = (pinax_state *)state;
+    return fail(st, PINAX_ERR_STATE, text[st->callback < sizeof text / sizeof text[0] ? st->callback : 0]);
+}
+
 // Bytes from the block, zeroed. NULL when the block is too small; st->needed then says how
 // much would have been enough so far.
 static void *take(pinax_state *st, size_t bytes, size_t align) {
@@ -375,9 +388,9 @@ pinax_err pinax_open(pinax_mem block, const pinax_config *config, pinax_state **
         return PINAX_ERR_ARGUMENT;
     *out = NULL;
     // the configuration may be the shorter one of a host built before hash_key was added
-    const size_t without_key = offsetof(pinax_config, hash_key);
+    const size_t without_key = PINAX_CONFIG_SIZE_NO_KEY;
     if (!block.ptr || !config || (config->struct_size != sizeof *config && config->struct_size != without_key) ||
-        config->float_slots != 0)
+        config->reserved_0 != 0)
         return PINAX_ERR_ARGUMENT;
     uint8_t *base = block.ptr;
     size_t skip = (size_t)(-(uintptr_t)base & 15u);
@@ -435,7 +448,7 @@ static void handle_drop(pinax_state *st, uint32_t slot, bool call_close) {
     st->handle_free = slot + 1;
     --st->handles_open;
     if (call_close && type->close)
-        type->close(object, type->user);
+        PNX_CALL_OUT(st, PNX_CB_CLOSE, type->close(object, type->user));
 }
 
 // Closes every handle that is still open, or only those opened by run `run` (0: all).
@@ -447,15 +460,35 @@ static void handles_close(pinax_state *st, uint32_t run) {
 }
 
 void pinax_close(pinax_state *state) {
+    if (!PNX_CB_ALLOWS_OR_NULL(state, 0)) {
+        (void)pnx_refused_in_callback(state);
+        return;
+    }
     if (state)
         handles_close(state, 0);
 }
 
 size_t pinax_needed(const pinax_state *state) {
+    if (!PNX_CB_ALLOWS_OR_NULL(state, PNX_CB_READERS)) {
+        (void)pnx_refused_in_callback(state);
+        return 0;
+    }
     return state ? state->needed : 0;
 }
 
+uint32_t pinax_version(void) {
+    return PINAX_VERSION_NUMBER(PINAX_VERSION_MAJOR, PINAX_VERSION_MINOR, PINAX_VERSION_PATCH);
+}
+
+uint32_t pinax_abi(void) {
+    return PINAX_ABI;
+}
+
 pinax_str pinax_error_text(const pinax_state *state) {
+    if (!PNX_CB_ALLOWS_OR_NULL(state, PNX_CB_READERS)) {
+        (void)pnx_refused_in_callback(state);
+        return (pinax_str){NULL, 0};
+    }
     pinax_str text = {(const unsigned char *)state->error_text, __builtin_strlen(state->error_text)};
     return text;
 }
@@ -463,8 +496,14 @@ pinax_str pinax_error_text(const pinax_state *state) {
 // ---- host words --------------------------------------------------------------------------
 
 pinax_err pinax_register(pinax_state *st, const char *module, const pinax_word_def *defs, size_t count) {
+    if (!PNX_CB_ALLOWS_OR_NULL(st, 0))
+        return pnx_refused_in_callback(st);
     if (!st || !module || (!defs && count))
         return PINAX_ERR_ARGUMENT;
+    for (size_t k = 0; k < count; ++k) // a flag this library does not know (RFC-0058 B4): nothing is registered
+        if (defs[k].flags & ~(uint32_t)(PINAX_WORD_PURE | PINAX_WORD_AWAITABLE | PINAX_WORD_KEEP_STR | PINAX_WORD_READS |
+                                        PINAX_WORD_WRITES))
+            return fail(st, PINAX_ERR_ARGUMENT, "host word: a flag this library does not know");
     if (st->from_image) { // the host words of the image, given again: same name, signature and flags
         for (size_t k = 0; k < count; ++k) {
             pnx_host *h = NULL;
@@ -1819,6 +1858,8 @@ void pnx_checks_report(const pinax_state *st, void (*put)(void *user, const char
 }
 
 pinax_err pinax_load_bytecode(pinax_state *st, pinax_str bytecode) {
+    if (!PNX_CB_ALLOWS_OR_NULL(st, 0))
+        return pnx_refused_in_callback(st);
     if (!st || !bytecode.ptr)
         return PINAX_ERR_ARGUMENT;
     if (st->head)
@@ -2555,6 +2596,8 @@ pinax_err pnx_word_effects(pinax_state *st, uint32_t word, pnx_effects *out) {
 }
 
 pinax_err pinax_word_effects(pinax_state *st, pinax_word word, pinax_effects *out) {
+    if (!PNX_CB_ALLOWS_OR_NULL(st, 0))
+        return pnx_refused_in_callback(st);
     if (!st || !out || out->struct_size != sizeof *out)
         return PINAX_ERR_ARGUMENT;
     if (st->suspended || st->host_cur || st->loading) // the block above `used` belongs to the run
@@ -2891,8 +2934,12 @@ static void mark_yields_from(pinax_state *st, uint32_t base) {
 }
 
 pinax_err pinax_find(pinax_state *st, const char *name, const char *signature, uint32_t flags, pinax_word *out) {
+    if (!PNX_CB_ALLOWS_OR_NULL(st, PNX_CB_BIT(PNX_CB_HOST)))
+        return pnx_refused_in_callback(st);
     if (!st || !name || !signature || !out)
         return PINAX_ERR_ARGUMENT;
+    if (flags & ~(uint32_t)PINAX_FIND_NESTED) // a flag this library does not know (RFC-0058 B4)
+        return fail(st, PINAX_ERR_ARGUMENT, "pinax_find: a flag this library does not know");
     if (!st->head)
         return fail(st, PINAX_ERR_STATE, "no code loaded");
     // a plain name is a word of the first source; module.word names a word of that module
@@ -2923,6 +2970,8 @@ pinax_err pinax_find(pinax_state *st, const char *name, const char *signature, u
 }
 
 pinax_err pinax_word_at(const pinax_state *st, uint32_t index, pinax_word_info *out) {
+    if (!PNX_CB_ALLOWS_OR_NULL(st, PNX_CB_READERS))
+        return pnx_refused_in_callback(st);
     if (!st || !out)
         return PINAX_ERR_ARGUMENT;
     for (uint32_t k = 0; st->head && k < st->head->n_words; ++k) {
@@ -3068,10 +3117,17 @@ int pnx_trace_note(pinax_state *st, uint32_t pc, uint32_t ibase, uint32_t sbase,
     fault_locals(st);
     const uint32_t word = word_of_pc(st, pc - 1);
     const char *name = word == UINT32_MAX ? "" : st->words[word].name;
-    return st->trace(st->trace_user, line, (pinax_str){(const unsigned char *)name, __builtin_strlen(name)});
+    int stop = 0;
+    PNX_CALL_OUT(st, PNX_CB_TRACE,
+                 stop = st->trace(st->trace_user, line, (pinax_str){(const unsigned char *)name, __builtin_strlen(name)}));
+    return stop;
 }
 
 void pinax_set_trace(pinax_state *st, int (*trace)(void *user, uint32_t line, pinax_str word), void *user) {
+    if (!PNX_CB_ALLOWS_OR_NULL(st, 0)) {
+        (void)pnx_refused_in_callback(st);
+        return;
+    }
     if (st)
         st->trace = trace, st->trace_user = user;
 }
@@ -3088,11 +3144,13 @@ void pnx_note_task_fault(pinax_state *st, pinax_err err) {
     if (st->on_task_fault) {
         const pinax_task_fault fault = {err, st->task ? st->task->tag : 0,
                                         {(const unsigned char *)st->task_where, __builtin_strlen(st->task_where)}};
-        st->on_task_fault(st->on_task_fault_user, st, &fault);
+        PNX_CALL_OUT(st, PNX_CB_TASK_FAULT, st->on_task_fault(st->on_task_fault_user, st, &fault));
     }
 }
 
 pinax_err pinax_capacity(pinax_state *st, const char *name, uint32_t value) {
+    if (!PNX_CB_ALLOWS_OR_NULL(st, 0))
+        return pnx_refused_in_callback(st);
     if (!st || !name || value < 1 || value > 0x7fffffffu)
         return PINAX_ERR_ARGUMENT;
     const size_t len = __builtin_strlen(name);
@@ -3114,6 +3172,8 @@ pinax_err pinax_capacity(pinax_state *st, const char *name, uint32_t value) {
 }
 
 pinax_err pinax_on_task_fault(pinax_state *st, pinax_task_fault_fn fn, void *user) {
+    if (!PNX_CB_ALLOWS_OR_NULL(st, 0))
+        return pnx_refused_in_callback(st);
     if (!st)
         return PINAX_ERR_ARGUMENT;
     st->on_task_fault = fn;
@@ -3122,6 +3182,10 @@ pinax_err pinax_on_task_fault(pinax_state *st, pinax_task_fault_fn fn, void *use
 }
 
 uint64_t pinax_task_faults(const pinax_state *st, pinax_str *last) {
+    if (!PNX_CB_ALLOWS_OR_NULL(st, PNX_CB_READERS)) {
+        (void)pnx_refused_in_callback(st);
+        return 0;
+    }
     if (!st)
         return 0;
     if (last)
@@ -3254,6 +3318,8 @@ static pinax_err run_nested(pinax_state *st, pinax_word word, const pinax_args *
 static pinax_err hosts_given(pinax_state *st);
 
 pinax_err pinax_run(pinax_state *st, pinax_word word, const pinax_args *args) {
+    if (!PNX_CB_ALLOWS_OR_NULL(st, PNX_CB_BIT(PNX_CB_HOST)))
+        return pnx_refused_in_callback(st);
     if (!st)
         return PINAX_ERR_ARGUMENT;
     if (!st->head || st->suspended)
@@ -3322,6 +3388,8 @@ pinax_err pinax_run(pinax_state *st, pinax_word word, const pinax_args *args) {
 }
 
 pinax_err pinax_resume(pinax_state *st, const pinax_args *results) {
+    if (!PNX_CB_ALLOWS_OR_NULL(st, 0))
+        return pnx_refused_in_callback(st);
     if (!st)
         return PINAX_ERR_ARGUMENT;
     if (!st->suspended || st->host_cur)
@@ -3354,7 +3422,7 @@ pinax_err pinax_resume(pinax_state *st, const pinax_args *results) {
     if (st->loading && err != PINAX_SUSPENDED && err != PINAX_WAITING) { // the load ends here: done, or failed and undone
         st->loading = false;
         if (st->barrier) // the end of load code, or of a session line, is a dot (RFC-0040 part F)
-            st->barrier(st->barrier_user);
+            PNX_CALL_OUT(st, PNX_CB_BARRIER, st->barrier(st->barrier_user));
         st->eval_pending = false; // a line that failed leaves the session stack as it was
         if (err != PINAX_OK) {
             const char *text = st->error_text;
@@ -3369,6 +3437,8 @@ pinax_err pinax_resume(pinax_state *st, const pinax_args *results) {
 }
 
 pinax_err pinax_abort(pinax_state *st) {
+    if (!PNX_CB_ALLOWS_OR_NULL(st, 0))
+        return pnx_refused_in_callback(st);
     if (!st)
         return PINAX_ERR_ARGUMENT;
     if (!st->suspended || st->host_cur)
@@ -3391,13 +3461,26 @@ pinax_err pinax_abort(pinax_state *st) {
 }
 
 void pinax_set_budget(pinax_state *st, uint64_t instructions) {
+    if (!PNX_CB_ALLOWS_OR_NULL(st, 0)) {
+        (void)pnx_refused_in_callback(st);
+        return;
+    }
     st->budget = instructions;
 }
 
 void pinax_stats_get(const pinax_state *st, pinax_stats *out) {
-    const size_t size = out->struct_size;
-    if (size != sizeof *out)
+    if (!PNX_CB_ALLOWS_OR_NULL(st, PNX_CB_READERS)) {
+        (void)pnx_refused_in_callback(st);
         return;
+    }
+    if (!st || !out)
+        return;
+    const size_t size = out->struct_size;
+    if (size != sizeof *out) { // a size this library does not know (RFC-0058 B2, D0116 (3))
+        out->struct_size = 0;
+        (void)fail((pinax_state *)st, PINAX_ERR_ARGUMENT, "pinax_stats_get: a struct_size this library does not know");
+        return;
+    }
     __builtin_memset(out, 0, sizeof *out);
     out->struct_size = size;
     out->depth_peak = st->depth_peak;
@@ -3420,6 +3503,8 @@ static bool run_unfinished(const pinax_state *st) {
 }
 
 pinax_err pinax_bind(pinax_state *st, const char *global, void *memory, size_t bytes) {
+    if (!PNX_CB_ALLOWS_OR_NULL(st, 0))
+        return pnx_refused_in_callback(st);
     if (!st || !global || !memory)
         return PINAX_ERR_ARGUMENT;
     if (!st->head)
@@ -3485,6 +3570,10 @@ static void give_shared(pinax_state *st, uint32_t ti, uint8_t *ptr, uint32_t len
 
 // RFC-0020 section 4: the target's declaration, written `shared`, reads the source's storage.
 pinax_err pinax_share(pinax_state *st, const char *global, pinax_state *source, const char *from) {
+    if (!PNX_CB_ALLOWS_OR_NULL(st, 0))
+        return pnx_refused_in_callback(st);
+    if (!PNX_CB_ALLOWS_OR_NULL(source, 0)) // the lending state is in a callback of its own
+        return pnx_refused_in_callback(source);
     if (!st || !global || !source || !from || st == source)
         return PINAX_ERR_ARGUMENT;
     if (!st->head || !source->head)
@@ -3558,6 +3647,10 @@ static bool share_saved(const pinax_state *st, uint32_t k) {
 }
 
 size_t pinax_share_size(const pinax_state *st) {
+    if (!PNX_CB_ALLOWS_OR_NULL(st, PNX_CB_READERS)) {
+        (void)pnx_refused_in_callback(st);
+        return 0;
+    }
     if (!st || !st->head)
         return 0;
     uint64_t count = 0, data = 0;
@@ -3572,6 +3665,8 @@ size_t pinax_share_size(const pinax_state *st) {
 }
 
 pinax_err pinax_share_save(const pinax_state *st, pinax_mem out, size_t *written) {
+    if (!PNX_CB_ALLOWS_OR_NULL(st, 0))
+        return pnx_refused_in_callback(st);
     if (!st || !out.ptr || !written)
         return PINAX_ERR_ARGUMENT;
     *written = 0;
@@ -3660,6 +3755,8 @@ static const pnx_share_entry *share_entry(pinax_str file, uint32_t k) {
 }
 
 pinax_err pinax_share_file(pinax_state *st, const char *global, pinax_str file, const char *from) {
+    if (!PNX_CB_ALLOWS_OR_NULL(st, 0))
+        return pnx_refused_in_callback(st);
     if (!st || !global || !from || !file.ptr)
         return PINAX_ERR_ARGUMENT;
     if (!st->head)
@@ -3743,6 +3840,8 @@ static pinax_err wake(pinax_state *st, const pnx_wait *w, int64_t *ibank, pnx_sc
 }
 
 pinax_err pinax_complete(pinax_state *st, pinax_token token, pinax_err outcome, const pinax_args *results) {
+    if (!PNX_CB_ALLOWS_OR_NULL(st, 0))
+        return pnx_refused_in_callback(st);
     if (!st || !token)
         return PINAX_ERR_ARGUMENT;
     if (st->host_cur)
@@ -3785,14 +3884,23 @@ pinax_err pinax_complete(pinax_state *st, pinax_token token, pinax_err outcome, 
 }
 
 void pinax_set_resolver(pinax_state *st, pinax_resolve_fn resolve, void *user) {
+    if (!PNX_CB_ALLOWS_OR_NULL(st, 0)) {
+        (void)pnx_refused_in_callback(st);
+        return;
+    }
     if (st) {
         st->resolve = resolve;
         st->resolve_user = user;
+        if (st->typed_only) { // a typed resolver was set: no falling back to one that cannot be checked
+            (void)fail(st, PINAX_ERR_STATE, "pinax_set_resolver: this state has a typed resolver");
+            return;
+        }
         for (uint32_t k = 0; st->from_image && resolve && k < st->n_hosts; ++k) { // the externs of an image
             pnx_host *h = &st->hosts[k];
             if (h->module[0] == '@' && !h->ext)
-                h->ext = resolve(user, (pinax_str){(const unsigned char *)h->module + 1, __builtin_strlen(h->module) - 1},
-                                 (pinax_str){(const unsigned char *)h->name, __builtin_strlen(h->name)});
+                PNX_CALL_OUT(st, PNX_CB_RESOLVER,
+                             h->ext = resolve(user, (pinax_str){(const unsigned char *)h->module + 1, __builtin_strlen(h->module) - 1},
+                                              (pinax_str){(const unsigned char *)h->name, __builtin_strlen(h->name)}));
         }
     }
 }
@@ -3958,6 +4066,118 @@ static pinax_err extern_call(pinax_call *call, void *user, const pinax_args *arg
     return PINAX_OK;
 }
 
+// The C layout of an extern as the declaration makes it, in the terms of pinax_c_layout.
+static void layout_of(const pinax_state *st, const pnx_host *h, pinax_c_layout *l) {
+    *l = (pinax_c_layout){.struct_size = sizeof *l, .n_args = h->ext_n};
+    for (uint32_t k = 0; k < h->ext_n; ++k) {
+        const uint8_t x = h->ext_kind[k];
+        if (x >= PNX_XA_HANDLE) {
+            const bool owned = x >= PNX_XA_HANDLE + PNX_XA_OWNED;
+            l->arg[k] = owned ? PINAX_C_OWNED : PINAX_C_HANDLE;
+            l->arg_type[k] = st->handle_types[x - PNX_XA_HANDLE - (owned ? PNX_XA_OWNED : 0)].name;
+        } else {
+            l->arg[k] = x == PNX_XA_STR ? PINAX_C_STR : x == PNX_XA_CSTR ? PINAX_C_CSTR : PINAX_C_INT;
+        }
+    }
+    if (h->ext_result >= PNX_XA_HANDLE) {
+        l->result = PINAX_C_HANDLE;
+        l->result_type = st->handle_types[h->ext_result - PNX_XA_HANDLE].name;
+    } else {
+        l->result = h->ext_result == PNX_XA_INT ? PINAX_C_INT : PINAX_C_NONE;
+    }
+    l->fails = 0;
+    for (const char *p = h->signature; *p; ++p)
+        if (p[0] == ' ' && p[1] == 'o' && p[2] == 'r' && p[3] == ' ' && p[4] == 'f') // " or fail"
+            l->fails = 1;
+}
+
+static bool same_type_name(const char *a, const char *b) {
+    return a && b && text_equal(a, b);
+}
+
+// Text of a layout, for the error: "(int, str, handle file gives int or fail)". Appends to out at *n.
+static void layout_put(char *out, size_t cap, size_t *n, const char *text) {
+    while (*text && *n + 1 < cap)
+        out[(*n)++] = *text++;
+    out[*n < cap ? *n : cap - 1] = '\0';
+}
+static void layout_text(const pinax_c_layout *l, char *out, size_t cap, size_t *n) {
+    static const char *const kind[] = {"none", "int", "str", "cstr", "handle", "owned"};
+    layout_put(out, cap, n, "(");
+    for (uint32_t k = 0; k < l->n_args && k < 8; ++k) {
+        if (k)
+            layout_put(out, cap, n, ", ");
+        layout_put(out, cap, n, l->arg[k] <= 5 ? kind[l->arg[k]] : "?");
+        if (l->arg[k] >= PINAX_C_HANDLE && l->arg[k] <= 5) {
+            layout_put(out, cap, n, " ");
+            layout_put(out, cap, n, l->arg_type[k] ? l->arg_type[k] : "?");
+        }
+    }
+    if (l->result != PINAX_C_NONE) {
+        layout_put(out, cap, n, l->n_args ? " gives " : "gives ");
+        layout_put(out, cap, n, l->result <= 5 ? kind[l->result] : "?");
+        if (l->result == PINAX_C_HANDLE) {
+            layout_put(out, cap, n, " ");
+            layout_put(out, cap, n, l->result_type ? l->result_type : "?");
+        }
+    }
+    layout_put(out, cap, n, l->fails ? " or fail)" : ")");
+}
+
+// Asks the typed resolver for the function of `h` and compares the layout it describes with the declaration's.
+static pinax_err typed_link(pinax_state *st, pnx_host *h) {
+    pinax_c_layout want, got = {.struct_size = sizeof got};
+    layout_of(st, h, &want);
+    const pinax_str library = {(const unsigned char *)h->module + 1, __builtin_strlen(h->module) - 1};
+    const pinax_str symbol = {(const unsigned char *)h->name, __builtin_strlen(h->name)};
+    pinax_extern_fn fn = NULL;
+    PNX_CALL_OUT(st, PNX_CB_RESOLVER, fn = st->typed_resolve(st->typed_user, library, symbol, &got));
+    if (!fn) {
+        h->ext = NULL;
+        return PINAX_OK; // the caller says "the host does not give this function"
+    }
+    bool same = got.n_args == want.n_args && got.result == want.result && got.fails == want.fails &&
+                (want.result != PINAX_C_HANDLE || same_type_name(got.result_type, want.result_type));
+    for (uint32_t k = 0; same && k < want.n_args; ++k)
+        same = got.arg[k] == want.arg[k] && (want.arg[k] < PINAX_C_HANDLE || same_type_name(got.arg_type[k], want.arg_type[k]));
+    if (!same) {
+        char *const text = st->layout_error;
+        const size_t cap = sizeof st->layout_error;
+        size_t n = 0;
+        layout_put(text, cap, &n, "extern ");
+        layout_put(text, cap, &n, h->name);
+        layout_put(text, cap, &n, ": the host describes it ");
+        layout_text(&got, text, cap, &n);
+        layout_put(text, cap, &n, ", the script declares ");
+        layout_text(&want, text, cap, &n);
+        h->ext = NULL;
+        return fail(st, PINAX_ERR_SIGNATURE, text);
+    }
+    h->ext = fn;
+    return PINAX_OK;
+}
+
+pinax_err pinax_set_typed_resolver(pinax_state *st, pinax_typed_resolve_fn resolve, void *user) {
+    if (!PNX_CB_ALLOWS_OR_NULL(st, 0))
+        return pnx_refused_in_callback(st);
+    if (!st || !resolve)
+        return PINAX_ERR_ARGUMENT;
+    st->typed_resolve = resolve;
+    st->typed_user = user;
+    st->typed_only = true;
+    pinax_err first = PINAX_OK;
+    // every extern there is, checked now: those of an image, and those an untyped resolver linked before
+    for (uint32_t k = 0; k < st->n_hosts; ++k) {
+        pnx_host *h = &st->hosts[k];
+        if (h->module[0] == '@' && (h->ext || st->from_image)) {
+            const pinax_err err = typed_link(st, h);
+            if (err != PINAX_OK && first == PINAX_OK)
+                first = err;
+        }
+    }
+    return first;
+}
+
 pinax_err pnx_extern_link(pinax_state *st, const char *module, const char *name, const char *signature,
                           uint32_t *index) {
     pnx_host made = {0};
@@ -3979,11 +4199,17 @@ pinax_err pnx_extern_link(pinax_state *st, const char *module, const char *name,
     }
     if (st->n_hosts == PNX_MAX_HOSTS)
         return fail(st, PINAX_ERR_NO_ROOM, "too many host words and extern functions");
-    if (!st->resolve)
+    if (!st->resolve && !st->typed_resolve)
         return fail(st, PINAX_ERR_NOT_FOUND, "extern: the host gave no resolver, so no C function can be named");
-    const pinax_str library = {(const unsigned char *)module + 1, __builtin_strlen(module) - 1};
-    const pinax_str symbol = {(const unsigned char *)name, __builtin_strlen(name)};
-    made.ext = st->resolve(st->resolve_user, library, symbol);
+    if (st->typed_resolve) {
+        const pinax_err err = typed_link(st, &made);
+        if (err != PINAX_OK)
+            return err;
+    } else {
+        const pinax_str library = {(const unsigned char *)module + 1, __builtin_strlen(module) - 1};
+        const pinax_str symbol = {(const unsigned char *)name, __builtin_strlen(name)};
+        PNX_CALL_OUT(st, PNX_CB_RESOLVER, made.ext = st->resolve(st->resolve_user, library, symbol));
+    }
     if (!made.ext)
         return fail(st, PINAX_ERR_NOT_FOUND, "extern: the host does not give this function");
     pnx_host *h = &st->hosts[st->n_hosts];
@@ -3996,6 +4222,8 @@ pinax_err pnx_extern_link(pinax_state *st, const char *module, const char *name,
 
 pinax_err pinax_handle_type(pinax_state *st, const char *name, void (*close)(void *object, void *user),
                             void *user, uint32_t *out_type) {
+    if (!PNX_CB_ALLOWS_OR_NULL(st, 0))
+        return pnx_refused_in_callback(st);
     if (!st || !name || !out_type)
         return PINAX_ERR_ARGUMENT;
     for (uint32_t k = 0; st->from_image && k < st->n_handle_types; ++k) { // given again: its number back
@@ -4038,6 +4266,8 @@ static pnx_handle_slot *handle_slot(pinax_state *st, uint32_t type, pinax_handle
 }
 
 pinax_err pinax_handle_new(pinax_state *st, uint32_t type, void *object, pinax_handle *out) {
+    if (!PNX_CB_ALLOWS_OR_NULL(st, PNX_CB_BIT(PNX_CB_HOST)))
+        return pnx_refused_in_callback(st);
     if (!st || !out || type == 0 || type > st->n_handle_types)
         return PINAX_ERR_ARGUMENT;
     if (st->handle_free == 0)
@@ -4056,12 +4286,18 @@ pinax_err pinax_handle_new(pinax_state *st, uint32_t type, void *object, pinax_h
 }
 
 void *pinax_handle_get(pinax_state *st, uint32_t type, pinax_handle handle) {
+    if (!PNX_CB_ALLOWS_OR_NULL(st, PNX_CB_BIT(PNX_CB_HOST) | PNX_CB_BIT(PNX_CB_CLOSE))) {
+        (void)pnx_refused_in_callback(st);
+        return NULL;
+    }
     const pnx_handle_slot *h = handle_slot(st, type, handle);
     return h ? h->object : NULL;
 }
 
 // The host took the object back (it closes it itself); the handle is dead from now on.
 pinax_err pinax_handle_release(pinax_state *st, uint32_t type, pinax_handle handle) {
+    if (!PNX_CB_ALLOWS_OR_NULL(st, PNX_CB_BIT(PNX_CB_HOST) | PNX_CB_BIT(PNX_CB_CLOSE)))
+        return pnx_refused_in_callback(st);
     pnx_handle_slot *h = handle_slot(st, type, handle);
     if (!h)
         return st ? fail(st, PINAX_ERR_STALE, "the handle is not open") : PINAX_ERR_ARGUMENT;
@@ -4070,6 +4306,8 @@ pinax_err pinax_handle_release(pinax_state *st, uint32_t type, pinax_handle hand
 }
 
 pinax_err pinax_global_find(pinax_state *st, const char *name, pinax_global *out) {
+    if (!PNX_CB_ALLOWS_OR_NULL(st, PNX_CB_BIT(PNX_CB_HOST)))
+        return pnx_refused_in_callback(st);
     if (!st || !name || !out)
         return PINAX_ERR_ARGUMENT;
     if (!st->head)
@@ -4192,6 +4430,8 @@ pinax_err pnx_leave_native(pinax_state *st) {
 }
 
 pinax_err pinax_native_attach(pinax_state *st, const pinax_native *native) {
+    if (!PNX_CB_ALLOWS_OR_NULL(st, 0))
+        return pnx_refused_in_callback(st);
     if (!st || (native && (native->struct_size != sizeof *native || !native->run || (native->code_words == 0) != (native->words == 0))))
         return PINAX_ERR_ARGUMENT;
     if (st->suspended || st->host_cur || st->loading)
@@ -4202,10 +4442,16 @@ pinax_err pinax_native_attach(pinax_state *st, const pinax_native *native) {
 }
 
 size_t pinax_image_size(const pinax_state *st) {
+    if (!PNX_CB_ALLOWS_OR_NULL(st, PNX_CB_READERS)) {
+        (void)pnx_refused_in_callback(st);
+        return 0;
+    }
     return st ? sizeof(pnx_image_head) + st->used : 0;
 }
 
 pinax_err pinax_image_save(const pinax_state *st, pinax_mem out, size_t *written) {
+    if (!PNX_CB_ALLOWS_OR_NULL(st, 0))
+        return pnx_refused_in_callback(st);
     if (!st || !out.ptr || !written)
         return PINAX_ERR_ARGUMENT;
     *written = 0;
@@ -4269,7 +4515,7 @@ pinax_err pinax_image_open(pinax_mem block, pinax_str image, const pinax_config 
     if (!out)
         return PINAX_ERR_ARGUMENT;
     *out = NULL;
-    const size_t without_key = offsetof(pinax_config, hash_key);
+    const size_t without_key = PINAX_CONFIG_SIZE_NO_KEY;
     if (!block.ptr || !image.ptr || !config ||
         (config->struct_size != sizeof *config && config->struct_size != without_key))
         return PINAX_ERR_ARGUMENT;
@@ -4358,6 +4604,7 @@ pinax_err pinax_image_open(pinax_mem block, pinax_str image, const pinax_config 
     st->fault_ibank = NULL, st->fault_sbank = NULL;
     __builtin_memset(&st->before_load, 0, sizeof st->before_load);
     st->resolve = NULL, st->resolve_user = NULL;
+    st->typed_resolve = NULL, st->typed_user = NULL; // given again; typed_only stays: no untyped fallback (D0116 (15))
     st->diag = config->diag, st->diag_user = config->diag_user;
     st->barrier = NULL, st->barrier_user = NULL; // a function of the process that saved the image
     st->trace = NULL, st->trace_user = NULL;
@@ -4402,6 +4649,8 @@ pinax_err pinax_image_open(pinax_mem block, pinax_str image, const pinax_config 
 #undef MOVE
 
 pinax_err pinax_clone(const pinax_state *source, pinax_mem block, pinax_state **out) {
+    if (!PNX_CB_ALLOWS_OR_NULL(source, 0))
+        return pnx_refused_in_callback(source);
     if (!source || !out)
         return PINAX_ERR_ARGUMENT;
     *out = NULL;
@@ -4418,11 +4667,17 @@ pinax_err pinax_clone(const pinax_state *source, pinax_mem block, pinax_state **
 }
 
 void pinax_on_barrier(pinax_state *st, void (*barrier)(void *user), void *user) {
+    if (!PNX_CB_ALLOWS_OR_NULL(st, 0)) {
+        (void)pnx_refused_in_callback(st);
+        return;
+    }
     if (st)
         st->barrier = barrier, st->barrier_user = user;
 }
 
 pinax_err pinax_clone_with(const pinax_state *source, pinax_mem block, uint32_t flags, pinax_state **out) {
+    if (!PNX_CB_ALLOWS_OR_NULL(source, 0))
+        return pnx_refused_in_callback(source);
     if (flags & ~(uint32_t)PINAX_CLONE_KEEP_HOSTS)
         return PINAX_ERR_ARGUMENT;
     const pinax_err err = pinax_clone(source, block, out);
@@ -4440,6 +4695,7 @@ pinax_err pinax_clone_with(const pinax_state *source, pinax_mem block, uint32_t 
     for (uint32_t k = 0; k < st->n_handle_types; ++k)
         st->handle_types[k].close = source->handle_types[k].close, st->handle_types[k].user = source->handle_types[k].user;
     st->resolve = source->resolve, st->resolve_user = source->resolve_user;
+    st->typed_resolve = source->typed_resolve, st->typed_user = source->typed_user;
     st->native = source->native;
     st->on_task_fault = source->on_task_fault, st->on_task_fault_user = source->on_task_fault_user;
     return PINAX_OK;
@@ -4459,6 +4715,8 @@ static pinax_err hosts_given(pinax_state *st) {
 }
 
 pinax_err pinax_fault_local(const pinax_state *st, uint32_t index, pinax_str *name, pinax_value *out) {
+    if (!PNX_CB_ALLOWS_OR_NULL(st, PNX_CB_READERS))
+        return pnx_refused_in_callback(st);
     if (!st || !name || !out)
         return PINAX_ERR_ARGUMENT;
     if (index >= st->fault_n)

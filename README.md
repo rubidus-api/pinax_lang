@@ -54,7 +54,8 @@ Build with any C23 compiler:
 
 ```sh
 cc -std=c23 -o nob nob.c
-./nob build          # build/native/libpinax.a, libpinax_host.a and the command pnx
+./nob build          # the command pnx and build/native/release/: libpinax.a, libpinax_host.a and
+                     # libpinax_sqlite.a, in which only the public names (pinax_) are global
 ./nob dist           # build/dist/pinax.h and pinax.c: the whole core as two files
 ./nob wasm           # build/wasm/pinax.wasm and pinax.mjs, for browsers and node (clang, wasm-ld),
                      # and build/dist/pinax-playground.html: Pinax in a terminal page, opened from disk
@@ -133,7 +134,7 @@ int main(void) {
 ```
 
 ```sh
-cc -std=c99 -Iinclude host.c build/native/libpinax.a -lm -o host
+cc -std=c99 -Iinclude host.c build/native/release/libpinax.a -lm -o host
 ```
 
 The three things a host relies on (a block too small is refused, a budget bounds a slice and the run resumes to its result, a
@@ -143,7 +144,8 @@ and LuaJIT are in [`benchmarks/`](benchmarks/).
 
 The state lives entirely inside `block`; Pinax never asks the system for memory. The standard
 host modules (`io`, `file`, `clock`, `random`, `env`) are ordinary host procedures in
-`src/host/`, linked only by hosts that want them. The same library, `libpinax_host.a`, has a
+`src/host/`, linked only by hosts that want them (`libpinax_host.a`; the module `sqlite` is `libpinax_sqlite.a`, whose
+SQLite is private, so a host may link its own beside it). The host library also has a
 host loop that runs many states on a few threads and channels that carry messages between
 them (`src/host/pinax_loop.h`); data that is only read is declared `shared` and lent to many
 states at once with `pinax_share`, without a copy; several processes map one file written with

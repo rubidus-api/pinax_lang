@@ -51,7 +51,8 @@ C23 컴파일러로 짓습니다.
 
 ```sh
 cc -std=c23 -o nob nob.c
-./nob build          # build/native/libpinax.a, libpinax_host.a, 명령 pnx
+./nob build          # 명령 pnx 와 build/native/release/: libpinax.a, libpinax_host.a,
+                     # libpinax_sqlite.a. 공개 이름(pinax_)만 전역이다
 ./nob dist           # build/dist/pinax.h 와 pinax.c: 핵 전체를 두 파일로
 ./nob wasm           # build/wasm/pinax.wasm 과 pinax.mjs: 브라우저와 node 용(clang, wasm-ld),
                      # 그리고 build/dist/pinax-playground.html: 디스크에서 바로 여는 Pinax 터미널 페이지
@@ -130,7 +131,7 @@ int main(void) {
 ```
 
 ```sh
-cc -std=c99 -Iinclude host.c build/native/libpinax.a -lm -o host
+cc -std=c99 -Iinclude host.c build/native/release/libpinax.a -lm -o host
 ```
 
 호스트가 기대는 세 가지(모자란 블록은 거절되고, 예산은 한 조각을 막으며 실행은 이어져 결과에 이르고, 등록한 C 함수는 불리고 그
@@ -140,7 +141,8 @@ script.pnx` 는 스크립트가 쓴 것을 알려 주어 블록의 크기를 정
 
 상태는 `block` 안에만 삽니다. Pinax 는 시스템에 메모리를 청하지 않습니다. 표준 호스트
 모듈(`io` `file` `clock` `random` `env`)은 `src/host/` 에 있는 평범한 호스트 프로시저이고, 필요한
-호스트만 링크합니다. 같은 라이브러리 `libpinax_host.a` 에는 여러 상태를 몇 개의 스레드에서 돌리는
+호스트만 링크합니다(`libpinax_host.a`. 모듈 `sqlite` 는 `libpinax_sqlite.a` 이고 그 안의 SQLite 는
+감춰져 있어서, 호스트가 자기 SQLite 를 함께 링크해도 됩니다). 호스트 라이브러리에는 여러 상태를 몇 개의 스레드에서 돌리는
 호스트 루프와, 상태 사이로 메시지를 나르는 채널도 있습니다(`src/host/pinax_loop.h`). 읽기만 하는
 자료는 `shared` 로 선언하고 `pinax_share` 로 여러 상태에 복사 없이 빌려줍니다. 여러 프로세스라면
 `pinax_share_save` 로 쓴 파일을 각자 `pinax_map_file` 로 사상해 함께 읽습니다.

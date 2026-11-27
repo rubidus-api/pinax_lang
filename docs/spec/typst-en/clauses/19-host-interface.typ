@@ -9,6 +9,12 @@ C23 and C++. This clause defines what its functions do; the comments in the head
 #para("2")[One state is used by one thread at a time; states share nothing. A `pinax_str` a function returns is valid
 until the next call on that state unless stated otherwise.]
 
+#para("3")[`PINAX_ABI` names the binary interface: a host compiled against the header runs with any later library of the
+same `PINAX_ABI`. `pinax_version()` gives the library's `PINAX_VERSION_NUMBER(major, minor, patch)` and `pinax_abi()` its
+`PINAX_ABI`; `PINAX_ABI_OK()` is true when the library has the header's `PINAX_ABI` and at least its version, and a host
+checks it once, at start. Every error code and flag has its number written in the header and keeps it; a flag bit the
+library does not know is refused with `PINAX_ERR_ARGUMENT`. The fields named `reserved_...` must be 0 or `NULL`.]
+
 == Error codes <host-errors>
 
 #para("1")[Functions return a `pinax_err`; `PINAX_OK` is 0. Three outcomes are not failures: `PINAX_SUSPENDED` (the
@@ -331,3 +337,33 @@ not, is `PINAX_ERR_ARGUMENT`; both 0 is a table of the whole program, whatever i
 
 #para("4")[The table is data the host vouches for, as an image is (4 (2a)): only its hash is checked, not its machine
 code. For exported code the guarantee of 4 (2a) holds as far as the loader's proofs are right.]
+
+== Callbacks <host-callbacks>
+
+#para("1")[The library calls the host back in seven places: a host procedure, the barrier function, the trace function,
+the task fault function, `config.diag`, a handle type's close function and the `extern` resolver (18). Each runs on the thread that is using the state (under `pinax_loop`, a loop thread). While one runs,
+the state knows which, and a call into the state that the table does not allow is refused: a function that returns
+`pinax_err` answers `PINAX_ERR_STATE`, one that returns a size, a count or a pointer answers 0 or `NULL`, one that
+returns nothing does nothing; the error text names the callback. Callbacks nest: a word run from a host procedure
+calls host procedures of its own, and each is a host procedure while it runs.
+#table(columns: (auto, 1fr), inset: 5pt, stroke: 0.5pt + luma(170),
+  [*Inside*], [*The state may be called with*],
+  [a host procedure], [`pinax_call_...`; `pinax_find` with `PINAX_FIND_NESTED`, `pinax_global_find`; `pinax_run` of a word so found; `pinax_handle_new`, `pinax_handle_get`, `pinax_handle_release`; the functions that read],
+  [barrier, trace, task fault, `diag`], [the functions that read],
+  [a handle type's close], [`pinax_handle_get` and `pinax_handle_release` (an object that closes the objects it owns)],
+  [the resolver], [nothing],
+)]
+
+#para("2")[The functions that read are `pinax_error_text`, `pinax_needed`, `pinax_fault_local`, `pinax_task_faults`,
+`pinax_eval_count`, `pinax_eval_value`, `pinax_word_at`, `pinax_image_size`, `pinax_share_size` and `pinax_stats_get`.
+`pinax_close` is never called from a callback.]
+
+#para("3")[What a callback is given lives for that call only: the string arguments of a host procedure (views, not
+copies), the `str` and `cstr` arguments of a C function of `extern` (it neither keeps nor writes through them), the
+`pinax_call` of a host procedure, the task fault's `where`, the trace's procedure name and the `diag` message.
+`pinax_call_alloc` memory lives until the next run started by the host. `pinax_loop_done` is not a callback of the
+state: the run has ended when it is called, and it may start another.]
+
+#para("4")[The host library is not free of process-wide data, as the core is: standard input read ahead, the random
+generator, the arguments of `env`, and the flush of standard output by its barrier are shared by every state of the
+process; `pinax_host_exit_asked` answers for the calling thread.]

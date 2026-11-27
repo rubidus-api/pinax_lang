@@ -20,12 +20,29 @@ extern "C" {
 #endif
 
 #define PINAX_VERSION_MAJOR 0
-#define PINAX_VERSION_MINOR 36
-#define PINAX_VERSION_PATCH 2
-#define PINAX_FORMAT 2 /* source, bytecode and image format; bumped by breaking changes */
+#define PINAX_VERSION_MINOR 37
+#define PINAX_VERSION_PATCH 0
+#define PINAX_FORMAT 2 /* source, image and share-file format (RFC-0012); bumped by breaking changes */
+/* The binary interface (RFC-0058, D0116): a host compiled against this header runs with any later
+ * library of the same PINAX_ABI. Raised only by a release that says so under "Breaking". */
+#define PINAX_ABI 1
+#define PINAX_VERSION_NUMBER(major, minor, patch) (((uint32_t)(major) << 16) | ((uint32_t)(minor) << 8) | (uint32_t)(patch))
 
+/* How the functions are declared. A host may define PINAX_API itself. Otherwise: with the shared library on
+ * Windows a host defines PINAX_SHARED (dllimport); the library defines PINAX_BUILDING too when it builds itself
+ * shared (dllexport, or default visibility under -fvisibility=hidden). Static use needs neither. */
 #ifndef PINAX_API
+#if defined(PINAX_SHARED) && (defined(_WIN32) || defined(__CYGWIN__))
+#ifdef PINAX_BUILDING
+#define PINAX_API __declspec(dllexport)
+#else
+#define PINAX_API __declspec(dllimport)
+#endif
+#elif defined(PINAX_SHARED) && defined(PINAX_BUILDING) && defined(__GNUC__)
+#define PINAX_API __attribute__((visibility("default")))
+#else
 #define PINAX_API
+#endif
 #endif
 
 /* ---- basic types ------------------------------------------------------------------ */
@@ -45,44 +62,51 @@ typedef uint64_t pinax_token;  /* one pending host operation */
 typedef enum pinax_err {
     PINAX_OK = 0,
     /* outcomes that are not failures */
-    PINAX_SUSPENDED,    /* instruction budget ran out; pinax_resume() continues */
-    PINAX_WAITING,      /* every runnable task waits for a host operation */
-    PINAX_PENDING,      /* returned by an awaitable host word: result comes later */
+    PINAX_SUSPENDED = 1,      /* instruction budget ran out; pinax_resume() continues */
+    PINAX_WAITING = 2,        /* every runnable task waits for a host operation */
+    PINAX_PENDING = 3,        /* returned by an awaitable host word: result comes later */
     /* a fault that ended the script, or a failure it passed up to the host */
     PINAX_ERR_FAILED = 0x100,
-    PINAX_ERR_OVERFLOW, /* integer overflow */
-    PINAX_ERR_DIV_ZERO, /* division by zero */
-    PINAX_ERR_RANGE,    /* index outside a declared capacity */
-    PINAX_ERR_FULL,     /* a declared capacity is used up */
-    PINAX_ERR_DEPTH,    /* call depth limit */
-    PINAX_ERR_STALE,    /* handle or pool slot used after release */
-    PINAX_ERR_CANCELLED,
-    PINAX_ERR_INTERRUPTED,
-    PINAX_ERR_DEADLOCK, /* every task left waits for a queue that nothing will change */
+    PINAX_ERR_OVERFLOW = 0x101, /* integer overflow */
+    PINAX_ERR_DIV_ZERO = 0x102, /* division by zero */
+    PINAX_ERR_RANGE = 0x103,    /* index outside a declared capacity */
+    PINAX_ERR_FULL = 0x104,     /* a declared capacity is used up */
+    PINAX_ERR_DEPTH = 0x105,    /* call depth limit */
+    PINAX_ERR_STALE = 0x106,    /* handle or pool slot used after release */
+    PINAX_ERR_CANCELLED = 0x107,
+    PINAX_ERR_INTERRUPTED = 0x108,
+    PINAX_ERR_DEADLOCK = 0x109, /* every task left waits for a queue that nothing will change */
     /* failures of the interface itself */
     PINAX_ERR_ARGUMENT = 0x200,
-    PINAX_ERR_NO_ROOM,   /* the block is too small; see pinax_needed() */
-    PINAX_ERR_SYNTAX,    /* load: source does not parse */
-    PINAX_ERR_TYPE,      /* load: stack effect or type check failed */
-    PINAX_ERR_NOT_FOUND,
-    PINAX_ERR_SIGNATURE, /* a word exists but its signature differs from the one asked for */
-    PINAX_ERR_FORMAT,    /* bytecode or image of another format, layout or code */
-    PINAX_ERR_STATE      /* call not allowed now (for example load while running) */
-    /* from 0x400: the failure codes a program declares (err NAME); pinax_error_text() names them */
+    PINAX_ERR_NO_ROOM = 0x201,   /* the block is too small; see pinax_needed() */
+    PINAX_ERR_SYNTAX = 0x202,    /* load: source does not parse */
+    PINAX_ERR_TYPE = 0x203,      /* load: stack effect or type check failed */
+    PINAX_ERR_NOT_FOUND = 0x204,
+    PINAX_ERR_SIGNATURE = 0x205, /* a word exists but its signature differs from the one asked for */
+    PINAX_ERR_FORMAT = 0x206,    /* bytecode or image of another format, layout or code */
+    PINAX_ERR_STATE = 0x207,     /* call not allowed now (for example load while running) */
+    /* From here: the failure codes a program declares (err NAME), in the order the state declares
+     * them; pinax_error_text() names them. A value is written for every code, so that none moves. */
+    PINAX_ERR_PROGRAM = 0x400,
+    PINAX_ERR_MAX_ = 0x7fffffff /* not a code: the enum holds every program code and stays int-sized */
 } pinax_err;
 
 /* ---- opening and closing ---------------------------------------------------------- */
 
-/* Capacities. Zero means "default". struct_size lets the struct grow compatibly. */
+/* Capacities. Zero means "default".
+ * struct_size (RFC-0058 B2): a struct that carries it is taken at its own sizeof and at the earlier sizes
+ * listed with it, nothing in between; the fields past a smaller size count as 0. A size the library does
+ * not know is refused (PINAX_ERR_ARGUMENT). pinax_config also takes PINAX_CONFIG_SIZE_NO_KEY, the size it
+ * had before hash_key. The other structs with struct_size have one size so far. */
 typedef struct pinax_config {
     size_t   struct_size;   /* sizeof(pinax_config) */
     uint32_t int_slots;     /* I bank: 64-bit slots */
     uint32_t str_slots;     /* S bank: string view slots */
-    uint32_t float_slots;   /* reserved, must be 0: a float is the bits of a double in an I slot */
+    uint32_t reserved_0;    /* must be 0 (was float_slots: a float is the bits of a double in an I slot, D0112) */
     uint32_t region_bytes;  /* byte region of the main task */
     uint32_t handle_slots;  /* host objects alive at once */
     uint64_t budget;        /* instructions per call or resume; 0 = unlimited */
-    /* load diagnostics; may be NULL */
+    /* load diagnostics; may be NULL. It may call only the functions that read the state (spec 19, Callbacks). */
     void (*diag)(void *user, pinax_str file, uint32_t line, uint32_t column, pinax_str message);
     void *diag_user;
     /* Key of the hash that lookup indexes use. Give 16 random bytes when scripts index text
@@ -91,6 +115,7 @@ typedef struct pinax_config {
      * for trusted data, no protection otherwise. The key is kept in the state and its images. */
     unsigned char hash_key[16];
 } pinax_config;
+#define PINAX_CONFIG_SIZE_NO_KEY offsetof(pinax_config, hash_key)
 
 PINAX_API pinax_err pinax_open(pinax_mem block, const pinax_config *config, pinax_state **out);
 PINAX_API void      pinax_close(pinax_state *state); /* closes the handles still open */
@@ -98,6 +123,13 @@ PINAX_API void      pinax_close(pinax_state *state); /* closes the handles still
 /* After PINAX_ERR_NO_ROOM: at least the block size that would have been enough (the size of
  * what was being taken when the block ran out; a load may take more after that). */
 PINAX_API size_t    pinax_needed(const pinax_state *state);
+/* The library's version, PINAX_VERSION_NUMBER of its MAJOR, MINOR and PATCH, and its PINAX_ABI. A host
+ * checks once, at start, that the library it runs with is one it was compiled for: */
+PINAX_API uint32_t  pinax_version(void);
+PINAX_API uint32_t  pinax_abi(void);
+#define PINAX_ABI_OK() \
+    (pinax_abi() == PINAX_ABI && \
+     pinax_version() >= PINAX_VERSION_NUMBER(PINAX_VERSION_MAJOR, PINAX_VERSION_MINOR, PINAX_VERSION_PATCH))
 /* Text of the last failure, valid until the next call on this state. */
 PINAX_API pinax_str pinax_error_text(const pinax_state *state);
 
@@ -115,20 +147,20 @@ PINAX_API pinax_str pinax_error_text(const pinax_state *state);
 typedef struct pinax_args {
     const int64_t   *i;  int64_t   *ri;
     const pinax_str *s;  pinax_str *rs;
-    const double    *f;  double    *rf;
+    const double    *reserved_f;  double *reserved_rf; /* must be NULL; not read (a float is an int's bits, D0112) */
 } pinax_args;
 
 typedef pinax_err (*pinax_host_fn)(pinax_call *call, void *user, const pinax_args *args);
 
-enum {
-    PINAX_WORD_PURE      = 1u << 0, /* no effect outside its results; may be folded or run in parallel */
-    PINAX_WORD_AWAITABLE = 1u << 1, /* may return PINAX_PENDING */
-    PINAX_WORD_KEEP_STR  = 1u << 2, /* string results point to memory that outlives the state */
-    /* What a host word touches outside the state, for the effects of the words that call it
-     * (pinax_word_effects). A word with neither, and not PURE, counts as both. */
-    PINAX_WORD_READS     = 1u << 3, /* reads it: an input, a file, the clock, the environment */
-    PINAX_WORD_WRITES    = 1u << 4  /* changes it: an output, a file, a command, a setting */
-};
+/* Flags are macros, so that every bit up to 31 can be one; a bit this library does not know is
+ * refused with PINAX_ERR_ARGUMENT (RFC-0058 B4). */
+#define PINAX_WORD_PURE      (1u << 0) /* no effect outside its results; may be folded or run in parallel */
+#define PINAX_WORD_AWAITABLE (1u << 1) /* may return PINAX_PENDING */
+#define PINAX_WORD_KEEP_STR  (1u << 2) /* string results point to memory that outlives the state */
+/* What a host word touches outside the state, for the effects of the words that call it
+ * (pinax_word_effects). A word with neither, and not PURE, counts as both. */
+#define PINAX_WORD_READS     (1u << 3) /* reads it: an input, a file, the clock, the environment */
+#define PINAX_WORD_WRITES    (1u << 4) /* changes it: an output, a file, a command, a setting */
 
 typedef struct pinax_word_def {
     const char   *name;      /* word name as scripts see it */
@@ -145,7 +177,9 @@ typedef struct pinax_word_def {
 PINAX_API pinax_err pinax_register(pinax_state *state, const char *module,
                                    const pinax_word_def *defs, size_t count);
 
-/* Inside a host word. A string result not flagged KEEP_STR is copied into the caller's region. */
+/* Inside a host word. A string result not flagged KEEP_STR is copied into the caller's region. A host word may
+ * call these, pinax_find with PINAX_FIND_NESTED, pinax_global_find, pinax_run, the handle functions and the
+ * functions that read the state; any other call into the state is refused (spec 19, Callbacks). */
 PINAX_API pinax_state *pinax_call_state(pinax_call *call);
 PINAX_API pinax_mem    pinax_call_alloc(pinax_call *call, size_t bytes); /* caller's region; len 0 = full */
 PINAX_API pinax_token  pinax_call_pending(pinax_call *call);             /* then return PINAX_PENDING */
@@ -193,14 +227,45 @@ PINAX_API pinax_err pinax_complete(pinax_state *state, pinax_token token,
  * in C: a host that runs scripts it does not trust sets no resolver.
  */
 typedef void (*pinax_extern_fn)(void);
-typedef pinax_extern_fn (*pinax_resolve_fn)(void *user, pinax_str library, pinax_str symbol);
+typedef pinax_extern_fn (*pinax_resolve_fn)(void *user, pinax_str library, pinax_str symbol); /* calls nothing of the state */
 /* On a state opened from an image, setting the resolver asks it at once for every extern
  * function of the image. */
 PINAX_API void pinax_set_resolver(pinax_state *state, pinax_resolve_fn resolve, void *user);
 
+/* A resolver that also describes the C function it gives (RFC-0058 F, D0116): its C layout, which the load
+ * compares with the layout the script's declaration makes, refusing a difference with PINAX_ERR_SIGNATURE (the
+ * error text names both). The script's names and distinct types do not matter, only what is passed: so a host
+ * that runs scripts it does not trust can allow `extern` for a closed list of functions it has described. A
+ * layout that matches does not make the function safe: the script still chooses every value, so the list
+ * holds only functions that are safe for any value of their layout.
+ * The library zeroes `layout` and sets its struct_size before the call; the resolver fills it and answers the
+ * function, or NULL. Once set on a state, pinax_set_resolver is refused on it and on its clones. Setting it
+ * checks at once every extern the state already has (those of an image, those an untyped resolver linked) and answers PINAX_ERR_SIGNATURE for the
+ * first that differs (that one stays unresolved). pinax_clone_with(KEEP_HOSTS) keeps it. */
+enum {
+    PINAX_C_NONE = 0,   /* no result */
+    PINAX_C_INT = 1,    /* an intptr_t: an integer, a bool, a character, a distinct type over int */
+    PINAX_C_STR = 2,    /* two arguments, (const char *, size_t), not NUL-terminated */
+    PINAX_C_CSTR = 3,   /* one const char *, NUL-terminated, valid for the call */
+    PINAX_C_HANDLE = 4, /* the object pointer of a handle of the type named in arg_type / result_type */
+    PINAX_C_OWNED = 5   /* the same, and the function takes the object over (`owned`): an argument only */
+};
+typedef struct pinax_c_layout {
+    size_t      struct_size;  /* sizeof(pinax_c_layout) */
+    uint32_t    n_args;       /* the parameters of the script's declaration, at most 8 */
+    uint8_t     arg[8];       /* PINAX_C_... for each */
+    uint8_t     result;       /* PINAX_C_NONE, PINAX_C_INT or PINAX_C_HANDLE */
+    uint8_t     fails;        /* 1: the declaration says `or fail` (a NULL handle result is the failure) */
+    const char *arg_type[8];  /* the handle type of a PINAX_C_HANDLE or PINAX_C_OWNED argument */
+    const char *result_type;  /* the handle type of a PINAX_C_HANDLE result */
+} pinax_c_layout;
+typedef pinax_extern_fn (*pinax_typed_resolve_fn)(void *user, pinax_str library, pinax_str symbol, pinax_c_layout *layout);
+PINAX_API pinax_err pinax_set_typed_resolver(pinax_state *state, pinax_typed_resolve_fn resolve, void *user);
+
 /* ---- host objects ----------------------------------------------------------------- */
 
-/* A kind of host pointer scripts can hold as a use-once value of type `name`. close may be NULL.
+/* A kind of host pointer scripts can hold as a use-once value of type `name`. close may be NULL; it may call
+ * only pinax_handle_get and pinax_handle_release on the state (spec 19, Callbacks).
  * A name given again with the same close and user gets the number it has (two modules share the
  * type); with another close or user it is refused. On a state opened from an image, a type of the
  * image is given again by its name and gets its number back; another name is refused. */
@@ -321,9 +386,9 @@ PINAX_API pinax_err pinax_eval(pinax_state *state, pinax_str line);
  * until the next load, eval or run. */
 enum {
     PINAX_VALUE_INT = 1, /* also characters, handles and distinct types over int */
-    PINAX_VALUE_BOOL,
-    PINAX_VALUE_STR,     /* also distinct types over str */
-    PINAX_VALUE_ERR
+    PINAX_VALUE_BOOL = 2,
+    PINAX_VALUE_STR = 3, /* also distinct types over str */
+    PINAX_VALUE_ERR = 4
 };
 typedef struct pinax_value {
     uint32_t  kind;  /* PINAX_VALUE_... */
@@ -340,15 +405,13 @@ PINAX_API void      pinax_eval_clear(pinax_state *state);
  * word it calls (RFC-0040 part G). A call through a word value counts every word of that
  * signature; a spawned task, every word without parameters and results; a C function of `extern`
  * counts as anything. 0 in `effects`: the word uses only its stack and locals. */
-enum {
-    PINAX_EFFECT_READS_GLOBALS  = 1u << 0,
-    PINAX_EFFECT_WRITES_GLOBALS = 1u << 1, /* also a list's length, a queue, a task set */
-    PINAX_EFFECT_READS_OUTSIDE  = 1u << 2, /* through a host word (PINAX_WORD_READS) */
-    PINAX_EFFECT_WRITES_OUTSIDE = 1u << 3, /* through a host word (PINAX_WORD_WRITES) */
-    PINAX_EFFECT_YIELDS         = 1u << 4, /* may give way to other tasks or wait for the host */
-    PINAX_EFFECT_FAILS          = 1u << 5, /* its signature says `or fail` */
-    PINAX_EFFECT_ANYTHING       = 1u << 6  /* calls a C function of extern */
-};
+#define PINAX_EFFECT_READS_GLOBALS  (1u << 0)
+#define PINAX_EFFECT_WRITES_GLOBALS (1u << 1) /* also a list's length, a queue, a task set */
+#define PINAX_EFFECT_READS_OUTSIDE  (1u << 2) /* through a host word (PINAX_WORD_READS) */
+#define PINAX_EFFECT_WRITES_OUTSIDE (1u << 3) /* through a host word (PINAX_WORD_WRITES) */
+#define PINAX_EFFECT_YIELDS         (1u << 4) /* may give way to other tasks or wait for the host */
+#define PINAX_EFFECT_FAILS          (1u << 5) /* its signature says `or fail` */
+#define PINAX_EFFECT_ANYTHING       (1u << 6) /* calls a C function of extern */
 typedef struct pinax_effects {
     size_t      struct_size;       /* sizeof(pinax_effects) */
     uint32_t    effects;           /* PINAX_EFFECT_... */
@@ -365,7 +428,8 @@ PINAX_API pinax_err pinax_word_effects(pinax_state *state, pinax_word word, pina
  * finished before what follows. The host's part is this function, called at each dot and at the
  * end of the code of a load or a session line (also one that faults): it writes what the host
  * words hold back (buffered output, a file's writes) and waits for what they started in the
- * background. It must not call this state. NULL (the default): nothing to finish. A clone keeps
+ * background. It may call only the functions that read the state (spec 19, Callbacks); any other call is
+ * refused. NULL (the default): nothing to finish. A clone keeps
  * it; an image does not. A comma that ends a statement waits for nothing. */
 PINAX_API void      pinax_on_barrier(pinax_state *state, void (*barrier)(void *user), void *user);
 
@@ -395,9 +459,7 @@ PINAX_API pinax_err pinax_on_task_fault(pinax_state *state, pinax_task_fault_fn 
 
 /* ---- running ----------------------------------------------------------------------- */
 
-enum {
-    PINAX_FIND_NESTED = 1u << 0 /* the word will be run from inside a host word */
-};
+#define PINAX_FIND_NESTED (1u << 0) /* the word will be run from inside a host word */
 /* Looks a word up and checks that it has exactly this signature. A plain name is a word of the
  * first source loaded; "module.word" is a word of that module, exported or not, and
  * "module.test.name" one of its tests. A word that may yield cannot
@@ -417,7 +479,7 @@ typedef struct pinax_word_info {
 } pinax_word_info;
 PINAX_API pinax_err pinax_word_at(const pinax_state *state, uint32_t index, pinax_word_info *out);
 
-/* Runs a word. args->i/s/f are the inputs; results are written through ri/rs/rf and stay
+/* Runs a word. args->i/s are the inputs; results are written through ri/rs and stay
  * valid until the next call on this state. PINAX_SUSPENDED and PINAX_WAITING are not failures.
  * From inside a host word the word runs to its end before pinax_run() returns: when the
  * instruction budget runs out there the answer is PINAX_ERR_INTERRUPTED, and the host word
@@ -475,7 +537,7 @@ PINAX_API pinax_err pinax_clone(const pinax_state *source, pinax_mem block, pina
  * process, with the same user pointers: its host words, handle types (close functions), extern
  * functions and resolver, its exported code (pinax_native_attach) and its task fault function
  * (pinax_on_task_fault). Bound globals are still bound again, and handles still do not pass. */
-enum { PINAX_CLONE_KEEP_HOSTS = 1u << 0 };
+#define PINAX_CLONE_KEEP_HOSTS (1u << 0)
 PINAX_API pinax_err pinax_clone_with(const pinax_state *source, pinax_mem block, uint32_t flags, pinax_state **out);
 
 /* ---- exported code ------------------------------------------------------------------ */
@@ -507,13 +569,14 @@ PINAX_API pinax_err pinax_native_attach(pinax_state *state, const pinax_native *
 
 typedef struct pinax_stats {
     size_t   struct_size;
-    uint32_t int_slots_peak, str_slots_peak, float_slots_peak;
+    uint32_t int_slots_peak, str_slots_peak, reserved_peak; /* reserved_peak is 0 (was float_slots_peak) */
     uint32_t region_bytes_peak;
     uint32_t handles_peak;
     uint32_t depth_peak;
     uint64_t instructions;
     size_t   block_bytes_used;
 } pinax_stats;
+/* A struct_size other than sizeof(pinax_stats) is answered with struct_size 0 and the error text. */
 PINAX_API void pinax_stats_get(const pinax_state *state, pinax_stats *out);
 
 #ifdef __cplusplus

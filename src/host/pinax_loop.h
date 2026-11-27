@@ -36,6 +36,11 @@
 
 #include "pinax.h"
 
+/* The host library's own export macro: it stays a static library when the core is shared (RFC-0058 B6). */
+#ifndef PINAX_HOST_API
+#define PINAX_HOST_API
+#endif
+
 #ifdef __cplusplus
 extern "C" {
 #endif
@@ -70,41 +75,41 @@ typedef struct pinax_loop_config {
  * the bytes a channel of `messages` messages of up to `message_bytes` each takes on a loop of
  * this config, both enough for a block of any alignment. The sum over the loop and its channels
  * is the block. */
-size_t pinax_loop_size(const pinax_loop_config *config);
-size_t pinax_channel_size(const pinax_loop_config *config, uint32_t messages, uint32_t message_bytes);
+PINAX_HOST_API size_t pinax_loop_size(const pinax_loop_config *config);
+PINAX_HOST_API size_t pinax_channel_size(const pinax_loop_config *config, uint32_t messages, uint32_t message_bytes);
 
 /* A loop with config->threads threads. PINAX_ERR_ARGUMENT for a config it does not understand
  * or a thread count outside 1 to 256; PINAX_ERR_NO_ROOM when the block is too small for the
  * loop, or memory or a thread cannot be had. */
-pinax_err pinax_loop_open(const pinax_loop_config *config, pinax_loop **out);
+PINAX_HOST_API pinax_err pinax_loop_open(const pinax_loop_config *config, pinax_loop **out);
 /* Runs `word` of `state` with `args` until it ends, then calls done(user, state, outcome). args
  * and what it points to (inputs and the places of the results) stay the host's and must live
  * until then. PINAX_ERR_STATE when the state already runs on the loop or the loop is closing. */
-pinax_err pinax_loop_start(pinax_loop *loop, pinax_state *state, pinax_word word, const pinax_args *args,
+PINAX_HOST_API pinax_err pinax_loop_start(pinax_loop *loop, pinax_state *state, pinax_word word, const pinax_args *args,
                            pinax_loop_done done, void *user);
 /* Waits until every run the loop was given has ended (runs started from done() included). */
-void      pinax_loop_wait(pinax_loop *loop);
+PINAX_HOST_API void      pinax_loop_wait(pinax_loop *loop);
 /* After pinax_loop_wait(): stops the threads and frees the loop and its channels. */
-void      pinax_loop_close(pinax_loop *loop);
+PINAX_HOST_API void      pinax_loop_close(pinax_loop *loop);
 
 /* For a host's own awaitable word on a state the loop runs: use this in place of
  * pinax_call_pending(), so that the loop knows an operation is outstanding, and finish it with
  * pinax_loop_complete() from any thread. ni integer and ns string results, from index 0;
  * strings are copied before this returns. */
-pinax_token pinax_loop_pending(pinax_loop *loop, pinax_call *call);
-pinax_err   pinax_loop_complete(pinax_loop *loop, pinax_state *state, pinax_token token, pinax_err outcome,
+PINAX_HOST_API pinax_token pinax_loop_pending(pinax_loop *loop, pinax_call *call);
+PINAX_HOST_API pinax_err   pinax_loop_complete(pinax_loop *loop, pinax_state *state, pinax_token token, pinax_err outcome,
                                 const int64_t *ri, size_t ni, const pinax_str *rs, size_t ns);
 
 /* A channel named `name` (written like a word) holding at most `messages` messages of at most
  * `message_bytes` bytes each. It lives until the loop is closed. Its slots are carved from the
  * loop's block: PINAX_ERR_NO_ROOM when pinax_channel_size() bytes are not left there. */
-pinax_err pinax_channel_open(pinax_loop *loop, const char *name, uint32_t messages, uint32_t message_bytes,
+PINAX_HOST_API pinax_err pinax_channel_open(pinax_loop *loop, const char *name, uint32_t messages, uint32_t message_bytes,
                              pinax_channel **out);
 /* Makes the channel the module `name` of the state; before the scripts that use it load, and
  * again after pinax_image_open() or pinax_clone(). */
-pinax_err pinax_channel_register(pinax_state *state, pinax_channel *channel);
+PINAX_HOST_API pinax_err pinax_channel_register(pinax_state *state, pinax_channel *channel);
 /* As a script's close: from any thread. */
-void      pinax_channel_close(pinax_channel *channel);
+PINAX_HOST_API void      pinax_channel_close(pinax_channel *channel);
 
 #ifdef __cplusplus
 }

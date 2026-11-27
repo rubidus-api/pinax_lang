@@ -305,6 +305,27 @@ typedef struct pnx_counts {
     bool    yields; // may yield (RFC-0005 section 3.5), worked out when the code is loaded
 } pnx_counts;
 
+// The callbacks the library calls (RFC-0058 G1). PNX_CALL_OUT marks the state as inside one for the
+// call and restores what was there, since a host function may run a word whose host functions run.
+enum { PNX_CB_NONE, PNX_CB_HOST, PNX_CB_BARRIER, PNX_CB_TRACE, PNX_CB_TASK_FAULT, PNX_CB_DIAG, PNX_CB_CLOSE,
+       PNX_CB_RESOLVER };
+#define PNX_CALL_OUT(st, kind, ...)                                                                          \
+    do {                                                                                                     \
+        const uint8_t pnx_callback_was_ = (st)->callback;                                                    \
+        (st)->callback = (kind);                                                                             \
+        __VA_ARGS__;                                                                                         \
+        (st)->callback = pnx_callback_was_;                                                                  \
+    } while (0)
+// The kinds a public function may be called from (a bit per PNX_CB_); outside any callback, all may.
+#define PNX_CB_BIT(k) (1u << (k))
+#define PNX_CB_READERS                                                                                       \
+    (PNX_CB_BIT(PNX_CB_HOST) | PNX_CB_BIT(PNX_CB_BARRIER) | PNX_CB_BIT(PNX_CB_TRACE) |                        \
+     PNX_CB_BIT(PNX_CB_TASK_FAULT) | PNX_CB_BIT(PNX_CB_DIAG))
+#define PNX_CB_ALLOWS(st, mask) ((st)->callback == PNX_CB_NONE || (((mask) >> (st)->callback) & 1u))
+#define PNX_CB_ALLOWS_OR_NULL(st, mask) (!(st) || PNX_CB_ALLOWS(st, mask))
+// The answer to a call a callback may not make: PINAX_ERR_STATE, the error text naming the callback.
+pinax_err pnx_refused_in_callback(const pinax_state *st);
+
 typedef struct pnx_host {
     char          module[16];
     char          name[32];
@@ -567,6 +588,9 @@ struct pinax_state {
     int64_t        *host_ia;
     pnx_scell      *host_sa;
     uint32_t        nest;
+    // the host callback running now (PNX_CB_..., 0: none), saved and restored around each call out:
+    // the public functions check it against the rules of spec 19 (RFC-0058 G, D0116)
+    uint8_t  callback;
     uint32_t top_word;
     bool     suspended;
     bool     loading;   // the suspended run is the code outside definitions of a load
@@ -614,6 +638,10 @@ struct pinax_state {
     uint16_t  eval_next_type[16];
     uint16_t  eval_next_text; // bit k: value k is a str
     void            *resolve_user;
+    pinax_typed_resolve_fn typed_resolve; // the resolver that describes its functions (RFC-0058 F)
+    void                  *typed_user;
+    bool                   typed_only;    // a typed resolver was set: pinax_set_resolver is refused (D0116 (15))
+    char                   layout_error[320]; // the error text of a layout that differs (pinax.h: no global data)
     uint8_t hash_key[16]; // of the lookup indexes; inside the block, so images carry it
 
     pnx_handle_type  handle_types[PNX_MAX_HANDLE_TYPES];

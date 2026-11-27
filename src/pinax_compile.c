@@ -8447,7 +8447,7 @@ static void see_line(comp *c, uint32_t next_line) {
         stack_text(c, c->f, text + 7, sizeof text - 7);
         const pinax_str file = {(const unsigned char *)c->file, __builtin_strlen(c->file)};
         const pinax_str message = {(const unsigned char *)text, __builtin_strlen(text)};
-        c->st->diag(c->st->diag_user, file, c->see_line, 0, message);
+        PNX_CALL_OUT(c->st, PNX_CB_DIAG, c->st->diag(c->st->diag_user, file, c->see_line, 0, message));
     }
     c->see_line = next_line;
 }
@@ -8623,7 +8623,7 @@ static bool body_token(comp *c) {
             stack_text(c, f, text + 7, sizeof text - 7);
             const pinax_str file = {(const unsigned char *)c->file, __builtin_strlen(c->file)};
             const pinax_str message = {(const unsigned char *)text, __builtin_strlen(text)};
-            c->st->diag(c->st->diag_user, file, 0, 0, message);
+            PNX_CALL_OUT(c->st, PNX_CB_DIAG, c->st->diag(c->st->diag_user, file, 0, 0, message));
         }
         return advance(c);
     }
@@ -9195,7 +9195,7 @@ static bool get_order(comp *c) {
         text[n]   = 0;
         const pinax_str file    = {(const unsigned char *)c->file, __builtin_strlen(c->file)};
         const pinax_str message = {(const unsigned char *)text, n};
-        c->st->diag(c->st->diag_user, file, 0, 0, message);
+        PNX_CALL_OUT(c->st, PNX_CB_DIAG, c->st->diag(c->st->diag_user, file, 0, 0, message));
     }
     return advance(c);
 }
@@ -10498,7 +10498,7 @@ static bool compile(comp *c, image *im, bool *has_top) {
                     __builtin_memcpy(text + n, effect, __builtin_strlen(effect) + 1);
                     const pinax_str file = {(const unsigned char *)c->file, __builtin_strlen(c->file)};
                     const pinax_str message = {(const unsigned char *)text, __builtin_strlen(text)};
-                    c->st->diag(c->st->diag_user, file, 0, 0, message);
+                    PNX_CALL_OUT(c->st, PNX_CB_DIAG, c->st->diag(c->st->diag_user, file, 0, 0, message));
                 }
             }
             if (!advance(c))
@@ -11248,15 +11248,25 @@ static bool module_name(const char *file, size_t *length) {
 
 // What the last pinax_eval() left (pinax.h).
 uint32_t pinax_eval_count(const pinax_state *st) {
+    if (!PNX_CB_ALLOWS_OR_NULL(st, PNX_CB_READERS)) {
+        (void)pnx_refused_in_callback(st);
+        return 0;
+    }
     return st ? st->eval_n : 0;
 }
 
 void pinax_eval_clear(pinax_state *st) {
+    if (!PNX_CB_ALLOWS_OR_NULL(st, 0)) {
+        (void)pnx_refused_in_callback(st);
+        return;
+    }
     if (st)
         st->eval_n = 0;
 }
 
 pinax_err pinax_eval_value(const pinax_state *st, uint32_t index, pinax_value *out) {
+    if (!PNX_CB_ALLOWS_OR_NULL(st, PNX_CB_READERS))
+        return pnx_refused_in_callback(st);
     if (!st || !out)
         return PINAX_ERR_ARGUMENT;
     if (index >= st->eval_n)
@@ -11454,7 +11464,7 @@ static pinax_err load_source(pinax_state *st, const char *file, pinax_str source
         if (st->diag) {
             const pinax_str name = {(const unsigned char *)c.file, __builtin_strlen(c.file)};
             const pinax_str text = {(const unsigned char *)c.message, __builtin_strlen(c.message)};
-            st->diag(st->diag_user, name, c.line, c.column, text);
+            PNX_CALL_OUT(st, PNX_CB_DIAG, st->diag(st->diag_user, name, c.line, c.column, text));
         }
         return c.err;
     }
@@ -11542,7 +11552,7 @@ static pinax_err load_source(pinax_state *st, const char *file, pinax_str source
             if (n > 8)
                 at = put_piece(text, at, sizeof text, ", ...");
             const pinax_str file = {(const unsigned char *)c.file, __builtin_strlen(c.file)};
-            st->diag(st->diag_user, file, 0, 0, (pinax_str){(const unsigned char *)text, at});
+            PNX_CALL_OUT(st, PNX_CB_DIAG, st->diag(st->diag_user, file, 0, 0, (pinax_str){(const unsigned char *)text, at}));
         }
     }
     if (eval && c.cleared && !has_top) // `clear` alone: the session stack is empty
@@ -11568,7 +11578,7 @@ static pinax_err load_source(pinax_state *st, const char *file, pinax_str source
         st->load_runs = false;
         st->budget = budget;
         if (err != PINAX_SUSPENDED && err != PINAX_WAITING && st->barrier) // the end of load code is a dot (RFC-0040 part F)
-            st->barrier(st->barrier_user);
+            PNX_CALL_OUT(st, PNX_CB_BARRIER, st->barrier(st->barrier_user));
         if (err == PINAX_OK && eval) // what the line left becomes the session stack
             err = pnx_session_keep(st, ints, strs);
         else if (eval && (err == PINAX_SUSPENDED || err == PINAX_WAITING))
@@ -11602,9 +11612,13 @@ static pinax_err load_source(pinax_state *st, const char *file, pinax_str source
 }
 
 pinax_err pinax_load(pinax_state *st, const char *file, pinax_str source, uint32_t mode) {
+    if (!PNX_CB_ALLOWS_OR_NULL(st, 0))
+        return pnx_refused_in_callback(st);
     return load_source(st, file, source, mode, false);
 }
 
 pinax_err pinax_eval(pinax_state *st, pinax_str line) {
+    if (!PNX_CB_ALLOWS_OR_NULL(st, 0))
+        return pnx_refused_in_callback(st);
     return load_source(st, "(eval)", line, PINAX_LOAD_CODE, true);
 }

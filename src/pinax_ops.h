@@ -1055,7 +1055,7 @@ PNX_OP(RCATA) {
 
 PNX_OP(BARRIER) { // the host writes what it holds and waits for what it started (pinax_on_barrier)
     if (st->barrier)
-        st->barrier(st->barrier_user);
+        PNX_CALL_OUT(st, PNX_CB_BARRIER, st->barrier(st->barrier_user));
     return PNX_R_OK;
 }
 PNX_OP(GCAP) { R[OP_A(w)] = st->globals[PNX_GX(st, OP_BX(w))].capacity; return PNX_R_OK; }

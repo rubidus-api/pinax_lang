@@ -165,11 +165,18 @@ static pinax_err host_call(pinax_state *st, const pnx_host *h, int64_t *ia, pnx_
     pinax_args args = {ia, ia + n.int_args, sv, rs, NULL, NULL};
     pinax_call call = {st, 0};
     // a word run from inside this host word puts its window above these arguments and results
+    // saved and restored, not cleared: this may be a word run from inside another host word (RFC-0058 G2)
+    const pnx_host *const host_was = st->host_cur;
+    int64_t *const ia_was = st->host_ia;
+    pnx_scell *const sa_was = st->host_sa;
     st->host_cur = h;
     st->host_ia = ia;
     st->host_sa = sa;
-    pinax_err err = h->fn(&call, h->user, &args);
-    st->host_cur = NULL;
+    pinax_err err = PINAX_OK;
+    PNX_CALL_OUT(st, PNX_CB_HOST, err = h->fn(&call, h->user, &args));
+    st->host_cur = host_was;
+    st->host_ia = ia_was;
+    st->host_sa = sa_was;
     *fault = false;
     if (err == PINAX_PENDING && call.token && (h->flags & PINAX_WORD_AWAITABLE) && st->nest == 0) {
         *token = call.token; // the result comes later, through pinax_complete()

@@ -29,6 +29,7 @@
 
 #include <stdbool.h>
 #include <stdint.h>
+#include <ctype.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -44,6 +45,12 @@
 #define COUNT(a) (sizeof(a) / sizeof((a)[0]))
 
 // Pinax sources (no OS access; freestanding).
+// The numbers of include/pinax.h, for file names (nob includes nothing of the project).
+#include "include/pinax.h"
+#define PINAX_ABI_OF_HEADER PINAX_ABI
+#define PINAX_MINOR_OF_HEADER PINAX_VERSION_MINOR
+#define PINAX_PATCH_OF_HEADER PINAX_VERSION_PATCH
+
 static const char *const core_sources[] = {"src/pinax_compile.c", "src/pinax_lex.c", "src/pinax_state.c", "src/pinax_text.c", "src/pinax_vm.c", "src/pinax_ptn.c", "src/pinax_rex.c", "src/pinax_json.c", "src/pinax_toml.c", "src/pinax_md.c", "src/pinax_sheet.c", "src/pinax_sheetio.c", "src/pinax_export.c"};
 static const size_t core_count = COUNT(core_sources);
 
@@ -63,7 +70,10 @@ static const char *const proven_portable[] = {
 // the portable files call them, and the core now calls those files. A freestanding build gets
 // the first inline from the compiler (PROVEN_FREESTANDING) and leaves the second out
 // (PROVEN_NO_U16STR). The library must link on its own.
-static const char *const proven_lib_hosted[] = {"platform/proven_sys_mem.c", "src/proven/u16str.c"};
+// Since proven v0.120.0 hash.c folds its CRCs with the processor's carry-less multiply where it has one
+// (platform/proven_sys_crc.c, hosted only; a freestanding build uses the tables).
+static const char *const proven_lib_hosted[] = {"platform/proven_sys_mem.c", "src/proven/u16str.c",
+                                                "platform/proven_sys_crc.c"};
 
 // proven_c_lib files that need the operating system. Tools and tests link them; the
 // library itself stays freestanding.
@@ -245,6 +255,148 @@ static const char *sqlite_flags(void) {
            "-DSQLITE_DEFAULT_FOREIGN_KEYS=1 -DSQLITE_ENABLE_MATH_FUNCTIONS";
 }
 
+// ---- the deliverable archives (RFC-0058 C1, C2; D0116) --------------------------------------------------------
+// The archives in build/<target>/ keep every name: pnx, the tests and the scripts link them. The ones a host is
+// given are build/<target>/release/: each a partial link of what the public names need, in which only those
+// names stay global; the core's own names (pnx_) that exported code calls are renamed pinax__ and stay global,
+// outside the promise; proven's and SQLite's become local, so a host may link its own copies of either.
+
+// The tool of the same toolchain as the target's archiver: "ar" -> "nm", "x86_64-w64-mingw32-ar" -> "...-nm".
+static void tool_of(const target_t *t, const char *tool, char *out, size_t cap) {
+    size_t n = strlen(t->ar);
+    if (n >= 2 && strcmp(t->ar + n - 2, "ar") == 0)
+        snprintf(out, cap, "%.*s%s", (int)(n - 2), t->ar, tool);
+    else
+        snprintf(out, cap, "%s", tool);
+}
+
+// The functions a header marks with `macro` (PINAX_API, PINAX_HOST_API), one name a line into `out`.
+static int public_names(const char *header, const char *macro, FILE *out, const char *skip_prefix) {
+    FILE *f = fopen(header, "r");
+    if (!f)
+        return 1;
+    char line[1024];
+    const size_t m = strlen(macro);
+    while (fgets(line, sizeof line, f)) {
+        const char *p = line;
+        while (*p == ' ')
+            ++p;
+        if (strncmp(p, macro, m) != 0 || (p[m] != ' ' && p[m] != '\t'))
+            continue;
+        const char *open = strchr(p, '(');
+        if (!open)
+            continue;
+        const char *end = open;
+        while (end > p && (end[-1] == ' '))
+            --end;
+        const char *start = end;
+        while (start > p && (isalnum((unsigned char)start[-1]) || start[-1] == '_'))
+            --start;
+        if (end > start && (!skip_prefix || strncmp(start, skip_prefix, strlen(skip_prefix)) != 0))
+            fprintf(out, "%.*s\n", (int)(end - start), start);
+    }
+    fclose(f);
+    return 0;
+}
+
+// in: archives; roots: a file of the names to pull and keep; out: the archive written. rename_core: the pnx_
+// names left global become pinax__.
+static int localize(const target_t *t, const char *in, const char *roots, bool rename_core, const char *out) {
+    char nm[256], objcopy[256], cmd[4096], at[600], whole[600], keep[600], ren[600], local[600];
+    tool_of(t, "nm", nm, sizeof nm);
+    tool_of(t, "objcopy", objcopy, sizeof objcopy);
+    // the files of the step beside release/, in release-work/: release/ holds only what is given
+    char work[500];
+    const char *slash = strrchr(out, '/');
+    snprintf(work, sizeof work, "%.*s-work%s", (int)(slash - out), out, slash);
+    snprintf(at, sizeof at, "%s.ld", work);
+    snprintf(whole, sizeof whole, "%s.whole.o", work);
+    snprintf(local, sizeof local, "%s.local.o", work);
+    snprintf(keep, sizeof keep, "%s.keep", work);
+    snprintf(ren, sizeof ren, "%s.rename", work);
+    // the linker options file: -u for each root, so that only what they need is pulled from the archives
+    snprintf(cmd, sizeof cmd, "sed 's/^/-u /' %s > %s", roots, at);
+    if (run(cmd))
+        return 1;
+    snprintf(cmd, sizeof cmd, "%s -r -nostdlib -Wl,@%s %s -o %s", t->cc, at, in, whole);
+    if (run(cmd))
+        return 1;
+    snprintf(cmd, sizeof cmd, "%s -g --defined-only %s | awk 'NF==3 && $3 ~ /^pnx_/ {print $3\" pinax__\"substr($3,5)}' > %s",
+             nm, whole, ren);
+    if (run(cmd))
+        return 1;
+    if (!rename_core && run(strcat(strcpy(cmd, ": > "), ren)))
+        return 1;
+    snprintf(cmd, sizeof cmd, "{ cat %s; awk '{print $2}' %s; } > %s", roots, ren, keep);
+    if (run(cmd))
+        return 1;
+    snprintf(cmd, sizeof cmd, "%s --keep-global-symbols=%s --redefine-syms=%s %s %s && rm -f %s && %s rcs %s %s",
+             objcopy, keep, ren, whole, local, out, t->ar, out, local);
+    return run(cmd);
+}
+
+static int build_release_libs(const target_t *t, const char *dir) {
+    char rel[300], wrk[320], roots[400], cmd[2000], in[1200], out[400];
+    { // the step needs the toolchain's objcopy and nm (GNU binutils or LLVM's); without them pnx still builds
+        char objcopy[256], probe[600];
+        tool_of(t, "objcopy", objcopy, sizeof objcopy);
+        snprintf(probe, sizeof probe, "%s --version >/dev/null 2>&1", objcopy);
+        if (system(probe) != 0) {
+            printf("nob: no %s: build/%s/release/ (the archives a host is given) is not built\n", objcopy, t->name);
+            return 0;
+        }
+    }
+    snprintf(rel, sizeof rel, "%s/release", dir);
+    snprintf(wrk, sizeof wrk, "%s/release-work", dir);
+    run(strcat(strcat(strcpy(cmd, "rm -rf "), rel), "/*.roots"));
+    mkdirs(rel);
+    mkdirs(wrk);
+    // the core: the functions of pinax.h
+    snprintf(roots, sizeof roots, "%s/libpinax.roots", wrk);
+    FILE *f = fopen(roots, "w");
+    if (!f || public_names("include/pinax.h", "PINAX_API", f, NULL))
+        return 1;
+    fclose(f);
+    snprintf(in, sizeof in, "%s/libpinax.a", dir);
+    // and every name of the core's own, so that the archive defines what pinax.c defines and pinax_native.h names
+    char nm[256];
+    tool_of(t, "nm", nm, sizeof nm);
+    snprintf(cmd, sizeof cmd, "%s -g --defined-only %s | awk 'NF==3 && $3 ~ /^pnx_/ {print $3}' | sort -u >> %s", nm, in, roots);
+    if (run(cmd))
+        return 1;
+    snprintf(out, sizeof out, "%s/libpinax.a", rel);
+    if (localize(t, in, roots, true, out))
+        return 1;
+    // the host library without SQLite, and SQLite on its own (RFC-0058 C2)
+    snprintf(roots, sizeof roots, "%s/libpinax_host.roots", wrk);
+    f = fopen(roots, "w");
+    if (!f || public_names("src/host/pinax_host.h", "PINAX_HOST_API", f, "pinax_host_sqlite") ||
+        public_names("src/host/pinax_loop.h", "PINAX_HOST_API", f, NULL))
+        return 1;
+    fclose(f);
+    snprintf(cmd, sizeof cmd, "grep -v '^pinax_host_register_sqlite$' %s > %s.tmp && mv %s.tmp %s", roots, roots, roots, roots);
+    if (run(cmd))
+        return 1;
+    snprintf(in, sizeof in, "%s/libpinax_host.a", dir);
+    snprintf(out, sizeof out, "%s/libpinax_host.a", rel);
+    if (localize(t, in, roots, false, out))
+        return 1;
+    if (sqlite_wanted()) {
+        snprintf(roots, sizeof roots, "%s/libpinax_sqlite.roots", wrk);
+        f = fopen(roots, "w");
+        if (!f)
+            return 1;
+        fputs("pinax_host_register_sqlite\npinax_host_sqlite_limits\n", f);
+        fclose(f);
+        snprintf(out, sizeof out, "%s/libpinax_sqlite.a", rel);
+        if (localize(t, in, roots, false, out))
+            return 1;
+    }
+    printf("nob: built %s (libpinax.a, libpinax_host.a%s: only the public names global)\n", rel,
+           sqlite_wanted() ? ", libpinax_sqlite.a" : "");
+    return 0;
+}
+
 static int build_lib(const target_t *t, char *lib, size_t lib_cap, char *hosted_objs, size_t hosted_cap) {
     char dir[256], objdir[300];
     build_dir(dir, sizeof dir, t);
@@ -321,6 +473,75 @@ static int build_lib(const target_t *t, char *lib, size_t lib_cap, char *hosted_
     if (run(cmd))
         return 1;
     printf("nob: built %s\n", pnx);
+    if (!t->sanitize && build_release_libs(t, dir))
+        return 1;
+    return 0;
+}
+
+// The core as a shared library (RFC-0058 E, D0116): its own -fPIC objects, only the functions of pinax.h
+// exported (-fvisibility=hidden; on win64 the ones PINAX_API marks dllexport). Linux: libpinax.so.1.MINOR.PATCH,
+// soname libpinax.so.<PINAX_ABI>, and the links libpinax.so.1 and libpinax.so; win64: pinax.dll, its import
+// library libpinax.dll.a and pinax.def. A host compiles with -DPINAX_SHARED on win64 (dllimport). Exported code
+// never links it (C3). On the native target the contract and the embedding example run against it.
+static int cmd_shared(const target_t *t) {
+    char dir[256], objdir[400], cmd[20000], own[1200], prov[1200];
+    build_dir(dir, sizeof dir, t);
+    snprintf(objdir, sizeof objdir, "%s/shared/obj", dir);
+    mkdirs(objdir);
+    const bool win = strcmp(t->exe, ".exe") == 0;
+    snprintf(own, sizeof own, "%s -fPIC -fvisibility=hidden -DPINAX_SHARED -DPINAX_BUILDING", own_flags(t));
+    snprintf(prov, sizeof prov, "%s -fPIC -fvisibility=hidden", proven_flags(t));
+    static char objs[16384];
+    objs[0] = '\0';
+    if (compile_set(t, own, "", core_sources, core_count, objdir, objs, sizeof objs) ||
+        compile_set(t, prov, "vendor/proven/", proven_portable, COUNT(proven_portable), objdir, objs, sizeof objs) ||
+        compile_set(t, prov, "vendor/proven/", proven_lib_hosted, COUNT(proven_lib_hosted), objdir, objs, sizeof objs))
+        return 1;
+    // a shared library takes every object whole, so the system parts that proven's random and time call come too
+    static const char *const shared_system[] = {"platform/proven_sys_time.c", "platform/proven_sys_random.c",
+                                                "platform/proven_sys_thread.c"};
+    if (compile_set(t, prov, "vendor/proven/", shared_system, COUNT(shared_system), objdir, objs, sizeof objs))
+        return 1;
+    char out[512];
+    if (win) {
+        snprintf(out, sizeof out, "%s/shared/pinax.dll", dir);
+        snprintf(cmd, sizeof cmd, "%s -shared -o %s%s -Wl,--out-implib,%s/shared/libpinax.dll.a "
+                 "-Wl,--output-def,%s/shared/pinax.def -static-libgcc -lbcrypt", t->cc, out, objs, dir, dir);
+    } else {
+        snprintf(out, sizeof out, "%s/shared/libpinax.so.%d.%d.%d", dir, PINAX_ABI_OF_HEADER, PINAX_MINOR_OF_HEADER,
+                 PINAX_PATCH_OF_HEADER);
+        snprintf(cmd, sizeof cmd, "%s -shared -o %s%s -Wl,-soname,libpinax.so.%d -Wl,--no-undefined -lm -pthread && ln -sf libpinax.so.%d.%d.%d "
+                 "%s/shared/libpinax.so.%d && ln -sf libpinax.so.%d %s/shared/libpinax.so", t->cc, out, objs,
+                 PINAX_ABI_OF_HEADER, PINAX_ABI_OF_HEADER, PINAX_MINOR_OF_HEADER, PINAX_PATCH_OF_HEADER, dir,
+                 PINAX_ABI_OF_HEADER, PINAX_ABI_OF_HEADER, dir);
+    }
+    if (run(cmd))
+        return 1;
+    // what it exports: the functions of pinax.h, nothing else
+    char nm[256];
+    tool_of(t, "nm", nm, sizeof nm);
+    if (!win) {
+        snprintf(cmd, sizeof cmd, "test -z \"$(%s -D --defined-only %s | awk 'NF==3 && $2 ~ /[TDBR]/ && $3 !~ /^pinax_/')\"",
+                 nm, out);
+        if (run(cmd)) {
+            fprintf(stderr, "nob: %s exports a name that is not pinax_\n", out);
+            return 1;
+        }
+    }
+    printf("nob: built %s\n", out);
+    if (strcmp(t->name, "native") != 0 || t->sanitize)
+        return 0;
+    snprintf(cmd, sizeof cmd, "%s -std=c23 -Wall -Wextra -Werror -Iinclude docs/spec/examples/19-contract.c -L%s/shared -lpinax "
+             "-Wl,-rpath,'$ORIGIN' -o %s/shared/contract && ./%s/shared/contract", t->cc, dir, dir, dir);
+    if (run(cmd))
+        return 1;
+    if (exists("tests/embed/host_min.c")) {
+        snprintf(cmd, sizeof cmd, "%s -std=c99 -Wall -Wextra -Werror -Iinclude tests/embed/host_min.c -L%s/shared -lpinax "
+                 "-Wl,-rpath,'$ORIGIN' -o %s/shared/host_min && test \"$(./%s/shared/host_min)\" = 42", t->cc, dir, dir, dir);
+        if (run(cmd))
+            return 1;
+    }
+    printf("nob: the contract and the embedding example run against %s\n", out);
     return 0;
 }
 
@@ -402,7 +623,7 @@ static const char *const dist_proven[] = {
     "vendor/proven/src/proven/float_parse.c",   "vendor/proven/src/proven/fmt.c",
     "vendor/proven/src/proven/hash.c",          "vendor/proven/src/proven/scan.c",
     "vendor/proven/src/proven/u16str.c",        "vendor/proven/src/proven/u8str.c",
-    "vendor/proven/src/proven/utf.c",
+    "vendor/proven/src/proven/utf.c",           "vendor/proven/platform/proven_sys_crc.c",
 };
 // Static names several of those files define: in one translation unit each file listed here
 // sees its own under another name.
@@ -531,6 +752,21 @@ static int cmd_dist(const target_t *t) {
              t->cc);
     if (run(cmd))
         return 1;
+    // Only the public names stay global (RFC-0058 C1): every other global of the file gets the reserved prefix,
+    // pnx_x as pinax__x and proven_x as pinax__proven_x, by a block of defines put first, then it is built again.
+    // pinax_native.h gets the same block for the names it calls.
+    snprintf(cmd, sizeof cmd,
+             "nm -g --defined-only build/dist/pinax.o | awk 'NF==3 && $3 ~ /^pnx_/ {print \"#define \"$3\" pinax__\"substr($3,5)} "
+             "NF==3 && $3 ~ /^proven_/ {print \"#define \"$3\" pinax__\"$3}' | sort -u > build/dist/prefix.h && "
+             "{ echo '/* Every name of this file that is not public gets the prefix pinax__ (RFC-0058 C1). */'; "
+             "cat build/dist/prefix.h build/dist/pinax.c; } > build/dist/pinax.c.new && mv build/dist/pinax.c.new build/dist/pinax.c");
+    if (run(cmd))
+        return 1;
+    snprintf(cmd, sizeof cmd, "%s -std=c23 -O2 -Wall -Wextra -Werror -Ibuild/dist -c build/dist/pinax.c -o build/dist/pinax.o && "
+             "test -z \"$(nm -g --defined-only build/dist/pinax.o | awk 'NF==3 && $3 !~ /^pinax_/')\"",
+             t->cc);
+    if (run(cmd))
+        return 1;
     if (exists("tests/embed/host_min.c")) {
         snprintf(cmd, sizeof cmd,
                  "%s -std=c99 -Wall -Wextra -Werror -Ibuild/dist tests/embed/host_min.c build/dist/pinax.o -lm "
@@ -550,6 +786,18 @@ static int cmd_dist(const target_t *t) {
           "#if defined(__GNUC__)\n#pragma GCC diagnostic ignored \"-Wunused-const-variable\"\n"
           "#pragma GCC diagnostic ignored \"-Wunused-function\"\n#endif\n",
           native);
+    { // the names of pinax.c it calls, under the prefix pinax.c gives them (RFC-0058 C1)
+        FILE *prefix = fopen("build/dist/prefix.h", "r");
+        char  line[512];
+        if (!prefix) {
+            fclose(native);
+            return 1;
+        }
+        while (fgets(line, sizeof line, prefix))
+            if (strncmp(line, "#define pnx_", 12) == 0)
+                fputs(line, native);
+        fclose(prefix);
+    }
     dist_seen_n = 0;
     status = dist_emit(native, "src/pinax_ops.h");
     fputs("#endif\n", native);
@@ -762,6 +1010,10 @@ static int cmd_contract(const target_t *t) {
     char dir[256], exe[512], cmd[4096];
     build_dir(dir, sizeof dir, t);
     snprintf(exe, sizeof exe, "%s/contract%s", dir, t->exe);
+    if (!t->sanitize) { // the promises hold for what a release gives a host: the core's archive alone (RFC-0058 C1)
+        snprintf(lib, sizeof lib, "%s/release/libpinax.a", dir);
+        hosted[0] = '\0';
+    }
     snprintf(cmd, sizeof cmd, "%s -std=c23 -Wall -Wextra -Werror -Iinclude %s docs/spec/examples/19-contract.c%s %s %s -o %s", t->cc,
              t->sanitize ? "-fsanitize=address,undefined" : "", hosted, lib,
              strcmp(t->exe, ".exe") == 0 ? "-static -lbcrypt" : "-lm -pthread", exe);
@@ -827,30 +1079,51 @@ static int cmd_wasm(void) {
 // pinax.h promises to need nothing but <stddef.h> and <stdint.h>, in C99 and later and in C++.
 static int check_headers(int *problems) {
     mkdirs("build/check");
-    FILE *f = fopen("build/check/header.c", "w");
-    if (!f)
-        return 1;
-    fputs("#include \"pinax.h\"\nint pinax_header_check(void) { return PINAX_OK; }\n", f);
-    fclose(f);
-    if (run("cp build/check/header.c build/check/header.cpp"))
-        return 1;
+    // Each public header alone, in every C and C++ standard the promise names (RFC-0058 B6, D0116),
+    // with the compiler of the build and, when it is there, clang.
+    static const char *const headers[] = {"pinax.h", "pinax_loop.h", "pinax_host.h"};
+    for (size_t h = 0; h < COUNT(headers); ++h) {
+        char path[256];
+        for (int cpp = 0; cpp < 2; ++cpp) {
+            snprintf(path, sizeof path, "build/check/header%zu.%s", h, cpp ? "cpp" : "c");
+            FILE *f = fopen(path, "w");
+            if (!f)
+                return 1;
+            fprintf(f, "#include \"%s\"\nint pinax_header_check(void) { return PINAX_OK; }\n", headers[h]);
+            fclose(f);
+        }
+    }
     const char *cc = getenv("CC") ? getenv("CC") : "cc";
     const char *cxx = getenv("CXX") ? getenv("CXX") : "c++";
+    const char *compilers[2][2] = {{cc, cxx}, {"clang", "clang++"}};
     char cmd[1024];
-    static const char *const standards[] = {"c99", "c23"};
-    for (size_t i = 0; i < COUNT(standards); ++i) {
-        snprintf(cmd, sizeof cmd, "%s -std=%s -Wall -Wextra -Wpedantic -Werror -Iinclude -fsyntax-only build/check/header.c",
-                 cc, standards[i]);
-        *problems += run(cmd);
+    static const char *const standards[] = {"c99", "c11", "c17", "c23"};
+    static const char *const cxx_standards[] = {"c++11", "c++20"};
+    for (int k = 0; k < 2; ++k) {
+        snprintf(cmd, sizeof cmd, "%s --version >/dev/null 2>&1", compilers[k][0]);
+        if (k == 1 && system(cmd) != 0)
+            continue;
+        for (size_t h = 0; h < COUNT(headers); ++h)
+            for (size_t i = 0; i < COUNT(standards); ++i) {
+                snprintf(cmd, sizeof cmd,
+                         "%s -std=%s -Wall -Wextra -Wpedantic -Werror -Iinclude -Isrc/host -fsyntax-only build/check/header%zu.c",
+                         compilers[k][0], standards[i], h);
+                *problems += run(cmd);
+            }
+        snprintf(cmd, sizeof cmd, "%s --version >/dev/null 2>&1", compilers[k][1]);
+        if (system(cmd) != 0) {
+            printf("nob check: no %s; skipping its C++ header check\n", compilers[k][1]);
+            continue;
+        }
+        for (size_t h = 0; h < COUNT(headers); ++h)
+            for (size_t i = 0; i < COUNT(cxx_standards); ++i) {
+                snprintf(cmd, sizeof cmd,
+                         "%s -std=%s -Wall -Wextra -Wpedantic -Werror -Iinclude -Isrc/host -fsyntax-only build/check/header%zu.cpp",
+                         compilers[k][1], cxx_standards[i], h);
+                *problems += run(cmd);
+            }
     }
-    snprintf(cmd, sizeof cmd, "%s --version >/dev/null 2>&1", cxx);
-    if (system(cmd) == 0) {
-        snprintf(cmd, sizeof cmd,
-                 "%s -std=c++17 -Wall -Wextra -Wpedantic -Werror -Iinclude -fsyntax-only build/check/header.cpp", cxx);
-        *problems += run(cmd);
-    } else {
-        printf("nob check: no C++ compiler; skipping the C++ header check\n");
-    }
+    FILE *f;
     // The proven adapter, with proven on the include path.
     f = fopen("build/check/adapter.c", "w");
     if (!f)
@@ -947,7 +1220,7 @@ int main(int argc, char **argv) {
             command = a;
         } else {
             fprintf(stderr, "nob: unknown option %s\n"
-                            "usage: ./nob [build|test|contract|check|freestanding|wasm|dist|all|clean] "
+                            "usage: ./nob [build|test|contract|check|freestanding|wasm|dist|abi|shared|all|clean] "
                             "[--target=native|win64] [--sanitize] [--debug] [--proofs] [--switch]\n", a);
             return 2;
         }
@@ -970,6 +1243,17 @@ int main(int argc, char **argv) {
         return cmd_contract(&t);
     if (strcmp(command, "wasm") == 0)
         return cmd_wasm();
+    if (strcmp(command, "shared") == 0)
+        return cmd_shared(&t);
+    if (strcmp(command, "abi") == 0) {
+        // The binary interface of the public headers against the baselines (RFC-0058 D, D0116); it needs
+        // clang (every target compiled only) and the built deliverables for the symbol lines.
+        if (!exists("tests/abi/abi.py")) {
+            printf("nob: tests/ not present (public checkout): no ABI baselines here\n");
+            return 0;
+        }
+        return run("python3 tests/abi/abi.py");
+    }
     if (strcmp(command, "all") == 0)
         return cmd_check() || cmd_freestanding() || cmd_test(&t) || cmd_contract(&t) || cmd_dist(&t);
     if (strcmp(command, "clean") == 0)

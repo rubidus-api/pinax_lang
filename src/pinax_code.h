@@ -500,7 +500,7 @@ enum {
 #define PNX_CONTAINER_VERSION 6 // 6: a procedure value is the number of the word plus one, 0 being none (RFC-0055); 5 holds the number itself
 #define PNX_WORD_TAKES_NAME 1 // pnx_wordrec.reserved: see redefine_old in pnx_head
 #define PNX_ORDER_MARK 0x0102
-#define PNX_ERR_DECLARED 0x400 // the first failure code a program declares (RFC-0037)
+#define PNX_ERR_DECLARED PINAX_ERR_PROGRAM // the first failure code a program declares (RFC-0037; pinax.h)
 #define PNX_MAX_ERRS 1024       // codes a state may declare
 
 // A container carries one load: what the program gains. Its records are numbered on from the

@@ -2,7 +2,7 @@
 #show: document-setup.with(
   title: "The Pinax Manual",
   subtitle: "Learning and using the embeddable scripting language Pinax",
-  version: "Edition 0.36.2",
+  version: "Edition 0.37.0",
   date: "October 2026")
 
 #include "chapters/00-preface.typ"
@@ -22,5 +22,6 @@
 #include "chapters/14-embedding.typ"
 #include "chapters/15-tools.typ"
 #include "chapters/16-messages.typ"
+#include "chapters/17-abi.typ"
 
 #term-index()

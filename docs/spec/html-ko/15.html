@@ -36,7 +36,7 @@
 false 1 2 select = 2
 9223372036854775807 2 sat_mul = 9223372036854775807
 9223372036854775807 2 wrap_mul = -2
-</code></pre></div><h5>제약</h5><p class="para"><span class="pn">(5)</span> 정수 프로시저는 <code>int</code>(또는 같은 선언한 타입, 7.4)만 받는다.</p><div class="example refused"><p class="ex-file"><code>15-max-str.pnx</code></p><pre><code data-lang="pinax"><span style="color: #198810">"a"</span> <span style="color: #198810">"b"</span> max drop
+</code></pre></div><h5>제약</h5><p class="para"><span class="pn">(5a)</span> 정수 프로시저는 <code>int</code>(또는 같은 선언한 타입, 7.4)만 받는다.</p><div class="example refused"><p class="ex-file"><code>15-max-str.pnx</code></p><pre><code data-lang="pinax"><span style="color: #198810">"a"</span> <span style="color: #198810">"b"</span> max drop
 </code></pre><p class="ex-label">거절</p><pre><code data-lang="text">$ pnx 15-max-str.pnx
 15-max-str.pnx:1:9: this procedure takes two int values, or two of the same declared type
 </code></pre></div><h5>결함</h5><p class="para"><span class="pn">(6)</span> <code>neg</code> 과 <code>abs</code> 는 −2<sup>63</sup> 에서 넘친다.</p><div class="example fault"><p class="ex-file"><code>15-neg-min.pnx</code></p><pre><code data-lang="pinax"><span style="color: #b60157">-9223372036854775808</span> neg drop

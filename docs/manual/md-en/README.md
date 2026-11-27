@@ -1,6 +1,6 @@
 # The Pinax Manual
 
-Learning and using the embeddable scripting language Pinax — Edition 0.36.2, October 2026
+Learning and using the embeddable scripting language Pinax — Edition 0.37.0, October 2026
 
 ## Contents
 
@@ -21,4 +21,5 @@ Learning and using the embeddable scripting language Pinax — Edition 0.36.2, O
 15. [14 Embedding in a C program](15.md)
 16. [15 Tools](16.md)
 17. [16 Messages you will meet](17.md)
-18. [Index](18.md)
+18. [17 ABI and compatibility](18.md)
+19. [Index](19.md)
