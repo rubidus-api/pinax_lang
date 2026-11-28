@@ -1,0 +1,780 @@
+<!doctype html>
+<html lang="en">
+<head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<title>7 Records, pools, indexes — Pinax Manual</title><style>@font-face { font-family:"Doc Serif"; src:url("../fonts/serif.woff2") format("woff2");
+  font-weight:400; font-style:normal; font-display:swap;
+  unicode-range:U+0000-024F,U+2000-206F,U+20A0-20BF,U+2100-21FF,U+2190-2BFF; }
+@font-face { font-family:"Doc Serif"; src:url("../fonts/serif-bold.woff2") format("woff2");
+  font-weight:700; font-style:normal; font-display:swap;
+  unicode-range:U+0000-024F,U+2000-206F,U+20A0-20BF,U+2100-21FF,U+2190-2BFF; }
+@font-face { font-family:"Doc Serif"; src:url("../fonts/serif-italic.woff2") format("woff2");
+  font-weight:400; font-style:italic; font-display:swap;
+  unicode-range:U+0000-024F,U+2000-206F,U+20A0-20BF,U+2100-21FF,U+2190-2BFF; }
+@font-face { font-family:"Doc Serif"; src:url("../fonts/serif-kr.woff2") format("woff2");
+  font-weight:400; font-style:normal; font-display:swap; }
+@font-face { font-family:"Doc Serif"; src:url("../fonts/serif-kr-bold.woff2") format("woff2");
+  font-weight:700; font-style:normal; font-display:swap; }
+@font-face { font-family:"Doc Sans"; src:url("../fonts/sans.woff2") format("woff2");
+  font-weight:400; font-style:normal; font-display:swap;
+  unicode-range:U+0000-024F,U+2000-206F,U+20A0-20BF,U+2100-21FF,U+2190-2BFF; }
+@font-face { font-family:"Doc Sans"; src:url("../fonts/sans-bold.woff2") format("woff2");
+  font-weight:700; font-style:normal; font-display:swap;
+  unicode-range:U+0000-024F,U+2000-206F,U+20A0-20BF,U+2100-21FF,U+2190-2BFF; }
+@font-face { font-family:"Doc Sans"; src:url("../fonts/sans-kr.woff2") format("woff2");
+  font-weight:400; font-style:normal; font-display:swap; }
+@font-face { font-family:"Doc Sans"; src:url("../fonts/sans-kr-bold.woff2") format("woff2");
+  font-weight:700; font-style:normal; font-display:swap; }
+@font-face { font-family:"Doc Mono"; src:url("../fonts/mono.woff2") format("woff2");
+  font-weight:400; font-style:normal; font-display:swap; }
+@font-face { font-family:"Doc Mono"; src:url("../fonts/mono-bold.woff2") format("woff2");
+  font-weight:700; font-style:normal; font-display:swap; }
+:root { color-scheme: light dark; --bg:#fafaf8; --bg2:#f2f2f0; --bg3:#e6e6e3; --fg:#141414; --muted:#555555; --line:#c9c9c9; --line-strong:#8a8a8a; --accent:#1a4f8a; --accent-fg:#ffffff; --accent2:#96530f; --honey:#f2b04a; --honey-fg:#2b1d00; --honey-text:#855400; --honey-soft:#fbebc6; --danger:#9b1b30; --ok:#1d6e37; --warn:#855400; --select:#d4dde8;
+  --rule:var(--line); --box-bg:var(--bg2); --code-bg:var(--bg2); --box-rule:var(--line); --link:var(--accent);
+  --tok-c:#3f5b4a; --tok-k:#123c87; --tok-t:#0f5b63; --tok-s:#7a3b0a;
+  --tok-n:#8a2222; --tok-p:#6b2d8a; --tok-x:#555555; }
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) { --bg:#121314; --bg2:#1c1e20; --bg3:#2a2c2f; --fg:#e8e8e8; --muted:#a6a6a6; --line:#3a3d40; --line-strong:#75787c; --accent:#8ab4e8; --accent-fg:#121314; --accent2:#d4883b; --honey:#f2b04a; --honey-fg:#121314; --honey-text:#f2b04a; --honey-soft:#3b311e; --danger:#f07a8c; --ok:#7bcb95; --warn:#f2b04a; --select:#2f3d52;
+    --tok-c:#9fbfa8; --tok-k:#9fc0f0; --tok-t:#7fcbd4; --tok-s:#e0b080;
+  --tok-n:#e79a9a; --tok-p:#c79ae0; --tok-x:#a6a6a6; } }
+:root[data-theme="dark"] { color-scheme: dark; --bg:#121314; --bg2:#1c1e20; --bg3:#2a2c2f; --fg:#e8e8e8; --muted:#a6a6a6; --line:#3a3d40; --line-strong:#75787c; --accent:#8ab4e8; --accent-fg:#121314; --accent2:#d4883b; --honey:#f2b04a; --honey-fg:#121314; --honey-text:#f2b04a; --honey-soft:#3b311e; --danger:#f07a8c; --ok:#7bcb95; --warn:#f2b04a; --select:#2f3d52;
+  --tok-c:#9fbfa8; --tok-k:#9fc0f0; --tok-t:#7fcbd4; --tok-s:#e0b080;
+  --tok-n:#e79a9a; --tok-p:#c79ae0; --tok-x:#a6a6a6; }
+:root[data-theme="light"] { color-scheme: light; }
+* { box-sizing:border-box; }
+body { margin:0; background:var(--bg); color:var(--fg); line-height:1.75;
+       font-family:"Doc Serif","Noto Serif CJK KR","Noto Serif KR",Georgia,serif; }
+.here-head { display:flex; align-items:center; gap:.8rem; padding:.2rem 0 .5rem;
+  border-bottom:1px solid var(--rule,#ddd); margin-bottom:.5rem; }
+.here-head .sp { flex:1; }
+.here-all { margin-left:auto; font-size:.9rem; }
+.here-x { font:inherit; font-size:.9rem; cursor:pointer; background:none;
+  border:1px solid var(--line-strong); padding:.05rem .45rem;
+  color:inherit; }
+.here-body a, .tf-secs a { display:block; text-decoration:none; padding:.12rem 0;
+  line-height:1.45; }
+.here-body a:hover, .tf-secs a:hover { text-decoration:underline; }
+.here-body a.lv4, .tf-secs a.lv4 { padding-left:1.6rem; font-size:.94rem;
+  color:var(--muted,#555); }
+.tf-no { display:inline-block; min-width:3.2rem; color:var(--muted,#666);
+  font-variant-numeric:tabular-nums; }
+.toc-full .tf-ch { margin:.9rem 0 .15rem; font-weight:700; }
+.toc-full .tf-secs { margin:0 0 .5rem .2rem; border-left:2px solid var(--rule,#e2e2e2);
+  padding-left:.7rem; }
+.toc-full h4.toc-part { margin-top:1.8rem; }
+.toc a.toc-detail { font-weight:700; }
+@media print { .here-btn, .here-panel { display:none; } }
+.bar { position:sticky; top:0; z-index:20; display:flex; flex-wrap:nowrap; gap:.25rem; align-items:center;
+       min-height:44px; padding:0 clamp(.4rem,2vw,1.6rem); background:var(--bg2);
+       border-bottom:1px solid var(--line); font-size:.9rem;
+       font-family:"Doc Sans","Noto Sans CJK KR",system-ui,sans-serif; }
+.bar a { color:var(--fg); text-decoration:none; } .bar a:hover { text-decoration:none; }
+.bar .sp { display:none; }
+main { width:100%; padding:1.6rem clamp(.9rem,3vw,2.5rem) 5rem; }
+.wrap { width:100%; }
+main .wrap { max-width:960px; margin-inline:auto; }
+:root[data-measure="fit"] main .wrap { max-width:none; margin:0; }
+h1,h2,h3,h4 { font-family:"Doc Sans","Noto Sans CJK KR",system-ui,sans-serif; line-height:1.35;
+  padding-bottom:.18rem; border-bottom:1px solid var(--rule); }
+h1 { font-size:clamp(1.5rem,3.4vw,2.1rem); margin:.2rem 0 .9rem; }
+h2 { font-size:clamp(1.35rem,3vw,1.8rem); margin:0 0 .7rem; padding-bottom:.35rem;
+     border-bottom:2px solid var(--fg); }
+h3 { font-size:clamp(1.05rem,2.2vw,1.25rem); margin:1.5rem 0 .5rem;
+     padding-bottom:.22rem; border-bottom:1.5px solid var(--fg); }
+p { margin:.9rem 0; } a { color:var(--link); }
+main p { text-indent: 1em; }
+.cover p, .note p, .toc p, .float-caption, .metalist p, .memrow p,
+.colophon-meta p, li p, td p, th p, figure p, blockquote p,
+.demo-src p, .demo-out p, pre, pre p,
+.dev-label, p.dev-label { text-indent: 0; }
+.src-note { font-size: .86em; color: var(--muted, #666); }
+.src-note code { font-size: .95em; }
+sup.fnref { font-size: .72em; line-height: 0; vertical-align: super; }
+sup.fnref a { text-decoration: none; padding: 0 .1em; }
+sup.fnref a::before { content: "["; }
+sup.fnref a::after  { content: "]"; }
+.chapter-notes { margin: 3rem 0 1rem; padding-top: .9rem;
+                 border-top: 2px solid var(--rule, #333); }
+.chapter-notes h2 { font-size: 1.05rem; margin: 0 0 .6rem; }
+.chapter-notes ol { margin: 0; padding-left: 1.6em; }
+.chapter-notes li { font-size: .92em; margin: .35em 0; text-indent: 0; }
+.chapter-notes a.fnback { text-decoration: none; }
+.dev p { text-indent: 0; }
+.dev p + p { text-indent: 1em; }
+.dev p:has(> span.dev-label:first-child) { text-indent: 0; }
+.chapter-head p { text-indent: 0; }
+pre,code,kbd { font-family:"Doc Mono","D2Coding",ui-monospace,SFMono-Regular,Menlo,monospace; }
+code { background:none; padding:0; font-size:.95em; }
+pre { background:none; border:1px solid var(--fg); border-radius:0;
+      padding:.95rem 1.05rem; overflow-x:auto; line-height:1.6; font-size:.95rem;
+      margin:1.2rem 0; }
+.tok-c { color:var(--tok-c); font-style:italic; }
+.tok-k { color:var(--tok-k); font-weight:700; }
+.tok-s { color:var(--tok-s); }
+.tok-n { color:var(--tok-n); }
+.tok-t { color:var(--tok-t); font-weight:700; }
+.tok-x { color:var(--tok-x); }
+.tok-p { color:var(--tok-p); }
+pre code { background:none; padding:0; }
+.tblwrap { overflow-x:auto; text-align:center; }
+.tblwrap > table { display:inline-table; width:auto; max-width:none; margin:1.1rem 0; }
+table { border-collapse:collapse; margin:1.1rem auto; font-size:.95rem;
+        width:auto; max-width:100%; border:2px solid var(--fg);
+        table-layout:auto; }
+th, td { white-space:normal; }
+th,td { border:1px solid var(--rule); padding:.42rem .6rem; text-align:left; vertical-align:top; }
+th { background:rgba(128,128,128,.16); font-weight:700;
+     border-bottom:2px solid var(--fg);
+     font-family:"Doc Sans","Noto Sans CJK KR",system-ui,sans-serif; }
+table tr:first-child th, table tr:first-child td { border-bottom:1px solid var(--fg); }
+ul,ol { padding-left:1.4rem; } li { margin:.3rem 0; }
+.float-list { list-style:none; padding-left:0; }
+.float-list li { margin:.12rem 0; }
+.memrow { overflow-x:auto; text-align:center; margin:1.1rem 0 .2rem; }
+.memrow table.mem { display:inline-table; border-collapse:collapse;
+  border:none; margin:0; width:auto; }
+.memrow td.cell { border:1px solid var(--fg); padding:.3rem .5rem;
+  font-family:"Doc Mono","D2Coding",ui-monospace,monospace; font-size:.9rem;
+  text-align:center; background:none; }
+.memrow td.cell.hi { border-width:2px; }
+.memrow td.addr { border:none; padding:.15rem .5rem 0; text-align:center;
+  font-family:"Doc Mono","D2Coding",ui-monospace,monospace; font-size:.82rem;
+  color:var(--muted); }
+.demo { border:1px solid var(--fg); margin:1.15rem 0; }
+.demo > .demo-head { margin:0; padding:.5rem .9rem; text-indent:0;
+  border-bottom:1px solid var(--fg); font-weight:700; font-size:.92rem; }
+.demo-src > .demo-head { font-family:"Doc Mono","D2Coding",ui-monospace,monospace; }
+.demo-in > .demo-head, .demo-out > .demo-head {
+  font-family:"Doc Sans","Noto Sans CJK KR",system-ui,sans-serif; }
+.demo > .demo-body { padding:0; }
+.demo > .demo-body pre { border:none; border-radius:0; margin:0;
+  padding:.6rem .9rem; }
+.dev { margin:1.15rem 0; padding:0; background:none; border:none; border-radius:0; }
+.dev > .dev-label { border-left:4px solid var(--fg);
+  padding:.1rem .8rem .25rem .8rem; margin:0 0 .34rem; }
+.dev > .dev-body { border-left:2px solid var(--box-rule);
+  padding:.35rem .8rem .35rem .8rem; margin:0; }
+.dev > .dev-body > *:first-child { margin-top:0; }
+.dev > .dev-body > *:last-child { margin-bottom:0; }
+.float-caption { text-align:center; font-family:"Doc Sans","Noto Sans CJK KR",system-ui,sans-serif;
+  font-size:.92rem; color:var(--muted); margin:.35rem 0 1.2rem; }
+figure { margin:1.2rem 0; }
+figure.tbl table { margin-bottom:.2rem; }
+figure.tbl { text-align:center; }
+.dev > p:first-child { margin-top:0; } .dev > p:last-child { margin-bottom:0; }
+.dev-label { font-family:"Doc Sans","Noto Sans CJK KR",system-ui,sans-serif; font-weight:700;
+             font-size:.92rem; color:var(--muted); margin-bottom:.4rem; }
+.dev.open { border:none; border-radius:0; background:none;
+  padding:0; margin:.75rem 0; }
+.dev.open > .dev-label { margin:0 0 .34rem; padding:.1rem .8rem .25rem .8rem;
+  text-indent:0; border-left:4px solid var(--fg);
+  font-family:"Doc Sans","Noto Sans CJK KR",system-ui,sans-serif; font-weight:700;
+  font-size:.98rem; color:var(--fg); text-transform:none; letter-spacing:0; }
+.dev.open > .open-body { margin:0; padding:.35rem .8rem;
+  border-left:2px solid var(--box-rule); }
+.dev.open > .open-body > *:first-child { margin-top:0; }
+.dev.open > .open-body > *:last-child { margin-bottom:0; }
+.dev.open > .open-body > * { margin:.4rem 0; }
+.dev.open > .open-body > *:first-child { margin-top:0; }
+.dev.open > .open-body > *:last-child { margin-bottom:0; }
+.dev.open .open-body > ol.qlist { margin:0; padding-left:1.35rem; }
+.dev.open ol.qlist li { margin:.18rem 0; padding-left:.15rem; }
+.dev.open ol.qlist li::marker { color:var(--muted); font-weight:700; }
+.dev.open .qa-a { border:none; border-left:2px solid var(--box-rule);
+  padding:.06rem 0 .06rem .7rem; margin:.32rem 0 0; }
+.prereq .dev-label, .deepqa .dev-label, .why .dev-label,
+.organizer .dev-label, .questions .dev-label {
+  text-transform:none; letter-spacing:0; font-size:1.12rem; font-weight:700;
+  color:var(--fg); margin-bottom:.45rem; }
+.deepqa .qa-a { border-left:2px solid var(--muted); padding-left:.75rem; }
+.qa-box { border:none; margin:1.15rem 0; }
+.qa-box .dev { margin:0; border:none; border-radius:0; padding:0; background:none; }
+.qa-box .qa-q { border-left:4px solid var(--fg);
+  padding:.1rem .8rem .25rem .8rem; margin:0; }
+.qa-box .qa-a { border:none; border-left:2px solid var(--box-rule);
+  padding:.35rem .8rem; margin:.34rem 0 0; }
+.qa-box .qa-q > p, .qa-box .qa-a > p { margin:0; }
+.dev.recap { border:none; background:none; padding:0; margin:1.15rem 0; }
+.dev.recap > .dev-label { margin:0 0 .34rem; padding:.1rem .8rem .25rem .8rem;
+  text-indent:0; border-left:4px solid var(--fg);
+  font-family:"Doc Sans","Noto Sans CJK KR",system-ui,sans-serif; font-weight:700;
+  font-size:.95rem; color:var(--fg); }
+.dev.recap > .dev-body > p, .dev.recap > .dev-body > div:not(.demo),
+.dev.recap > .dev-body > figure { margin:.3rem 0; padding:0; }
+.dev > .dev-body > .demo { margin:.7rem 0; }
+.deepqa .qa-a { border-left:2px solid var(--muted); padding-left:.75rem; }
+.qa-q .dev-label, .qa-a .dev-label, .deepqa .qa-a .dev-label {
+  display:inline; margin-bottom:0; }
+.qa-q .dev-label + p, .qa-a .dev-label + p { display:inline; }
+.qa-q .dev-label, .qa-q .dev-label + p {
+  font-family:"Doc Sans","Noto Sans CJK KR",system-ui,sans-serif; font-weight:700;
+  color:var(--fg); font-size:1rem; }
+.qa-a .dev-label { color:var(--muted); }
+.qa-a .dev-label + p { font-family:inherit; font-weight:400; }
+span.dev-label { display:inline; font-size:1rem; margin:0; }
+.dev.misconception, .dev.realcase, .dev.antipattern, .dev.mathbox,
+.dev.platform, .dev.recap {
+  border:none; border-radius:0; background:none; padding:0; margin:1.15rem 0; }
+.dev.misconception > .dev-label, .dev.realcase > .dev-label,
+.dev.antipattern > .dev-label, .dev.mathbox > .dev-label,
+.dev.platform > .dev-label, .dev.recap > .dev-label {
+  margin:0 0 .34rem; padding:.1rem .8rem .25rem .8rem; text-indent:0;
+  border-left:4px solid var(--fg);
+  font-family:"Doc Sans","Noto Sans CJK KR",system-ui,sans-serif; font-weight:700;
+  font-size:.95rem; color:var(--fg); }
+.dev > .dev-body > p, .dev > .dev-body > div:not(.demo),
+.dev > .dev-body > figure, .dev > .open-body > p {
+  margin:.35rem 0; padding:0; }
+.bar .menu-btn { flex:0 0 auto; display:inline-flex; align-items:center; justify-content:center;
+  min-width:38px; min-height:38px; padding:0; font:inherit; font-size:1.25rem; line-height:1;
+  color:var(--fg); background:none; border:0; cursor:pointer; text-decoration:none; }
+.bar .back, .bar .bar-nav .nb { flex:0 0 auto; display:inline-flex; align-items:center; gap:.3em;
+  min-height:32px; padding:0 .65rem; border:1px solid var(--line); background:var(--bg);
+  color:var(--fg); font-weight:600; white-space:nowrap; text-decoration:none; }
+.bar .menu-btn[aria-expanded="true"] { background:var(--bg3); }
+.bar .place { flex:1 1 auto; min-width:0; overflow:hidden; white-space:nowrap; text-overflow:ellipsis;
+  padding:0 .35rem; }
+.bar .place strong a { color:var(--honey-text); }
+.bar .place .cur { color:var(--fg); }
+.bar .bar-nav { flex:0 0 auto; display:flex; gap:.3rem; align-items:center; white-space:nowrap; }
+.bar .bar-nav .off { color:var(--muted); border-color:var(--line); opacity:.45; }
+.bar .back:hover, .bar .menu-btn:hover, .bar .bar-nav a.nb:hover, .bar .place a:hover { background:var(--bg3); }
+.dev p, .dev div, .dev ul, .dev ol, .qa-box p, .qa-box div {
+  margin-top:.4rem; margin-bottom:.4rem; }
+.dev > *:first-child, .qa-box .dev > *:first-child { margin-top:0; }
+.dev > *:last-child, .qa-box .dev > *:last-child { margin-bottom:0; }
+.dev ul, .dev ol { padding-left:1.3rem; }
+.dev li { margin:.15rem 0; }
+.dev.antipattern > .dev-label { border-left-style:solid; }
+.dev.mathbox { font-size:.95rem; }
+.note { border:1px solid var(--rule); background:none; padding:.65rem .9rem;
+        margin:0 0 1.6rem; font-size:.9rem; }
+.cover { text-align:center; margin:1.4rem 0 2rem; padding-bottom:1.2rem; }
+.cover h1 { font-size:clamp(1.9rem,5vw,2.9rem); margin:0; letter-spacing:.01em;
+            padding-bottom:0; border-bottom:none; }
+.cover p { margin:.45rem 0; }
+.cover-sub { font-size:clamp(1rem,2.2vw,1.2rem); color:var(--fg); }
+.badge { display:inline-block; margin-top:.5rem; padding:.16rem .6rem;
+         border:1px solid var(--fg); font-size:.8rem; font-weight:700;
+         font-family:"Doc Sans","Noto Sans CJK KR",system-ui,sans-serif; }
+.cover-meta { color:var(--muted); font-size:.9rem;
+              font-family:"Doc Sans","Noto Sans CJK KR",system-ui,sans-serif; }
+.cover-author { margin-top:1.1rem; font-size:1.05rem; }
+.cover-links { font-size:.87rem; }
+.cover-links a { margin:0 .6rem; }
+.cover-blurb { max-width:44rem; margin:1.7rem auto 0; font-size:.95rem; color:var(--muted); }
+.cover-blurb p { margin:.5rem 0; }
+.metalist { display:grid; grid-template-columns:max-content 1fr; gap:.35rem 1.2rem;
+  margin:.6rem 0 1rem; }
+.metalist dt { color:var(--muted); font-family:"Doc Sans","Noto Sans CJK KR",system-ui,sans-serif;
+  font-size:.92rem; }
+.metalist dd { margin:0; }
+.colophon-meta { display:grid; grid-template-columns:max-content 1fr; gap:.35rem 1.2rem;
+                 margin:1.2rem 0 1.8rem; font-size:.93rem; }
+.colophon-meta dt { color:var(--muted);
+                    font-family:"Doc Sans","Noto Sans CJK KR",system-ui,sans-serif; font-size:.88rem; }
+.colophon-meta dd { margin:0; }
+.colophon { font-size:.93rem; }
+.colophon > div { margin:.9rem 0; padding-left:.9rem; border-left:1px solid var(--rule); }
+figure.fig { margin:1.6rem 0; text-align:center; }
+figure.fig img { max-width:100%; height:auto; }
+figure.fig figcaption { margin-top:.5rem; font-size:.92rem; color:var(--muted); }
+@media (prefers-color-scheme: dark) { figure.fig img { filter:invert(1) hue-rotate(180deg); } }
+:root[data-theme="dark"] figure.fig img { filter:invert(1) hue-rotate(180deg); }
+:root[data-theme="light"] figure.fig img { filter:none; }
+.toc { columns:24rem; column-gap:2.4rem; }
+.toc-part { break-inside:avoid; margin:1.1rem 0 .3rem; font-size:.95rem; letter-spacing:.02em;
+            font-family:"Doc Sans","Noto Sans CJK KR",system-ui,sans-serif; }
+.toc > .toc-part:first-child, .toc > .toc-keep:first-child > .toc-part, .toc-full > .toc-part:first-child { margin-top:0; }
+.toc-front { margin-bottom:.4rem; }
+.toc-group { padding-left:.85rem; }
+.toc-keep, .toc a { break-inside:avoid; }
+.toc a { display:block; padding:.28rem 0; text-decoration:none; }
+.toc a:hover { text-decoration:underline; }
+.nav { display:flex; gap:1rem; align-items:center; margin-top:3rem; padding-top:1rem;
+       border-top:1px solid var(--rule); font-size:.9rem;
+       font-family:"Doc Sans","Noto Sans CJK KR",system-ui,sans-serif; }
+.nav .sp { flex:1 1 auto; }
+code.style-name { font-family:"Doc Mono","D2Coding",ui-monospace,monospace;
+  font-size:.72em; color:var(--muted); background:var(--rule);
+  padding:.05em .35em; border-radius:3px; white-space:nowrap;
+  font-weight:400; letter-spacing:0; }
+.dev.open > .dev-label { padding-top:.42rem; padding-bottom:.42rem; }
+.dev.open > .open-body { padding-top:.4rem; padding-bottom:.4rem; }
+.dev.open > .open-body > p { margin:.6rem 0; }
+.dev > .dev-body { padding-top:.5rem; padding-bottom:.5rem; }
+.dev > .dev-body > p, .dev > .dev-body > div:not(.demo),
+.dev > .dev-body > figure { margin:.55rem 0; }
+main { line-height:1.85; }
+p { margin:1.15rem 0; }
+h2 { margin-top:2.4rem; }
+h3 { margin-top:2rem; }
+li { margin:.3rem 0; }
+h1, h2, h3, h4 { border-bottom-color:var(--box-rule) !important; }
+.toc { line-height:1.45; }
+.toc a { padding:.16rem 0; }
+.toc-part { margin:.85rem 0 .2rem; }
+.metalist { line-height:1.45; gap:.2rem 1.2rem; }
+.metalist dt, .metalist dd { margin:0; }
+.demo { border-color:var(--box-rule); }
+.demo > .demo-head { border-bottom-color:var(--box-rule); }
+.dev > .dev-label,
+.dev.open > .dev-label,
+.qa-box .qa-q,
+.dev.misconception > .dev-label, .dev.realcase > .dev-label,
+.dev.antipattern > .dev-label, .dev.mathbox > .dev-label,
+.dev.platform > .dev-label, .dev.recap > .dev-label {
+  border-left-color:var(--box-rule); }
+.dev > .dev-body,
+.dev > .open-body,
+.dev.open .qa-a,
+.qa-box .qa-a,
+.deepqa .qa-a { border-left-color:var(--box-rule); }
+.dev, .dev *, .qa-box, .qa-box *, .demo, .demo *,
+h1, h2, h3, h4, .colophon > div {
+  border-color:var(--box-rule); }
+.tbl table, .tbl th, .tbl td { border-color:initial; }
+.dev.open > .open-body,
+.dev.open > .qa-a,
+.dev.open .qa-a,
+.dev.deepqa .qa-a,
+.qa-box > .qa-a,
+.qa-box > .qa-q { border-left-color:var(--box-rule); }
+.bar .bar-toc { font-size:1.15em; line-height:1; text-decoration:none; }
+.dev, .dev-body, .open-body, .qa-box, .qa-q, .qa-a, .dev-label,
+.toc-full, .toc-full .tf-secs { line-height:inherit; font-size:1rem; }
+.dev > .dev-body > p, .dev > .open-body > p,
+.qa-box .qa-q > p, .qa-box .qa-a > p { margin:1.15rem 0; }
+.dev > .dev-body > *:first-child, .dev > .open-body > *:first-child,
+.qa-box .qa-q > p:first-child, .qa-box .qa-a > p:first-child { margin-top:0; }
+.dev > .dev-body > *:last-child, .dev > .open-body > *:last-child,
+.qa-box .qa-q > p:last-child, .qa-box .qa-a > p:last-child { margin-bottom:0; }
+.dev > .dev-label, .dev.open > .dev-label { font-size:.98rem; line-height:1.4; }
+h1,h2,h3,h4 { padding-bottom:.34rem; }
+h1 { margin:.2rem 0 1.3rem; }
+h2 { padding-bottom:.42rem; margin-bottom:1.15rem; }
+h3 { padding-bottom:.36rem; margin-bottom:.95rem; }
+.dev.open > .open-body > * { margin:.3rem 0; }
+.dev.open > .open-body > p { margin:.5rem 0; }
+.dev.open > .open-body > div { margin:.15rem 0; }
+.dev.open ul, .dev.open ol { margin:.3rem 0; }
+.dev.open li, .dev.open ol.qlist li { margin:0; }
+.dev.open > .open-body > *:first-child { margin-top:0; }
+.dev.open > .open-body > *:last-child { margin-bottom:0; }
+.dev.open .qa-a > p { margin:.35rem 0; }
+.dev, .dev *, .qa-box, .qa-box *, .demo, .demo *,
+h1, h2, h3, h4, .colophon > div { border-color:var(--box-rule); }
+.tbl table, .tbl th, .tbl td { border-color:initial; }
+a:focus-visible, button:focus-visible, summary:focus-visible, input:focus-visible {
+  outline:2px solid var(--accent2); outline-offset:2px; }
+:target, h1, h2, h3, h4, [id] { scroll-margin-top:4.2rem; }
+.skip { position:absolute; left:-9999px; top:0; z-index:30;
+        background:var(--bg); color:var(--fg); border:1px solid var(--fg);
+        padding:.5rem .8rem; font-size:.9rem; text-decoration:none; }
+.skip:focus { left:.5rem; top:.5rem; }
+.here-panel { position:fixed; top:46px; left:clamp(.2rem,1vw,1rem); z-index:19;
+  width:min(32rem, calc(100vw - .4rem)); max-height:calc(100vh - 54px); overflow:auto;
+  padding:.7rem .9rem .9rem; border:1px solid var(--line); --k:var(--line-strong);
+  font-family:"Doc Sans","Noto Sans CJK KR",system-ui,sans-serif; font-size:.9rem; line-height:1.4;
+  background:
+    linear-gradient(var(--k),var(--k)) left top / 8px 3px no-repeat,
+    linear-gradient(var(--k),var(--k)) left top / 3px 8px no-repeat,
+    linear-gradient(var(--k),var(--k)) right top / 8px 3px no-repeat,
+    linear-gradient(var(--k),var(--k)) right top / 3px 8px no-repeat,
+    linear-gradient(var(--k),var(--k)) left bottom / 8px 3px no-repeat,
+    linear-gradient(var(--k),var(--k)) left bottom / 3px 8px no-repeat,
+    linear-gradient(var(--k),var(--k)) right bottom / 8px 3px no-repeat,
+    linear-gradient(var(--k),var(--k)) right bottom / 3px 8px no-repeat,
+    color-mix(in srgb, var(--bg) 97%, transparent); }
+.here-panel .tools { display:flex; flex-wrap:wrap; gap:.3rem .4rem; align-items:center;
+  margin-bottom:.6rem; }
+.tool, .segb { font:inherit; font-size:.88rem; color:var(--fg); background:none;
+  border:1px solid var(--line-strong); padding:0 .6rem; min-height:30px;
+  display:inline-flex; align-items:center; text-decoration:none; cursor:pointer; white-space:nowrap; }
+.tool:hover, .segb:hover, .nav a:hover, .here-panel .here-body a:hover { background:var(--bg3); }
+.segb[aria-pressed="true"] { background:var(--select); border-color:var(--accent); font-weight:700; }
+.tool, .segb, .bar a, .bar button, .nav a, .here-panel a { transition:background-color .08s; }
+@media (prefers-reduced-motion: reduce) { * { transition:none !important; } }
+main a { text-decoration:underline; text-decoration-color:var(--box-rule);
+  text-underline-offset:2px; }
+main a:hover { background:var(--box-bg); text-decoration-color:var(--link); }
+main .toc a, main .toc-full a, main .here-body a { text-decoration:none; }
+main .toc a:hover, main .toc-full a:hover { background:var(--box-bg); text-decoration:underline; }
+.setbox { margin:0 0 .6rem; }
+.setrow { display:flex; flex-wrap:wrap; gap:.4rem .5rem; align-items:center; margin:.35rem 0; }
+.setlbl { min-width:4.2rem; font-size:.82rem; font-weight:700; }
+.seg { display:inline-flex; flex-wrap:wrap; gap:.25rem; }
+.col { display:inline-flex; align-items:center; gap:.3rem; }
+.col input[type=color] { width:2rem; height:1.4rem; padding:0; border:1px solid var(--line-strong);
+  background:none; cursor:pointer; }
+.setnote { margin:.5rem 0 0; font-size:.82rem; }
+.here-panel .ver { font-size:.82rem; color:var(--muted); padding:.2rem .45rem .2rem 0;
+  font-family:"Doc Sans","Noto Sans CJK KR",system-ui,sans-serif; white-space:nowrap; }
+.demo pre, .demo pre code {
+  white-space:pre-wrap; overflow-wrap:anywhere; word-break:break-word; }
+.demo > .demo-body { overflow-x:visible; }
+.plink {
+  margin-left: .4em; font-weight: 400; text-decoration: none;
+  color: var(--muted, #888); opacity: 0;
+}
+h3:hover > .plink, h4:hover > .plink,
+h3 > .plink:focus, h4 > .plink:focus { opacity: 1; }
+@media (hover: none) { .plink { opacity: .45; } }
+.searchbox { margin:.6em 0 0; }
+.searchbox input[type=search] {
+  width: 100%; padding: .45em .6em; font: inherit;
+  border: 1px solid var(--line-strong);
+  background: var(--bg); color: var(--fg);
+}
+.search-hint { color: var(--muted, #777); font-size: .85em; margin:.3em 0 0; }
+.search-results { list-style: none; padding: 0; margin: .5em 0 0; }
+.search-results li { margin: .15em 0; }
+.search-results .where { color: var(--muted, #777); font-size: .85em; margin-left: .4em; }
+@media (max-width: 900px), (orientation: portrait) {
+  :root:not([data-layout="desktop"]) .bar .place .cur { display:none; }
+  :root:not([data-layout="desktop"]) .bar .back,
+  :root:not([data-layout="desktop"]) .bar .bar-nav .nb { min-height:40px; padding:0 .5rem; }
+}
+@media (max-width: 480px) {
+  :root:not([data-layout="desktop"]) .bar .bar-nav .prev .lbl,
+  :root:not([data-layout="desktop"]) .bar .bar-nav .next .lbl { display:none; }
+  :root:not([data-layout="desktop"]) .bar .bar-nav .nb { min-width:44px; justify-content:center; }
+  :root:not([data-layout="desktop"]) .bar { gap:.2rem; }
+}
+:root[data-layout="mobile"] .bar .place .cur { display:none; }
+:root[data-layout="mobile"] .bar .back, :root[data-layout="mobile"] .bar .bar-nav .nb { min-height:40px; padding:0 .5rem; }
+:root[data-layout="mobile"] main .wrap { max-width:34rem; }
+@media (pointer: coarse), (max-width: 900px) {
+  .bar .menu-btn { min-width:44px; min-height:44px; }
+  .tool, .segb { min-height:38px; }
+}
+@media print { .bar, .here-panel { display:none; } }
+
+body { font-family:"Doc Serif","Noto Serif",Georgia,"Noto Serif CJK KR",serif; }
+h1,h2,h3,h4,.bar,.dev-label,.toc-part,.cover-meta,.badge,
+.colophon-meta dt { font-family:"Doc Sans","Noto Sans",system-ui,"Noto Sans CJK KR",sans-serif; }
+pre,code,kbd { font-family:"Doc Mono","D2Coding",ui-monospace,SFMono-Regular,Menlo,monospace; }
+div.box { border-left:3px solid var(--box-rule); background:var(--box-bg); padding:.4rem .9rem; margin:1rem 0; }
+div.box.mistake { border-left-color:var(--danger); }
+p.box-title { font-weight:700; margin:.2rem 0; }
+div.example p.ex-file, div.example p.ex-label { font-size:.82rem; color:var(--muted); margin:.6rem 0 .2rem; }
+div.example.refused p.ex-label, div.example.fault p.ex-label { color:var(--danger); }
+div.example.refused pre:last-child, div.example.fault pre:last-child { border-left:3px solid var(--danger); }
+main h1.doc-title, main p.doc-sub { display:none; }
+</style>
+<script>(function(){try{var L=localStorage,o='doc-read';if(o&&o!=='doc-read'&&L.getItem(o)!==null&&L.getItem('doc-read')===null){var v=JSON.parse(L.getItem(o)||'{}');delete v.width;L.setItem('doc-read',JSON.stringify(v));L.removeItem(o);}var s=JSON.parse(L.getItem('doc-read')||'{}');var r=document.documentElement;if(s.theme&&s.theme!=='auto')r.setAttribute('data-theme',s.theme);if(s.fg)r.style.setProperty('--fg',s.fg);if(s.bg)r.style.setProperty('--bg',s.bg);if(s.link)r.style.setProperty('--link',s.link);if(s.width==='fit')r.setAttribute('data-measure','fit');if(s.layout==='desktop'||s.layout==='mobile')r.setAttribute('data-layout',s.layout);if(s.layout==='desktop'){var m=document.querySelector('meta[name=viewport]');if(m)m.setAttribute('content','width=1100');}}catch(e){}})();</script></head>
+<body>
+<a class="skip" href="#content">Skip to content</a>
+<div class="bar"><button class="menu-btn" id="set-open" type="button" aria-expanded="false" aria-controls="here-panel" aria-label="Menu" title="Menu">☰</button><a class="back" href="index.html" title="Back">← <span class="lbl">Back</span></a><span class="place"><strong><a href="index.html">Pinax Manual</a></strong><span class="cur"> › ch. 7</span></span><span class="bar-nav"><a class="nb prev" href="07.html">‹ <span class="lbl">Prev</span></a><a class="nb toc" href="index.html"><span class="lbl">TOC</span></a><a class="nb next" href="09.html"><span class="lbl">Next</span> ›</a></span></div><div id="here-panel" class="here-panel" hidden><div class="setbox" id="setbox"><div class="setrow"><span class="setlbl">Language</span><span class="seg"><a class="segb" href="../html-ko/">한국어</a></span></div><div class="setrow"><span class="setlbl">Text width</span><span class="seg" id="s-width"><button type="button" class="segb" data-width="960">960</button><button type="button" class="segb" data-width="fit">Fit the window</button></span></div><div class="setrow"><span class="setlbl">Layout</span><span class="seg" id="s-layout"><button type="button" class="segb" data-layout="auto">Auto</button><button type="button" class="segb" data-layout="desktop">PC</button><button type="button" class="segb" data-layout="mobile">Mobile</button></span></div><div class="setrow"><span class="setlbl">Theme</span><span class="seg"><button type="button" class="segb" data-theme="auto">System</button><button type="button" class="segb" data-theme="light">Light</button><button type="button" class="segb" data-theme="dark">Dark</button></span></div><div class="setrow"><span class="setlbl">Colours</span><label class="col"><span>Text</span><input type="color" id="s-fg"></label><label class="col"><span>Background</span><input type="color" id="s-bg"></label><label class="col"><span>Link</span><input type="color" id="s-link"></label></div><p class="setnote">Settings are kept in this browser only.</p></div><div class="tools"><span class="ver">v0.37.1</span><a class="tool" href="toc.html">▤ Detailed contents</a><a class="tool" href="https://github.com/rubidus-api/pinax_lang/releases/download/v0.37.1/pinax-manual-v0.37.1-en.pdf">⤓ PDF</a><a class="tool" href="https://github.com/rubidus-api/pinax_lang" title="This manual on GitHub">Git</a><a class="tool" href="https://rubidus-api.github.io/" title="rubidus-api.github.io --- every published project">⌂ All projects</a><a class="tool" href="https://github.com/rubidus-api" title="github.com/rubidus-api --- every repository">≡ All repos</a></div><div class="here-head"><strong>Contents of this chapter</strong></div><div class="here-body"><a class="lv3" href="#s7-1"><span class="tf-no">7.1</span>Records and rows</a><a class="lv3" href="#s7-2"><span class="tf-no">7.2</span>Linking by rows</a><a class="lv3" href="#s7-3"><span class="tf-no">7.3</span>Pools: taking and giving back</a><a class="lv3" href="#s7-4"><span class="tf-no">7.4</span>Indexes</a><a class="lv3" href="#s7-5"><span class="tf-no">7.5</span>Rows in order</a></div></div>
+<main id="content"><div class="wrap">
+<h2>7 Records, pools, indexes</h2><div class="box opening"><p><strong>Builds on</strong>: Chapter 6 (collections), chapter 5 (stored text).</p><p><strong>Questions this chapter answers</strong></p><ul><li>How are data with several fields held?</li><li>How are linked data such as trees and lists built without pointers?</li><li>How do I find a row by its name?</li><li>How do I read rows in order of a field?</li></ul></div><h3 id="s7-1">7.1 Records and rows<a class="plink" href="#s7-1" aria-label="Link to this section" title="Link to this section">#</a></h3><p><code>record … end</code> is a sequence of fields, each with a type (<code>u8</code> <code>u16</code> <code>i32</code> <code>int</code> <code>bool</code> <code>str N</code> …): a <code>u8</code> field reads as a <code>u8</code> and takes a <code>u8</code> only (<code>2016 u16 b to book.year</code>). Records do not travel as values. You declare a list (or array, or pool) of records and handle its <strong>rows</strong>. A row’s type is named after its table.</p><div class="example run"><p class="ex-file"><code>07-records.pnx</code></p><pre><code data-lang="pinax"><span>use</span> io .
+<span>record</span> book
+  title <span>str</span> <span>32</span>
+  year <span>u16</span>
+  pages <span>u16</span>
+<span>end</span>
+<span>list</span> shelf book <span>8</span>
+<span>row</span> shelf <span>"The C Programming Language"</span> <span>1978</span> <span>228</span> .
+<span>row</span> shelf <span>"Thinking Forth"</span> <span>1984</span> <span>300</span> .
+<span>row</span> shelf <span>as</span> lua <span>"Programming in Lua"</span> <span>2003</span> .          <span>rem a named row; pages left out: 0</span>
+<span>def</span> show b shelf <span>do</span> <span>args</span> b book.year <span>" "</span> b book.title <span>", "</span> b book.pages <span>" pages"</span> . <span>cat</span> io.println <span>end</span>
+shelf <span>do</span> <span>to</span> b b show <span>end</span> each
+<span>2016</span> <span>u16</span> lua <span>to</span> book.year                               <span>rem value, row, to record.field</span>
+<span>388</span> <span>u16</span> lua <span>to</span> book.pages
+lua show
+</code></pre><p class="ex-label">Output</p><pre><code data-lang="text">$ pnx 07-records.pnx
+1978 The C Programming Language, 228 pages
+1984 Thinking Forth, 300 pages
+2003 Programming in Lua, 0 pages
+2016 Programming in Lua, 388 pages
+</code></pre></div><p>Fields are written <code>RECORD.FIELD</code>: <code>b book.year</code> reads, <code>2016 lua to book.year</code> stores. <code>row</code> adds a row to a list outside definitions, and can name it. Adding rows while running is <code>add_row</code>.</p><div class="example run"><p class="ex-file"><code>07-add-row.pnx</code></p><pre><code data-lang="pinax"><span>use</span> io .
+<span>record</span> point
+  x <span>i32</span>
+  y <span>i32</span>
+<span>end</span>
+<span>list</span> path point <span>4</span>
+<span>def</span> add_point x <span>int</span>, y <span>int</span> <span>or</span> <span>fail</span> <span>do</span>
+  path add_row <span>or_fail</span> <span>to</span> p                         <span>rem a new, zeroed row at the end</span>
+  x <span>i32</span> p <span>to</span> point.x
+  y <span>i32</span> p <span>to</span> point.y
+<span>end</span>
+<span>def</span> walk <span>or</span> <span>fail</span> <span>do</span> <span>0</span> <span>0</span> add_point <span>or_fail</span>  <span>3</span> <span>4</span> add_point <span>or_fail</span>  <span>6</span> <span>0</span> add_point <span>or_fail</span> <span>end</span>
+walk <span>or_else</span> <span>to</span> e e err_text io.println <span>end</span>
+path <span>do</span> <span>to</span> p <span>args</span> <span>"("</span> p point.x <span>", "</span> p point.y <span>")"</span> . <span>cat</span> io.print <span>end</span> each
+<span>""</span> io.println
+</code></pre><p class="ex-label">Output</p><pre><code data-lang="text">$ pnx 07-add-row.pnx
+(0, 0)(3, 4)(6, 0)
+</code></pre></div><p>A <code>float</code> field holds a quantity whose size is not known in advance, such as a measurement (chapter 2). A NaN or an infinity stored in a field stays there, so ask with <code>f.is_finite</code> after reading it. <code>sort_by</code> a <code>float</code> field puts <code>-0.0</code> before <code>0.0</code> and a NaN last. A <code>float</code> field is not the key of an index (equality of floats cannot be trusted). <code>json.pack</code> refuses a row that holds a NaN or an infinity with <code>err.range</code> (JSON has no such number); <code>csv.pack</code> writes <code>nan</code> and <code>inf</code>.</p><div class="example run"><p class="ex-file"><code>07-float-field.pnx</code></p><pre><code data-lang="pinax"><span>use</span> io .
+<span>use</span> f .
+<span>record</span> reading
+  sensor <span>str</span> <span>8</span>
+  celsius float
+<span>end</span>
+<span>list</span> readings reading <span>8</span>
+<span>row</span> readings <span>"hall"</span> <span>21</span>.5e0 .
+<span>row</span> readings <span>"attic"</span> <span>30</span>.25e0 .
+<span>row</span> readings <span>"cellar"</span> 12e0 .
+<span>def</span> mean <span>gives</span> float <span>do</span>
+  0e0 <span>to</span> total
+  readings <span>do</span> <span>to</span> r total r reading.celsius f.add <span>to</span> total <span>end</span> each
+  total readings len f.from_int f.div
+<span>end</span>
+readings <span>do</span> <span>to</span> r <span>args</span> r reading.sensor <span>" "</span> r reading.celsius . <span>cat</span> io.println <span>end</span> each
+<span>args</span> <span>"mean "</span> mean . <span>cat</span> io.println
+</code></pre><p class="ex-label">Output</p><pre><code data-lang="text">$ pnx 07-float-field.pnx
+hall 21.5
+attic 30.25
+cellar 12.0
+mean 21.25
+</code></pre></div><p>Here are the procedures for rows together, with remarks. The <code>r</code> that <code>add_row</code> gives is a number inside the table; a field is stored with <code>value row to record.field</code>, and read with <code>row record.field</code>, which takes one row off and puts the field’s value on.</p><div class="example run"><p class="ex-file"><code>07-row-steps.pnx</code></p><pre><code data-lang="pinax"><span>use</span> io .
+<span>record</span> item
+  name <span>str</span> <span>12</span>                         <span>rem stored text: 12 bytes inside the row</span>
+  price <span>int</span>
+<span>end</span>
+<span>list</span> cart item <span>4</span>                       <span>rem a table: room for 4 rows of item</span>
+<span>def</span> add_item n <span>str</span>, p <span>int</span> <span>or</span> <span>fail</span> <span>do</span>
+  cart add_row <span>or_fail</span> <span>to</span> r            <span>rem a new row at the end; r is its number in the table</span>
+  n r <span>to</span> item.name                     <span>rem value, row, to record.field: store a field</span>
+  p r <span>to</span> item.price
+<span>end</span>
+<span>def</span> total <span>gives</span> <span>int</span> <span>do</span>
+  <span>0</span> <span>to</span> acc
+  cart <span>do</span> <span>to</span> r acc r item.price add <span>to</span> acc <span>end</span> each   <span>rem each row of the table in turn</span>
+  acc
+<span>end</span>
+<span>def</span> main <span>do</span>
+  <span>"pencil"</span> <span>120</span> add_item <span>or_else</span> <span>to</span> e <span>end</span>
+  <span>"eraser"</span> <span>80</span> add_item <span>or_else</span> <span>to</span> e <span>end</span>
+  <span>1</span> cart idx <span>to</span> second                 <span>rem the row with number 1</span>
+  <span>args</span> second item.name <span>" costs "</span> second item.price . <span>cat</span> io.println
+  <span>args</span> <span>"total "</span> total . <span>cat</span> io.println
+<span>end</span>
+main
+</code></pre><p class="ex-label">Output</p><pre><code data-lang="text">$ pnx 07-row-steps.pnx
+eraser costs 80
+total 200
+</code></pre></div><table><thead><tr><th><strong>Token</strong></th><th><strong>Stack after it</strong></th><th><strong>What happened</strong></th></tr></thead><tbody><tr><td><code>cart add_row</code></td><td><code>1</code></td><td>Adds a row at the end and puts its number on (it can fail: <code>or_fail</code> follows).</td></tr><tr><td><code>to r</code></td><td><code>—</code></td><td>Keeps the number in <code>r</code>.</td></tr><tr><td><code>n r</code></td><td><code>"eraser" 1</code></td><td>The value to store, and the row.</td></tr><tr><td><code>to item.name</code></td><td><code>—</code></td><td>Stores into the <code>name</code> field of row 1; both come off.</td></tr><tr><td><code>r item.price</code></td><td><code>80</code></td><td>Takes one row off and puts its <code>price</code> on.</td></tr></tbody></table><div class="box qa"><p class="box-title">Q&amp;A</p><p><strong>Q. Is a row the address of a record?</strong></p><p>A. No. A row is a <strong>number</strong> within its table, and its range is checked on every use. So holding the wrong row cannot damage memory; at worst it stops with a fault.</p></div><h3 id="s7-2">7.2 Linking by rows<a class="plink" href="#s7-2" aria-label="Link to this section" title="Link to this section">#</a></h3><p>A field whose type is the name of a table holds a row of that table. It starts as “none”, asked with <code>is_none</code>. That is how a tree is built without pointers. Since the record refers to the table that holds it, the table is announced first with <code>forward</code>. The cells of an array or a list hold rows in the same way: <code>list order cities 8</code> (section 7.5).</p><div class="example run"><p class="ex-file"><code>07-tree.pnx</code></p><pre><code data-lang="pinax"><span>use</span> io .
+<span>use</span> <span>str</span> .
+<span>rem A binary search tree in a pool: rows point to rows by number, never by address.</span>
+<span>forward</span> <span>pool</span> nodes
+<span>record</span> node
+  key <span>int</span>
+  left nodes
+  right nodes
+<span>end</span>
+<span>pool</span> nodes node <span>16</span>
+<span>global</span> root nodes
+<span>def</span> put_key k <span>int</span> <span>or</span> <span>fail</span> <span>do</span>
+  nodes alloc <span>or_fail</span> <span>to</span> n
+  k n <span>to</span> node.key
+  root is_none <span>if</span> n set root <span>return</span> <span>end</span>
+  root <span>to</span> at
+  <span>loop</span>
+    k at node.key lt <span>if</span>
+      at node.left is_none <span>if</span> n at <span>to</span> node.left <span>return</span> <span>end</span>
+      at node.left <span>to</span> at
+    <span>else</span>
+      at node.right is_none <span>if</span> n at <span>to</span> node.right <span>return</span> <span>end</span>
+      at node.right <span>to</span> at
+    <span>end</span>
+  <span>end</span>
+<span>end</span>
+<span>def</span> show t nodes <span>do</span>                                  <span>rem in order: left, self, right</span>
+  t is_none <span>if</span> <span>return</span> <span>end</span>
+  t node.left show
+  t node.key <span>str</span>.to_str io.print <span>" "</span> io.print
+  t node.right show
+<span>end</span>
+<span>def</span> build <span>or</span> <span>fail</span> <span>do</span> <span>50</span> put_key <span>or_fail</span> <span>30</span> put_key <span>or_fail</span> <span>70</span> put_key <span>or_fail</span> <span>20</span> put_key <span>or_fail</span> <span>40</span> put_key <span>or_fail</span> <span>end</span>
+build <span>or_else</span> <span>to</span> e e err_text io.println <span>end</span>
+root show
+<span>""</span> io.println
+</code></pre><p class="ex-label">Output</p><pre><code data-lang="text">$ pnx 07-tree.pnx
+20 30 40 50 70 
+</code></pre></div><p>Reading or storing a field of the “none” row is a fault. When following rows, ask <code>is_none</code> first (as the first line of <code>show</code> above does).</p><div class="example fault"><p class="ex-file"><code>07-none-field.pnx</code></p><pre><code data-lang="pinax"><span>use</span> io .
+<span>forward</span> <span>list</span> nodes
+<span>record</span> node
+  value <span>int</span>
+  next nodes                           <span>rem a row of nodes, or none</span>
+<span>end</span>
+<span>list</span> nodes node <span>4</span>
+<span>row</span> nodes <span>as</span> last <span>3</span> .                     <span>rem its next is none: nothing was given</span>
+last node.next node.value drop         <span>rem reading a field of none ends the run</span>
+</code></pre><p class="ex-label">Fault</p><pre><code data-lang="text">$ pnx 07-none-field.pnx
+07-none-field.pnx:9: index out of range
+</code></pre></div><h3 id="s7-3">7.3 Pools: taking and giving back<a class="plink" href="#s7-3" aria-label="Link to this section" title="Link to this section">#</a></h3><p>A <code>pool</code> is a table whose rows are taken (<code>alloc</code>) and given back (<code>free</code>). The row <code>alloc</code> gives is an <strong>owned value</strong>: on every path it shall be stored into a field or global, or given to <code>free</code>, exactly once. The processor checks this at load.</p><div class="example refused"><p class="ex-file"><code>07-pool-leak.pnx</code></p><pre><code data-lang="pinax"><span>record</span> node
+  key <span>int</span>
+<span>end</span>
+<span>pool</span> nodes node <span>4</span>
+<span>def</span> new_node k <span>int</span> <span>or</span> <span>fail</span> <span>do</span>
+  nodes alloc <span>or_fail</span> <span>to</span> n
+  k n <span>to</span> node.key
+<span>end</span>
+</code></pre><p class="ex-label">Refused</p><pre><code data-lang="text">$ pnx 07-pool-leak.pnx
+07-pool-leak.pnx:8:1: an owned value in a local is not given on every path (close, free or store it)
+</code></pre></div><p>A row of a pool carries a generation besides its number. Using a row that was given back — even when someone has taken that slot again since — stops with a fault.</p><div class="example fault"><p class="ex-file"><code>07-stale.pnx</code></p><pre><code data-lang="pinax"><span>use</span> io .
+<span>record</span> node
+  key <span>int</span>
+<span>end</span>
+<span>pool</span> nodes node <span>4</span>
+<span>global</span> keep nodes
+<span>def</span> demo <span>or</span> <span>fail</span> <span>do</span>
+  nodes alloc <span>or_fail</span> <span>to</span> n
+  n set keep
+  keep nodes free
+  <span>"the row is given back"</span> io.println
+  keep node.key drop
+<span>end</span>
+demo <span>or_else</span> <span>to</span> e <span>end</span>
+</code></pre><p class="ex-label">Fault</p><pre><code data-lang="text">$ pnx 07-stale.pnx
+the row is given back
+07-stale.pnx:12: a row or handle was used after it was given back
+  n nodes = 4294967297
+</code></pre></div><h3 id="s7-4">7.4 Indexes<a class="plink" href="#s7-4" aria-label="Link to this section" title="Link to this section">#</a></h3><p><code>index NAME TABLE RECORD.FIELD</code> is a hash table that finds rows by one field. <code>lookup</code> finds the row of a key (failing with <code>not_found</code> when there is none). Rows written with <code>row</code> are in it from the start.</p><div class="example run"><p class="ex-file"><code>07-index.pnx</code></p><pre><code data-lang="pinax"><span>use</span> io .
+<span>record</span> user
+  name <span>str</span> <span>16</span>
+  age <span>u8</span>
+<span>end</span>
+<span>list</span> users user <span>8</span>
+<span>index</span> by_name users user.name
+<span>row</span> users <span>"kim"</span> <span>30</span> .
+<span>row</span> users <span>"lee"</span> <span>25</span> .
+<span>def</span> register name <span>str</span>, age <span>int</span> <span>or</span> <span>fail</span> <span>do</span>
+  users add_row <span>or_fail</span> <span>to</span> u
+  name u <span>to</span> user.name
+  age <span>u8</span> u <span>to</span> user.age
+  u by_name insert <span>or_fail</span>                          <span>rem without this, lookup does not see it</span>
+<span>end</span>
+<span>def</span> age_of name <span>str</span> <span>gives</span> <span>int</span> <span>or</span> <span>fail</span> <span>do</span> name by_name lookup <span>or_fail</span> user.age raw <span>end</span>
+<span>"park"</span> <span>41</span> register <span>or_else</span> <span>to</span> e e err_text io.println <span>end</span>
+<span>"kim"</span> <span>31</span> register <span>or_else</span> <span>to</span> e <span>args</span> <span>"kim again: "</span> e err_text . <span>cat</span> io.println <span>end</span>
+<span>def</span> show name <span>str</span> <span>do</span> <span>args</span> name <span>": "</span> name age_of <span>or_else</span> <span>to</span> e <span>-1</span> <span>end</span> . <span>cat</span> io.println <span>end</span>
+<span>"lee"</span> show
+<span>"park"</span> show
+<span>"choi"</span> show
+</code></pre><p class="ex-label">Output</p><pre><code data-lang="text">$ pnx 07-index.pnx
+kim again: failed
+lee: 25
+park: 41
+choi: -1
+</code></pre></div><div class="box mistake"><p class="box-title">Common mistake: A row added with <code>add_row</code> is in the index too</p>It is not. A row added while running is found by <code>lookup</code> only after <code>insert</code>, as <code>register</code> above does. When the key is there already, <code>insert</code> fails and the row added with <code>add_row</code> stays in the list — so it is cleaner to <code>lookup</code> the key first and add after.</div><p>An index may also be over a pool. Then a store can both find its rows by key and give rows back: <code>free</code> takes the row out of every index over its pool, so a key given back is not found any more, and its slot is taken again by the next <code>alloc</code>. <code>key INDEX has</code> asks whether a key is there, without failing. A pool is walked with <code>each</code>, which visits the rows alive, in the order of their slots; to read them in another order, push them into a list of rows and sort that.</p><div class="example run"><p class="ex-file"><code>07-pool-index.pnx</code></p><pre><code data-lang="pinax"><span>use</span> io .
+<span>record</span> item
+  name <span>str</span> <span>12</span>
+  count <span>int</span>
+<span>end</span>
+<span>pool</span> items item <span>3</span>
+<span>index</span> by_name items item.name
+<span>list</span> order items <span>3</span>
+<span>def</span> count_in name <span>str</span> <span>or</span> <span>fail</span> <span>do</span>
+  name by_name has not <span>if</span>
+    items alloc <span>or_fail</span> <span>to</span> r              <span>rem a free row: three at most</span>
+    name r <span>to</span> item.name
+    r by_name insert <span>or_fail</span>              <span>rem the index keeps it now</span>
+  <span>end</span>
+  name by_name lookup <span>or_fail</span> <span>to</span> r
+  r item.count <span>1</span> add r <span>to</span> item.count
+<span>end</span>
+<span>def</span> drop_out name <span>str</span> <span>do</span>
+  name by_name lookup <span>or_else</span> <span>to</span> e <span>return</span> <span>end</span> items free
+<span>end</span>
+<span>def</span> show <span>do</span>
+  order clear
+  items <span>do</span> <span>to</span> r r order push <span>or_else</span> <span>to</span> e <span>end</span> <span>end</span> each
+  order items sort_by item.name
+  order <span>do</span> <span>to</span> r <span>args</span> r item.name <span>" "</span> r item.count . <span>cat</span> io.println <span>end</span> each
+<span>end</span>
+<span>"pear"</span> count_in <span>or_else</span> <span>to</span> e <span>end</span>
+<span>"fig"</span> count_in <span>or_else</span> <span>to</span> e <span>end</span>
+<span>"pear"</span> count_in <span>or_else</span> <span>to</span> e <span>end</span>
+<span>"plum"</span> count_in <span>or_else</span> <span>to</span> e <span>end</span>
+<span>"kiwi"</span> count_in <span>or_else</span> <span>to</span> e <span>args</span> <span>"kiwi: "</span> e err_text . <span>cat</span> io.println <span>end</span>
+<span>"fig"</span> drop_out
+<span>"kiwi"</span> count_in <span>or_else</span> <span>to</span> e <span>end</span>           <span>rem the row fig gave back</span>
+show
+</code></pre><p class="ex-label">Output</p><pre><code data-lang="text">$ pnx 07-pool-index.pnx
+kiwi: full
+kiwi 1
+pear 2
+plum 1
+</code></pre></div><div class="box mistake"><p class="box-title">Common mistake: After <code>insert</code> the local still holds the new row</p><p>It does not. A row <code>alloc</code> has just given is owned, and <code>insert</code> takes it over as storing it in a field does: when the key is there already, <code>insert</code> gives the row back to the pool and fails, so nothing is lost. Fill the row before <code>insert</code>, and find it again by its key afterwards, as <code>count_in</code> above does.</p><div class="example refused"><p class="ex-file"><code>07-pool-insert-gone.pnx</code></p><pre><code data-lang="pinax"><span>record</span> item
+  name <span>str</span> <span>12</span>
+  count <span>int</span>
+<span>end</span>
+<span>pool</span> items item <span>3</span>
+<span>index</span> by_name items item.name
+<span>def</span> enter name <span>str</span> <span>or</span> <span>fail</span> <span>do</span>
+  items alloc <span>or_fail</span> <span>to</span> r
+  name r <span>to</span> item.name
+  r by_name insert <span>or_fail</span>
+  <span>1</span> r <span>to</span> item.count
+<span>end</span>
+</code></pre><p class="ex-label">Refused</p><pre><code data-lang="text">$ pnx 07-pool-insert-gone.pnx
+07-pool-insert-gone.pnx:11:5: this local gave its owned value away; it holds nothing to read
+</code></pre></div></div><div class="box qa"><p class="box-title">Q&amp;A</p><p><strong>Q. Can a row of one table go into another table?</strong></p><p>A. No. The type of a row is the name of its table. A row of <code>cart</code> is used with <code>cart</code> only; given to a field or a list of another table it is refused as the wrong type. To move a row between two tables of the same record, read the fields one by one into a new row, or copy with <code>filter_into</code> (chapter 6).</p></div><h3 id="s7-5">7.5 Rows in order<a class="plink" href="#s7-5" aria-label="Link to this section" title="Link to this section">#</a></h3><p><code>sort</code> puts the cells of an array or a list in order, from the smallest; <code>sort_desc</code> from the largest. Rows are not sorted that way: an index, a field or a global may keep a row by its number, and moving the rows would make those wrong. A list of the rows is sorted instead, by a field of the rows: <code>order cities sort_by city.name</code>, where <code>order</code> is declared as <code>list order cities 8</code>, a list whose cells are rows of <code>cities</code>. The rows stay where they are and <code>order</code> says in which order to read them. A list of row numbers (<code>int</code>) is sorted the same way.</p><div class="example run"><p class="ex-file"><code>07-sort.pnx</code></p><pre><code data-lang="pinax"><span>use</span> io .
+<span>record</span> city
+  name <span>str</span> <span>16</span>
+  people <span>int</span>
+<span>end</span>
+<span>list</span> cities city <span>8</span>
+<span>list</span> order cities <span>8</span>                           <span>rem rows of cities</span>
+<span>list</span> sizes <span>int</span> <span>8</span>
+<span>def</span> city_of n <span>str</span>, p <span>int</span> <span>or</span> <span>fail</span> <span>do</span>
+  cities add_row <span>or_fail</span> <span>to</span> r
+  n r <span>to</span> city.name
+  p r <span>to</span> city.people
+  p sizes push <span>or_fail</span>
+<span>end</span>
+<span>def</span> main <span>or</span> <span>fail</span> <span>do</span>
+  <span>"Lyon"</span> <span>522</span> city_of <span>or_fail</span>  <span>"Nice"</span> <span>342</span> city_of <span>or_fail</span>  <span>"Paris"</span> <span>2103</span> city_of <span>or_fail</span>  <span>"Lille"</span> <span>236</span> city_of <span>or_fail</span>
+  sizes sort_desc
+  <span>args</span> <span>"largest: "</span> <span>0</span> sizes idx . <span>cat</span> io.println
+  cities <span>do</span> <span>to</span> c c <span>end</span> order map_into <span>or_fail</span>
+  order cities sort_by city.name
+  order <span>do</span> <span>to</span> c c city.name io.println <span>end</span> each
+<span>end</span>
+main <span>or_else</span> <span>to</span> e e err_text io.println <span>end</span>
+</code></pre><p class="ex-label">Output</p><pre><code data-lang="text">$ pnx 07-sort.pnx
+largest: 2103
+Lille
+Lyon
+Nice
+Paris
+</code></pre></div><div class="example refused"><p class="ex-file"><code>07-sort-rows.pnx</code></p><pre><code data-lang="pinax"><span>record</span> city
+  name <span>str</span> <span>16</span>
+  people <span>int</span>
+<span>end</span>
+<span>list</span> cities city <span>8</span>
+<span>index</span> by_name cities city.name
+<span>def</span> order_them <span>do</span> cities sort <span>end</span>
+</code></pre><p class="ex-label">Refused</p><pre><code data-lang="text">$ pnx 07-sort-rows.pnx
+07-sort-rows.pnx:7:26: rows do not move: sort a list of their numbers by a field: order table sort_by record.field
+</code></pre></div><div class="box qa"><p class="box-title">Q&amp;A</p><p><strong>Q. How do I sort by two fields?</strong></p><p>A. Sort twice, the less important field first: <code>order t sort_by r.name</code> and then <code>order t sort_by_desc r.count</code> gives the largest counts first, and the same count by name. A sort keeps the order of equal keys, so the second sort leaves the first one’s order among the rows it finds equal.</p></div><div class="box mistake"><p class="box-title">Common mistake: <code>sort_desc</code> is <code>sort</code> read backwards</p>Only for cells, where two equal cells cannot be told apart. For rows it is not: <code>sort_by_desc</code> keeps equal keys in the order they had, as <code>sort_by</code> does, and reading a <code>sort_by</code> backwards would reverse them.</div><div class="box summary"><p class="box-title">Summary</p><ul><li>Cells are sorted with <code>sort</code> and <code>sort_desc</code>; rows through a list of the rows (or of their numbers) with <code>sort_by</code> and <code>sort_by_desc</code>, which keep the order of equal keys (standard 15.3).</li><li>Records are handled as rows of tables; fields are read and stored as <code>RECORD.FIELD</code> (standard 8.8).</li><li>A row is a number checked on every use; a field of the none row is a fault (8.8).</li><li>A row of a pool is handed over once; a row given back is a fault (8.9, 12.4).</li><li>An index holds the rows of <code>row</code>; rows added while running are <code>insert</code>ed (8.10).</li><li>An index may be over a pool: <code>insert</code> takes over a row just taken, <code>free</code> takes a row out of the indexes, <code>has</code> asks for a key, and <code>each</code> walks the live rows (8.9, 8.10).</li></ul></div>
+<div class="nav"><a href="07.html">← Prev</a><span class="sp"></span><a href="index.html">Contents</a><span class="sp"></span><a href="09.html">Next →</a></div>
+</div></main>
+<script>(function(){var b=document.querySelector('.menu-btn'),p=document.getElementById('here-panel');function open(o){if(!p)return;p.hidden=!o;if(b)b.setAttribute('aria-expanded',o);}if(b)b.addEventListener('click',function(){open(p.hidden);});if(p)p.addEventListener('click',function(e){if(e.target.tagName==='A'&&e.target.getAttribute('href').charAt(0)==='#')open(false);});document.addEventListener('keydown',function(e){if(e.key==='Escape'&&p&&!p.hidden){open(false);if(b)b.focus();}});document.addEventListener('click',function(e){if(p&&!p.hidden&&!p.contains(e.target)&&!(b&&b.contains(e.target)))open(false);});var bk=document.querySelector('.bar .back');if(bk)bk.addEventListener('click',function(e){if(history.length>1&&document.referrer){e.preventDefault();history.back();}});var box=document.getElementById('setbox');if(!box)return;var r=document.documentElement;function load(){try{return JSON.parse(localStorage.getItem('doc-read')||'{}');}catch(e){return {};}}function save(s){try{localStorage.setItem('doc-read',JSON.stringify(s));}catch(e){}}function css(n){return getComputedStyle(r).getPropertyValue(n).trim();}function paint(){var s=load();var t=s.theme||'auto',w=s.width==='fit'?'fit':'960';[].forEach.call(box.querySelectorAll('.segb[data-theme]'),function(x){x.setAttribute('aria-pressed',x.dataset.theme===t);});[].forEach.call(box.querySelectorAll('.segb[data-width]'),function(x){x.setAttribute('aria-pressed',x.dataset.width===w);});var ly=s.layout||'auto';[].forEach.call(box.querySelectorAll('.segb[data-layout]'),function(x){x.setAttribute('aria-pressed',x.dataset.layout===ly);});document.getElementById('s-fg').value=s.fg||hex(css('--fg'));document.getElementById('s-bg').value=s.bg||hex(css('--bg'));document.getElementById('s-link').value=s.link||hex(css('--link'));}function hex(v){var m=v.match(/^rgba?\((\d+)[ ,]+(\d+)[ ,]+(\d+)/);if(!m)return v.charAt(0)==='#'?v:'#000000';return '#'+[1,2,3].map(function(i){return ('0'+parseInt(m[i],10).toString(16)).slice(-2);}).join('');}paint();[].forEach.call(box.querySelectorAll('.segb[data-width]'),function(x){x.addEventListener('click',function(){var s=load();if(x.dataset.width==='fit'){s.width='fit';r.setAttribute('data-measure','fit');}else{delete s.width;r.removeAttribute('data-measure');}save(s);setTimeout(paint,0);});});[].forEach.call(box.querySelectorAll('.segb[data-layout]'),function(x){x.addEventListener('click',function(){var s=load(),v=x.dataset.layout;if(v==='auto'){delete s.layout;r.removeAttribute('data-layout');}else{s.layout=v;r.setAttribute('data-layout',v);}save(s);var m=document.querySelector('meta[name=viewport]');var want=v==='desktop'?'width=1100':'width=device-width, initial-scale=1';if(m&&m.getAttribute('content')!==want)location.reload();else setTimeout(paint,0);});});[].forEach.call(box.querySelectorAll('.segb[data-theme]'),function(x){x.addEventListener('click',function(){var s=load();s.theme=x.dataset.theme;delete s.fg;delete s.bg;delete s.link;save(s);['--fg','--bg','--link'].forEach(function(n){r.style.removeProperty(n);});if(s.theme==='auto')r.removeAttribute('data-theme');else r.setAttribute('data-theme',s.theme);setTimeout(paint,0);});});[['s-fg','--fg','fg'],['s-bg','--bg','bg'],['s-link','--link','link']].forEach(function(a){document.getElementById(a[0]).addEventListener('input',function(){var s=load();s[a[2]]=this.value;save(s);r.style.setProperty(a[1],this.value);});});})();</script><script>
+(function(){
+  var q=document.getElementById('q'), out=document.getElementById('qr');
+  if(!q||!out) return;
+  var data=null, NONE="Nothing found";
+  function esc(s){var d=document.createElement('div');d.textContent=s;return d.innerHTML;}
+  function run(){
+    var v=q.value.trim().toLowerCase();
+    out.innerHTML='';
+    if(!v||!data) return;
+    var hits=[];
+    for(var i=0;i<data.length && hits.length<40;i++){
+      if(data[i][0].toLowerCase().indexOf(v)>=0) hits.push(data[i]);
+    }
+    if(!hits.length){ out.innerHTML='<li>'+NONE+'</li>'; return; }
+    out.innerHTML=hits.map(function(h){
+      return '<li><a href="'+h[1]+'">'+esc(h[0])+'</a>'+
+             (h[2]?'<span class="where">'+esc(h[2])+'</span>':'')+'</li>';
+    }).join('');
+  }
+  q.addEventListener('input',function(){
+    if(data){ run(); return; }
+    fetch('search-index.json').then(function(r){return r.json();})
+      .then(function(j){ data=j; run(); })
+      .catch(function(){ out.innerHTML='<li>'+NONE+'</li>'; });
+  });
+})();
+</script></body></html>

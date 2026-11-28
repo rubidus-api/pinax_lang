@@ -1,0 +1,708 @@
+<!doctype html>
+<html lang="en">
+<head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<title>6 Collections — Pinax Manual</title><style>@font-face { font-family:"Doc Serif"; src:url("../fonts/serif.woff2") format("woff2");
+  font-weight:400; font-style:normal; font-display:swap;
+  unicode-range:U+0000-024F,U+2000-206F,U+20A0-20BF,U+2100-21FF,U+2190-2BFF; }
+@font-face { font-family:"Doc Serif"; src:url("../fonts/serif-bold.woff2") format("woff2");
+  font-weight:700; font-style:normal; font-display:swap;
+  unicode-range:U+0000-024F,U+2000-206F,U+20A0-20BF,U+2100-21FF,U+2190-2BFF; }
+@font-face { font-family:"Doc Serif"; src:url("../fonts/serif-italic.woff2") format("woff2");
+  font-weight:400; font-style:italic; font-display:swap;
+  unicode-range:U+0000-024F,U+2000-206F,U+20A0-20BF,U+2100-21FF,U+2190-2BFF; }
+@font-face { font-family:"Doc Serif"; src:url("../fonts/serif-kr.woff2") format("woff2");
+  font-weight:400; font-style:normal; font-display:swap; }
+@font-face { font-family:"Doc Serif"; src:url("../fonts/serif-kr-bold.woff2") format("woff2");
+  font-weight:700; font-style:normal; font-display:swap; }
+@font-face { font-family:"Doc Sans"; src:url("../fonts/sans.woff2") format("woff2");
+  font-weight:400; font-style:normal; font-display:swap;
+  unicode-range:U+0000-024F,U+2000-206F,U+20A0-20BF,U+2100-21FF,U+2190-2BFF; }
+@font-face { font-family:"Doc Sans"; src:url("../fonts/sans-bold.woff2") format("woff2");
+  font-weight:700; font-style:normal; font-display:swap;
+  unicode-range:U+0000-024F,U+2000-206F,U+20A0-20BF,U+2100-21FF,U+2190-2BFF; }
+@font-face { font-family:"Doc Sans"; src:url("../fonts/sans-kr.woff2") format("woff2");
+  font-weight:400; font-style:normal; font-display:swap; }
+@font-face { font-family:"Doc Sans"; src:url("../fonts/sans-kr-bold.woff2") format("woff2");
+  font-weight:700; font-style:normal; font-display:swap; }
+@font-face { font-family:"Doc Mono"; src:url("../fonts/mono.woff2") format("woff2");
+  font-weight:400; font-style:normal; font-display:swap; }
+@font-face { font-family:"Doc Mono"; src:url("../fonts/mono-bold.woff2") format("woff2");
+  font-weight:700; font-style:normal; font-display:swap; }
+:root { color-scheme: light dark; --bg:#fafaf8; --bg2:#f2f2f0; --bg3:#e6e6e3; --fg:#141414; --muted:#555555; --line:#c9c9c9; --line-strong:#8a8a8a; --accent:#1a4f8a; --accent-fg:#ffffff; --accent2:#96530f; --honey:#f2b04a; --honey-fg:#2b1d00; --honey-text:#855400; --honey-soft:#fbebc6; --danger:#9b1b30; --ok:#1d6e37; --warn:#855400; --select:#d4dde8;
+  --rule:var(--line); --box-bg:var(--bg2); --code-bg:var(--bg2); --box-rule:var(--line); --link:var(--accent);
+  --tok-c:#3f5b4a; --tok-k:#123c87; --tok-t:#0f5b63; --tok-s:#7a3b0a;
+  --tok-n:#8a2222; --tok-p:#6b2d8a; --tok-x:#555555; }
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) { --bg:#121314; --bg2:#1c1e20; --bg3:#2a2c2f; --fg:#e8e8e8; --muted:#a6a6a6; --line:#3a3d40; --line-strong:#75787c; --accent:#8ab4e8; --accent-fg:#121314; --accent2:#d4883b; --honey:#f2b04a; --honey-fg:#121314; --honey-text:#f2b04a; --honey-soft:#3b311e; --danger:#f07a8c; --ok:#7bcb95; --warn:#f2b04a; --select:#2f3d52;
+    --tok-c:#9fbfa8; --tok-k:#9fc0f0; --tok-t:#7fcbd4; --tok-s:#e0b080;
+  --tok-n:#e79a9a; --tok-p:#c79ae0; --tok-x:#a6a6a6; } }
+:root[data-theme="dark"] { color-scheme: dark; --bg:#121314; --bg2:#1c1e20; --bg3:#2a2c2f; --fg:#e8e8e8; --muted:#a6a6a6; --line:#3a3d40; --line-strong:#75787c; --accent:#8ab4e8; --accent-fg:#121314; --accent2:#d4883b; --honey:#f2b04a; --honey-fg:#121314; --honey-text:#f2b04a; --honey-soft:#3b311e; --danger:#f07a8c; --ok:#7bcb95; --warn:#f2b04a; --select:#2f3d52;
+  --tok-c:#9fbfa8; --tok-k:#9fc0f0; --tok-t:#7fcbd4; --tok-s:#e0b080;
+  --tok-n:#e79a9a; --tok-p:#c79ae0; --tok-x:#a6a6a6; }
+:root[data-theme="light"] { color-scheme: light; }
+* { box-sizing:border-box; }
+body { margin:0; background:var(--bg); color:var(--fg); line-height:1.75;
+       font-family:"Doc Serif","Noto Serif CJK KR","Noto Serif KR",Georgia,serif; }
+.here-head { display:flex; align-items:center; gap:.8rem; padding:.2rem 0 .5rem;
+  border-bottom:1px solid var(--rule,#ddd); margin-bottom:.5rem; }
+.here-head .sp { flex:1; }
+.here-all { margin-left:auto; font-size:.9rem; }
+.here-x { font:inherit; font-size:.9rem; cursor:pointer; background:none;
+  border:1px solid var(--line-strong); padding:.05rem .45rem;
+  color:inherit; }
+.here-body a, .tf-secs a { display:block; text-decoration:none; padding:.12rem 0;
+  line-height:1.45; }
+.here-body a:hover, .tf-secs a:hover { text-decoration:underline; }
+.here-body a.lv4, .tf-secs a.lv4 { padding-left:1.6rem; font-size:.94rem;
+  color:var(--muted,#555); }
+.tf-no { display:inline-block; min-width:3.2rem; color:var(--muted,#666);
+  font-variant-numeric:tabular-nums; }
+.toc-full .tf-ch { margin:.9rem 0 .15rem; font-weight:700; }
+.toc-full .tf-secs { margin:0 0 .5rem .2rem; border-left:2px solid var(--rule,#e2e2e2);
+  padding-left:.7rem; }
+.toc-full h4.toc-part { margin-top:1.8rem; }
+.toc a.toc-detail { font-weight:700; }
+@media print { .here-btn, .here-panel { display:none; } }
+.bar { position:sticky; top:0; z-index:20; display:flex; flex-wrap:nowrap; gap:.25rem; align-items:center;
+       min-height:44px; padding:0 clamp(.4rem,2vw,1.6rem); background:var(--bg2);
+       border-bottom:1px solid var(--line); font-size:.9rem;
+       font-family:"Doc Sans","Noto Sans CJK KR",system-ui,sans-serif; }
+.bar a { color:var(--fg); text-decoration:none; } .bar a:hover { text-decoration:none; }
+.bar .sp { display:none; }
+main { width:100%; padding:1.6rem clamp(.9rem,3vw,2.5rem) 5rem; }
+.wrap { width:100%; }
+main .wrap { max-width:960px; margin-inline:auto; }
+:root[data-measure="fit"] main .wrap { max-width:none; margin:0; }
+h1,h2,h3,h4 { font-family:"Doc Sans","Noto Sans CJK KR",system-ui,sans-serif; line-height:1.35;
+  padding-bottom:.18rem; border-bottom:1px solid var(--rule); }
+h1 { font-size:clamp(1.5rem,3.4vw,2.1rem); margin:.2rem 0 .9rem; }
+h2 { font-size:clamp(1.35rem,3vw,1.8rem); margin:0 0 .7rem; padding-bottom:.35rem;
+     border-bottom:2px solid var(--fg); }
+h3 { font-size:clamp(1.05rem,2.2vw,1.25rem); margin:1.5rem 0 .5rem;
+     padding-bottom:.22rem; border-bottom:1.5px solid var(--fg); }
+p { margin:.9rem 0; } a { color:var(--link); }
+main p { text-indent: 1em; }
+.cover p, .note p, .toc p, .float-caption, .metalist p, .memrow p,
+.colophon-meta p, li p, td p, th p, figure p, blockquote p,
+.demo-src p, .demo-out p, pre, pre p,
+.dev-label, p.dev-label { text-indent: 0; }
+.src-note { font-size: .86em; color: var(--muted, #666); }
+.src-note code { font-size: .95em; }
+sup.fnref { font-size: .72em; line-height: 0; vertical-align: super; }
+sup.fnref a { text-decoration: none; padding: 0 .1em; }
+sup.fnref a::before { content: "["; }
+sup.fnref a::after  { content: "]"; }
+.chapter-notes { margin: 3rem 0 1rem; padding-top: .9rem;
+                 border-top: 2px solid var(--rule, #333); }
+.chapter-notes h2 { font-size: 1.05rem; margin: 0 0 .6rem; }
+.chapter-notes ol { margin: 0; padding-left: 1.6em; }
+.chapter-notes li { font-size: .92em; margin: .35em 0; text-indent: 0; }
+.chapter-notes a.fnback { text-decoration: none; }
+.dev p { text-indent: 0; }
+.dev p + p { text-indent: 1em; }
+.dev p:has(> span.dev-label:first-child) { text-indent: 0; }
+.chapter-head p { text-indent: 0; }
+pre,code,kbd { font-family:"Doc Mono","D2Coding",ui-monospace,SFMono-Regular,Menlo,monospace; }
+code { background:none; padding:0; font-size:.95em; }
+pre { background:none; border:1px solid var(--fg); border-radius:0;
+      padding:.95rem 1.05rem; overflow-x:auto; line-height:1.6; font-size:.95rem;
+      margin:1.2rem 0; }
+.tok-c { color:var(--tok-c); font-style:italic; }
+.tok-k { color:var(--tok-k); font-weight:700; }
+.tok-s { color:var(--tok-s); }
+.tok-n { color:var(--tok-n); }
+.tok-t { color:var(--tok-t); font-weight:700; }
+.tok-x { color:var(--tok-x); }
+.tok-p { color:var(--tok-p); }
+pre code { background:none; padding:0; }
+.tblwrap { overflow-x:auto; text-align:center; }
+.tblwrap > table { display:inline-table; width:auto; max-width:none; margin:1.1rem 0; }
+table { border-collapse:collapse; margin:1.1rem auto; font-size:.95rem;
+        width:auto; max-width:100%; border:2px solid var(--fg);
+        table-layout:auto; }
+th, td { white-space:normal; }
+th,td { border:1px solid var(--rule); padding:.42rem .6rem; text-align:left; vertical-align:top; }
+th { background:rgba(128,128,128,.16); font-weight:700;
+     border-bottom:2px solid var(--fg);
+     font-family:"Doc Sans","Noto Sans CJK KR",system-ui,sans-serif; }
+table tr:first-child th, table tr:first-child td { border-bottom:1px solid var(--fg); }
+ul,ol { padding-left:1.4rem; } li { margin:.3rem 0; }
+.float-list { list-style:none; padding-left:0; }
+.float-list li { margin:.12rem 0; }
+.memrow { overflow-x:auto; text-align:center; margin:1.1rem 0 .2rem; }
+.memrow table.mem { display:inline-table; border-collapse:collapse;
+  border:none; margin:0; width:auto; }
+.memrow td.cell { border:1px solid var(--fg); padding:.3rem .5rem;
+  font-family:"Doc Mono","D2Coding",ui-monospace,monospace; font-size:.9rem;
+  text-align:center; background:none; }
+.memrow td.cell.hi { border-width:2px; }
+.memrow td.addr { border:none; padding:.15rem .5rem 0; text-align:center;
+  font-family:"Doc Mono","D2Coding",ui-monospace,monospace; font-size:.82rem;
+  color:var(--muted); }
+.demo { border:1px solid var(--fg); margin:1.15rem 0; }
+.demo > .demo-head { margin:0; padding:.5rem .9rem; text-indent:0;
+  border-bottom:1px solid var(--fg); font-weight:700; font-size:.92rem; }
+.demo-src > .demo-head { font-family:"Doc Mono","D2Coding",ui-monospace,monospace; }
+.demo-in > .demo-head, .demo-out > .demo-head {
+  font-family:"Doc Sans","Noto Sans CJK KR",system-ui,sans-serif; }
+.demo > .demo-body { padding:0; }
+.demo > .demo-body pre { border:none; border-radius:0; margin:0;
+  padding:.6rem .9rem; }
+.dev { margin:1.15rem 0; padding:0; background:none; border:none; border-radius:0; }
+.dev > .dev-label { border-left:4px solid var(--fg);
+  padding:.1rem .8rem .25rem .8rem; margin:0 0 .34rem; }
+.dev > .dev-body { border-left:2px solid var(--box-rule);
+  padding:.35rem .8rem .35rem .8rem; margin:0; }
+.dev > .dev-body > *:first-child { margin-top:0; }
+.dev > .dev-body > *:last-child { margin-bottom:0; }
+.float-caption { text-align:center; font-family:"Doc Sans","Noto Sans CJK KR",system-ui,sans-serif;
+  font-size:.92rem; color:var(--muted); margin:.35rem 0 1.2rem; }
+figure { margin:1.2rem 0; }
+figure.tbl table { margin-bottom:.2rem; }
+figure.tbl { text-align:center; }
+.dev > p:first-child { margin-top:0; } .dev > p:last-child { margin-bottom:0; }
+.dev-label { font-family:"Doc Sans","Noto Sans CJK KR",system-ui,sans-serif; font-weight:700;
+             font-size:.92rem; color:var(--muted); margin-bottom:.4rem; }
+.dev.open { border:none; border-radius:0; background:none;
+  padding:0; margin:.75rem 0; }
+.dev.open > .dev-label { margin:0 0 .34rem; padding:.1rem .8rem .25rem .8rem;
+  text-indent:0; border-left:4px solid var(--fg);
+  font-family:"Doc Sans","Noto Sans CJK KR",system-ui,sans-serif; font-weight:700;
+  font-size:.98rem; color:var(--fg); text-transform:none; letter-spacing:0; }
+.dev.open > .open-body { margin:0; padding:.35rem .8rem;
+  border-left:2px solid var(--box-rule); }
+.dev.open > .open-body > *:first-child { margin-top:0; }
+.dev.open > .open-body > *:last-child { margin-bottom:0; }
+.dev.open > .open-body > * { margin:.4rem 0; }
+.dev.open > .open-body > *:first-child { margin-top:0; }
+.dev.open > .open-body > *:last-child { margin-bottom:0; }
+.dev.open .open-body > ol.qlist { margin:0; padding-left:1.35rem; }
+.dev.open ol.qlist li { margin:.18rem 0; padding-left:.15rem; }
+.dev.open ol.qlist li::marker { color:var(--muted); font-weight:700; }
+.dev.open .qa-a { border:none; border-left:2px solid var(--box-rule);
+  padding:.06rem 0 .06rem .7rem; margin:.32rem 0 0; }
+.prereq .dev-label, .deepqa .dev-label, .why .dev-label,
+.organizer .dev-label, .questions .dev-label {
+  text-transform:none; letter-spacing:0; font-size:1.12rem; font-weight:700;
+  color:var(--fg); margin-bottom:.45rem; }
+.deepqa .qa-a { border-left:2px solid var(--muted); padding-left:.75rem; }
+.qa-box { border:none; margin:1.15rem 0; }
+.qa-box .dev { margin:0; border:none; border-radius:0; padding:0; background:none; }
+.qa-box .qa-q { border-left:4px solid var(--fg);
+  padding:.1rem .8rem .25rem .8rem; margin:0; }
+.qa-box .qa-a { border:none; border-left:2px solid var(--box-rule);
+  padding:.35rem .8rem; margin:.34rem 0 0; }
+.qa-box .qa-q > p, .qa-box .qa-a > p { margin:0; }
+.dev.recap { border:none; background:none; padding:0; margin:1.15rem 0; }
+.dev.recap > .dev-label { margin:0 0 .34rem; padding:.1rem .8rem .25rem .8rem;
+  text-indent:0; border-left:4px solid var(--fg);
+  font-family:"Doc Sans","Noto Sans CJK KR",system-ui,sans-serif; font-weight:700;
+  font-size:.95rem; color:var(--fg); }
+.dev.recap > .dev-body > p, .dev.recap > .dev-body > div:not(.demo),
+.dev.recap > .dev-body > figure { margin:.3rem 0; padding:0; }
+.dev > .dev-body > .demo { margin:.7rem 0; }
+.deepqa .qa-a { border-left:2px solid var(--muted); padding-left:.75rem; }
+.qa-q .dev-label, .qa-a .dev-label, .deepqa .qa-a .dev-label {
+  display:inline; margin-bottom:0; }
+.qa-q .dev-label + p, .qa-a .dev-label + p { display:inline; }
+.qa-q .dev-label, .qa-q .dev-label + p {
+  font-family:"Doc Sans","Noto Sans CJK KR",system-ui,sans-serif; font-weight:700;
+  color:var(--fg); font-size:1rem; }
+.qa-a .dev-label { color:var(--muted); }
+.qa-a .dev-label + p { font-family:inherit; font-weight:400; }
+span.dev-label { display:inline; font-size:1rem; margin:0; }
+.dev.misconception, .dev.realcase, .dev.antipattern, .dev.mathbox,
+.dev.platform, .dev.recap {
+  border:none; border-radius:0; background:none; padding:0; margin:1.15rem 0; }
+.dev.misconception > .dev-label, .dev.realcase > .dev-label,
+.dev.antipattern > .dev-label, .dev.mathbox > .dev-label,
+.dev.platform > .dev-label, .dev.recap > .dev-label {
+  margin:0 0 .34rem; padding:.1rem .8rem .25rem .8rem; text-indent:0;
+  border-left:4px solid var(--fg);
+  font-family:"Doc Sans","Noto Sans CJK KR",system-ui,sans-serif; font-weight:700;
+  font-size:.95rem; color:var(--fg); }
+.dev > .dev-body > p, .dev > .dev-body > div:not(.demo),
+.dev > .dev-body > figure, .dev > .open-body > p {
+  margin:.35rem 0; padding:0; }
+.bar .menu-btn { flex:0 0 auto; display:inline-flex; align-items:center; justify-content:center;
+  min-width:38px; min-height:38px; padding:0; font:inherit; font-size:1.25rem; line-height:1;
+  color:var(--fg); background:none; border:0; cursor:pointer; text-decoration:none; }
+.bar .back, .bar .bar-nav .nb { flex:0 0 auto; display:inline-flex; align-items:center; gap:.3em;
+  min-height:32px; padding:0 .65rem; border:1px solid var(--line); background:var(--bg);
+  color:var(--fg); font-weight:600; white-space:nowrap; text-decoration:none; }
+.bar .menu-btn[aria-expanded="true"] { background:var(--bg3); }
+.bar .place { flex:1 1 auto; min-width:0; overflow:hidden; white-space:nowrap; text-overflow:ellipsis;
+  padding:0 .35rem; }
+.bar .place strong a { color:var(--honey-text); }
+.bar .place .cur { color:var(--fg); }
+.bar .bar-nav { flex:0 0 auto; display:flex; gap:.3rem; align-items:center; white-space:nowrap; }
+.bar .bar-nav .off { color:var(--muted); border-color:var(--line); opacity:.45; }
+.bar .back:hover, .bar .menu-btn:hover, .bar .bar-nav a.nb:hover, .bar .place a:hover { background:var(--bg3); }
+.dev p, .dev div, .dev ul, .dev ol, .qa-box p, .qa-box div {
+  margin-top:.4rem; margin-bottom:.4rem; }
+.dev > *:first-child, .qa-box .dev > *:first-child { margin-top:0; }
+.dev > *:last-child, .qa-box .dev > *:last-child { margin-bottom:0; }
+.dev ul, .dev ol { padding-left:1.3rem; }
+.dev li { margin:.15rem 0; }
+.dev.antipattern > .dev-label { border-left-style:solid; }
+.dev.mathbox { font-size:.95rem; }
+.note { border:1px solid var(--rule); background:none; padding:.65rem .9rem;
+        margin:0 0 1.6rem; font-size:.9rem; }
+.cover { text-align:center; margin:1.4rem 0 2rem; padding-bottom:1.2rem; }
+.cover h1 { font-size:clamp(1.9rem,5vw,2.9rem); margin:0; letter-spacing:.01em;
+            padding-bottom:0; border-bottom:none; }
+.cover p { margin:.45rem 0; }
+.cover-sub { font-size:clamp(1rem,2.2vw,1.2rem); color:var(--fg); }
+.badge { display:inline-block; margin-top:.5rem; padding:.16rem .6rem;
+         border:1px solid var(--fg); font-size:.8rem; font-weight:700;
+         font-family:"Doc Sans","Noto Sans CJK KR",system-ui,sans-serif; }
+.cover-meta { color:var(--muted); font-size:.9rem;
+              font-family:"Doc Sans","Noto Sans CJK KR",system-ui,sans-serif; }
+.cover-author { margin-top:1.1rem; font-size:1.05rem; }
+.cover-links { font-size:.87rem; }
+.cover-links a { margin:0 .6rem; }
+.cover-blurb { max-width:44rem; margin:1.7rem auto 0; font-size:.95rem; color:var(--muted); }
+.cover-blurb p { margin:.5rem 0; }
+.metalist { display:grid; grid-template-columns:max-content 1fr; gap:.35rem 1.2rem;
+  margin:.6rem 0 1rem; }
+.metalist dt { color:var(--muted); font-family:"Doc Sans","Noto Sans CJK KR",system-ui,sans-serif;
+  font-size:.92rem; }
+.metalist dd { margin:0; }
+.colophon-meta { display:grid; grid-template-columns:max-content 1fr; gap:.35rem 1.2rem;
+                 margin:1.2rem 0 1.8rem; font-size:.93rem; }
+.colophon-meta dt { color:var(--muted);
+                    font-family:"Doc Sans","Noto Sans CJK KR",system-ui,sans-serif; font-size:.88rem; }
+.colophon-meta dd { margin:0; }
+.colophon { font-size:.93rem; }
+.colophon > div { margin:.9rem 0; padding-left:.9rem; border-left:1px solid var(--rule); }
+figure.fig { margin:1.6rem 0; text-align:center; }
+figure.fig img { max-width:100%; height:auto; }
+figure.fig figcaption { margin-top:.5rem; font-size:.92rem; color:var(--muted); }
+@media (prefers-color-scheme: dark) { figure.fig img { filter:invert(1) hue-rotate(180deg); } }
+:root[data-theme="dark"] figure.fig img { filter:invert(1) hue-rotate(180deg); }
+:root[data-theme="light"] figure.fig img { filter:none; }
+.toc { columns:24rem; column-gap:2.4rem; }
+.toc-part { break-inside:avoid; margin:1.1rem 0 .3rem; font-size:.95rem; letter-spacing:.02em;
+            font-family:"Doc Sans","Noto Sans CJK KR",system-ui,sans-serif; }
+.toc > .toc-part:first-child, .toc > .toc-keep:first-child > .toc-part, .toc-full > .toc-part:first-child { margin-top:0; }
+.toc-front { margin-bottom:.4rem; }
+.toc-group { padding-left:.85rem; }
+.toc-keep, .toc a { break-inside:avoid; }
+.toc a { display:block; padding:.28rem 0; text-decoration:none; }
+.toc a:hover { text-decoration:underline; }
+.nav { display:flex; gap:1rem; align-items:center; margin-top:3rem; padding-top:1rem;
+       border-top:1px solid var(--rule); font-size:.9rem;
+       font-family:"Doc Sans","Noto Sans CJK KR",system-ui,sans-serif; }
+.nav .sp { flex:1 1 auto; }
+code.style-name { font-family:"Doc Mono","D2Coding",ui-monospace,monospace;
+  font-size:.72em; color:var(--muted); background:var(--rule);
+  padding:.05em .35em; border-radius:3px; white-space:nowrap;
+  font-weight:400; letter-spacing:0; }
+.dev.open > .dev-label { padding-top:.42rem; padding-bottom:.42rem; }
+.dev.open > .open-body { padding-top:.4rem; padding-bottom:.4rem; }
+.dev.open > .open-body > p { margin:.6rem 0; }
+.dev > .dev-body { padding-top:.5rem; padding-bottom:.5rem; }
+.dev > .dev-body > p, .dev > .dev-body > div:not(.demo),
+.dev > .dev-body > figure { margin:.55rem 0; }
+main { line-height:1.85; }
+p { margin:1.15rem 0; }
+h2 { margin-top:2.4rem; }
+h3 { margin-top:2rem; }
+li { margin:.3rem 0; }
+h1, h2, h3, h4 { border-bottom-color:var(--box-rule) !important; }
+.toc { line-height:1.45; }
+.toc a { padding:.16rem 0; }
+.toc-part { margin:.85rem 0 .2rem; }
+.metalist { line-height:1.45; gap:.2rem 1.2rem; }
+.metalist dt, .metalist dd { margin:0; }
+.demo { border-color:var(--box-rule); }
+.demo > .demo-head { border-bottom-color:var(--box-rule); }
+.dev > .dev-label,
+.dev.open > .dev-label,
+.qa-box .qa-q,
+.dev.misconception > .dev-label, .dev.realcase > .dev-label,
+.dev.antipattern > .dev-label, .dev.mathbox > .dev-label,
+.dev.platform > .dev-label, .dev.recap > .dev-label {
+  border-left-color:var(--box-rule); }
+.dev > .dev-body,
+.dev > .open-body,
+.dev.open .qa-a,
+.qa-box .qa-a,
+.deepqa .qa-a { border-left-color:var(--box-rule); }
+.dev, .dev *, .qa-box, .qa-box *, .demo, .demo *,
+h1, h2, h3, h4, .colophon > div {
+  border-color:var(--box-rule); }
+.tbl table, .tbl th, .tbl td { border-color:initial; }
+.dev.open > .open-body,
+.dev.open > .qa-a,
+.dev.open .qa-a,
+.dev.deepqa .qa-a,
+.qa-box > .qa-a,
+.qa-box > .qa-q { border-left-color:var(--box-rule); }
+.bar .bar-toc { font-size:1.15em; line-height:1; text-decoration:none; }
+.dev, .dev-body, .open-body, .qa-box, .qa-q, .qa-a, .dev-label,
+.toc-full, .toc-full .tf-secs { line-height:inherit; font-size:1rem; }
+.dev > .dev-body > p, .dev > .open-body > p,
+.qa-box .qa-q > p, .qa-box .qa-a > p { margin:1.15rem 0; }
+.dev > .dev-body > *:first-child, .dev > .open-body > *:first-child,
+.qa-box .qa-q > p:first-child, .qa-box .qa-a > p:first-child { margin-top:0; }
+.dev > .dev-body > *:last-child, .dev > .open-body > *:last-child,
+.qa-box .qa-q > p:last-child, .qa-box .qa-a > p:last-child { margin-bottom:0; }
+.dev > .dev-label, .dev.open > .dev-label { font-size:.98rem; line-height:1.4; }
+h1,h2,h3,h4 { padding-bottom:.34rem; }
+h1 { margin:.2rem 0 1.3rem; }
+h2 { padding-bottom:.42rem; margin-bottom:1.15rem; }
+h3 { padding-bottom:.36rem; margin-bottom:.95rem; }
+.dev.open > .open-body > * { margin:.3rem 0; }
+.dev.open > .open-body > p { margin:.5rem 0; }
+.dev.open > .open-body > div { margin:.15rem 0; }
+.dev.open ul, .dev.open ol { margin:.3rem 0; }
+.dev.open li, .dev.open ol.qlist li { margin:0; }
+.dev.open > .open-body > *:first-child { margin-top:0; }
+.dev.open > .open-body > *:last-child { margin-bottom:0; }
+.dev.open .qa-a > p { margin:.35rem 0; }
+.dev, .dev *, .qa-box, .qa-box *, .demo, .demo *,
+h1, h2, h3, h4, .colophon > div { border-color:var(--box-rule); }
+.tbl table, .tbl th, .tbl td { border-color:initial; }
+a:focus-visible, button:focus-visible, summary:focus-visible, input:focus-visible {
+  outline:2px solid var(--accent2); outline-offset:2px; }
+:target, h1, h2, h3, h4, [id] { scroll-margin-top:4.2rem; }
+.skip { position:absolute; left:-9999px; top:0; z-index:30;
+        background:var(--bg); color:var(--fg); border:1px solid var(--fg);
+        padding:.5rem .8rem; font-size:.9rem; text-decoration:none; }
+.skip:focus { left:.5rem; top:.5rem; }
+.here-panel { position:fixed; top:46px; left:clamp(.2rem,1vw,1rem); z-index:19;
+  width:min(32rem, calc(100vw - .4rem)); max-height:calc(100vh - 54px); overflow:auto;
+  padding:.7rem .9rem .9rem; border:1px solid var(--line); --k:var(--line-strong);
+  font-family:"Doc Sans","Noto Sans CJK KR",system-ui,sans-serif; font-size:.9rem; line-height:1.4;
+  background:
+    linear-gradient(var(--k),var(--k)) left top / 8px 3px no-repeat,
+    linear-gradient(var(--k),var(--k)) left top / 3px 8px no-repeat,
+    linear-gradient(var(--k),var(--k)) right top / 8px 3px no-repeat,
+    linear-gradient(var(--k),var(--k)) right top / 3px 8px no-repeat,
+    linear-gradient(var(--k),var(--k)) left bottom / 8px 3px no-repeat,
+    linear-gradient(var(--k),var(--k)) left bottom / 3px 8px no-repeat,
+    linear-gradient(var(--k),var(--k)) right bottom / 8px 3px no-repeat,
+    linear-gradient(var(--k),var(--k)) right bottom / 3px 8px no-repeat,
+    color-mix(in srgb, var(--bg) 97%, transparent); }
+.here-panel .tools { display:flex; flex-wrap:wrap; gap:.3rem .4rem; align-items:center;
+  margin-bottom:.6rem; }
+.tool, .segb { font:inherit; font-size:.88rem; color:var(--fg); background:none;
+  border:1px solid var(--line-strong); padding:0 .6rem; min-height:30px;
+  display:inline-flex; align-items:center; text-decoration:none; cursor:pointer; white-space:nowrap; }
+.tool:hover, .segb:hover, .nav a:hover, .here-panel .here-body a:hover { background:var(--bg3); }
+.segb[aria-pressed="true"] { background:var(--select); border-color:var(--accent); font-weight:700; }
+.tool, .segb, .bar a, .bar button, .nav a, .here-panel a { transition:background-color .08s; }
+@media (prefers-reduced-motion: reduce) { * { transition:none !important; } }
+main a { text-decoration:underline; text-decoration-color:var(--box-rule);
+  text-underline-offset:2px; }
+main a:hover { background:var(--box-bg); text-decoration-color:var(--link); }
+main .toc a, main .toc-full a, main .here-body a { text-decoration:none; }
+main .toc a:hover, main .toc-full a:hover { background:var(--box-bg); text-decoration:underline; }
+.setbox { margin:0 0 .6rem; }
+.setrow { display:flex; flex-wrap:wrap; gap:.4rem .5rem; align-items:center; margin:.35rem 0; }
+.setlbl { min-width:4.2rem; font-size:.82rem; font-weight:700; }
+.seg { display:inline-flex; flex-wrap:wrap; gap:.25rem; }
+.col { display:inline-flex; align-items:center; gap:.3rem; }
+.col input[type=color] { width:2rem; height:1.4rem; padding:0; border:1px solid var(--line-strong);
+  background:none; cursor:pointer; }
+.setnote { margin:.5rem 0 0; font-size:.82rem; }
+.here-panel .ver { font-size:.82rem; color:var(--muted); padding:.2rem .45rem .2rem 0;
+  font-family:"Doc Sans","Noto Sans CJK KR",system-ui,sans-serif; white-space:nowrap; }
+.demo pre, .demo pre code {
+  white-space:pre-wrap; overflow-wrap:anywhere; word-break:break-word; }
+.demo > .demo-body { overflow-x:visible; }
+.plink {
+  margin-left: .4em; font-weight: 400; text-decoration: none;
+  color: var(--muted, #888); opacity: 0;
+}
+h3:hover > .plink, h4:hover > .plink,
+h3 > .plink:focus, h4 > .plink:focus { opacity: 1; }
+@media (hover: none) { .plink { opacity: .45; } }
+.searchbox { margin:.6em 0 0; }
+.searchbox input[type=search] {
+  width: 100%; padding: .45em .6em; font: inherit;
+  border: 1px solid var(--line-strong);
+  background: var(--bg); color: var(--fg);
+}
+.search-hint { color: var(--muted, #777); font-size: .85em; margin:.3em 0 0; }
+.search-results { list-style: none; padding: 0; margin: .5em 0 0; }
+.search-results li { margin: .15em 0; }
+.search-results .where { color: var(--muted, #777); font-size: .85em; margin-left: .4em; }
+@media (max-width: 900px), (orientation: portrait) {
+  :root:not([data-layout="desktop"]) .bar .place .cur { display:none; }
+  :root:not([data-layout="desktop"]) .bar .back,
+  :root:not([data-layout="desktop"]) .bar .bar-nav .nb { min-height:40px; padding:0 .5rem; }
+}
+@media (max-width: 480px) {
+  :root:not([data-layout="desktop"]) .bar .bar-nav .prev .lbl,
+  :root:not([data-layout="desktop"]) .bar .bar-nav .next .lbl { display:none; }
+  :root:not([data-layout="desktop"]) .bar .bar-nav .nb { min-width:44px; justify-content:center; }
+  :root:not([data-layout="desktop"]) .bar { gap:.2rem; }
+}
+:root[data-layout="mobile"] .bar .place .cur { display:none; }
+:root[data-layout="mobile"] .bar .back, :root[data-layout="mobile"] .bar .bar-nav .nb { min-height:40px; padding:0 .5rem; }
+:root[data-layout="mobile"] main .wrap { max-width:34rem; }
+@media (pointer: coarse), (max-width: 900px) {
+  .bar .menu-btn { min-width:44px; min-height:44px; }
+  .tool, .segb { min-height:38px; }
+}
+@media print { .bar, .here-panel { display:none; } }
+
+body { font-family:"Doc Serif","Noto Serif",Georgia,"Noto Serif CJK KR",serif; }
+h1,h2,h3,h4,.bar,.dev-label,.toc-part,.cover-meta,.badge,
+.colophon-meta dt { font-family:"Doc Sans","Noto Sans",system-ui,"Noto Sans CJK KR",sans-serif; }
+pre,code,kbd { font-family:"Doc Mono","D2Coding",ui-monospace,SFMono-Regular,Menlo,monospace; }
+div.box { border-left:3px solid var(--box-rule); background:var(--box-bg); padding:.4rem .9rem; margin:1rem 0; }
+div.box.mistake { border-left-color:var(--danger); }
+p.box-title { font-weight:700; margin:.2rem 0; }
+div.example p.ex-file, div.example p.ex-label { font-size:.82rem; color:var(--muted); margin:.6rem 0 .2rem; }
+div.example.refused p.ex-label, div.example.fault p.ex-label { color:var(--danger); }
+div.example.refused pre:last-child, div.example.fault pre:last-child { border-left:3px solid var(--danger); }
+main h1.doc-title, main p.doc-sub { display:none; }
+</style>
+<script>(function(){try{var L=localStorage,o='doc-read';if(o&&o!=='doc-read'&&L.getItem(o)!==null&&L.getItem('doc-read')===null){var v=JSON.parse(L.getItem(o)||'{}');delete v.width;L.setItem('doc-read',JSON.stringify(v));L.removeItem(o);}var s=JSON.parse(L.getItem('doc-read')||'{}');var r=document.documentElement;if(s.theme&&s.theme!=='auto')r.setAttribute('data-theme',s.theme);if(s.fg)r.style.setProperty('--fg',s.fg);if(s.bg)r.style.setProperty('--bg',s.bg);if(s.link)r.style.setProperty('--link',s.link);if(s.width==='fit')r.setAttribute('data-measure','fit');if(s.layout==='desktop'||s.layout==='mobile')r.setAttribute('data-layout',s.layout);if(s.layout==='desktop'){var m=document.querySelector('meta[name=viewport]');if(m)m.setAttribute('content','width=1100');}}catch(e){}})();</script></head>
+<body>
+<a class="skip" href="#content">Skip to content</a>
+<div class="bar"><button class="menu-btn" id="set-open" type="button" aria-expanded="false" aria-controls="here-panel" aria-label="Menu" title="Menu">☰</button><a class="back" href="index.html" title="Back">← <span class="lbl">Back</span></a><span class="place"><strong><a href="index.html">Pinax Manual</a></strong><span class="cur"> › ch. 6</span></span><span class="bar-nav"><a class="nb prev" href="06.html">‹ <span class="lbl">Prev</span></a><a class="nb toc" href="index.html"><span class="lbl">TOC</span></a><a class="nb next" href="08.html"><span class="lbl">Next</span> ›</a></span></div><div id="here-panel" class="here-panel" hidden><div class="setbox" id="setbox"><div class="setrow"><span class="setlbl">Language</span><span class="seg"><a class="segb" href="../html-ko/">한국어</a></span></div><div class="setrow"><span class="setlbl">Text width</span><span class="seg" id="s-width"><button type="button" class="segb" data-width="960">960</button><button type="button" class="segb" data-width="fit">Fit the window</button></span></div><div class="setrow"><span class="setlbl">Layout</span><span class="seg" id="s-layout"><button type="button" class="segb" data-layout="auto">Auto</button><button type="button" class="segb" data-layout="desktop">PC</button><button type="button" class="segb" data-layout="mobile">Mobile</button></span></div><div class="setrow"><span class="setlbl">Theme</span><span class="seg"><button type="button" class="segb" data-theme="auto">System</button><button type="button" class="segb" data-theme="light">Light</button><button type="button" class="segb" data-theme="dark">Dark</button></span></div><div class="setrow"><span class="setlbl">Colours</span><label class="col"><span>Text</span><input type="color" id="s-fg"></label><label class="col"><span>Background</span><input type="color" id="s-bg"></label><label class="col"><span>Link</span><input type="color" id="s-link"></label></div><p class="setnote">Settings are kept in this browser only.</p></div><div class="tools"><span class="ver">v0.37.1</span><a class="tool" href="toc.html">▤ Detailed contents</a><a class="tool" href="https://github.com/rubidus-api/pinax_lang/releases/download/v0.37.1/pinax-manual-v0.37.1-en.pdf">⤓ PDF</a><a class="tool" href="https://github.com/rubidus-api/pinax_lang" title="This manual on GitHub">Git</a><a class="tool" href="https://rubidus-api.github.io/" title="rubidus-api.github.io --- every published project">⌂ All projects</a><a class="tool" href="https://github.com/rubidus-api" title="github.com/rubidus-api --- every repository">≡ All repos</a></div><div class="here-head"><strong>Contents of this chapter</strong></div><div class="here-body"><a class="lv3" href="#s6-1"><span class="tf-no">6.1</span>Arrays</a><a class="lv3" href="#s6-2"><span class="tf-no">6.2</span>Lists</a><a class="lv3" href="#s6-3"><span class="tf-no">6.3</span>Queues</a><a class="lv3" href="#s6-4"><span class="tf-no">6.4</span>Filtering and mapping into a place</a><a class="lv3" href="#s6-5"><span class="tf-no">6.5</span>Passing a collection to a procedure</a><a class="lv3" href="#s6-6"><span class="tf-no">6.6</span>A table of rows and columns</a></div></div>
+<main id="content"><div class="wrap">
+<h2>6 Collections</h2><div class="box opening"><p><strong>Builds on</strong>: Chapter 4 (rails and blocks), chapter 5 (buffers).</p><p><strong>Questions this chapter answers</strong></p><ul><li>What places hold several values, and how is their size decided?</li><li>What happens when you add to a full list or take from an empty queue?</li><li>How do I filter or transform an array into another place?</li></ul></div><p>Every collection has its capacity fixed by its declaration, and its room is placed in the state’s block ahead of time. No storage grows while running. So “how much can it hold” is always written in the source.</p><h3 id="s6-1">6.1 Arrays<a class="plink" href="#s6-1" aria-label="Link to this section" title="Link to this section">#</a></h3><p><code>array NAME type capacity</code> is a row of cells that is always full. Every cell starts at zero, and <code>len</code> is always the capacity. A cell is read with <code>i ARRAY idx</code> and stored with <code>value i set ARRAY</code> (the same <code>set</code> that stores into a global). <code>assign</code> fills it from the first cell, outside definitions.</p><div class="example run"><p class="ex-file"><code>06-array.pnx</code></p><pre><code data-lang="pinax"><span>use</span> io .
+<span>use</span> <span>str</span> .
+<span>const</span> days <span>7</span>
+<span>array</span> rain <span>int</span> days                         <span>rem always full: 7 cells, all 0 at first</span>
+<span>assign</span> rain (<span>0</span>, <span>5</span>, <span>12</span>, <span>0</span>, <span>3</span>)                <span>rem cells 5 and 6 stay 0</span>
+<span>8</span> <span>6</span> set rain                                 <span>rem value, index, set, array: cell 6 becomes 8</span>
+<span>def</span> show <span>do</span> rain <span>do</span> <span>to</span> r r <span>str</span>.to_str io.print <span>" "</span> io.print <span>end</span> each <span>""</span> io.println <span>end</span>
+show
+<span>args</span> <span>"rainy days: "</span> rain <span>do</span> <span>to</span> r r <span>0</span> gt <span>end</span> count <span>" of "</span> rain len . <span>cat</span> io.println
+</code></pre><p class="ex-label">Output</p><pre><code data-lang="text">$ pnx 06-array.pnx
+0 5 12 0 3 0 8 
+rainy days: 4 of 7
+</code></pre></div><p>An index out of range is a fault. Compare an index you cannot be sure of with <code>len</code> before using it.</p><div class="example fault"><p class="ex-file"><code>06-index-range.pnx</code></p><pre><code data-lang="pinax"><span>use</span> io .
+<span>array</span> week <span>int</span> <span>7</span>
+<span>def</span> day i <span>int</span> <span>gives</span> <span>int</span> <span>do</span> i week idx <span>end</span>
+<span>3</span> day drop
+<span>"day 3 is fine"</span> io.println
+<span>7</span> day drop
+</code></pre><p class="ex-label">Fault</p><pre><code data-lang="text">$ pnx 06-index-range.pnx
+day 3 is fine
+06-index-range.pnx:3: index out of range
+  i int = 7
+</code></pre></div><h3 id="s6-2">6.2 Lists<a class="plink" href="#s6-2" aria-label="Link to this section" title="Link to this section">#</a></h3><p>A <code>list</code> is an array whose length grows from 0 up to its capacity. <code>push</code> adds at the end and <code>pop</code> takes from the end. Only indexes below the length may be used.</p><div class="example run"><p class="ex-file"><code>06-list.pnx</code></p><pre><code data-lang="pinax"><span>use</span> io .
+<span>use</span> <span>str</span> .
+<span>list</span> stack <span>u8</span> <span>4</span>                             <span>rem grows from 0 to 4</span>
+<span>def</span> balanced s <span>str</span> <span>gives</span> <span>bool</span> <span>do</span>            <span>rem are the brackets of s balanced?</span>
+  stack clear
+  s <span>str</span>.bytes <span>do</span> <span>to</span> b
+    b <span>'('</span> eq <span>if</span> b stack push <span>or_else</span> <span>to</span> e <span>end</span> <span>end</span>
+    b <span>')'</span> eq <span>if</span> stack pop <span>or_else</span> <span>to</span> e <span>0</span> <span>u8</span> <span>end</span> drop <span>end</span>
+  <span>end</span> each
+  stack is_empty
+<span>end</span>
+<span>def</span> check s <span>str</span> <span>do</span> <span>args</span> s <span>" "</span> s balanced . <span>cat</span> io.println <span>end</span>
+<span>"(a(b)c)"</span> check
+<span>"(a(b c)"</span> check
+</code></pre><p class="ex-label">Output</p><pre><code data-lang="text">$ pnx 06-list.pnx
+(a(b)c) true
+(a(b c) false
+</code></pre></div><p>Here are the procedures for lists in one place, with remarks saying what each line does.</p><div class="example run"><p class="ex-file"><code>06-list-steps.pnx</code></p><pre><code data-lang="pinax"><span>use</span> io .
+<span>use</span> <span>str</span> .
+<span>list</span> scores <span>int</span> <span>3</span>                          <span>rem room for 3; it starts empty</span>
+<span>def</span> show <span>do</span> <span>args</span> <span>"length "</span> scores len <span>" of "</span> scores capacity . <span>cat</span> io.println <span>end</span>
+show                                       <span>rem length 0 of 3</span>
+<span>70</span> scores push <span>or_else</span> <span>to</span> e <span>end</span>             <span>rem push can fail (full), so its guard follows it</span>
+<span>85</span> scores push <span>or_else</span> <span>to</span> e <span>end</span>
+show                                       <span>rem length 2 of 3</span>
+<span>args</span> <span>"first "</span> <span>0</span> scores idx <span>", second "</span> <span>1</span> scores idx . <span>cat</span> io.println   <span>rem i list idx reads cell i</span>
+<span>90</span> <span>1</span> set scores                            <span>rem v i set list puts v into cell i</span>
+<span>args</span> <span>"second is now "</span> <span>1</span> scores idx . <span>cat</span> io.println
+scores pop <span>or_else</span> <span>to</span> e <span>-1</span> <span>end</span> <span>str</span>.to_str io.println    <span>rem the last one comes off: 90</span>
+show                                       <span>rem length 1 of 3</span>
+</code></pre><p class="ex-label">Output</p><pre><code data-lang="text">$ pnx 06-list-steps.pnx
+length 0 of 3
+length 2 of 3
+first 70, second 85
+second is now 90
+90
+length 1 of 3
+</code></pre></div><p>One <code>push</code> and one <code>pop</code>, followed on the stack. Both can fail, so a guard follows each.</p><table><thead><tr><th><strong>Token</strong></th><th><strong>Stack after it</strong></th><th><strong>What happened</strong></th></tr></thead><tbody><tr><td><code>70</code></td><td><code>70</code></td><td>The value to put in.</td></tr><tr><td><code>scores push</code></td><td><code>—</code></td><td>Puts it at the end. Had the list been full, it would fail and leave nothing.</td></tr><tr><td><code>or_else to e end</code></td><td><code>—</code></td><td>Skipped, since it succeeded. On failure the body runs; it is empty, so nothing is left.</td></tr><tr><td><code>scores pop</code></td><td><code>90</code></td><td>Takes the last value off.</td></tr><tr><td><code>or_else to e -1 end</code></td><td><code>90</code></td><td>Success: skipped. On failure <code>-1</code> would fill the place.</td></tr><tr><td><code>str.to_str io.println</code></td><td><code>—</code></td><td>Prints it.</td></tr></tbody></table><table><thead><tr><th><strong>Written</strong></th><th><strong>Stack</strong></th><th><strong>What it does</strong></th></tr></thead><tbody><tr><td><code>LIST len</code></td><td><code>— → int</code></td><td>the length now</td></tr><tr><td><code>LIST capacity</code></td><td><code>— → int</code></td><td>the declared capacity</td></tr><tr><td><code>i LIST idx</code></td><td><code>int → value</code></td><td>reads cell <code>i</code>; outside the length the fault <code>range</code></td></tr><tr><td><code>v i set LIST</code></td><td><code>value int → —</code></td><td>stores into cell <code>i</code>; outside the length the fault <code>range</code></td></tr><tr><td><code>v LIST push</code></td><td><code>value → —</code></td><td>adds at the end; fails with <code>full</code> when full</td></tr><tr><td><code>LIST pop</code></td><td><code>— → value</code></td><td>takes from the end; fails with <code>range</code> when empty</td></tr></tbody></table><p><code>push</code> and <code>pop</code> can fail: a <code>push</code> into a full list fails with <code>full</code>, a <code>pop</code> from an empty list with <code>range</code>. A <code>push</code> that fails does not change the list.</p><div class="example run"><p class="ex-file"><code>06-list-full.pnx</code></p><pre><code data-lang="pinax"><span>use</span> io .
+<span>list</span> two <span>int</span> <span>2</span>
+<span>def</span> fill <span>or</span> <span>fail</span> <span>do</span> <span>1</span> two push <span>or_fail</span> <span>2</span> two push <span>or_fail</span> <span>3</span> two push <span>or_fail</span> <span>end</span>
+fill <span>or_else</span> <span>to</span> e <span>args</span> <span>"the third push failed: "</span> e err_text . <span>cat</span> io.println <span>end</span>
+<span>args</span> <span>"the list holds "</span> two len . <span>cat</span> io.println
+</code></pre><p class="ex-label">Output</p><pre><code data-lang="text">$ pnx 06-list-full.pnx
+the third push failed: full
+the list holds 2
+</code></pre></div><p>Because they can fail, <code>push</code> and <code>pop</code> are always followed by a guard (chapter 8); leaving it out is refused at load. To ignore the failure, write <code>or_else to e end</code>, so that the source says it is ignored.</p><div class="example refused"><p class="ex-file"><code>06-push-unguarded.pnx</code></p><pre><code data-lang="pinax"><span>list</span> scores <span>int</span> <span>3</span>
+<span>def</span> add_score n <span>int</span> <span>do</span> n scores push <span>end</span>   <span>rem push can fail: what then? the guard is missing</span>
+</code></pre><p class="ex-label">Refused</p><pre><code data-lang="text">$ pnx 06-push-unguarded.pnx
+06-push-unguarded.pnx:2:38: a procedure that can fail is followed by or_fail, or_return or or_else
+</code></pre></div><div class="box qa"><p class="box-title">Q&amp;A</p><p><strong>Q. Isn’t a generous capacity a waste of memory?</strong></p><p>A. It is. But the amount is in the source and fixed at load. Instead of a program stopping when memory runs out, it shows as a failing <code>push</code>, and that failure has to be handled before the program is even loaded.</p></div><h3 id="s6-3">6.3 Queues<a class="plink" href="#s6-3" aria-label="Link to this section" title="Link to this section">#</a></h3><p>In a <code>queue</code>, what goes in first comes out first. <code>put</code> puts in, <code>take</code> takes out, and <code>peek</code> looks without taking. <code>wait_take</code> and <code>wait_put</code>, which wait between tasks for an empty or full queue, are in chapter 13.</p><div class="example run"><p class="ex-file"><code>06-queue.pnx</code></p><pre><code data-lang="pinax"><span>use</span> io .
+<span>use</span> <span>str</span> .
+<span>queue</span> line <span>int</span> <span>3</span>
+<span>def</span> arrive n <span>int</span> <span>do</span> n line put <span>or_else</span> <span>to</span> e <span>args</span> <span>"turned away: "</span> n . <span>cat</span> io.println <span>end</span> <span>end</span>
+<span>def</span> serve <span>do</span> line take <span>or_else</span> <span>to</span> e <span>args</span> <span>"nobody waits: "</span> e err_text . <span>cat</span> io.println <span>return</span> <span>end</span> <span>to</span> n  <span>args</span> <span>"served "</span> n . <span>cat</span> io.println <span>end</span>
+<span>1</span> arrive <span>2</span> arrive <span>3</span> arrive <span>4</span> arrive
+serve serve
+<span>5</span> arrive
+serve serve serve
+</code></pre><p class="ex-label">Output</p><pre><code data-lang="text">$ pnx 06-queue.pnx
+turned away: 4
+served 1
+served 2
+served 3
+served 5
+nobody waits: range
+</code></pre></div><div class="box mistake"><p class="box-title">Common mistake: A queue can be walked with <code>each</code> too</p>Only arrays and lists are rails, and a pool for <code>each</code> alone (chapter 7). Queues, buffers and indexes are not. To handle the elements of a queue in order, call <code>take</code> in a loop.<div class="example refused"><p class="ex-file"><code>06-queue-rail.pnx</code></p><pre><code data-lang="pinax"><span>use</span> io .
+<span>queue</span> q <span>int</span> <span>4</span>
+q <span>do</span> <span>to</span> x <span>end</span> each
+</code></pre><p class="ex-label">Refused</p><pre><code data-lang="text">$ pnx 06-queue-rail.pnx
+06-queue-rail.pnx:3:11: only an array, a list or a pool is a rail (not a queue, a buffer or an index)
+</code></pre></div></div><h3 id="s6-4">6.4 Filtering and mapping into a place<a class="plink" href="#s6-4" aria-label="Link to this section" title="Link to this section">#</a></h3><p><code>map_into</code> and <code>filter_into</code> put the results of transforming or filtering the elements of a rail with a block into a <strong>place that already exists</strong> no new array is made. A list destination is added to at the end; an array is written from cell 0, and the number of cells written is given. When the destination is full, they fail.</p><div class="example run"><p class="ex-file"><code>06-map-filter.pnx</code></p><pre><code data-lang="pinax"><span>use</span> io .
+<span>use</span> <span>str</span> .
+<span>array</span> prices <span>int</span> <span>6</span>
+<span>assign</span> prices (<span>1200</span>, <span>450</span>, <span>3000</span>, <span>780</span>, <span>99</span>, <span>2500</span>)
+<span>list</span> cheap <span>int</span> <span>6</span>
+<span>array</span> with_tax <span>int</span> <span>6</span>
+<span>def</span> go <span>or</span> <span>fail</span> <span>do</span>
+  prices <span>do</span> <span>to</span> p p <span>1000</span> lt <span>end</span> cheap filter_into <span>or_fail</span>
+  prices <span>do</span> <span>to</span> p p <span>11</span> mul <span>10</span> div <span>end</span> with_tax map_into <span>or_fail</span> <span>to</span> n
+  <span>args</span> <span>"cheap: "</span> cheap len <span>" items, the first "</span> <span>0</span> cheap idx . <span>cat</span> io.println
+  <span>args</span> <span>"with tax, "</span> n <span>" cells written, the first "</span> <span>0</span> with_tax idx . <span>cat</span> io.println
+<span>end</span>
+go <span>or_else</span> <span>to</span> e e err_text io.println <span>end</span>
+</code></pre><p class="ex-label">Output</p><pre><code data-lang="text">$ pnx 06-map-filter.pnx
+cheap: 3 items, the first 450
+with tax, 6 cells written, the first 1320
+</code></pre></div><h3 id="s6-5">6.5 Passing a collection to a procedure<a class="plink" href="#s6-5" aria-label="Link to this section" title="Link to this section">#</a></h3><p>A procedure can take a collection as a parameter. Write its kind and what its cells hold — <code>list int</code>, <code>array city</code>, <code>queue int</code>, <code>list str 8</code> — or <code>buffer</code>, and give the collection’s name where you call the procedure. Inside, the parameter works wherever a collection’s name does (even as the destination of <code>map_into</code>). The same procedure now serves every list of that kind, whatever its capacity.</p><div class="example run"><p class="ex-file"><code>06-coll-param.pnx</code></p><pre><code data-lang="pinax"><span>use</span> io .
+<span>list</span> morning <span>int</span> <span>8</span>
+<span>list</span> evening <span>int</span> <span>8</span>
+<span>def</span> record_all l <span>list</span> <span>int</span>, a <span>int</span>, b <span>int</span>, c <span>int</span> <span>do</span>
+  a l push <span>or_else</span> <span>to</span> e <span>end</span>  b l push <span>or_else</span> <span>to</span> e <span>end</span>  c l push <span>or_else</span> <span>to</span> e <span>end</span>
+<span>end</span>
+<span>def</span> report name <span>str</span>, l <span>list</span> <span>int</span> <span>do</span>
+  <span>args</span> name <span>": "</span> l len <span>" readings, highest "</span> l maximum <span>or_else</span> <span>to</span> e <span>0</span> <span>end</span> . <span>cat</span> io.println
+<span>end</span>
+morning <span>12</span> <span>15</span> <span>11</span> record_all
+evening <span>21</span> <span>19</span> <span>20</span> record_all
+<span>"morning"</span> morning report
+<span>"evening"</span> evening report
+</code></pre><p class="ex-label">Output</p><pre><code data-lang="text">$ pnx 06-coll-param.pnx
+morning: 3 readings, highest 15
+evening: 3 readings, highest 21
+</code></pre></div><div class="box mistake"><p class="box-title">Common mistake: A table’s name as a parameter type takes the table</p>Written as a parameter type, the name of a table of records means <em>one row</em> of it (chapter 7). To take the whole table, write <code>list RECORD</code> or <code>array RECORD</code>.<div class="example refused"><p class="ex-file"><code>06-coll-param-row.pnx</code></p><pre><code data-lang="pinax"><span>record</span> reading
+  value <span>i32</span>
+<span>end</span>
+<span>list</span> morning reading <span>8</span>
+<span>def</span> count_them l morning <span>gives</span> <span>int</span> <span>do</span> <span>0</span> <span>end</span>      <span>rem a table's name as a type: one row of it</span>
+morning count_them
+</code></pre><p class="ex-label">Refused</p><pre><code data-lang="text">$ pnx 06-coll-param-row.pnx
+06-coll-param-row.pnx:6:9: this parameter takes one row of a table; a parameter that takes the whole table is written list RECORD or array RECORD
+</code></pre></div></div><div class="box qa"><p class="box-title">Q&amp;A</p><p><strong>Q. How do I empty a list, or make it shorter?</strong></p><p>A. <code>LIST clear</code> sets its length to 0 and <code>n LIST truncate</code> to <code>n</code>. The cells keep their values, but past the length they are not seen. An array is always full, so it cannot be emptied; its cells are written one by one with <code>set</code>.</p></div><h3 id="s6-6">6.6 A table of rows and columns<a class="plink" href="#s6-6" aria-label="Link to this section" title="Link to this section">#</a></h3><p>When a table of rows and columns is wanted that holds a number in one cell and a text in the next, as a spreadsheet does, the module <code>sheet</code> keeps it in a buffer. It is a library; it is not a type. The buffer is made a <strong>book</strong> by <code>open_book</code>, and <code>create</code> makes named sheets in it (at most so many rows, exactly so many columns). A sheet is chosen by name (<code>activate</code>) or by number (<code>activate_n</code>), and every other procedure then works on the chosen <strong>current sheet</strong>: the shape of connecting to a service, choosing one thing in it and asking. A row is added at a time, and every procedure of <code>sheet</code> takes the buffer last. A cell comes out through the procedure of its kind: <code>int</code>, <code>str</code>, <code>bool</code>, <code>dec</code>. Equal texts and big numbers are stored once, however many cells hold them and in however many sheets.</p><p>Searching and choosing work on a <strong>selection</strong>, the rows chosen so far. <code>where_str</code> and <code>where_int</code> start it from all the rows; <code>narrow_int</code> and <code>narrow_str</code> keep, of the rows selected, those that are still right. A line of such procedures is the pipe, and <code>order_by</code>, <code>sum_sel</code> and <code>sel_row</code> read what is left.</p><div class="example run"><p class="ex-file"><code>06-sheet.pnx</code></p><pre><code data-lang="pinax"><span>use</span> io .
+<span>use</span> sheet .
+<span>buffer</span> grid <span>8192</span>
+<span>def</span> load <span>or</span> <span>fail</span> <span>do</span>
+  <span>1</span> grid sheet.open_book <span>or_fail</span>
+  <span>"stock"</span> <span>6</span> <span>3</span> grid sheet.create <span>or_fail</span> drop
+  <span>3</span> <span>do</span> grid sheet.add_row <span>or_fail</span> drop <span>end</span> times
+  <span>"apple"</span> <span>0</span> <span>0</span> grid sheet.put_str <span>or_fail</span>  <span>3</span> <span>0</span> <span>1</span> grid sheet.put_int <span>or_fail</span>
+  <span>"pear"</span> <span>1</span> <span>0</span> grid sheet.put_str <span>or_fail</span>   <span>5</span> <span>1</span> <span>1</span> grid sheet.put_int <span>or_fail</span>
+  <span>"pear"</span> <span>2</span> <span>0</span> grid sheet.put_str <span>or_fail</span>   <span>7</span> <span>2</span> <span>1</span> grid sheet.put_int <span>or_fail</span>
+<span>end</span>
+<span>def</span> show title <span>str</span> <span>do</span> <span>args</span> title <span>":"</span> . <span>cat</span> io.print
+  <span>0</span> grid sheet.sel_len range <span>do</span> <span>to</span> k <span>args</span> <span>" "</span> k grid sheet.sel_row . <span>cat</span> io.print <span>end</span> each
+  <span>""</span> io.println
+<span>end</span>
+<span>def</span> main <span>or</span> <span>fail</span> <span>do</span>
+  load <span>or_fail</span>
+  <span>0</span> sheet.eq <span>"pear"</span> grid sheet.where_str     <span>rem rows whose column 0 is pear</span>
+  <span>"pears"</span> show
+  <span>1</span> sheet.gt <span>5</span> grid sheet.narrow_int         <span>rem of those, column 1 above 5</span>
+  <span>"dear pears"</span> show
+  grid sheet.select_all
+  <span>1</span> grid sheet.order_by_desc <span>or_fail</span>         <span>rem all rows, dearest first</span>
+  <span>"by price"</span> show
+<span>end</span>
+main <span>or_else</span> <span>to</span> e e err_text io.println <span>end</span>
+</code></pre><p class="ex-label">Output</p><pre><code data-lang="text">$ pnx 06-sheet.pnx
+pears: 1 2
+dear pears: 2
+by price: 2 1 0
+</code></pre></div><p>With several sheets <code>find_sheet</code>, <code>sheet_name</code>, <code>copy_to</code>, <code>remove</code> and <code>rename</code> help, and a column that is searched often, or chosen by range, can be given an ordered index (a B+tree) by <code>index</code>. With one, <code>find_row_*</code>, <code>where_*</code> and <code>order_by</code> answer without scanning, and the answers are the same. A write costs a little more.</p><div class="example run"><p class="ex-file"><code>06-sheet-book.pnx</code></p><pre><code data-lang="pinax"><span>use</span> io .
+<span>use</span> sheet .
+<span>buffer</span> book <span>65536</span>
+<span>def</span> main <span>or</span> <span>fail</span> <span>do</span>
+  <span>1</span> book sheet.open_book <span>or_fail</span>
+  <span>"people"</span> <span>100</span> <span>2</span> book sheet.create <span>or_fail</span> drop
+  <span>100</span> <span>do</span> book sheet.add_row <span>or_fail</span> drop <span>end</span> times
+  <span>0</span> <span>100</span> range <span>do</span> <span>to</span> r
+    <span>args</span> <span>"user"</span> r <span>7</span> mul <span>100</span> mod . <span>cat</span> r <span>0</span> book sheet.put_str <span>or_fail</span>
+    r <span>3</span> mul r <span>1</span> book sheet.put_int <span>or_fail</span>
+  <span>end</span> each
+  <span>0</span> book sheet.index <span>or_fail</span>                    <span>rem names are looked up a lot: index column 0</span>
+  <span>"user21"</span> <span>0</span> book sheet.find_row_str <span>or_fail</span> <span>to</span> r
+  <span>args</span> <span>"user21 is row "</span> r <span>", score "</span> r <span>1</span> book sheet.int <span>or_fail</span> . <span>cat</span> io.println
+  <span>1</span> sheet.ge <span>270</span> book sheet.where_int          <span>rem the rows whose column 1 is at least 270</span>
+  <span>args</span> <span>"scores from 270: "</span> book sheet.sel_len . <span>cat</span> io.println
+<span>end</span>
+main <span>or_else</span> <span>to</span> e e err_text io.println <span>end</span>
+</code></pre><p class="ex-label">Output</p><pre><code data-lang="text">$ pnx 06-sheet-book.pnx
+user21 is row 3, score 9
+scores from 270: 10
+</code></pre></div><p>Spreadsheets and CSV files come in and go out through two buffers: the file, then the book. <code>load_csv</code> and <code>load_xlsx</code> add the file’s rows to the current sheet (<code>mode</code> 0 turns numbers into numbers, and in an xlsx a date into Unix seconds; mode 1 keeps the text, or the serial number; mode 2 is mode 0 with a date kind, <code>put_date</code> and <code>date</code>, for the dates of an xlsx and for CSV fields such as <code>2024-02-29</code> or <code>2024-02-29T08:30:00</code>, and a date is written back as a date), and <code>save_csv</code> and <code>save_xlsx</code> write the sheet into a buffer, which the program then writes to a file. The procedures give the number of rows or bytes. They have no power over files, because the program moves the bytes itself (<code>file.read_all_into</code>, <code>file.write</code>), and nothing is allocated: an xlsx is read in the spare room after the file’s bytes in its buffer, so declare that buffer larger than the file.</p><div class="example run"><p class="ex-file"><code>06-sheet-files.pnx</code></p><pre><code data-lang="pinax"><span>use</span> io .
+<span>use</span> csv .
+<span>use</span> sheet .
+<span>buffer</span> book <span>65536</span>
+<span>buffer</span> blob <span>262144</span>
+<span>def</span> fill <span>or</span> <span>fail</span> <span>do</span>
+  <span>"name"</span> blob csv.put <span>or_fail</span>  <span>"qty"</span> blob csv.put <span>or_fail</span>  <span>"price"</span> blob csv.put <span>or_fail</span>  blob csv.end_line <span>or_fail</span>
+  <span>"a, </span><span>\"</span><span>b</span><span>\"</span><span>"</span> blob csv.put <span>or_fail</span>  <span>7</span> blob csv.put_int <span>or_fail</span>  <span>"1.50"</span> blob csv.put <span>or_fail</span>  blob csv.end_line <span>or_fail</span>
+  <span>"007"</span> blob csv.put <span>or_fail</span>  <span>""</span> blob csv.put <span>or_fail</span>  <span>"-2"</span> blob csv.put <span>or_fail</span>  blob csv.end_line <span>or_fail</span>
+<span>end</span>
+<span>def</span> main <span>or</span> <span>fail</span> <span>do</span>
+  <span>1</span> book sheet.open_book <span>or_fail</span>
+  <span>"t"</span> <span>20</span> <span>3</span> book sheet.create <span>or_fail</span> drop
+  fill <span>or_fail</span>                                       <span>rem in a program the file is read by file.read_all_into</span>
+  <span>0</span> blob book sheet.load_csv <span>or_fail</span> <span>to</span> n            <span>rem mode 0: numbers become numbers, "007" stays text</span>
+  <span>args</span> <span>"rows "</span> n <span>", row 1 column 1 is "</span> <span>1</span> <span>1</span> book sheet.kind <span>", row 2 column 0 is "</span> <span>2</span> <span>0</span> book sheet.str <span>or_fail</span> . <span>cat</span> io.println
+  blob book sheet.save_xlsx <span>or_fail</span> drop             <span>rem the book written as an xlsx into the same buffer</span>
+  <span>1</span> book sheet.open_book <span>or_fail</span>
+  <span>"back"</span> <span>20</span> <span>3</span> book sheet.create <span>or_fail</span> drop
+  <span>0</span> <span>0</span> blob book sheet.load_xlsx <span>or_fail</span> <span>to</span> m         <span>rem and read from it: mode 0, workbook sheet 0</span>
+  <span>args</span> <span>"read back "</span> m <span>" rows, price is a dec: "</span> <span>1</span> <span>2</span> book sheet.kind sheet.k_dec eq . <span>cat</span> io.println
+<span>end</span>
+main <span>or_else</span> <span>to</span> e e err_text io.println <span>end</span>
+</code></pre><p class="ex-label">Output</p><pre><code data-lang="text">$ pnx 06-sheet-files.pnx
+rows 3, row 1 column 1 is 1, row 2 column 0 is 007
+read back 3 rows, price is a dec: true
+</code></pre></div><p>Columns do not grow: <code>widen</code> rebuilds the table, in the same buffer, with another number of columns. A cell of another kind than the procedure asks for fails with <code>err.format</code>; ask <code>kind</code> first when it can be so.</p><div class="box summary"><p class="box-title">Summary</p><ul><li>A procedure takes a collection as <code>list T</code>, <code>array T</code>, <code>queue T</code> or <code>buffer</code> (9.9).</li><li>The capacity of a collection is fixed by its declaration; no storage grows while running (standard 8.1).</li><li>An array is always full; a list’s length grows; an index out of range is a fault (8.4, 8.5).</li><li><code>push</code> <code>pop</code> <code>put</code> <code>take</code> can fail: <code>full</code> when full, <code>range</code> when empty (8.5, 8.6).</li><li>Only arrays and lists are rails (10.6).</li><li><code>map_into</code> and <code>filter_into</code> write into the destination they are given (10.6).</li><li><code>sheet</code> keeps rows and columns of any kind of cell in a buffer; rows grow, columns are fixed by <code>create</code>; several sheets in one book, ordered indexes, and CSV and xlsx files in and out through two buffers (standard 16.10).</li></ul></div>
+<div class="nav"><a href="06.html">← Prev</a><span class="sp"></span><a href="index.html">Contents</a><span class="sp"></span><a href="08.html">Next →</a></div>
+</div></main>
+<script>(function(){var b=document.querySelector('.menu-btn'),p=document.getElementById('here-panel');function open(o){if(!p)return;p.hidden=!o;if(b)b.setAttribute('aria-expanded',o);}if(b)b.addEventListener('click',function(){open(p.hidden);});if(p)p.addEventListener('click',function(e){if(e.target.tagName==='A'&&e.target.getAttribute('href').charAt(0)==='#')open(false);});document.addEventListener('keydown',function(e){if(e.key==='Escape'&&p&&!p.hidden){open(false);if(b)b.focus();}});document.addEventListener('click',function(e){if(p&&!p.hidden&&!p.contains(e.target)&&!(b&&b.contains(e.target)))open(false);});var bk=document.querySelector('.bar .back');if(bk)bk.addEventListener('click',function(e){if(history.length>1&&document.referrer){e.preventDefault();history.back();}});var box=document.getElementById('setbox');if(!box)return;var r=document.documentElement;function load(){try{return JSON.parse(localStorage.getItem('doc-read')||'{}');}catch(e){return {};}}function save(s){try{localStorage.setItem('doc-read',JSON.stringify(s));}catch(e){}}function css(n){return getComputedStyle(r).getPropertyValue(n).trim();}function paint(){var s=load();var t=s.theme||'auto',w=s.width==='fit'?'fit':'960';[].forEach.call(box.querySelectorAll('.segb[data-theme]'),function(x){x.setAttribute('aria-pressed',x.dataset.theme===t);});[].forEach.call(box.querySelectorAll('.segb[data-width]'),function(x){x.setAttribute('aria-pressed',x.dataset.width===w);});var ly=s.layout||'auto';[].forEach.call(box.querySelectorAll('.segb[data-layout]'),function(x){x.setAttribute('aria-pressed',x.dataset.layout===ly);});document.getElementById('s-fg').value=s.fg||hex(css('--fg'));document.getElementById('s-bg').value=s.bg||hex(css('--bg'));document.getElementById('s-link').value=s.link||hex(css('--link'));}function hex(v){var m=v.match(/^rgba?\((\d+)[ ,]+(\d+)[ ,]+(\d+)/);if(!m)return v.charAt(0)==='#'?v:'#000000';return '#'+[1,2,3].map(function(i){return ('0'+parseInt(m[i],10).toString(16)).slice(-2);}).join('');}paint();[].forEach.call(box.querySelectorAll('.segb[data-width]'),function(x){x.addEventListener('click',function(){var s=load();if(x.dataset.width==='fit'){s.width='fit';r.setAttribute('data-measure','fit');}else{delete s.width;r.removeAttribute('data-measure');}save(s);setTimeout(paint,0);});});[].forEach.call(box.querySelectorAll('.segb[data-layout]'),function(x){x.addEventListener('click',function(){var s=load(),v=x.dataset.layout;if(v==='auto'){delete s.layout;r.removeAttribute('data-layout');}else{s.layout=v;r.setAttribute('data-layout',v);}save(s);var m=document.querySelector('meta[name=viewport]');var want=v==='desktop'?'width=1100':'width=device-width, initial-scale=1';if(m&&m.getAttribute('content')!==want)location.reload();else setTimeout(paint,0);});});[].forEach.call(box.querySelectorAll('.segb[data-theme]'),function(x){x.addEventListener('click',function(){var s=load();s.theme=x.dataset.theme;delete s.fg;delete s.bg;delete s.link;save(s);['--fg','--bg','--link'].forEach(function(n){r.style.removeProperty(n);});if(s.theme==='auto')r.removeAttribute('data-theme');else r.setAttribute('data-theme',s.theme);setTimeout(paint,0);});});[['s-fg','--fg','fg'],['s-bg','--bg','bg'],['s-link','--link','link']].forEach(function(a){document.getElementById(a[0]).addEventListener('input',function(){var s=load();s[a[2]]=this.value;save(s);r.style.setProperty(a[1],this.value);});});})();</script><script>
+(function(){
+  var q=document.getElementById('q'), out=document.getElementById('qr');
+  if(!q||!out) return;
+  var data=null, NONE="Nothing found";
+  function esc(s){var d=document.createElement('div');d.textContent=s;return d.innerHTML;}
+  function run(){
+    var v=q.value.trim().toLowerCase();
+    out.innerHTML='';
+    if(!v||!data) return;
+    var hits=[];
+    for(var i=0;i<data.length && hits.length<40;i++){
+      if(data[i][0].toLowerCase().indexOf(v)>=0) hits.push(data[i]);
+    }
+    if(!hits.length){ out.innerHTML='<li>'+NONE+'</li>'; return; }
+    out.innerHTML=hits.map(function(h){
+      return '<li><a href="'+h[1]+'">'+esc(h[0])+'</a>'+
+             (h[2]?'<span class="where">'+esc(h[2])+'</span>':'')+'</li>';
+    }).join('');
+  }
+  q.addEventListener('input',function(){
+    if(data){ run(); return; }
+    fetch('search-index.json').then(function(r){return r.json();})
+      .then(function(j){ data=j; run(); })
+      .catch(function(){ out.innerHTML='<li>'+NONE+'</li>'; });
+  });
+})();
+</script></body></html>

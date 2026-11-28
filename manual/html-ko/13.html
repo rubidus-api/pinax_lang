@@ -1,0 +1,632 @@
+<!doctype html>
+<html lang="ko">
+<head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<title>12 패턴 — Pinax 매뉴얼</title><style>@font-face { font-family:"Doc Serif"; src:url("../fonts/serif.woff2") format("woff2");
+  font-weight:400; font-style:normal; font-display:swap;
+  unicode-range:U+0000-024F,U+2000-206F,U+20A0-20BF,U+2100-21FF,U+2190-2BFF; }
+@font-face { font-family:"Doc Serif"; src:url("../fonts/serif-bold.woff2") format("woff2");
+  font-weight:700; font-style:normal; font-display:swap;
+  unicode-range:U+0000-024F,U+2000-206F,U+20A0-20BF,U+2100-21FF,U+2190-2BFF; }
+@font-face { font-family:"Doc Serif"; src:url("../fonts/serif-italic.woff2") format("woff2");
+  font-weight:400; font-style:italic; font-display:swap;
+  unicode-range:U+0000-024F,U+2000-206F,U+20A0-20BF,U+2100-21FF,U+2190-2BFF; }
+@font-face { font-family:"Doc Serif"; src:url("../fonts/serif-kr.woff2") format("woff2");
+  font-weight:400; font-style:normal; font-display:swap; }
+@font-face { font-family:"Doc Serif"; src:url("../fonts/serif-kr-bold.woff2") format("woff2");
+  font-weight:700; font-style:normal; font-display:swap; }
+@font-face { font-family:"Doc Sans"; src:url("../fonts/sans.woff2") format("woff2");
+  font-weight:400; font-style:normal; font-display:swap;
+  unicode-range:U+0000-024F,U+2000-206F,U+20A0-20BF,U+2100-21FF,U+2190-2BFF; }
+@font-face { font-family:"Doc Sans"; src:url("../fonts/sans-bold.woff2") format("woff2");
+  font-weight:700; font-style:normal; font-display:swap;
+  unicode-range:U+0000-024F,U+2000-206F,U+20A0-20BF,U+2100-21FF,U+2190-2BFF; }
+@font-face { font-family:"Doc Sans"; src:url("../fonts/sans-kr.woff2") format("woff2");
+  font-weight:400; font-style:normal; font-display:swap; }
+@font-face { font-family:"Doc Sans"; src:url("../fonts/sans-kr-bold.woff2") format("woff2");
+  font-weight:700; font-style:normal; font-display:swap; }
+@font-face { font-family:"Doc Mono"; src:url("../fonts/mono.woff2") format("woff2");
+  font-weight:400; font-style:normal; font-display:swap; }
+@font-face { font-family:"Doc Mono"; src:url("../fonts/mono-bold.woff2") format("woff2");
+  font-weight:700; font-style:normal; font-display:swap; }
+:root { color-scheme: light dark; --bg:#fafaf8; --bg2:#f2f2f0; --bg3:#e6e6e3; --fg:#141414; --muted:#555555; --line:#c9c9c9; --line-strong:#8a8a8a; --accent:#1a4f8a; --accent-fg:#ffffff; --accent2:#96530f; --honey:#f2b04a; --honey-fg:#2b1d00; --honey-text:#855400; --honey-soft:#fbebc6; --danger:#9b1b30; --ok:#1d6e37; --warn:#855400; --select:#d4dde8;
+  --rule:var(--line); --box-bg:var(--bg2); --code-bg:var(--bg2); --box-rule:var(--line); --link:var(--accent);
+  --tok-c:#3f5b4a; --tok-k:#123c87; --tok-t:#0f5b63; --tok-s:#7a3b0a;
+  --tok-n:#8a2222; --tok-p:#6b2d8a; --tok-x:#555555; }
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) { --bg:#121314; --bg2:#1c1e20; --bg3:#2a2c2f; --fg:#e8e8e8; --muted:#a6a6a6; --line:#3a3d40; --line-strong:#75787c; --accent:#8ab4e8; --accent-fg:#121314; --accent2:#d4883b; --honey:#f2b04a; --honey-fg:#121314; --honey-text:#f2b04a; --honey-soft:#3b311e; --danger:#f07a8c; --ok:#7bcb95; --warn:#f2b04a; --select:#2f3d52;
+    --tok-c:#9fbfa8; --tok-k:#9fc0f0; --tok-t:#7fcbd4; --tok-s:#e0b080;
+  --tok-n:#e79a9a; --tok-p:#c79ae0; --tok-x:#a6a6a6; } }
+:root[data-theme="dark"] { color-scheme: dark; --bg:#121314; --bg2:#1c1e20; --bg3:#2a2c2f; --fg:#e8e8e8; --muted:#a6a6a6; --line:#3a3d40; --line-strong:#75787c; --accent:#8ab4e8; --accent-fg:#121314; --accent2:#d4883b; --honey:#f2b04a; --honey-fg:#121314; --honey-text:#f2b04a; --honey-soft:#3b311e; --danger:#f07a8c; --ok:#7bcb95; --warn:#f2b04a; --select:#2f3d52;
+  --tok-c:#9fbfa8; --tok-k:#9fc0f0; --tok-t:#7fcbd4; --tok-s:#e0b080;
+  --tok-n:#e79a9a; --tok-p:#c79ae0; --tok-x:#a6a6a6; }
+:root[data-theme="light"] { color-scheme: light; }
+* { box-sizing:border-box; }
+body { margin:0; background:var(--bg); color:var(--fg); line-height:1.75;
+       font-family:"Doc Serif","Noto Serif CJK KR","Noto Serif KR",Georgia,serif; }
+.here-head { display:flex; align-items:center; gap:.8rem; padding:.2rem 0 .5rem;
+  border-bottom:1px solid var(--rule,#ddd); margin-bottom:.5rem; }
+.here-head .sp { flex:1; }
+.here-all { margin-left:auto; font-size:.9rem; }
+.here-x { font:inherit; font-size:.9rem; cursor:pointer; background:none;
+  border:1px solid var(--line-strong); padding:.05rem .45rem;
+  color:inherit; }
+.here-body a, .tf-secs a { display:block; text-decoration:none; padding:.12rem 0;
+  line-height:1.45; }
+.here-body a:hover, .tf-secs a:hover { text-decoration:underline; }
+.here-body a.lv4, .tf-secs a.lv4 { padding-left:1.6rem; font-size:.94rem;
+  color:var(--muted,#555); }
+.tf-no { display:inline-block; min-width:3.2rem; color:var(--muted,#666);
+  font-variant-numeric:tabular-nums; }
+.toc-full .tf-ch { margin:.9rem 0 .15rem; font-weight:700; }
+.toc-full .tf-secs { margin:0 0 .5rem .2rem; border-left:2px solid var(--rule,#e2e2e2);
+  padding-left:.7rem; }
+.toc-full h4.toc-part { margin-top:1.8rem; }
+.toc a.toc-detail { font-weight:700; }
+@media print { .here-btn, .here-panel { display:none; } }
+.bar { position:sticky; top:0; z-index:20; display:flex; flex-wrap:nowrap; gap:.25rem; align-items:center;
+       min-height:44px; padding:0 clamp(.4rem,2vw,1.6rem); background:var(--bg2);
+       border-bottom:1px solid var(--line); font-size:.9rem;
+       font-family:"Doc Sans","Noto Sans CJK KR",system-ui,sans-serif; }
+.bar a { color:var(--fg); text-decoration:none; } .bar a:hover { text-decoration:none; }
+.bar .sp { display:none; }
+main { width:100%; padding:1.6rem clamp(.9rem,3vw,2.5rem) 5rem; }
+.wrap { width:100%; }
+main .wrap { max-width:960px; margin-inline:auto; }
+:root[data-measure="fit"] main .wrap { max-width:none; margin:0; }
+h1,h2,h3,h4 { font-family:"Doc Sans","Noto Sans CJK KR",system-ui,sans-serif; line-height:1.35;
+  padding-bottom:.18rem; border-bottom:1px solid var(--rule); }
+h1 { font-size:clamp(1.5rem,3.4vw,2.1rem); margin:.2rem 0 .9rem; }
+h2 { font-size:clamp(1.35rem,3vw,1.8rem); margin:0 0 .7rem; padding-bottom:.35rem;
+     border-bottom:2px solid var(--fg); }
+h3 { font-size:clamp(1.05rem,2.2vw,1.25rem); margin:1.5rem 0 .5rem;
+     padding-bottom:.22rem; border-bottom:1.5px solid var(--fg); }
+p { margin:.9rem 0; } a { color:var(--link); }
+main p { text-indent: 1em; }
+.cover p, .note p, .toc p, .float-caption, .metalist p, .memrow p,
+.colophon-meta p, li p, td p, th p, figure p, blockquote p,
+.demo-src p, .demo-out p, pre, pre p,
+.dev-label, p.dev-label { text-indent: 0; }
+.src-note { font-size: .86em; color: var(--muted, #666); }
+.src-note code { font-size: .95em; }
+sup.fnref { font-size: .72em; line-height: 0; vertical-align: super; }
+sup.fnref a { text-decoration: none; padding: 0 .1em; }
+sup.fnref a::before { content: "["; }
+sup.fnref a::after  { content: "]"; }
+.chapter-notes { margin: 3rem 0 1rem; padding-top: .9rem;
+                 border-top: 2px solid var(--rule, #333); }
+.chapter-notes h2 { font-size: 1.05rem; margin: 0 0 .6rem; }
+.chapter-notes ol { margin: 0; padding-left: 1.6em; }
+.chapter-notes li { font-size: .92em; margin: .35em 0; text-indent: 0; }
+.chapter-notes a.fnback { text-decoration: none; }
+.dev p { text-indent: 0; }
+.dev p + p { text-indent: 1em; }
+.dev p:has(> span.dev-label:first-child) { text-indent: 0; }
+.chapter-head p { text-indent: 0; }
+pre,code,kbd { font-family:"Doc Mono","D2Coding",ui-monospace,SFMono-Regular,Menlo,monospace; }
+code { background:none; padding:0; font-size:.95em; }
+pre { background:none; border:1px solid var(--fg); border-radius:0;
+      padding:.95rem 1.05rem; overflow-x:auto; line-height:1.6; font-size:.95rem;
+      margin:1.2rem 0; }
+.tok-c { color:var(--tok-c); font-style:italic; }
+.tok-k { color:var(--tok-k); font-weight:700; }
+.tok-s { color:var(--tok-s); }
+.tok-n { color:var(--tok-n); }
+.tok-t { color:var(--tok-t); font-weight:700; }
+.tok-x { color:var(--tok-x); }
+.tok-p { color:var(--tok-p); }
+pre code { background:none; padding:0; }
+.tblwrap { overflow-x:auto; text-align:center; }
+.tblwrap > table { display:inline-table; width:auto; max-width:none; margin:1.1rem 0; }
+table { border-collapse:collapse; margin:1.1rem auto; font-size:.95rem;
+        width:auto; max-width:100%; border:2px solid var(--fg);
+        table-layout:auto; }
+th, td { white-space:normal; }
+th,td { border:1px solid var(--rule); padding:.42rem .6rem; text-align:left; vertical-align:top; }
+th { background:rgba(128,128,128,.16); font-weight:700;
+     border-bottom:2px solid var(--fg);
+     font-family:"Doc Sans","Noto Sans CJK KR",system-ui,sans-serif; }
+table tr:first-child th, table tr:first-child td { border-bottom:1px solid var(--fg); }
+ul,ol { padding-left:1.4rem; } li { margin:.3rem 0; }
+.float-list { list-style:none; padding-left:0; }
+.float-list li { margin:.12rem 0; }
+.memrow { overflow-x:auto; text-align:center; margin:1.1rem 0 .2rem; }
+.memrow table.mem { display:inline-table; border-collapse:collapse;
+  border:none; margin:0; width:auto; }
+.memrow td.cell { border:1px solid var(--fg); padding:.3rem .5rem;
+  font-family:"Doc Mono","D2Coding",ui-monospace,monospace; font-size:.9rem;
+  text-align:center; background:none; }
+.memrow td.cell.hi { border-width:2px; }
+.memrow td.addr { border:none; padding:.15rem .5rem 0; text-align:center;
+  font-family:"Doc Mono","D2Coding",ui-monospace,monospace; font-size:.82rem;
+  color:var(--muted); }
+.demo { border:1px solid var(--fg); margin:1.15rem 0; }
+.demo > .demo-head { margin:0; padding:.5rem .9rem; text-indent:0;
+  border-bottom:1px solid var(--fg); font-weight:700; font-size:.92rem; }
+.demo-src > .demo-head { font-family:"Doc Mono","D2Coding",ui-monospace,monospace; }
+.demo-in > .demo-head, .demo-out > .demo-head {
+  font-family:"Doc Sans","Noto Sans CJK KR",system-ui,sans-serif; }
+.demo > .demo-body { padding:0; }
+.demo > .demo-body pre { border:none; border-radius:0; margin:0;
+  padding:.6rem .9rem; }
+.dev { margin:1.15rem 0; padding:0; background:none; border:none; border-radius:0; }
+.dev > .dev-label { border-left:4px solid var(--fg);
+  padding:.1rem .8rem .25rem .8rem; margin:0 0 .34rem; }
+.dev > .dev-body { border-left:2px solid var(--box-rule);
+  padding:.35rem .8rem .35rem .8rem; margin:0; }
+.dev > .dev-body > *:first-child { margin-top:0; }
+.dev > .dev-body > *:last-child { margin-bottom:0; }
+.float-caption { text-align:center; font-family:"Doc Sans","Noto Sans CJK KR",system-ui,sans-serif;
+  font-size:.92rem; color:var(--muted); margin:.35rem 0 1.2rem; }
+figure { margin:1.2rem 0; }
+figure.tbl table { margin-bottom:.2rem; }
+figure.tbl { text-align:center; }
+.dev > p:first-child { margin-top:0; } .dev > p:last-child { margin-bottom:0; }
+.dev-label { font-family:"Doc Sans","Noto Sans CJK KR",system-ui,sans-serif; font-weight:700;
+             font-size:.92rem; color:var(--muted); margin-bottom:.4rem; }
+.dev.open { border:none; border-radius:0; background:none;
+  padding:0; margin:.75rem 0; }
+.dev.open > .dev-label { margin:0 0 .34rem; padding:.1rem .8rem .25rem .8rem;
+  text-indent:0; border-left:4px solid var(--fg);
+  font-family:"Doc Sans","Noto Sans CJK KR",system-ui,sans-serif; font-weight:700;
+  font-size:.98rem; color:var(--fg); text-transform:none; letter-spacing:0; }
+.dev.open > .open-body { margin:0; padding:.35rem .8rem;
+  border-left:2px solid var(--box-rule); }
+.dev.open > .open-body > *:first-child { margin-top:0; }
+.dev.open > .open-body > *:last-child { margin-bottom:0; }
+.dev.open > .open-body > * { margin:.4rem 0; }
+.dev.open > .open-body > *:first-child { margin-top:0; }
+.dev.open > .open-body > *:last-child { margin-bottom:0; }
+.dev.open .open-body > ol.qlist { margin:0; padding-left:1.35rem; }
+.dev.open ol.qlist li { margin:.18rem 0; padding-left:.15rem; }
+.dev.open ol.qlist li::marker { color:var(--muted); font-weight:700; }
+.dev.open .qa-a { border:none; border-left:2px solid var(--box-rule);
+  padding:.06rem 0 .06rem .7rem; margin:.32rem 0 0; }
+.prereq .dev-label, .deepqa .dev-label, .why .dev-label,
+.organizer .dev-label, .questions .dev-label {
+  text-transform:none; letter-spacing:0; font-size:1.12rem; font-weight:700;
+  color:var(--fg); margin-bottom:.45rem; }
+.deepqa .qa-a { border-left:2px solid var(--muted); padding-left:.75rem; }
+.qa-box { border:none; margin:1.15rem 0; }
+.qa-box .dev { margin:0; border:none; border-radius:0; padding:0; background:none; }
+.qa-box .qa-q { border-left:4px solid var(--fg);
+  padding:.1rem .8rem .25rem .8rem; margin:0; }
+.qa-box .qa-a { border:none; border-left:2px solid var(--box-rule);
+  padding:.35rem .8rem; margin:.34rem 0 0; }
+.qa-box .qa-q > p, .qa-box .qa-a > p { margin:0; }
+.dev.recap { border:none; background:none; padding:0; margin:1.15rem 0; }
+.dev.recap > .dev-label { margin:0 0 .34rem; padding:.1rem .8rem .25rem .8rem;
+  text-indent:0; border-left:4px solid var(--fg);
+  font-family:"Doc Sans","Noto Sans CJK KR",system-ui,sans-serif; font-weight:700;
+  font-size:.95rem; color:var(--fg); }
+.dev.recap > .dev-body > p, .dev.recap > .dev-body > div:not(.demo),
+.dev.recap > .dev-body > figure { margin:.3rem 0; padding:0; }
+.dev > .dev-body > .demo { margin:.7rem 0; }
+.deepqa .qa-a { border-left:2px solid var(--muted); padding-left:.75rem; }
+.qa-q .dev-label, .qa-a .dev-label, .deepqa .qa-a .dev-label {
+  display:inline; margin-bottom:0; }
+.qa-q .dev-label + p, .qa-a .dev-label + p { display:inline; }
+.qa-q .dev-label, .qa-q .dev-label + p {
+  font-family:"Doc Sans","Noto Sans CJK KR",system-ui,sans-serif; font-weight:700;
+  color:var(--fg); font-size:1rem; }
+.qa-a .dev-label { color:var(--muted); }
+.qa-a .dev-label + p { font-family:inherit; font-weight:400; }
+span.dev-label { display:inline; font-size:1rem; margin:0; }
+.dev.misconception, .dev.realcase, .dev.antipattern, .dev.mathbox,
+.dev.platform, .dev.recap {
+  border:none; border-radius:0; background:none; padding:0; margin:1.15rem 0; }
+.dev.misconception > .dev-label, .dev.realcase > .dev-label,
+.dev.antipattern > .dev-label, .dev.mathbox > .dev-label,
+.dev.platform > .dev-label, .dev.recap > .dev-label {
+  margin:0 0 .34rem; padding:.1rem .8rem .25rem .8rem; text-indent:0;
+  border-left:4px solid var(--fg);
+  font-family:"Doc Sans","Noto Sans CJK KR",system-ui,sans-serif; font-weight:700;
+  font-size:.95rem; color:var(--fg); }
+.dev > .dev-body > p, .dev > .dev-body > div:not(.demo),
+.dev > .dev-body > figure, .dev > .open-body > p {
+  margin:.35rem 0; padding:0; }
+.bar .menu-btn { flex:0 0 auto; display:inline-flex; align-items:center; justify-content:center;
+  min-width:38px; min-height:38px; padding:0; font:inherit; font-size:1.25rem; line-height:1;
+  color:var(--fg); background:none; border:0; cursor:pointer; text-decoration:none; }
+.bar .back, .bar .bar-nav .nb { flex:0 0 auto; display:inline-flex; align-items:center; gap:.3em;
+  min-height:32px; padding:0 .65rem; border:1px solid var(--line); background:var(--bg);
+  color:var(--fg); font-weight:600; white-space:nowrap; text-decoration:none; }
+.bar .menu-btn[aria-expanded="true"] { background:var(--bg3); }
+.bar .place { flex:1 1 auto; min-width:0; overflow:hidden; white-space:nowrap; text-overflow:ellipsis;
+  padding:0 .35rem; }
+.bar .place strong a { color:var(--honey-text); }
+.bar .place .cur { color:var(--fg); }
+.bar .bar-nav { flex:0 0 auto; display:flex; gap:.3rem; align-items:center; white-space:nowrap; }
+.bar .bar-nav .off { color:var(--muted); border-color:var(--line); opacity:.45; }
+.bar .back:hover, .bar .menu-btn:hover, .bar .bar-nav a.nb:hover, .bar .place a:hover { background:var(--bg3); }
+.dev p, .dev div, .dev ul, .dev ol, .qa-box p, .qa-box div {
+  margin-top:.4rem; margin-bottom:.4rem; }
+.dev > *:first-child, .qa-box .dev > *:first-child { margin-top:0; }
+.dev > *:last-child, .qa-box .dev > *:last-child { margin-bottom:0; }
+.dev ul, .dev ol { padding-left:1.3rem; }
+.dev li { margin:.15rem 0; }
+.dev.antipattern > .dev-label { border-left-style:solid; }
+.dev.mathbox { font-size:.95rem; }
+.note { border:1px solid var(--rule); background:none; padding:.65rem .9rem;
+        margin:0 0 1.6rem; font-size:.9rem; }
+.cover { text-align:center; margin:1.4rem 0 2rem; padding-bottom:1.2rem; }
+.cover h1 { font-size:clamp(1.9rem,5vw,2.9rem); margin:0; letter-spacing:.01em;
+            padding-bottom:0; border-bottom:none; }
+.cover p { margin:.45rem 0; }
+.cover-sub { font-size:clamp(1rem,2.2vw,1.2rem); color:var(--fg); }
+.badge { display:inline-block; margin-top:.5rem; padding:.16rem .6rem;
+         border:1px solid var(--fg); font-size:.8rem; font-weight:700;
+         font-family:"Doc Sans","Noto Sans CJK KR",system-ui,sans-serif; }
+.cover-meta { color:var(--muted); font-size:.9rem;
+              font-family:"Doc Sans","Noto Sans CJK KR",system-ui,sans-serif; }
+.cover-author { margin-top:1.1rem; font-size:1.05rem; }
+.cover-links { font-size:.87rem; }
+.cover-links a { margin:0 .6rem; }
+.cover-blurb { max-width:44rem; margin:1.7rem auto 0; font-size:.95rem; color:var(--muted); }
+.cover-blurb p { margin:.5rem 0; }
+.metalist { display:grid; grid-template-columns:max-content 1fr; gap:.35rem 1.2rem;
+  margin:.6rem 0 1rem; }
+.metalist dt { color:var(--muted); font-family:"Doc Sans","Noto Sans CJK KR",system-ui,sans-serif;
+  font-size:.92rem; }
+.metalist dd { margin:0; }
+.colophon-meta { display:grid; grid-template-columns:max-content 1fr; gap:.35rem 1.2rem;
+                 margin:1.2rem 0 1.8rem; font-size:.93rem; }
+.colophon-meta dt { color:var(--muted);
+                    font-family:"Doc Sans","Noto Sans CJK KR",system-ui,sans-serif; font-size:.88rem; }
+.colophon-meta dd { margin:0; }
+.colophon { font-size:.93rem; }
+.colophon > div { margin:.9rem 0; padding-left:.9rem; border-left:1px solid var(--rule); }
+figure.fig { margin:1.6rem 0; text-align:center; }
+figure.fig img { max-width:100%; height:auto; }
+figure.fig figcaption { margin-top:.5rem; font-size:.92rem; color:var(--muted); }
+@media (prefers-color-scheme: dark) { figure.fig img { filter:invert(1) hue-rotate(180deg); } }
+:root[data-theme="dark"] figure.fig img { filter:invert(1) hue-rotate(180deg); }
+:root[data-theme="light"] figure.fig img { filter:none; }
+.toc { columns:24rem; column-gap:2.4rem; }
+.toc-part { break-inside:avoid; margin:1.1rem 0 .3rem; font-size:.95rem; letter-spacing:.02em;
+            font-family:"Doc Sans","Noto Sans CJK KR",system-ui,sans-serif; }
+.toc > .toc-part:first-child, .toc > .toc-keep:first-child > .toc-part, .toc-full > .toc-part:first-child { margin-top:0; }
+.toc-front { margin-bottom:.4rem; }
+.toc-group { padding-left:.85rem; }
+.toc-keep, .toc a { break-inside:avoid; }
+.toc a { display:block; padding:.28rem 0; text-decoration:none; }
+.toc a:hover { text-decoration:underline; }
+.nav { display:flex; gap:1rem; align-items:center; margin-top:3rem; padding-top:1rem;
+       border-top:1px solid var(--rule); font-size:.9rem;
+       font-family:"Doc Sans","Noto Sans CJK KR",system-ui,sans-serif; }
+.nav .sp { flex:1 1 auto; }
+code.style-name { font-family:"Doc Mono","D2Coding",ui-monospace,monospace;
+  font-size:.72em; color:var(--muted); background:var(--rule);
+  padding:.05em .35em; border-radius:3px; white-space:nowrap;
+  font-weight:400; letter-spacing:0; }
+.dev.open > .dev-label { padding-top:.42rem; padding-bottom:.42rem; }
+.dev.open > .open-body { padding-top:.4rem; padding-bottom:.4rem; }
+.dev.open > .open-body > p { margin:.6rem 0; }
+.dev > .dev-body { padding-top:.5rem; padding-bottom:.5rem; }
+.dev > .dev-body > p, .dev > .dev-body > div:not(.demo),
+.dev > .dev-body > figure { margin:.55rem 0; }
+main { line-height:1.85; }
+p { margin:1.15rem 0; }
+h2 { margin-top:2.4rem; }
+h3 { margin-top:2rem; }
+li { margin:.3rem 0; }
+h1, h2, h3, h4 { border-bottom-color:var(--box-rule) !important; }
+.toc { line-height:1.45; }
+.toc a { padding:.16rem 0; }
+.toc-part { margin:.85rem 0 .2rem; }
+.metalist { line-height:1.45; gap:.2rem 1.2rem; }
+.metalist dt, .metalist dd { margin:0; }
+.demo { border-color:var(--box-rule); }
+.demo > .demo-head { border-bottom-color:var(--box-rule); }
+.dev > .dev-label,
+.dev.open > .dev-label,
+.qa-box .qa-q,
+.dev.misconception > .dev-label, .dev.realcase > .dev-label,
+.dev.antipattern > .dev-label, .dev.mathbox > .dev-label,
+.dev.platform > .dev-label, .dev.recap > .dev-label {
+  border-left-color:var(--box-rule); }
+.dev > .dev-body,
+.dev > .open-body,
+.dev.open .qa-a,
+.qa-box .qa-a,
+.deepqa .qa-a { border-left-color:var(--box-rule); }
+.dev, .dev *, .qa-box, .qa-box *, .demo, .demo *,
+h1, h2, h3, h4, .colophon > div {
+  border-color:var(--box-rule); }
+.tbl table, .tbl th, .tbl td { border-color:initial; }
+.dev.open > .open-body,
+.dev.open > .qa-a,
+.dev.open .qa-a,
+.dev.deepqa .qa-a,
+.qa-box > .qa-a,
+.qa-box > .qa-q { border-left-color:var(--box-rule); }
+.bar .bar-toc { font-size:1.15em; line-height:1; text-decoration:none; }
+.dev, .dev-body, .open-body, .qa-box, .qa-q, .qa-a, .dev-label,
+.toc-full, .toc-full .tf-secs { line-height:inherit; font-size:1rem; }
+.dev > .dev-body > p, .dev > .open-body > p,
+.qa-box .qa-q > p, .qa-box .qa-a > p { margin:1.15rem 0; }
+.dev > .dev-body > *:first-child, .dev > .open-body > *:first-child,
+.qa-box .qa-q > p:first-child, .qa-box .qa-a > p:first-child { margin-top:0; }
+.dev > .dev-body > *:last-child, .dev > .open-body > *:last-child,
+.qa-box .qa-q > p:last-child, .qa-box .qa-a > p:last-child { margin-bottom:0; }
+.dev > .dev-label, .dev.open > .dev-label { font-size:.98rem; line-height:1.4; }
+h1,h2,h3,h4 { padding-bottom:.34rem; }
+h1 { margin:.2rem 0 1.3rem; }
+h2 { padding-bottom:.42rem; margin-bottom:1.15rem; }
+h3 { padding-bottom:.36rem; margin-bottom:.95rem; }
+.dev.open > .open-body > * { margin:.3rem 0; }
+.dev.open > .open-body > p { margin:.5rem 0; }
+.dev.open > .open-body > div { margin:.15rem 0; }
+.dev.open ul, .dev.open ol { margin:.3rem 0; }
+.dev.open li, .dev.open ol.qlist li { margin:0; }
+.dev.open > .open-body > *:first-child { margin-top:0; }
+.dev.open > .open-body > *:last-child { margin-bottom:0; }
+.dev.open .qa-a > p { margin:.35rem 0; }
+.dev, .dev *, .qa-box, .qa-box *, .demo, .demo *,
+h1, h2, h3, h4, .colophon > div { border-color:var(--box-rule); }
+.tbl table, .tbl th, .tbl td { border-color:initial; }
+a:focus-visible, button:focus-visible, summary:focus-visible, input:focus-visible {
+  outline:2px solid var(--accent2); outline-offset:2px; }
+:target, h1, h2, h3, h4, [id] { scroll-margin-top:4.2rem; }
+.skip { position:absolute; left:-9999px; top:0; z-index:30;
+        background:var(--bg); color:var(--fg); border:1px solid var(--fg);
+        padding:.5rem .8rem; font-size:.9rem; text-decoration:none; }
+.skip:focus { left:.5rem; top:.5rem; }
+.here-panel { position:fixed; top:46px; left:clamp(.2rem,1vw,1rem); z-index:19;
+  width:min(32rem, calc(100vw - .4rem)); max-height:calc(100vh - 54px); overflow:auto;
+  padding:.7rem .9rem .9rem; border:1px solid var(--line); --k:var(--line-strong);
+  font-family:"Doc Sans","Noto Sans CJK KR",system-ui,sans-serif; font-size:.9rem; line-height:1.4;
+  background:
+    linear-gradient(var(--k),var(--k)) left top / 8px 3px no-repeat,
+    linear-gradient(var(--k),var(--k)) left top / 3px 8px no-repeat,
+    linear-gradient(var(--k),var(--k)) right top / 8px 3px no-repeat,
+    linear-gradient(var(--k),var(--k)) right top / 3px 8px no-repeat,
+    linear-gradient(var(--k),var(--k)) left bottom / 8px 3px no-repeat,
+    linear-gradient(var(--k),var(--k)) left bottom / 3px 8px no-repeat,
+    linear-gradient(var(--k),var(--k)) right bottom / 8px 3px no-repeat,
+    linear-gradient(var(--k),var(--k)) right bottom / 3px 8px no-repeat,
+    color-mix(in srgb, var(--bg) 97%, transparent); }
+.here-panel .tools { display:flex; flex-wrap:wrap; gap:.3rem .4rem; align-items:center;
+  margin-bottom:.6rem; }
+.tool, .segb { font:inherit; font-size:.88rem; color:var(--fg); background:none;
+  border:1px solid var(--line-strong); padding:0 .6rem; min-height:30px;
+  display:inline-flex; align-items:center; text-decoration:none; cursor:pointer; white-space:nowrap; }
+.tool:hover, .segb:hover, .nav a:hover, .here-panel .here-body a:hover { background:var(--bg3); }
+.segb[aria-pressed="true"] { background:var(--select); border-color:var(--accent); font-weight:700; }
+.tool, .segb, .bar a, .bar button, .nav a, .here-panel a { transition:background-color .08s; }
+@media (prefers-reduced-motion: reduce) { * { transition:none !important; } }
+main a { text-decoration:underline; text-decoration-color:var(--box-rule);
+  text-underline-offset:2px; }
+main a:hover { background:var(--box-bg); text-decoration-color:var(--link); }
+main .toc a, main .toc-full a, main .here-body a { text-decoration:none; }
+main .toc a:hover, main .toc-full a:hover { background:var(--box-bg); text-decoration:underline; }
+.setbox { margin:0 0 .6rem; }
+.setrow { display:flex; flex-wrap:wrap; gap:.4rem .5rem; align-items:center; margin:.35rem 0; }
+.setlbl { min-width:4.2rem; font-size:.82rem; font-weight:700; }
+.seg { display:inline-flex; flex-wrap:wrap; gap:.25rem; }
+.col { display:inline-flex; align-items:center; gap:.3rem; }
+.col input[type=color] { width:2rem; height:1.4rem; padding:0; border:1px solid var(--line-strong);
+  background:none; cursor:pointer; }
+.setnote { margin:.5rem 0 0; font-size:.82rem; }
+.here-panel .ver { font-size:.82rem; color:var(--muted); padding:.2rem .45rem .2rem 0;
+  font-family:"Doc Sans","Noto Sans CJK KR",system-ui,sans-serif; white-space:nowrap; }
+.demo pre, .demo pre code {
+  white-space:pre-wrap; overflow-wrap:anywhere; word-break:break-word; }
+.demo > .demo-body { overflow-x:visible; }
+.plink {
+  margin-left: .4em; font-weight: 400; text-decoration: none;
+  color: var(--muted, #888); opacity: 0;
+}
+h3:hover > .plink, h4:hover > .plink,
+h3 > .plink:focus, h4 > .plink:focus { opacity: 1; }
+@media (hover: none) { .plink { opacity: .45; } }
+.searchbox { margin:.6em 0 0; }
+.searchbox input[type=search] {
+  width: 100%; padding: .45em .6em; font: inherit;
+  border: 1px solid var(--line-strong);
+  background: var(--bg); color: var(--fg);
+}
+.search-hint { color: var(--muted, #777); font-size: .85em; margin:.3em 0 0; }
+.search-results { list-style: none; padding: 0; margin: .5em 0 0; }
+.search-results li { margin: .15em 0; }
+.search-results .where { color: var(--muted, #777); font-size: .85em; margin-left: .4em; }
+@media (max-width: 900px), (orientation: portrait) {
+  :root:not([data-layout="desktop"]) .bar .place .cur { display:none; }
+  :root:not([data-layout="desktop"]) .bar .back,
+  :root:not([data-layout="desktop"]) .bar .bar-nav .nb { min-height:40px; padding:0 .5rem; }
+}
+@media (max-width: 480px) {
+  :root:not([data-layout="desktop"]) .bar .bar-nav .prev .lbl,
+  :root:not([data-layout="desktop"]) .bar .bar-nav .next .lbl { display:none; }
+  :root:not([data-layout="desktop"]) .bar .bar-nav .nb { min-width:44px; justify-content:center; }
+  :root:not([data-layout="desktop"]) .bar { gap:.2rem; }
+}
+:root[data-layout="mobile"] .bar .place .cur { display:none; }
+:root[data-layout="mobile"] .bar .back, :root[data-layout="mobile"] .bar .bar-nav .nb { min-height:40px; padding:0 .5rem; }
+:root[data-layout="mobile"] main .wrap { max-width:34rem; }
+@media (pointer: coarse), (max-width: 900px) {
+  .bar .menu-btn { min-width:44px; min-height:44px; }
+  .tool, .segb { min-height:38px; }
+}
+@media print { .bar, .here-panel { display:none; } }
+
+body { font-family:"Doc Serif","Noto Serif CJK KR","Noto Serif KR",Georgia,serif; }
+h1,h2,h3,h4,.bar,.dev-label,.toc-part,.cover-meta,.badge,
+.colophon-meta dt { font-family:"Doc Sans","Noto Sans CJK KR","Noto Sans KR",system-ui,sans-serif; }
+pre,code,kbd { font-family:"Doc Mono","D2Coding",ui-monospace,SFMono-Regular,Menlo,monospace; }
+div.box { border-left:3px solid var(--box-rule); background:var(--box-bg); padding:.4rem .9rem; margin:1rem 0; }
+div.box.mistake { border-left-color:var(--danger); }
+p.box-title { font-weight:700; margin:.2rem 0; }
+div.example p.ex-file, div.example p.ex-label { font-size:.82rem; color:var(--muted); margin:.6rem 0 .2rem; }
+div.example.refused p.ex-label, div.example.fault p.ex-label { color:var(--danger); }
+div.example.refused pre:last-child, div.example.fault pre:last-child { border-left:3px solid var(--danger); }
+main h1.doc-title, main p.doc-sub { display:none; }
+</style>
+<script>(function(){try{var L=localStorage,o='doc-read';if(o&&o!=='doc-read'&&L.getItem(o)!==null&&L.getItem('doc-read')===null){var v=JSON.parse(L.getItem(o)||'{}');delete v.width;L.setItem('doc-read',JSON.stringify(v));L.removeItem(o);}var s=JSON.parse(L.getItem('doc-read')||'{}');var r=document.documentElement;if(s.theme&&s.theme!=='auto')r.setAttribute('data-theme',s.theme);if(s.fg)r.style.setProperty('--fg',s.fg);if(s.bg)r.style.setProperty('--bg',s.bg);if(s.link)r.style.setProperty('--link',s.link);if(s.width==='fit')r.setAttribute('data-measure','fit');if(s.layout==='desktop'||s.layout==='mobile')r.setAttribute('data-layout',s.layout);if(s.layout==='desktop'){var m=document.querySelector('meta[name=viewport]');if(m)m.setAttribute('content','width=1100');}}catch(e){}})();</script></head>
+<body>
+<a class="skip" href="#content">본문으로 건너뛰기</a>
+<div class="bar"><button class="menu-btn" id="set-open" type="button" aria-expanded="false" aria-controls="here-panel" aria-label="메뉴" title="메뉴">☰</button><a class="back" href="index.html" title="뒤로">← <span class="lbl">뒤로</span></a><span class="place"><strong><a href="index.html">Pinax 매뉴얼</a></strong><span class="cur"> › 12장</span></span><span class="bar-nav"><a class="nb prev" href="12.html">‹ <span class="lbl">이전</span></a><a class="nb toc" href="index.html"><span class="lbl">목차</span></a><a class="nb next" href="14.html"><span class="lbl">다음</span> ›</a></span></div><div id="here-panel" class="here-panel" hidden><div class="setbox" id="setbox"><div class="setrow"><span class="setlbl">언어</span><span class="seg"><a class="segb" href="../html-en/">English</a></span></div><div class="setrow"><span class="setlbl">본문 폭</span><span class="seg" id="s-width"><button type="button" class="segb" data-width="960">960</button><button type="button" class="segb" data-width="fit">창에 맞춤</button></span></div><div class="setrow"><span class="setlbl">배치</span><span class="seg" id="s-layout"><button type="button" class="segb" data-layout="auto">자동</button><button type="button" class="segb" data-layout="desktop">PC</button><button type="button" class="segb" data-layout="mobile">모바일</button></span></div><div class="setrow"><span class="setlbl">테마</span><span class="seg"><button type="button" class="segb" data-theme="auto">시스템</button><button type="button" class="segb" data-theme="light">밝게</button><button type="button" class="segb" data-theme="dark">어둡게</button></span></div><div class="setrow"><span class="setlbl">색</span><label class="col"><span>글자</span><input type="color" id="s-fg"></label><label class="col"><span>배경</span><input type="color" id="s-bg"></label><label class="col"><span>링크</span><input type="color" id="s-link"></label></div><p class="setnote">설정은 이 브라우저에만 저장된다.</p></div><div class="tools"><span class="ver">v0.37.1</span><a class="tool" href="toc.html">▤ 상세 차례</a><a class="tool" href="https://github.com/rubidus-api/pinax_lang/releases/download/v0.37.1/pinax-manual-v0.37.1-ko.pdf">⤓ PDF</a><a class="tool" href="https://github.com/rubidus-api/pinax_lang" title="이 매뉴얼의 GitHub 저장소">Git</a><a class="tool" href="https://rubidus-api.github.io/" title="rubidus-api.github.io --- 공개된 모든 프로젝트">⌂ 전체 사이트</a><a class="tool" href="https://github.com/rubidus-api" title="github.com/rubidus-api --- 모든 저장소">≡ 저장소 목록</a></div><div class="here-head"><strong>이 장의 차례</strong></div><div class="here-body"><a class="lv3" href="#s12-1"><span class="tf-no">12.1</span>작은 패턴: ptn</a><a class="lv3" href="#s12-2"><span class="tf-no">12.2</span>정규 표현식: rex</a><a class="lv3" href="#s12-3"><span class="tf-no">12.3</span>패턴은 상수다</a></div></div>
+<main id="content"><div class="wrap">
+<h2>12 패턴</h2><div class="box opening"><p><strong>먼저 알아야 할 것</strong>: 5장(뷰), 4장(레일).</p><p><strong>이 장이 답하는 물음</strong></p><ul><li>글에서 모양으로 찾고 바꾸려면 무엇을 쓰는가?</li><li>왜 패턴은 상수여야 하는가?</li><li><code>ptn</code> 과 <code>rex</code> 는 언제 어느 것을 쓰는가?</li></ul></div><h3 id="s12-1">12.1 작은 패턴: <code>ptn</code><a class="plink" href="#s12-1" aria-label="이 절의 주소" title="이 절의 주소">#</a></h3><p><code>ptn</code> 의 패턴은 Lua 와 같은 크기다: <code>%d</code> <code>%a</code> <code>%s</code> 같은 갈래, <code>[…]</code> 집합, <code>*</code> <code>+</code> <code>-</code> <code>?</code>, 그리고 갈무리 <code>(…)</code>. 고르기(<code>|</code>)는 없다. 맞은 뒤 <code>n ptn.capture</code> 로 갈무리를 읽는다.</p><div class="example run"><p class="ex-file"><code>12-ptn.pnx</code></p><pre><code data-lang="pinax"><span>use</span> io .
+<span>use</span> ptn .
+<span>use</span> <span>str</span> .
+<span>rem Pull fields out of log lines with a small pattern.</span>
+<span>const</span> entry <span>"^(%d+):(%d+) (%u+) (.*)$"</span>
+<span>def</span> show line <span>str</span> <span>do</span>
+  line entry ptn.match <span>or_else</span> <span>to</span> e <span>args</span> <span>"no match: "</span> line . <span>cat</span> io.println <span>return</span> <span>end</span> drop
+  <span>args</span> <span>3</span> ptn.capture <span>" at "</span> <span>1</span> ptn.capture <span>"h"</span> <span>2</span> ptn.capture <span>": "</span> <span>4</span> ptn.capture . <span>cat</span> io.println
+<span>end</span>
+<span>"09:15 INFO server started"</span> show
+<span>"10:02 WARN disk 91% full"</span> show
+<span>"garbage"</span> show
+<span>"a1b22c333"</span> <span>"%d+"</span> ptn.matches <span>do</span> <span>to</span> m <span>args</span> <span>"["</span> m <span>"]"</span> . <span>cat</span> io.print <span>end</span> each
+<span>""</span> io.println
+<span>"hello world"</span> <span>"(%w+)"</span> <span>"&lt;%1>"</span> ptn.replace io.println
+</code></pre><p class="ex-label">출력</p><pre><code data-lang="text">$ pnx 12-ptn.pnx
+INFO at 09h15: server started
+WARN at 10h02: disk 91% full
+no match: garbage
+[1][22][333]
+&lt;hello> &lt;world>
+</code></pre></div><p>패턴은 작은 조각을 늘어놓은 것이다. 자주 쓰는 조각은 이렇다(전체 목록은 표준 16.6).</p><table><thead><tr><th><strong>조각</strong></th><th><strong>맞는 것</strong></th></tr></thead><tbody><tr><td><code>a</code> 처럼 보통 글자</td><td>그 바이트 하나</td></tr><tr><td><code>.</code></td><td>아무 바이트 하나</td></tr><tr><td><code>%d</code> <code>%a</code> <code>%s</code> <code>%w</code></td><td>숫자, 글자, 공백, 글자나 숫자 하나. 대문자(<code>%D</code> …)는 그 밖의 것</td></tr><tr><td><code>%.</code> <code>%%</code></td><td>점, <code>%</code> 그 자체</td></tr><tr><td><code>[ae]</code> <code>[a-z]</code> <code>[^0-9]</code></td><td>넣은 것 가운데 하나, 범위 가운데 하나, 넣지 않은 것 하나</td></tr><tr><td>조각 뒤의 <code>+</code> <code>*</code> <code>?</code></td><td>한 번 이상, 0 번 이상, 0 번이나 한 번</td></tr><tr><td><code>^</code> 와 <code>$</code></td><td>패턴 처음에 쓰면 글의 처음, 끝에 쓰면 글의 끝에서만</td></tr><tr><td><code>( … )</code></td><td>맞은 부분을 갈무리한다. <code>n ptn.capture</code> 로 읽는다</td></tr></tbody></table><p>패턴 하나씩 시험해 보면 조각의 뜻이 잘 보인다.</p><div class="example run"><p class="ex-file"><code>12-ptn-steps.pnx</code></p><pre><code data-lang="pinax"><span>use</span> io .
+<span>use</span> ptn .
+<span>def</span> say ok <span>bool</span>, what <span>str</span> <span>do</span> <span>args</span> ok <span>if</span> <span>"yes "</span> <span>else</span> <span>"no  "</span> <span>end</span> what . <span>cat</span> io.println <span>end</span>
+<span>"order 66"</span> <span>"%d+"</span> ptn.is_match <span>"%d+: a digit, one or more"</span> say
+<span>"order 66"</span> <span>"^%d+"</span> ptn.is_match <span>"^%d+: digits at the start, and it starts with a letter"</span> say
+<span>"order 66"</span> <span>"%a+ %d+$"</span> ptn.is_match <span>"%a+ %d+$: letters, a space, digits at the end"</span> say
+<span>"grey"</span> <span>"gr[ae]y"</span> ptn.is_match <span>"gr[ae]y on grey: [ae] is a or e"</span> say
+<span>"colour"</span> <span>"colou?r"</span> ptn.is_match <span>"colou?r on colour: ? makes the u optional"</span> say
+<span>"x="</span> <span>"x=%d*"</span> ptn.is_match <span>"x=%d* on x=: * allows none at all"</span> say
+<span>"3.14"</span> <span>"%d%.%d"</span> ptn.is_match <span>"%d%.%d on 3.14: %. is a real point"</span> say
+</code></pre><p class="ex-label">출력</p><pre><code data-lang="text">$ pnx 12-ptn-steps.pnx
+yes %d+: a digit, one or more
+no  ^%d+: digits at the start, and it starts with a letter
+yes %a+ %d+$: letters, a space, digits at the end
+yes gr[ae]y on grey: [ae] is a or e
+yes colou?r on colour: ? makes the u optional
+yes x=%d* on x=: * allows none at all
+yes %d%.%d on 3.14: %. is a real point
+</code></pre></div><p><code>ptn.capture</code> 가 읽는 것은 <strong>이 실행의</strong> 마지막 맞음이다. 맞은 적이 없는데 읽으면 결함 <code>range</code> 다. 다른 실행에서 맞힌 것은 보이지 않는다 — 그 글은 이미 사라졌을 수 있기 때문이다.</p><div class="example fault"><p class="ex-file"><code>12-capture-none.pnx</code></p><pre><code data-lang="pinax"><span>use</span> io .
+<span>use</span> ptn .
+<span>def</span> first_number <span>gives</span> <span>str</span> <span>do</span>
+  <span>1</span> ptn.capture                               <span>rem no match in this run yet: there is nothing to read</span>
+<span>end</span>
+first_number io.println
+</code></pre><p class="ex-label">결함으로 멈춤</p><pre><code data-lang="text">$ pnx 12-capture-none.pnx
+12-capture-none.pnx:4: index out of range
+</code></pre></div><h3 id="s12-2">12.2 정규 표현식: <code>rex</code><a class="plink" href="#s12-2" aria-label="이 절의 주소" title="이 절의 주소">#</a></h3><p><code>rex</code> 는 고르기, 횟수(<code>{n,m}</code>), 프로시저 경계(<code>\b</code>), 플래그(<code>(?i)</code> 등)가 있는 정규 표현식이다. 되돌아가지 않는 방식으로 맞추므로 어떤 패턴도 글의 길이에 비례하는 시간 안에 끝난다. 패턴은 <code>rex.rx</code> 로 프로그램을 만들어 쓰고, <code>matches</code> 의 블록은 묶음을 매개변수로 받는다.</p><div class="example run"><p class="ex-file"><code>12-rex.pnx</code></p><pre><code data-lang="pinax"><span>use</span> io .
+<span>use</span> rex .
+<span>use</span> <span>str</span> .
+<span>rem Dates in any of two forms, rewritten to one.</span>
+<span>const</span> iso <span>r"(\d{4})-(\d{2})-(\d{2})"</span>
+<span>def</span> demo <span>do</span>
+  <span>"due 2026-10-15, paid 2026-11-02"</span> iso rex.rx <span>r"\3.\2.\1"</span> rex.replace io.println
+  <span>"id=7, x=20; name=kim, n=3"</span> <span>r"(\w+)=(\d+)"</span> rex.rx rex.matches <span>do</span> <span>to</span> value <span>to</span> key <span>to</span> whole
+    <span>args</span> key <span>" -> "</span> value . <span>cat</span> io.println
+  <span>end</span> each
+  <span>"a , b;c ,d"</span> <span>r"\s*[,;]\s*"</span> rex.rx rex.split <span>do</span> <span>to</span> p <span>args</span> <span>"&lt;"</span> p <span>">"</span> . <span>cat</span> io.print <span>end</span> each
+  <span>""</span> io.println
+<span>end</span>
+demo
+</code></pre><p class="ex-label">출력</p><pre><code data-lang="text">$ pnx 12-rex.pnx
+due 15.10.2026, paid 02.11.2026
+id -> 7
+x -> 20
+n -> 3
+&lt;a>&lt;b>&lt;c>&lt;d>
+</code></pre></div><p>맞은 곳마다 블록이 바꿀 글을 만들게 할 수도 있다.</p><div class="example run"><p class="ex-file"><code>12-replace-by.pnx</code></p><pre><code data-lang="pinax"><span>use</span> io .
+<span>use</span> rex .
+<span>use</span> <span>str</span> .
+<span>buffer</span> out <span>128</span>
+<span>def</span> title s <span>str</span> <span>gives</span> <span>int</span> <span>or</span> <span>fail</span> <span>do</span>          <span>rem capitalize every word</span>
+  out clear
+  s <span>r"\b[a-z]"</span> rex.rx out <span>do</span> <span>to</span> w w <span>str</span>.upper <span>end</span> rex.replace_by <span>or_fail</span>
+<span>end</span>
+<span>def</span> show <span>do</span> <span>"the quick brown fox"</span> title <span>or_else</span> <span>to</span> e <span>-1</span> <span>end</span> <span>to</span> n  <span>args</span> out contents <span>" ("</span> n <span>" letters)"</span> . <span>cat</span> io.println <span>end</span>
+show
+</code></pre><p class="ex-label">출력</p><pre><code data-lang="text">$ pnx 12-replace-by.pnx
+The Quick Brown Fox (4 letters)
+</code></pre></div><p>찾는 프로시저는 셋이 더 있다. <code>rex.match</code> 는 처음 맞은 부분을 주고 없으면 실패한다. <code>rex.matches</code> 는 맞은 부분마다 블록을 돌리는 레일이고, 블록은 맞은 전체와 묶음마다 <code>str</code> 하나를 받는다. <code>rex.split</code> 은 맞은 부분으로 가른 조각의 레일이다. <code>ptn</code> 에도 같은 레일 <code>ptn.matches</code> 가 있다.</p><div class="example run"><p class="ex-file"><code>12-rex-words.pnx</code></p><pre><code data-lang="pinax"><span>use</span> io .
+<span>use</span> <span>str</span> .
+<span>use</span> rex .
+<span>def</span> demo <span>do</span>
+  <span>"order 66, aisle 7"</span> <span>r"\d+"</span> rex.rx rex.match <span>or_else</span> <span>to</span> e <span>"none"</span> <span>end</span> io.println
+  <span>"no digits here"</span> <span>r"\d+"</span> rex.rx rex.match <span>or_else</span> <span>to</span> e <span>"none"</span> <span>end</span> io.println
+  <span>"x=1, y=22"</span> <span>r"(\w)=(\d+)"</span> rex.rx rex.matches <span>do</span> <span>to</span> value <span>to</span> name <span>to</span> whole
+    <span>args</span> name <span>" is "</span> value . <span>cat</span> io.println
+  <span>end</span> each
+  <span>"a;b;;c"</span> <span>r";"</span> rex.rx rex.split <span>do</span> <span>to</span> p <span>args</span> <span>"["</span> p <span>"]"</span> . <span>cat</span> io.print <span>end</span> each
+  <span>""</span> io.println
+<span>end</span>
+demo
+</code></pre><p class="ex-label">출력</p><pre><code data-lang="text">$ pnx 12-rex-words.pnx
+66
+none
+x is 1
+y is 22
+[a][b][][c]
+</code></pre></div><div class="example run"><p class="ex-file"><code>12-ptn-matches.pnx</code></p><pre><code data-lang="pinax"><span>use</span> io .
+<span>use</span> ptn .
+<span>def</span> demo <span>do</span>
+  <span>"x=1, y=22, z=333"</span> <span>"%a=%d+"</span> ptn.matches <span>do</span> <span>to</span> m <span>args</span> <span>"&lt;"</span> m <span>">"</span> . <span>cat</span> io.print <span>end</span> each
+  <span>""</span> io.println
+<span>end</span>
+demo
+</code></pre><p class="ex-label">출력</p><pre><code data-lang="text">$ pnx 12-ptn-matches.pnx
+&lt;x=1>&lt;y=22>&lt;z=333>
+</code></pre></div><table><thead><tr><th><strong>토큰</strong></th><th><strong>그 뒤의 스택</strong></th><th><strong>일어난 일</strong></th></tr></thead><tbody><tr><td><code>"order 66, aisle 7" r"\d+" rex.rx</code></td><td><code>"order 66, aisle 7" re</code></td><td>글과 패턴 프로그램. <code>rex.rx</code> 는 적재 때 만든다.</td></tr><tr><td><code>rex.match</code></td><td><code>"66"</code></td><td>처음 맞은 부분의 뷰. 없었다면 실패한다.</td></tr><tr><td><code>or_else to e "none" end</code></td><td><code>"66"</code></td><td>성공: 건너뛴다.</td></tr><tr><td><code>io.println</code></td><td><code>—</code></td><td>찍는다.</td></tr></tbody></table><div class="box mistake"><p class="box-title">흔한 오해: 정규 표현식을 보통 문자열에 적는다</p><code>"\d+"</code> 는 거절된다. 보통 문자열에서 <code>\d</code> 는 모르는 이스케이프이기 때문이다. 더 나쁜 것은 <code>"\b"</code> 다 — 백스페이스 문자가 되어 조용히 다른 뜻이 된다. 패턴은 날 문자열 <code>r"…"</code> 에 적는다.<div class="example refused"><p class="ex-file"><code>12-escape.pnx</code></p><pre><code data-lang="pinax"><span>use</span> rex .
+<span>def</span> digits s <span>str</span> <span>gives</span> <span>bool</span> <span>do</span> s <span>"</span><span>\d</span><span>+"</span> rex.rx rex.is_match <span>end</span>
+</code></pre><p class="ex-label">거절</p><pre><code data-lang="text">$ pnx 12-escape.pnx
+12-escape.pnx:2:35: unknown escape; a raw string r"..." keeps backslashes as written
+</code></pre></div></div><h3 id="s12-3">12.3 패턴은 상수다<a class="plink" href="#s12-3" aria-label="이 절의 주소" title="이 절의 주소">#</a></h3><p><code>ptn</code> 의 패턴과 <code>rex.rx</code> 의 패턴은 리터럴이거나 <code>const</code> 여야 한다. 처리기가 적재 때 패턴을 검사하고 프로그램으로 만들기 위해서다. 틀린 패턴은 돌기 전에 거절된다.</p><div class="example refused"><p class="ex-file"><code>12-pattern-variable.pnx</code></p><pre><code data-lang="pinax"><span>use</span> rex .
+<span>def</span> find s <span>str</span>, p <span>str</span> <span>gives</span> <span>bool</span> <span>do</span> s p rex.rx rex.is_match <span>end</span>
+</code></pre><p class="ex-label">거절</p><pre><code data-lang="text">$ pnx 12-pattern-variable.pnx
+12-pattern-variable.pnx:2:41: rx takes a string literal or a const name; a pattern made while running is rex.compile
+</code></pre></div><p>돌 때 만든 패턴이 필요하면 <code>rex.compile</code> 을 쓴다. 틀린 패턴은 실패(<code>format</code>)로 온다.</p><div class="example run"><p class="ex-file"><code>12-compile.pnx</code></p><pre><code data-lang="pinax"><span>use</span> io .
+<span>use</span> rex .
+<span>use</span> env .
+<span>def</span> count_matches pattern <span>str</span>, s <span>str</span> <span>gives</span> <span>int</span> <span>or</span> <span>fail</span> <span>do</span>
+  pattern rex.compile <span>or_fail</span> <span>to</span> re
+  <span>0</span> <span>to</span> n
+  s re rex.matches <span>do</span> <span>to</span> m n <span>1</span> add <span>to</span> n <span>end</span> each
+  n
+<span>end</span>
+<span>def</span> main <span>do</span>
+  <span>1</span> env.arg <span>or_else</span> <span>to</span> e <span>"x"</span> <span>end</span> <span>to</span> p
+  <span>args</span> <span>"matches of "</span> p <span>": "</span> p <span>"a1 b22 c333"</span> count_matches <span>or_else</span> <span>to</span> e <span>-1</span> <span>end</span> . <span>cat</span> io.println
+  <span>"("</span> <span>"a1"</span> count_matches <span>or_else</span> <span>to</span> e <span>args</span> <span>"bad pattern: "</span> e err_text . <span>cat</span> io.println <span>-1</span> <span>end</span> drop
+<span>end</span>
+main
+</code></pre><p class="ex-label">출력</p><pre><code data-lang="text">$ pnx 12-compile.pnx [0-9]+
+matches of [0-9]+: 3
+bad pattern: format
+</code></pre></div><div class="box qa"><p class="box-title">문답</p><p><strong>물음. <code>ptn</code> 과 <code>rex</code> 는 어느 것을 쓰는가?</strong></p><p>답. 짧은 패턴, 갈무리 몇 개면 <code>ptn</code> 이 가볍다. 고르기나 횟수가 필요하거나, 밖에서 온 패턴이거나, 아주 긴 글이면 <code>rex</code> 를 쓴다. <code>ptn</code> 은 되돌아가며 찾으므로 나쁜 패턴은 걸음의 한계에 걸려 결함으로 멈춘다.</p></div><div class="box qa"><p class="box-title">문답</p><p><strong>물음. 맞은 부분은 복사되는가?</strong></p><p>답. 아니다. <code>rex.match</code>, 묶음, <code>split</code> 의 조각은 모두 원래 글을 가리키는 뷰다(5장). 바꾼 글만 새로 만들어지고, <code>replace</code> 는 구역에, <code>replace_into</code> 와 <code>replace_by</code> 는 버퍼에 쓴다.</p></div><div class="box summary"><p class="box-title">정리</p><ul><li><code>ptn</code> 은 Lua 크기의 패턴이고, 갈무리는 <code>ptn.capture</code> 로 읽는다. 그 실행에 맞음이 없으면 결함 <code>range</code>(표준 16.6).</li><li><code>rex</code> 는 되돌아가지 않는 정규 표현식이고, 묶음은 블록의 매개변수가 된다(16.7).</li><li>패턴은 리터럴이나 <code>const</code> 다. 돌 때 만드는 것은 <code>rex.compile</code>(16.6, 16.7).</li><li>정규 표현식은 날 문자열에 적는다(6.5).</li></ul></div>
+<div class="nav"><a href="12.html">← 이전</a><span class="sp"></span><a href="index.html">차례로</a><span class="sp"></span><a href="14.html">다음 →</a></div>
+</div></main>
+<script>(function(){var b=document.querySelector('.menu-btn'),p=document.getElementById('here-panel');function open(o){if(!p)return;p.hidden=!o;if(b)b.setAttribute('aria-expanded',o);}if(b)b.addEventListener('click',function(){open(p.hidden);});if(p)p.addEventListener('click',function(e){if(e.target.tagName==='A'&&e.target.getAttribute('href').charAt(0)==='#')open(false);});document.addEventListener('keydown',function(e){if(e.key==='Escape'&&p&&!p.hidden){open(false);if(b)b.focus();}});document.addEventListener('click',function(e){if(p&&!p.hidden&&!p.contains(e.target)&&!(b&&b.contains(e.target)))open(false);});var bk=document.querySelector('.bar .back');if(bk)bk.addEventListener('click',function(e){if(history.length>1&&document.referrer){e.preventDefault();history.back();}});var box=document.getElementById('setbox');if(!box)return;var r=document.documentElement;function load(){try{return JSON.parse(localStorage.getItem('doc-read')||'{}');}catch(e){return {};}}function save(s){try{localStorage.setItem('doc-read',JSON.stringify(s));}catch(e){}}function css(n){return getComputedStyle(r).getPropertyValue(n).trim();}function paint(){var s=load();var t=s.theme||'auto',w=s.width==='fit'?'fit':'960';[].forEach.call(box.querySelectorAll('.segb[data-theme]'),function(x){x.setAttribute('aria-pressed',x.dataset.theme===t);});[].forEach.call(box.querySelectorAll('.segb[data-width]'),function(x){x.setAttribute('aria-pressed',x.dataset.width===w);});var ly=s.layout||'auto';[].forEach.call(box.querySelectorAll('.segb[data-layout]'),function(x){x.setAttribute('aria-pressed',x.dataset.layout===ly);});document.getElementById('s-fg').value=s.fg||hex(css('--fg'));document.getElementById('s-bg').value=s.bg||hex(css('--bg'));document.getElementById('s-link').value=s.link||hex(css('--link'));}function hex(v){var m=v.match(/^rgba?\((\d+)[ ,]+(\d+)[ ,]+(\d+)/);if(!m)return v.charAt(0)==='#'?v:'#000000';return '#'+[1,2,3].map(function(i){return ('0'+parseInt(m[i],10).toString(16)).slice(-2);}).join('');}paint();[].forEach.call(box.querySelectorAll('.segb[data-width]'),function(x){x.addEventListener('click',function(){var s=load();if(x.dataset.width==='fit'){s.width='fit';r.setAttribute('data-measure','fit');}else{delete s.width;r.removeAttribute('data-measure');}save(s);setTimeout(paint,0);});});[].forEach.call(box.querySelectorAll('.segb[data-layout]'),function(x){x.addEventListener('click',function(){var s=load(),v=x.dataset.layout;if(v==='auto'){delete s.layout;r.removeAttribute('data-layout');}else{s.layout=v;r.setAttribute('data-layout',v);}save(s);var m=document.querySelector('meta[name=viewport]');var want=v==='desktop'?'width=1100':'width=device-width, initial-scale=1';if(m&&m.getAttribute('content')!==want)location.reload();else setTimeout(paint,0);});});[].forEach.call(box.querySelectorAll('.segb[data-theme]'),function(x){x.addEventListener('click',function(){var s=load();s.theme=x.dataset.theme;delete s.fg;delete s.bg;delete s.link;save(s);['--fg','--bg','--link'].forEach(function(n){r.style.removeProperty(n);});if(s.theme==='auto')r.removeAttribute('data-theme');else r.setAttribute('data-theme',s.theme);setTimeout(paint,0);});});[['s-fg','--fg','fg'],['s-bg','--bg','bg'],['s-link','--link','link']].forEach(function(a){document.getElementById(a[0]).addEventListener('input',function(){var s=load();s[a[2]]=this.value;save(s);r.style.setProperty(a[1],this.value);});});})();</script><script>
+(function(){
+  var q=document.getElementById('q'), out=document.getElementById('qr');
+  if(!q||!out) return;
+  var data=null, NONE="\ucc3e\uc740 \uac83\uc774 \uc5c6\ub2e4";
+  function esc(s){var d=document.createElement('div');d.textContent=s;return d.innerHTML;}
+  function run(){
+    var v=q.value.trim().toLowerCase();
+    out.innerHTML='';
+    if(!v||!data) return;
+    var hits=[];
+    for(var i=0;i<data.length && hits.length<40;i++){
+      if(data[i][0].toLowerCase().indexOf(v)>=0) hits.push(data[i]);
+    }
+    if(!hits.length){ out.innerHTML='<li>'+NONE+'</li>'; return; }
+    out.innerHTML=hits.map(function(h){
+      return '<li><a href="'+h[1]+'">'+esc(h[0])+'</a>'+
+             (h[2]?'<span class="where">'+esc(h[2])+'</span>':'')+'</li>';
+    }).join('');
+  }
+  q.addEventListener('input',function(){
+    if(data){ run(); return; }
+    fetch('search-index.json').then(function(r){return r.json();})
+      .then(function(j){ data=j; run(); })
+      .catch(function(){ out.innerHTML='<li>'+NONE+'</li>'; });
+  });
+})();
+</script></body></html>
