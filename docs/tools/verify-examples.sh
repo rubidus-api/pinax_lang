@@ -34,8 +34,12 @@ host_lib=${PINAX_HOST_LIB:-$root/build/native/libpinax_host.a}
 cc=${CC:-cc}
 [ -x "$pnx" ] || { echo "verify-examples: no $pnx (run ./nob first)" >&2; exit 2; }
 src_dir=$root/docs/$tree/examples
-out_dir=$root/docs/$tree/build/examples-out
-run_dir=$root/docs/$tree/build/examples-run
+# where the documents' Typst reads the outputs: beside the private sources when they are here (ops/doc-src),
+# else beside the public examples
+out_base=$root/docs/$tree
+[ -d "$root/ops/doc-src/$tree/typst-en" ] && out_base=$root/ops/doc-src/$tree
+out_dir=$out_base/build/examples-out
+run_dir=$out_base/build/examples-run
 rm -rf "$out_dir" "$run_dir"
 mkdir -p "$out_dir" "$run_dir"
 

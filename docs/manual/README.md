@@ -10,11 +10,12 @@ to the clauses of the standard. Korean original, English edition with the same c
 
 | 폴더 · folder | 무엇 · what |
 |---|---|
-| [`typst-ko/`](typst-ko/) · [`typst-en/`](typst-en/) | 원고(Typst) --- 원본 · the manuscript, the source |
-| [`md-ko/`](md-ko/README.md) · [`md-en/`](md-en/README.md) | GitHub 에서 읽는 Markdown 판 · Markdown editions |
-| [`html-ko/`](html-ko/index.html) · [`html-en/`](html-en/index.html) | 웹 판, 읽기는 <https://rubidus-api.github.io/pinax_lang/manual/html-ko/> · web editions, read at <https://rubidus-api.github.io/pinax_lang/manual/html-en/> |
-| `pdf-ko/` · `pdf-en/` | PDF 판(짓기만 하고 커밋하지 않는다) · PDF editions, built, not committed |
-| [`examples/`](examples/) | 책이 싣는 모든 프로그램 · every program the book shows |
+| 웹판 · web | <https://rubidus-api.github.io/pinax_lang/manual/html-ko/> · <https://rubidus-api.github.io/pinax_lang/manual/html-en/> |
+| PDF | 릴리스마다 · with each release |
+| [`examples/`](examples/) | 문서가 싣는 모든 프로그램 · every program the document shows |
+
+원고(Typst)는 공개하지 않는다. 웹판과 PDF 는 릴리스 때 지어 웹과 릴리스에 올린다. The manuscript (Typst) is not
+published; the web editions and the PDFs are built at each release.
 
 ## 예제는 돌린 것이다 · Every example is run
 
@@ -25,17 +26,12 @@ to the clauses of the standard. Korean original, English edition with the same c
 Each file in `examples/` says on its first line what must happen. `../tools/verify-examples.sh` checks it and captures
 the output; the manuscript prints only what was captured, refusals included.
 
-## 짓기 · Building
+## 예제 돌리기 · Running the examples
 
 ```sh
-./nob                                   # pnx 와 라이브러리 · pnx and the library
-sh docs/tools/build.sh manual             # 예제 → PDF → HTML → Markdown → 점검 · examples, PDF, HTML, Markdown, checks
-sh docs/tools/build.sh manual quick check # 원고가 조판되는지만 · just check the manuscripts compile
+./nob                                     # pnx 와 라이브러리 · pnx and the library
+sh docs/tools/verify-examples.sh manual      # 예제마다 첫 줄의 약속 · each example against its first line
 ```
-
-[Typst](https://typst.app) 0.15 와 Noto Serif CJK KR, Noto Sans CJK KR, D2Coding 글꼴이 필요하다. `TYPST` 와
-`TYPST_FONT_PATHS` 로 알려 준다. 글꼴을 못 찾으면 PDF 를 버린다 --- Typst 는 대체 글꼴로 조용히 성공하기 때문이다.
-Needs Typst 0.15 and the fonts above (set `TYPST` and `TYPST_FONT_PATHS`); a PDF set in substituted fonts is discarded.
 
 ## 라이선스 · License
 

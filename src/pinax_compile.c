@@ -1201,6 +1201,13 @@ static bool sig_text(const comp *c, const sig *s, char *out, size_t cap) {
             if (!side && c->in_extern && (c->cstr_mask >> k & 1u))
                 PUT("c", 1);
             PUT(tn.text, tn.length);
+            const tid base = base_of(c, kt);
+            if (c->in_extern && base != kt && base != TY_INT && base != TY_BOOL && !is_dec(base)) {
+                // an extern lays a distinct type out as its base: `label:str` (D0117)
+                const name bn = type_name(c, base);
+                PUT(":", 1);
+                PUT(bn.text, bn.length);
+            }
         }
     }
     if (s->fails) {
@@ -1218,7 +1225,18 @@ static bool sig_text(const comp *c, const sig *s, char *out, size_t cap) {
 static bool host_sig(comp *c, const pnx_host *h, sig *s) {
     pnx_lexer temp, *saved_lx = c->lx;
     const pnx_token saved_tok = c->tok;
-    pnx_lex_init(&temp, (const uint8_t *)h->signature, __builtin_strlen(h->signature));
+    char text[sizeof h->signature]; // without the `:base` an extern writes after a distinct type (D0117)
+    size_t n = 0;
+    for (const char *p = h->signature; *p && n + 1 < sizeof text;) {
+        if (*p == ':') {
+            for (++p; (*p >= 'a' && *p <= 'z') || (*p >= 'A' && *p <= 'Z') || (*p >= '0' && *p <= '9') || *p == '_';)
+                ++p;
+            continue;
+        }
+        text[n++] = *p++;
+    }
+    text[n] = '\0';
+    pnx_lex_init(&temp, (const uint8_t *)text, n);
     c->lx = &temp;
     c->in_extern = h->module[0] == '@';
     c->in_host = !c->in_extern;

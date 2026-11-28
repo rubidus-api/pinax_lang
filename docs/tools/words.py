@@ -1,7 +1,8 @@
 #!/usr/bin/env python3
 """words.py - the word index of the playground's completion, from the standard (English edition).
 
-Reads the "Word / Signature / Meaning" tables of clauses 15 to 17 of docs/spec/typst-en and writes
+Reads the "Word / Signature / Meaning" tables of clauses 15 to 17 of docs/spec/md-en (the Markdown edition,
+generated from the same source and public) and writes
 src/wasm/words.mjs: for each word its module ("" for the core), signature and meaning. The standard is
 the one source; the file is generated and `words.py --check` (run by gate t2) fails when it is stale.
 Only the modules the page runs are kept (CORE, the library modules of clause 16 and `io`).
@@ -12,41 +13,52 @@ Only the modules the page runs are kept (CORE, the library modules of clause 16 
 import glob, json, os, re, sys
 
 ROOT = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "..")
-CLAUSES = os.path.join(ROOT, "docs", "spec", "typst-en", "clauses")
+CLAUSES = os.path.join(ROOT, "docs", "spec", "md-en")
 OUT = os.path.join(ROOT, "src", "wasm", "words.mjs")
 PAGE_MODULES = {"", "str", "fmt", "hash", "encode", "bytes", "ptn", "rex", "json", "csv", "sheet", "toml", "md", "args", "f", "io"}
+MODULE_HEAD = re.compile(r"^## \d+\.\d+ ([a-z_0-9]+) \u2014 (.+?)\s*$", re.M)
 
 
-def cells(body):
-    """The top-level [..] groups of a table body; a code span (`..`) hides its brackets."""
-    out, depth, start, code = [], 0, 0, False
-    for i, c in enumerate(body):
+def row_cells(line):
+    """The cells of a Markdown table row; a code span or a backslash hides a |."""
+    out, cur, code, i = [], "", False, 0
+    line = line.strip()[1:]
+    while i < len(line):
+        c = line[i]
+        if c == "\\" and i + 1 < len(line) and line[i + 1] == "|":
+            cur += "|"
+            i += 2
+            continue
         if c == "`":
             code = not code
-        elif not code:
-            if c == "[":
-                if depth == 0:
-                    start = i + 1
-                depth += 1
-            elif c == "]":
-                depth -= 1
-                if depth == 0:
-                    out.append(body[start:i])
+        if c == "|" and not code:
+            out.append(cur.strip())
+            cur = ""
+        else:
+            cur += c
+        i += 1
     return out
 
 
 def tables(src):
-    for m in re.finditer(r"#table\(", src):
-        i, d, code = m.end(), 1, False
-        while d:
-            c = src[i]
-            if c == "`":
-                code = not code
-            elif not code:
-                d += (c == "(") - (c == ")")
+    """(offset, header cells, rows of cells) of each table."""
+    lines = src.split("\n")
+    pos, i = 0, 0
+    offsets = []
+    for l in lines:
+        offsets.append(pos)
+        pos += len(l) + 1
+    while i < len(lines):
+        if lines[i].startswith("|") and i + 1 < len(lines) and re.match(r"^\|(\s*:?-+:?\s*\|)+\s*$", lines[i + 1]):
+            head = row_cells(lines[i])
+            rows, j = [], i + 2
+            while j < len(lines) and lines[j].startswith("|"):
+                rows.append(row_cells(lines[j]))
+                j += 1
+            yield offsets[i], head, rows
+            i = j
+        else:
             i += 1
-        body = src[m.end():i - 1]
-        yield m.start(), cells(body[body.index("\n"):] if "\n" in body else body)
 
 
 def spans(cell):
@@ -54,18 +66,18 @@ def spans(cell):
 
 
 def plain(text):
-    text = re.sub(r"#super\[([^\]]*)\]", r"\1", text)
-    text = re.sub(r"#\w+\[([^\]]*)\]", r"\1", text)
+    text = re.sub(r"<sup>([^<]*)</sup>", r"\1", text)
+    text = re.sub(r"\[([^\]]*)\]\([^)]*\)", r"\1", text)
     text = text.replace("\\", " ").replace("`", "").replace("*", "")
     return re.sub(r"\s+", " ", text).strip()
 
 
 def words_of(path):
     src = open(path, encoding="utf-8").read()
-    heads = [(m.start(), m.group(1)) for m in re.finditer(r"^== `([a-z_0-9]+)`", src, re.M)]
-    core = os.path.basename(path).startswith("15-")
-    for pos, cs in tables(src):
-        names = [plain(c) for c in cs[:3]]
+    heads = [(m.start(), m.group(1)) for m in MODULE_HEAD.finditer(src)]
+    core = os.path.basename(path).startswith("15")
+    for pos, head, rows in tables(src):
+        names = [plain(c) for c in head[:3]]
         names = ["Word" if n == "Procedure" else n for n in names]  # the standard says procedure
         if names[:3] == ["Word", "Signature", "Meaning"]:
             cols = 3
@@ -78,9 +90,7 @@ def words_of(path):
         module = "" if core else next((n for p, n in reversed(heads) if p < pos), None)
         if module not in PAGE_MODULES:
             continue
-        step = abs(cols)
-        for r in range(step, len(cs) - step + 1, step):
-            row = cs[r:r + step]
+        for row in rows:
             ws = spans(row[0])
             sigs = spans(row[1]) if cols in (3, -2) else []
             meaning = plain(row[2] if cols == 3 else row[1] if cols == 2 else "")
@@ -92,10 +102,10 @@ def words_of(path):
 
 
 def modules_of(paths):
-    """[name, title] of each module the page runs, from the `== `name` --- title` headings."""
+    """[name, title] of each module the page runs, from the `## N.M name — title` headings."""
     out = []
     for path in paths:
-        for m in re.finditer(r"^== `([a-z_0-9]+)` --- ([^<\n]+?)\s*(?:<[^>]*>)?\s*$", open(path, encoding="utf-8").read(), re.M):
+        for m in MODULE_HEAD.finditer(open(path, encoding="utf-8").read()):
             if m.group(1) in PAGE_MODULES and m.group(1) not in ("", "args"): # args needs no use
                 out.append([m.group(1), plain(m.group(2))])
     return out
@@ -103,7 +113,7 @@ def modules_of(paths):
 
 def build():
     rows = []
-    for f in sorted(glob.glob(os.path.join(CLAUSES, "1[567]*.typ"))):
+    for f in sorted(glob.glob(os.path.join(CLAUSES, "1[567].md"))):
         rows += list(words_of(f))
     seen, out = set(), []
     for r in rows:
@@ -113,7 +123,7 @@ def build():
     text = "// words.mjs - GENERATED by docs/tools/words.py from the standard (clauses 15 to 17); do not edit.\n"
     text += "// [module (\"\" is the core), word, signature, meaning]\nexport const WORDS = [\n"
     text += "".join("  " + json.dumps(r, ensure_ascii=True) + ",\n" for r in out) + "];\n"
-    mods = modules_of(sorted(glob.glob(os.path.join(CLAUSES, "1[67]*.typ"))))
+    mods = modules_of(sorted(glob.glob(os.path.join(CLAUSES, "1[67].md"))))
     text += "// [module, what it is]: what `use` and set_order take\nexport const MODULES = [\n"
     text += "".join("  " + json.dumps(m, ensure_ascii=True) + ",\n" for m in mods) + "];\n"
     return text

@@ -26,7 +26,7 @@ int main(void) {
              "array allow str 16 4\n"
              "8080 set port\n"
              "\"edge\" set name\n"
-             "assign allow (\"10.0.0.1\", \"10.0.0.2\")\n") != PINAX_OK)
+             "assign allow (\"192.0.2.1\", \"192.0.2.2\")\n") != PINAX_OK)
         return 1;
     pinax_global g;
     if (pinax_global_find(st, "port", &g) != PINAX_OK)

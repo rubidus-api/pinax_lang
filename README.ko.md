@@ -149,14 +149,14 @@ script.pnx` 는 스크립트가 쓴 것을 알려 주어 블록의 크기를 정
 
 ## 문서
 
-- [Pinax 매뉴얼](docs/manual/md-ko/README.md): 첫 프로그램부터 C 프로그램에 넣기까지, 돌아가는 예제와 거절되는 예제와
-  함께 배우는 책입니다([영어판](docs/manual/md-en/README.md)).
+- [Pinax 매뉴얼](https://rubidus-api.github.io/pinax_lang/manual/html-ko/): 첫 프로그램부터 C 프로그램에 넣기까지,
+  돌아가는 예제와 거절되는 예제와 함께 배우는 책입니다([영어판](https://rubidus-api.github.io/pinax_lang/manual/html-en/)).
 - [Pinax 표준](docs/spec/md-ko/README.md): 언어의 정의입니다. 구문, 제약, 의미, 결함과 모든 진단을 번호 붙은 조항으로
   적었습니다([영어판](docs/spec/md-en/README.md)).
 
-두 문서 모두 Typst 로 쓰고 `docs/tools/build.sh` 로 PDF, HTML, Markdown 을 짓습니다. 실린 프로그램은 모두 실제로 돌린
-것이고, 출력도 그때 받은 그대로입니다. 웹판은 <https://rubidus-api.github.io/pinax_lang/> 에서 읽고, PDF 는
-릴리스에서 받습니다.
+실린 프로그램은 모두 `docs/manual/examples/` 와 `docs/spec/examples/` 에 있고, `docs/tools/verify-examples.sh` 가
+실제로 돌려 출력을 받아 둡니다. 웹판은 <https://rubidus-api.github.io/pinax_lang/> 에서 읽고, 표준은 `docs/spec/md-*/`
+의 Markdown 판(생성본, 손으로 고치지 않음)으로도 읽으며, PDF 는 릴리스에서 받습니다.
 
 ## 라이선스
 

@@ -153,15 +153,15 @@ states at once with `pinax_share`, without a copy; several processes map one fil
 
 ## Documentation
 
-- [The Pinax Manual](docs/manual/md-en/README.md): the language from the first program to embedding it in C, with
-  running and refused examples ([Korean original](docs/manual/md-ko/README.md)).
+- [The Pinax Manual](https://rubidus-api.github.io/pinax_lang/manual/html-en/): the language from the first program to
+  embedding it in C, with running and refused examples ([Korean original](https://rubidus-api.github.io/pinax_lang/manual/html-ko/)).
 - [The Pinax Standard](docs/spec/md-en/README.md): the definition in numbered clauses: syntax, constraints,
   semantics, faults and every diagnostic ([Korean original](docs/spec/md-ko/README.md)).
 
-Both are written in Typst and built to PDF, HTML and Markdown by `docs/tools/build.sh`; every program they show is run
-and its output captured. The Korean editions are the originals; the English editions have the same
-chapters, clauses and examples. Read them on the web at
-<https://rubidus-api.github.io/pinax_lang/>, or download the PDFs from the release.
+Every program they show is in `docs/manual/examples/` and `docs/spec/examples/`, run by `docs/tools/verify-examples.sh`
+with its output captured. The Korean editions are the originals; the English editions have the same chapters, clauses
+and examples. Read them on the web at <https://rubidus-api.github.io/pinax_lang/>, the standard also as Markdown in
+`docs/spec/md-*/` (generated, never edited by hand), or download the PDFs from the release.
 
 ## License
 

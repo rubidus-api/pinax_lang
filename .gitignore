@@ -19,6 +19,7 @@
 !/docs/tools/
 !/docs/playground/
 !/docs/index.html
+!/docs/style.css
 !/docs/.nojekyll
 
 # The blocks below come from the bootstrap kit. With the whitelist above they
@@ -88,3 +89,9 @@ resources/cache/
 
 # The PDF editions are built, not kept (they would pile up in history).
 docs/*/pdf-*/
+
+# The generated web editions (D0118): built at a release by ops/doc-src/build-docs.py, published on gh-pages.
+# The standard's Markdown edition (docs/spec/md-*) stays on main; the manual has none.
+docs/*/html-*/
+docs/manual/md-*/
+docs/manual/fonts/

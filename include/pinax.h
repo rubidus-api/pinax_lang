@@ -21,7 +21,7 @@ extern "C" {
 
 #define PINAX_VERSION_MAJOR 0
 #define PINAX_VERSION_MINOR 37
-#define PINAX_VERSION_PATCH 0
+#define PINAX_VERSION_PATCH 1
 #define PINAX_FORMAT 2 /* source, image and share-file format (RFC-0012); bumped by breaking changes */
 /* The binary interface (RFC-0058, D0116): a host compiled against this header runs with any later
  * library of the same PINAX_ABI. Raised only by a release that says so under "Breaking". */

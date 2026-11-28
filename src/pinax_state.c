@@ -238,6 +238,19 @@ static bool token_is(const char *start, size_t len, const char *word) {
     return __builtin_strlen(word) == len && __builtin_memcmp(start, word, len) == 0;
 }
 
+// After a type's name, `:BASE`: an extern's distinct type laid out as its base (`label:str`, D0117). The base
+// takes the place of the type for counting and layout; false when the colon has no name after it.
+static bool sig_base(const char **p, const char **type, size_t *type_len) {
+    if (**p != ':')
+        return true;
+    const char *b = ++*p;
+    while (is_name_char(**p))
+        ++*p;
+    *type = b;
+    *type_len = (size_t)(*p - b);
+    return *type_len != 0;
+}
+
 bool pnx_signature_counts(const char *sig, pnx_counts *out) {
     pnx_counts n = {0};
     const char *p = sig;
@@ -263,6 +276,8 @@ bool pnx_signature_counts(const char *sig, pnx_counts *out) {
                 return false;
             type = start;
             type_len = len;
+            if (!sig_base(&p, &type, &type_len))
+                return false;
             continue;
         }
         // a parameter ends here
@@ -335,6 +350,8 @@ bool pnx_signature_widths(const char *sig, uint8_t args[PNX_MAX_WIDTHS], uint8_t
             ++tokens;
             type = start;
             type_len = len;
+            if (!sig_base(&p, &type, &type_len))
+                return false;
             continue;
         }
         if (tokens) { // a parameter ended: an integer one unless it is a str or a cstr
@@ -3946,6 +3963,8 @@ static bool extern_layout(const pinax_state *st, const char *sig, pnx_host *h) {
                 owned = true;
             type = start;
             type_len = len;
+            if (!sig_base(&p, &type, &type_len))
+                return false;
             ++tokens;
             continue;
         }
